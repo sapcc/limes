@@ -150,6 +150,50 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 	testSubcapacityTranslation(t, "ironic-flavors", extraSetup, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
+func TestTranslateNovaSubcapacities(t *testing.T) {
+	subcapacitiesInLiquidFormat := []assert.JSONObject{
+		{
+			"name":     "nova-compute-bb91",
+			"capacity": 448,
+			"usage":    1101,
+			"attributes": assert.JSONObject{
+				"aggregate_name": "vc-a-0",
+				"traits":         []string{"COMPUTE_IMAGE_TYPE_ISO", "COMPUTE_IMAGE_TYPE_VMDK", "COMPUTE_NET_ATTACH_INTERFACE", "COMPUTE_NODE", "COMPUTE_RESCUE_BFV", "COMPUTE_SAME_HOST_COLD_MIGRATE", "CUSTOM_BIGVM_DISABLED"},
+			},
+		},
+		{
+			"name":     "nova-compute-bb274",
+			"capacity": 104,
+			"usage":    315,
+			"attributes": assert.JSONObject{
+				"aggregate_name": "vc-a-1",
+				"traits":         []string{"COMPUTE_IMAGE_TYPE_ISO", "COMPUTE_IMAGE_TYPE_VMDK", "COMPUTE_NET_ATTACH_INTERFACE", "COMPUTE_NODE", "COMPUTE_RESCUE_BFV", "COMPUTE_SAME_HOST_COLD_MIGRATE"},
+			},
+		},
+	}
+
+	subcapacitiesInLegacyFormat := []assert.JSONObject{
+		{
+			"service_host": "nova-compute-bb91",
+			"az":           "az-one",
+			"aggregate":    "vc-a-0",
+			"capacity":     448,
+			"usage":        1101,
+			"traits":       []string{"COMPUTE_IMAGE_TYPE_ISO", "COMPUTE_IMAGE_TYPE_VMDK", "COMPUTE_NET_ATTACH_INTERFACE", "COMPUTE_NODE", "COMPUTE_RESCUE_BFV", "COMPUTE_SAME_HOST_COLD_MIGRATE", "CUSTOM_BIGVM_DISABLED"},
+		},
+		{
+			"service_host": "nova-compute-bb274",
+			"az":           "az-one",
+			"aggregate":    "vc-a-1",
+			"capacity":     104,
+			"usage":        315,
+			"traits":       []string{"COMPUTE_IMAGE_TYPE_ISO", "COMPUTE_IMAGE_TYPE_VMDK", "COMPUTE_NET_ATTACH_INTERFACE", "COMPUTE_NODE", "COMPUTE_RESCUE_BFV", "COMPUTE_SAME_HOST_COLD_MIGRATE"},
+		},
+	}
+
+	testSubcapacityTranslation(t, "nova-flavors", nil, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+}
+
 func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
@@ -344,6 +388,106 @@ func TestTranslateIronicSubresources(t *testing.T) {
 	}
 
 	testSubresourceTranslation(t, "ironic-flavors", extraSetup, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+}
+
+func TestTranslateNovaSubresources(t *testing.T) {
+	subresourcesInLiquidFormat := []assert.JSONObject{
+		{
+			"id":   "c655dfeb-18fa-479d-b0bf-36cd63c2e901",
+			"name": "d042639-test-server",
+			"attributes": assert.JSONObject{
+				"status": "ACTIVE",
+				"metadata": assert.JSONObject{
+					"image_buildnumber": "",
+					"image_name":        "SAP-compliant-ubuntu-24-04",
+				},
+				"tags":              []string{},
+				"availability_zone": "az-one",
+				"flavor": assert.JSONObject{
+					"name":          "g_c1_m2_v2",
+					"vcpu":          1,
+					"ram_mib":       2032,
+					"disk_gib":      64,
+					"video_ram_mib": 16,
+				},
+				"os_type": "image-deleted",
+			},
+		},
+		{
+			"id":   "7cd0f695-75b5-4514-82a2-953237e4c7d6",
+			"name": "nsxt-e2e-test-vm-1",
+			"attributes": assert.JSONObject{
+				"status":            "ACTIVE",
+				"metadata":          assert.JSONObject{},
+				"tags":              []string{},
+				"availability_zone": "az-one",
+				"flavor": assert.JSONObject{
+					"name":          "g_c8_m16",
+					"vcpu":          8,
+					"ram_mib":       16368,
+					"disk_gib":      64,
+					"video_ram_mib": 16,
+				},
+				"os_type": "image-deleted",
+			},
+		},
+	}
+
+	subresourcesInLegacyFormat := []assert.JSONObject{
+		{
+			"id":     "c655dfeb-18fa-479d-b0bf-36cd63c2e901",
+			"name":   "d042639-test-server",
+			"status": "ACTIVE",
+			"metadata": assert.JSONObject{
+				"image_buildnumber": "",
+				"image_name":        "SAP-compliant-ubuntu-24-04",
+			},
+			"tags":              []string{},
+			"availability_zone": "az-one",
+			"hypervisor":        "vmware",
+			"flavor":            "g_c1_m2_v2",
+			"vcpu":              1,
+			"ram": assert.JSONObject{
+				"value": 2032,
+				"unit":  "MiB",
+			},
+			"disk": assert.JSONObject{
+				"value": 64,
+				"unit":  "GiB",
+			},
+			"video_ram": assert.JSONObject{
+				"value": 16,
+				"unit":  "MiB",
+			},
+			"os_type": "image-deleted",
+		},
+		{
+			"id":                "7cd0f695-75b5-4514-82a2-953237e4c7d6",
+			"name":              "nsxt-e2e-test-vm-1",
+			"status":            "ACTIVE",
+			"metadata":          assert.JSONObject{},
+			"tags":              []string{},
+			"availability_zone": "az-one",
+			"hypervisor":        "vmware",
+			"flavor":            "g_c8_m16",
+			"vcpu":              8,
+			"ram": assert.JSONObject{
+				"value": 16368,
+				"unit":  "MiB",
+			},
+			"disk": assert.JSONObject{
+				"value": 64,
+				"unit":  "GiB",
+			},
+			"video_ram": assert.JSONObject{
+				"value": 16,
+				"unit":  "MiB",
+			},
+			"os_type": "image-deleted",
+		},
+	}
+
+	testSubresourceTranslation(t, "nova-flavors", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {

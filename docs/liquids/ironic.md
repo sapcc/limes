@@ -40,7 +40,7 @@ If `with_subresources` is set, each `instances_$FLAVOR` resource will have one s
 | `attributes.tags` | array of strings | User-supplied tags on this instance according to Nova. |
 | `attributes.os_type` | string | The OS type, as inferred from the image that was used to boot this instance. |
 
-TODO: `os_type` inference is shared with Nova. When the Nova subresource scraping is moved to LIQUID, the method shall be documented over there, and a backreference shall be added here.
+The logic for `os_type` inference is shared with liquid-nova, and is explained [in the documentation for liquid-nova](./nova.md#os-type-inference).
 
 ### Considerations for cloud operators
 
@@ -49,7 +49,7 @@ You need to make sure that the extra specs on your Ironic flavors are all set up
 
 Furthermore, Nova needs to be patched to ignore the usual quotas for instances of Ironic flavors.
 Instead, Nova must accept quotas with the same naming pattern (`instances_$FLAVOR`), and only enforce these quotas when accepting new instances using Ironic flavors, without counting those instances towards the usual quotas.
-In SAP Converged Cloud, Nova carries a custom patch set that triggers this behavior on presence of the `quota:instance_only` and `quota:separate` extra specs.
+In SAP Cloud Infrastructure, Nova carries a custom patch set that triggers this behavior on presence of the `quota:instance_only` and `quota:separate` extra specs.
 
 ## Capacity calculation
 

@@ -20,15 +20,19 @@
 package nova
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// Subcapacity is the structure for subcapacities reported by the "nova" capacity plugin.
+// DeprecatedSubcapacity is the structure for subcapacities reported by the "nova" capacity plugin.
 // Each subcapacity refers to a single Nova hypervisor.
 //
 // This structure can appear on both pooled resources (using the Capacity and Usage fields to report only one dimension at a time),
 // or on split flavors (using the CapacityVector and UsageVector fields to report all dimensions at once).
-type Subcapacity struct {
+type DeprecatedSubcapacity struct {
 	ServiceHost      string                 `json:"service_host"`
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 	AggregateName    string                 `json:"aggregate"`
@@ -39,8 +43,9 @@ type Subcapacity struct {
 	Traits           []string               `json:"traits"`
 }
 
+// TODO: Remove when switching to liquid-nova
 // PooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
-type PooledSubcapacityBuilder struct {
+type DeprecatedPooledSubcapacityBuilder struct {
 	// These are actually []Subcapacity, but we store them as []any because
 	// that's what goes into type core.CapacityData in the end.
 	CoresSubcapacities     []any
@@ -48,11 +53,24 @@ type PooledSubcapacityBuilder struct {
 	RAMSubcapacities       []any
 }
 
-func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) {
+// PooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
+type PooledSubcapacityBuilder struct {
+	CoresSubcapacities     []liquid.Subcapacity
+	InstancesSubcapacities []liquid.Subcapacity
+	RAMSubcapacities       []liquid.Subcapacity
+}
+
+type SubcapacityAttributes struct {
+	AggregateName string   `json:"aggregate_name"`
+	Traits        []string `json:"traits"`
+}
+
+// TODO: Remove when switching to liquid-nova
+func (b *DeprecatedPooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) {
 	pc := h.PartialCapacity()
 
 	hvCoresCapa := pc.IntoCapacityData("cores", maxRootDiskSize, nil)
-	b.CoresSubcapacities = append(b.CoresSubcapacities, Subcapacity{
+	b.CoresSubcapacities = append(b.CoresSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -61,7 +79,7 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		Traits:           h.Traits,
 	})
 	hvInstancesCapa := pc.IntoCapacityData("instances", maxRootDiskSize, nil)
-	b.InstancesSubcapacities = append(b.InstancesSubcapacities, Subcapacity{
+	b.InstancesSubcapacities = append(b.InstancesSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -70,7 +88,7 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		Traits:           h.Traits,
 	})
 	hvRAMCapa := pc.IntoCapacityData("ram", maxRootDiskSize, nil)
-	b.RAMSubcapacities = append(b.RAMSubcapacities, Subcapacity{
+	b.RAMSubcapacities = append(b.RAMSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -80,15 +98,53 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 	})
 }
 
+func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) error {
+	pc := h.PartialCapacity()
+
+	attrs := SubcapacityAttributes{
+		AggregateName: h.AggregateName,
+		Traits:        h.Traits,
+	}
+	buf, err := json.Marshal(attrs)
+	if err != nil {
+		return fmt.Errorf("while serializing Subcapacity Attributes: %w", err)
+	}
+
+	hvCoresCapa := pc.IntoCapacityData("cores", maxRootDiskSize, nil)
+	b.CoresSubcapacities = append(b.CoresSubcapacities, liquid.Subcapacity{
+		Name:       h.Hypervisor.Service.Host,
+		Capacity:   hvCoresCapa.Capacity,
+		Usage:      hvCoresCapa.Usage,
+		Attributes: json.RawMessage(buf),
+	})
+	hvInstancesCapa := pc.IntoCapacityData("instances", maxRootDiskSize, nil)
+	b.InstancesSubcapacities = append(b.InstancesSubcapacities, liquid.Subcapacity{
+		Name:       h.Hypervisor.Service.Host,
+		Capacity:   hvInstancesCapa.Capacity,
+		Usage:      hvInstancesCapa.Usage,
+		Attributes: json.RawMessage(buf),
+	})
+	hvRAMCapa := pc.IntoCapacityData("ram", maxRootDiskSize, nil)
+	b.RAMSubcapacities = append(b.RAMSubcapacities, liquid.Subcapacity{
+		Name:       h.Hypervisor.Service.Host,
+		Capacity:   hvRAMCapa.Capacity,
+		Usage:      hvRAMCapa.Usage,
+		Attributes: json.RawMessage(buf),
+	})
+
+	return nil
+}
+
+// TODO: Remove when switching to liquid-nova
 // PooledSubcapacityBuilder is used to build subcapacity lists for split flavors.
 // These subcapacities are reported on the first flavor in alphabetic order.
-type SplitFlavorSubcapacityBuilder struct {
+type DeprecatedSplitFlavorSubcapacityBuilder struct {
 	Subcapacities []any
 }
 
-func (b *SplitFlavorSubcapacityBuilder) AddHypervisor(h MatchingHypervisor) {
+func (b *DeprecatedSplitFlavorSubcapacityBuilder) AddHypervisor(h MatchingHypervisor) {
 	pc := h.PartialCapacity()
-	b.Subcapacities = append(b.Subcapacities, Subcapacity{
+	b.Subcapacities = append(b.Subcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
