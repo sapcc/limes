@@ -27,12 +27,12 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// Subcapacity is the structure for subcapacities reported by the "nova" capacity plugin.
+// DeprecatedSubcapacity is the structure for subcapacities reported by the "nova" capacity plugin.
 // Each subcapacity refers to a single Nova hypervisor.
 //
 // This structure can appear on both pooled resources (using the Capacity and Usage fields to report only one dimension at a time),
 // or on split flavors (using the CapacityVector and UsageVector fields to report all dimensions at once).
-type Subcapacity struct {
+type DeprecatedSubcapacity struct {
 	ServiceHost      string                 `json:"service_host"`
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 	AggregateName    string                 `json:"aggregate"`
@@ -70,7 +70,7 @@ func (b *DeprecatedPooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor,
 	pc := h.PartialCapacity()
 
 	hvCoresCapa := pc.IntoCapacityData("cores", maxRootDiskSize, nil)
-	b.CoresSubcapacities = append(b.CoresSubcapacities, Subcapacity{
+	b.CoresSubcapacities = append(b.CoresSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -79,7 +79,7 @@ func (b *DeprecatedPooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor,
 		Traits:           h.Traits,
 	})
 	hvInstancesCapa := pc.IntoCapacityData("instances", maxRootDiskSize, nil)
-	b.InstancesSubcapacities = append(b.InstancesSubcapacities, Subcapacity{
+	b.InstancesSubcapacities = append(b.InstancesSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -88,7 +88,7 @@ func (b *DeprecatedPooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor,
 		Traits:           h.Traits,
 	})
 	hvRAMCapa := pc.IntoCapacityData("ram", maxRootDiskSize, nil)
-	b.RAMSubcapacities = append(b.RAMSubcapacities, Subcapacity{
+	b.RAMSubcapacities = append(b.RAMSubcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
@@ -144,7 +144,7 @@ type DeprecatedSplitFlavorSubcapacityBuilder struct {
 
 func (b *DeprecatedSplitFlavorSubcapacityBuilder) AddHypervisor(h MatchingHypervisor) {
 	pc := h.PartialCapacity()
-	b.Subcapacities = append(b.Subcapacities, Subcapacity{
+	b.Subcapacities = append(b.Subcapacities, DeprecatedSubcapacity{
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
