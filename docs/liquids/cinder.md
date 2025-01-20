@@ -47,8 +47,7 @@ The following methods to assign pools to volume types are implemented:
 | Matching | Volume Type         | Pools               |
 | -------- | ------------------- | ------------------- |
 | Type 1   | volume_backend_name | volume_backend_name |
-| Type 2   | storage_protocol    | storage_protocol    |
-|          | quality_type        | quality_type        |
+| Type 2   | storage_protocol<br>quality_type    | storage_protocol<br>quality_type    |
 
 Pools without a matching volume type are ignored.
 
