@@ -69,16 +69,42 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	for info := range volumeTypesByInfo {
 		sortedPools[info] = make(map[liquid.AvailabilityZone][]StoragePool)
 	}
+
+	// regular pool check.
+	poolMatches := make(map[StoragePool]VolumeTypeInfo)
+	remainingPools := make(map[StoragePool]VolumeTypeInfo)
 	for _, pool := range pools {
 		info := VolumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
 		}
+
 		_, exists := sortedPools[info]
 		if !exists {
-			logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
+			remainingPools[pool] = info
 			continue
 		}
+		poolMatches[pool] = info
+	}
 
+	// fcd pool check.
+	for pool := range remainingPools {
+		info := VolumeTypeInfo{
+			StorageProtocol: pool.Capabilities.StorageProtocol,
+			QualityType:     pool.Capabilities.QualityType,
+		}
+		_, exists := sortedPools[info]
+		if !exists {
+			continue
+		}
+		poolMatches[pool] = info
+		delete(remainingPools, pool)
+	}
+
+	for pool, info := range remainingPools {
+		logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
+	}
+
+	for pool, info := range poolMatches {
 		poolAZ := liquid.AvailabilityZoneUnknown
 		for az, hosts := range serviceHostsPerAZ {
 			for _, v := range hosts {
@@ -93,7 +119,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			logg.Info("ScanCapacity: pool %q with %s does not match any service host", pool.Name, info)
 		}
 		logg.Debug("ScanCapacity: considering pool %q with %s in AZ %q", pool.Name, info, poolAZ)
-
 		sortedPools[info][poolAZ] = append(sortedPools[info][poolAZ], pool)
 	}
 
@@ -255,6 +280,8 @@ type StoragePool struct {
 		VolumeBackendName   string                          `json:"volume_backend_name"`
 		TotalCapacityGB     liquids.Float64WithStringErrors `json:"total_capacity_gb"`
 		AllocatedCapacityGB liquids.Float64WithStringErrors `json:"allocated_capacity_gb"`
+		StorageProtocol     string                          `json:"storage_protocol"`
+		QualityType         string                          `json:"quality_type"`
 
 		// SAP Converged Cloud extension
 		CustomAttributes struct {

@@ -67,13 +67,16 @@ func (vt VolumeType) VolumesQuotaName() string {
 
 // VolumeTypeInfo contains configuration for a VolumeType.
 // We need this for matching pools with their VolumeType.
+
 type VolumeTypeInfo struct {
 	VolumeBackendName string
+	StorageProtocol   string
+	QualityType       string
 }
 
 // String returns a string representation of this VolumeTypeInfo for log messages.
 func (i VolumeTypeInfo) String() string {
-	return fmt.Sprintf("volume_backend_name = %q", i.VolumeBackendName)
+	return fmt.Sprintf("volume_backend_name = %q, storage_protocol = %q, quality_type = %q ", i.VolumeBackendName, i.StorageProtocol, i.QualityType)
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -95,10 +98,14 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
 	for _, vtSpec := range vtSpecs {
-		if vtSpec.IsPublic && vtSpec.PublicAccess {
-			volumeTypes[VolumeType(vtSpec.Name)] = VolumeTypeInfo{
-				VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
-			}
+		if !vtSpec.IsPublic && !vtSpec.PublicAccess {
+			continue
+		}
+
+		volumeTypes[VolumeType(vtSpec.Name)] = VolumeTypeInfo{
+			VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
+			StorageProtocol:   vtSpec.ExtraSpecs["storage_protocol"],
+			QualityType:       vtSpec.ExtraSpecs["quality_type"],
 		}
 	}
 	l.VolumeTypes.Set(volumeTypes)
