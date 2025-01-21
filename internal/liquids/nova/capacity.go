@@ -466,11 +466,18 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	}
 
 	for az, hypervisors := range hypervisorsByAZ {
+		// Only consider hypersivors in the calculation that match all extra specs the pooled flavors agreed on
+		var matchingHypervisors BinpackHypervisors
+		for _, h := range hypervisors {
+			if FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h.Match) {
+				matchingHypervisors = append(matchingHypervisors, h)
+			}
+		}
 		var (
 			azCapacity PartialCapacity
 			builder    PooledSubcapacityBuilder
 		)
-		for _, h := range hypervisors {
+		for _, h := range matchingHypervisors {
 			azCapacity.Add(h.Match.PartialCapacity())
 			if l.WithSubcapacities {
 				err = builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
@@ -480,6 +487,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 		}
 		for _, h := range shadowedHypervisorsByAZ[az] {
+			if !FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h) {
+				continue
+			}
 			azCapacity.Add(h.PartialCapacity().CappedToUsage())
 			if l.WithSubcapacities {
 				err = builder.AddHypervisor(h, float64(maxRootDiskSize))
@@ -493,7 +503,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		capacities["instances"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
 		capacities["ram"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 		for _, flavor := range splitFlavors {
-			count := hypervisors.PlacementCountForFlavor(flavor.Name)
+			count := matchingHypervisors.PlacementCountForFlavor(flavor.Name)
 			capacities["cores"].PerAZ[az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquidapi.AtLeastZero(flavor.VCPUs))
 			capacities["instances"].PerAZ[az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
 			capacities["ram"].PerAZ[az].Capacity -= count * liquidapi.AtLeastZero(flavor.RAM)

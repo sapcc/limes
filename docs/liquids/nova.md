@@ -98,6 +98,19 @@ On the most basic level, pooled capacity is calculated by enumerating Nova hyper
 | `compute/instances` | Estimated per AZ as `10000 * count(matchingAggregates)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all matching hypervisors, and `maxDisk` is the largest disk requirement of all pooled flavors matching the configured `flavor_selection`. |
 | `compute/ram` | The sum of the reported RAM for all matching hypervisors. |
 
+If `with_subcapacities` is set, each of those three resources will have one subcapacity for each Nova hypervisor, with the following fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | The `service.host` attribute of the hypervisor according to Nova. |
+| `capacity` | unsigned integer | How much this hypervisor contributes to the resource's overall capacity value. |
+| `usage` | unsigned integer | How much this hypervisor contributes to the resource's overall usage value. |
+| `attributes.aggregate_name` | string | Which aggregate was matched and used to establish an AZ association. |
+| `attributes.traits` | list of strings | The traits of this hypervisor's resource provider according to the Placement API. |
+
+**Warning:** The subcapacities currently do not include entries for hypervisors that only host split flavors and no pooled flavors.
+This is considered a bug and may be fixed at a later time.
+
 ### Split flavors
 
 If there are split flavors (as defined above), the capacity for `compute/instances_${FLAVOR_NAME}` eats into the pooled capacity.
