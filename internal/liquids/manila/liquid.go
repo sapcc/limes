@@ -216,8 +216,8 @@ const (
 	// queries for netapp-exporter metrics
 	sharePhysicalUsageQuery      = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
 	snapshotPhysicalUsageQuery   = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_snapshot_used_bytes{project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
-	snapmirrorUsageQuery         = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_total_bytes        {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}[15m])))`
-	snapmirrorPhysicalUsageQuery = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}[15m])))`
+	snapmirrorUsageQuery         = `sum by (availability_zone, project_id, share_type) (netapp_snapmirror_capacity_total_bytes_for_limes)`
+	snapmirrorPhysicalUsageQuery = `sum by (availability_zone, project_id, share_type) (netapp_snapmirror_capacity_used_bytes_for_limes)`
 )
 
 type azMetricsKey struct {
