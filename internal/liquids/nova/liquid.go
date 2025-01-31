@@ -139,6 +139,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
+
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
 			Unit:                liquid.UnitNone,
