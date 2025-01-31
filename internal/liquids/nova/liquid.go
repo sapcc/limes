@@ -143,28 +143,33 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
 			Unit:                liquid.UnitNone,
+			Topology:            liquid.AZAwareResourceTopology,
 			HasCapacity:         true,
 			HasQuota:            true,
 			NeedsResourceDemand: true,
 		},
 		"instances": {
 			Unit:                liquid.UnitNone,
+			Topology:            liquid.AZAwareResourceTopology,
 			HasCapacity:         true,
 			HasQuota:            true,
 			NeedsResourceDemand: true,
 		},
 		"ram": {
 			Unit:                liquid.UnitMebibytes,
+			Topology:            liquid.AZAwareResourceTopology,
 			HasCapacity:         true,
 			HasQuota:            true,
 			NeedsResourceDemand: true,
 		},
 		"server_groups": {
 			Unit:     liquid.UnitNone,
+			Topology: liquid.FlatResourceTopology,
 			HasQuota: true,
 		},
 		"server_group_members": {
 			Unit:     liquid.UnitNone,
+			Topology: liquid.FlatResourceTopology,
 			HasQuota: true,
 		},
 	}
@@ -176,6 +181,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		if IsSplitFlavor(f) {
 			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
 				Unit:                liquid.UnitNone,
+				Topology:            liquid.AZAwareResourceTopology,
 				HasCapacity:         true,
 				HasQuota:            true,
 				NeedsResourceDemand: true,
