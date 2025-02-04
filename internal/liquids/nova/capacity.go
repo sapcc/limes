@@ -504,9 +504,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		capacities["ram"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 		for _, flavor := range splitFlavors {
 			count := matchingHypervisors.PlacementCountForFlavor(flavor.Name)
-			capacities["cores"].PerAZ[az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquidapi.AtLeastZero(flavor.VCPUs))
-			capacities["instances"].PerAZ[az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-			capacities["ram"].PerAZ[az].Capacity -= count * liquidapi.AtLeastZero(flavor.RAM)
+			capacities["cores"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["cores"].PerAZ[az].Capacity, coresDemand.OvercommitFactor.ApplyInReverseTo(count*liquidapi.AtLeastZero(flavor.VCPUs)))
+			capacities["instances"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["instances"].PerAZ[az].Capacity, count) //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
+			capacities["ram"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["ram"].PerAZ[az].Capacity, count*liquidapi.AtLeastZero(flavor.RAM))
 		}
 	}
 
