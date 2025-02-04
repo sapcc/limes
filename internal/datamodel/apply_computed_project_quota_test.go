@@ -715,6 +715,123 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			402: {Allocated: 0},
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	// Multiple AZs with capacity.
+	// Sufficient total capacity for quota demand.
+	// Distribute quota w.r.t. available capacity
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 1, // Capacity available here as well
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 10,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(5)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 1},
+			402: {Allocated: 1},
+		},
+		"az-three": {
+			401: {Allocated: 2},
+			402: {Allocated: 4},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	// Multiple AZs with capacity.
+	// Total capacity can not fully satisfy quota demand.
+	// Distribute quota to fulfill min quota constraint ignoring capacity limits.
+	// Distribute proportional to available capacity.
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 1,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 2,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(6)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 1},
+			402: {Allocated: 2},
+		},
+		"az-three": {
+			401: {Allocated: 2},
+			402: {Allocated: 4},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
 }
 
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
