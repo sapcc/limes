@@ -195,6 +195,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
+	logg.Debug("pooled extra specs = %v", pooledExtraSpecs)
 	if maxRootDiskSize == 0 {
 		return liquid.ServiceCapacityReport{}, errors.New("pooled capacity requested, but there are no matching flavors")
 	}
@@ -239,10 +240,10 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			hypervisorsByAZ[h.AvailabilityZone] = append(hypervisorsByAZ[h.AvailabilityZone], bh)
 
 			hc := h.PartialCapacity()
-			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit", h.Hypervisor.Description(), h.AvailabilityZone,
+			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit, traits: %v", h.Hypervisor.Description(), h.AvailabilityZone,
 				BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
 				BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
-				len(bh.Nodes), bh.Nodes[0].Capacity,
+				len(bh.Nodes), bh.Nodes[0].Capacity, h.Traits,
 			)
 		} else {
 			shadowedHypervisorsByAZ[h.AvailabilityZone] = append(shadowedHypervisorsByAZ[h.AvailabilityZone], h)
