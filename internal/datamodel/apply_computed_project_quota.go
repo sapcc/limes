@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -418,32 +419,41 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 // After increasing Desired, but before increasing Allocated, this decreases
 // Desired in order to fit into project-local quota constraints.
 func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZone]clusterAZAllocationStats, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectResourceID map[db.ProjectResourceID]struct{}, isAZAware bool) {
-	// TODO: quota is distributed for all resources without updating capacity in between
-	// how to handle the case that the first resource uses all capacity in some AZ?
+	// Quota should not be assgined to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
+	resourceAZs := allAZs
+	if isAZAware {
+		resourceAZs = append([]limes.AvailabilityZone{}, allAZs...)
+		resourceAZs = slices.DeleteFunc(resourceAZs, func(az limes.AvailabilityZone) bool { return az == limes.AvailabilityZoneAny })
+	}
 	for resourceID, c := range constraints {
 		// raise Allocated as necessary to fulfil minimum quota
 		if c.MinQuota != nil && *c.MinQuota > 0 {
 			// phase 1: distribute quota proportionally to desire in AZs that have capacity
-			// if there is sufficient capacity, all quota required additionally will be assigned in this phase
+			// if there is sufficient capacity in each AZ, all quota required additionally will be assigned in this phase
 			totalAllocated := uint64(0)
-			desireScalePerAZ := make(map[limes.AvailabilityZone]uint64)
-			for _, az := range allAZs {
-				// Quota should not be assgined to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
-				if az == limes.AvailabilityZoneAny && isAZAware {
-					continue
-				}
+			totalCapacity := uint64(0)
+			totalDesire := uint64(0)
+			for _, az := range resourceAZs {
 				t := target[az][resourceID]
 				totalAllocated += t.Allocated
+				totalCapacity += stats[az].Capacity
+				totalDesire += t.Requested()
+			}
+			desireScalePerAZ := make(map[limes.AvailabilityZone]uint64)
+			for _, az := range resourceAZs {
 				if stats[az].Capacity > 0 {
-					desireScalePerAZ[az] = *c.MinQuota * max(1, subtractOrZero(t.Desired, t.Allocated))
+					if totalDesire > 0 {
+						// Desire is normalized to avoid uint overflows when dealing with large desire values
+						desireProportion := float64(target[az][resourceID].Requested()) / float64(totalDesire)
+						desireScalePerAZ[az] = uint64(math.Ceil(float64(*c.MinQuota) * desireProportion))
+					} else {
+						desireScalePerAZ[az] = *c.MinQuota
+					}
 				}
 			}
 			missingQuota := subtractOrZero(*c.MinQuota, totalAllocated)
 			extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, desireScalePerAZ)
-			for _, az := range allAZs {
-				if az == limes.AvailabilityZoneAny && isAZAware {
-					continue
-				}
+			for _, az := range resourceAZs {
 				extraAllocated := min(extraAllocatedPerAZ[az], stats[az].Capacity)
 				target[az][resourceID].Allocated += extraAllocated
 				missingQuota -= extraAllocated
@@ -454,14 +464,13 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			// Since min quota should be enforced, more quota than available capacity may be distributed
 			if missingQuota > 0 {
 				capacityScalePerAZ := make(map[limes.AvailabilityZone]uint64)
-				for _, az := range allAZs {
-					if az == limes.AvailabilityZoneAny && isAZAware {
-						continue
-					}
-					capacityScalePerAZ[az] = *c.MinQuota * stats[az].Capacity // TODO: Possible overflow?
+				for _, az := range resourceAZs {
+					// Capacity is normalized to avoid uint overflows when dealing with large capacities
+					capacityProportion := (float64(stats[az].Capacity) / float64(totalCapacity))
+					capacityScalePerAZ[az] = uint64(math.Ceil(float64(*c.MinQuota) * capacityProportion))
 				}
 				extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, capacityScalePerAZ)
-				for _, az := range allAZs {
+				for _, az := range resourceAZs {
 					if az == limes.AvailabilityZoneAny && isAZAware {
 						continue
 					}
@@ -479,7 +488,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 				t := target[az][resourceID]
 				totalAllocated += t.Allocated
 				totalDesired += max(t.Allocated, t.Desired)
-				extraDesiredPerAZ[az] = subtractOrZero(t.Desired, t.Allocated)
+				extraDesiredPerAZ[az] = t.Requested()
 			}
 			if totalDesired > *c.MaxQuota {
 				extraDesiredPerAZ = liquidapi.DistributeFairly(subtractOrZero(*c.MaxQuota, totalAllocated), extraDesiredPerAZ)

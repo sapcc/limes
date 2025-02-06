@@ -834,6 +834,126 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
 }
 
+func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
+	// This tests how min quota overwrites deals with very large numbers
+	// (as can occur e.g. for Swift capacity measured in bytes).
+	// This can be problematic since the min quota distribution is proportional to desire / available capacity.
+	val := uint64(200000000000000)
+
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: val / 2, // Potential overflow due to capacity scaling
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: val / 6, // Potential overflow due to capacity scaling
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1,
+		ProjectBaseQuota: 0,
+	}
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(val)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: val / 4 * 3},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: val / 4},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: val,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// Potential overflow due to desire scaling
+				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 2},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: val,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// Potential overflow due to desire scaling
+				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 6},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(val)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: val / 4 * 3},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: val / 4},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
