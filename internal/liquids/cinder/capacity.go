@@ -77,14 +77,12 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		info := VolumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
 		}
-		remainingInfo := VolumeTypeInfo{
-			StorageProtocol: pool.Capabilities.StorageProtocol,
-			QualityType:     pool.Capabilities.QualityType,
-		}
 
 		_, exists := sortedPools[info]
 		if !exists {
-			remainingPools[pool] = remainingInfo
+			info.StorageProtocol = pool.Capabilities.StorageProtocol
+			info.QualityType = pool.Capabilities.QualityType
+			remainingPools[pool] = info
 			continue
 		}
 		poolMatches[pool] = info
