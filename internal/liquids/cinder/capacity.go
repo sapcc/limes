@@ -39,6 +39,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
+	for _, pool := range pools {
+		logg.Debug("DEB: %s %s", pool.Name, pool.Capabilities)
+	}
 
 	// list service hosts (the relation of pools to their service hosts is used to establish AZ membership)
 	allPages, err := services.List(l.CinderV3, nil).AllPages(ctx)
@@ -77,10 +80,14 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		info := VolumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
 		}
+		remainingInfo := VolumeTypeInfo{
+			StorageProtocol: pool.Capabilities.StorageProtocol,
+			QualityType:     pool.Capabilities.QualityType,
+		}
 
 		_, exists := sortedPools[info]
 		if !exists {
-			remainingPools[pool] = info
+			remainingPools[pool] = remainingInfo
 			continue
 		}
 		poolMatches[pool] = info
@@ -92,6 +99,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			StorageProtocol: pool.Capabilities.StorageProtocol,
 			QualityType:     pool.Capabilities.QualityType,
 		}
+
 		_, exists := sortedPools[info]
 		if !exists {
 			continue
