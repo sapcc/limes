@@ -39,9 +39,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
-	for _, pool := range pools {
-		logg.Debug("DEB: %s %s", pool.Name, pool.Capabilities)
-	}
 
 	// list service hosts (the relation of pools to their service hosts is used to establish AZ membership)
 	allPages, err := services.List(l.CinderV3, nil).AllPages(ctx)
