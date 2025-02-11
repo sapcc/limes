@@ -411,6 +411,7 @@ func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	printDataMetrics(bw, metricsBySeries, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
 	printDataMetrics(bw, metricsBySeries, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_commitment_min_expires_at", `Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_override_quota_from_config", `Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
@@ -465,22 +466,33 @@ var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var projectMetricsQuery = sqlext.SimplifyWhitespace(`
-	WITH project_az_sums AS (
+	WITH project_sums AS (
 	  SELECT resource_id,
 	         SUM(usage) AS usage,
 	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
 	         COUNT(physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources
 	   GROUP BY resource_id
+	),
+	project_commitment_minExpiresAt AS (
+		SELECT p.domain_id, p.id AS project_id, ps.type, pr.name, MIN(expires_at) AS project_commitment_min_expires_at
+		FROM projects p
+		JOIN project_services ps ON ps.project_id = p.id
+		JOIN project_resources pr ON pr.service_id = ps.id
+		JOIN project_az_resources par ON par.resource_id = pr.id
+		JOIN project_commitments pc ON pc.az_resource_id = par.id AND pc.state = 'active'
+		GROUP BY p.domain_id, p.id, ps.type, pr.name 
 	)
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name,
 	       pr.quota, pr.backend_quota, pr.override_quota_from_config,
-	       pas.usage, pas.physical_usage, pas.has_physical_usage
+	       psums.usage, psums.physical_usage, psums.has_physical_usage,
+	       pcmea.project_commitment_min_expires_at
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
-	  JOIN project_az_sums pas ON pas.resource_id = pr.id
+	  JOIN project_sums psums ON psums.resource_id = pr.id
+	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND ps.type= pcmea.TYPE AND pr.name = pcmea.name
 `)
 
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -633,7 +645,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("during projectMetricsQuery: %w", err)
+		return nil, fmt.Errorf("during domainMetricsQuery: %w", err)
 	}
 
 	// fetch values for project level (quota/usage)
@@ -651,9 +663,10 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			usage                   uint64
 			physicalUsage           uint64
 			hasPhysicalUsage        bool
+			minExpiresAt            *time.Time
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&quota, &backendQuota, &overrideQuotaFromConfig, &usage, &physicalUsage, &hasPhysicalUsage)
+			&quota, &backendQuota, &overrideQuotaFromConfig, &usage, &physicalUsage, &hasPhysicalUsage, &minExpiresAt)
 		if err != nil {
 			return err
 		}
@@ -690,6 +703,10 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 				metric := dataMetric{Labels: labels, Value: float64(physicalUsage)}
 				result["limes_project_physical_usage"] = append(result["limes_project_physical_usage"], metric)
 			}
+		}
+		if minExpiresAt != nil || d.ReportZeroes {
+			metric := dataMetric{Labels: labels, Value: timeAsUnixOrZero(minExpiresAt)}
+			result["limes_project_commitment_min_expires_at"] = append(result["limes_project_commitment_min_expires_at"], metric)
 		}
 		return nil
 	})
