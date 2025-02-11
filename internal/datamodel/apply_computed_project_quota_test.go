@@ -835,7 +835,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 }
 
 func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
-	// This tests how min quota overwrites deals with very large numbers
+	// This tests how min quota overrides deals with very large numbers
 	// (as can occur e.g. for Swift capacity measured in bytes).
 	// This can be problematic since the min quota distribution is proportional to desire / available capacity.
 	val := uint64(200000000000000)
