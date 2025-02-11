@@ -23,35 +23,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
-
-// DeprecatedSubcapacity is the structure for subcapacities reported by the "nova" capacity plugin.
-// Each subcapacity refers to a single Nova hypervisor.
-//
-// This structure can appear on both pooled resources (using the Capacity and Usage fields to report only one dimension at a time),
-// or on split flavors (using the CapacityVector and UsageVector fields to report all dimensions at once).
-type DeprecatedSubcapacity struct {
-	ServiceHost      string                 `json:"service_host"`
-	AvailabilityZone limes.AvailabilityZone `json:"az"`
-	AggregateName    string                 `json:"aggregate"`
-	Capacity         *uint64                `json:"capacity,omitempty"`
-	Usage            *uint64                `json:"usage,omitempty"`
-	CapacityVector   *BinpackVector[uint64] `json:"capacity_vector,omitempty"`
-	UsageVector      *BinpackVector[uint64] `json:"usage_vector,omitempty"`
-	Traits           []string               `json:"traits"`
-}
-
-// TODO: Remove when switching to liquid-nova
-// PooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
-type DeprecatedPooledSubcapacityBuilder struct {
-	// These are actually []Subcapacity, but we store them as []any because
-	// that's what goes into type core.CapacityData in the end.
-	CoresSubcapacities     []any
-	InstancesSubcapacities []any
-	RAMSubcapacities       []any
-}
 
 // PooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
 type PooledSubcapacityBuilder struct {
@@ -63,39 +36,6 @@ type PooledSubcapacityBuilder struct {
 type SubcapacityAttributes struct {
 	AggregateName string   `json:"aggregate_name"`
 	Traits        []string `json:"traits"`
-}
-
-// TODO: Remove when switching to liquid-nova
-func (b *DeprecatedPooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) {
-	pc := h.PartialCapacity()
-
-	hvCoresCapa := pc.IntoCapacityData("cores", maxRootDiskSize, nil)
-	b.CoresSubcapacities = append(b.CoresSubcapacities, DeprecatedSubcapacity{
-		ServiceHost:      h.Hypervisor.Service.Host,
-		AggregateName:    h.AggregateName,
-		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvCoresCapa.Capacity,
-		Usage:            hvCoresCapa.Usage,
-		Traits:           h.Traits,
-	})
-	hvInstancesCapa := pc.IntoCapacityData("instances", maxRootDiskSize, nil)
-	b.InstancesSubcapacities = append(b.InstancesSubcapacities, DeprecatedSubcapacity{
-		ServiceHost:      h.Hypervisor.Service.Host,
-		AggregateName:    h.AggregateName,
-		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvInstancesCapa.Capacity,
-		Usage:            hvInstancesCapa.Usage,
-		Traits:           h.Traits,
-	})
-	hvRAMCapa := pc.IntoCapacityData("ram", maxRootDiskSize, nil)
-	b.RAMSubcapacities = append(b.RAMSubcapacities, DeprecatedSubcapacity{
-		ServiceHost:      h.Hypervisor.Service.Host,
-		AggregateName:    h.AggregateName,
-		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvRAMCapa.Capacity,
-		Usage:            hvRAMCapa.Usage,
-		Traits:           h.Traits,
-	})
 }
 
 func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) error {
@@ -133,31 +73,4 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 	})
 
 	return nil
-}
-
-// TODO: Remove when switching to liquid-nova
-// PooledSubcapacityBuilder is used to build subcapacity lists for split flavors.
-// These subcapacities are reported on the first flavor in alphabetic order.
-type DeprecatedSplitFlavorSubcapacityBuilder struct {
-	Subcapacities []any
-}
-
-func (b *DeprecatedSplitFlavorSubcapacityBuilder) AddHypervisor(h MatchingHypervisor) {
-	pc := h.PartialCapacity()
-	b.Subcapacities = append(b.Subcapacities, DeprecatedSubcapacity{
-		ServiceHost:      h.Hypervisor.Service.Host,
-		AggregateName:    h.AggregateName,
-		AvailabilityZone: h.AvailabilityZone,
-		CapacityVector: &BinpackVector[uint64]{
-			VCPUs:    pc.VCPUs.Capacity,
-			MemoryMB: pc.MemoryMB.Capacity,
-			LocalGB:  pc.LocalGB.Capacity,
-		},
-		UsageVector: &BinpackVector[uint64]{
-			VCPUs:    pc.VCPUs.Usage,
-			MemoryMB: pc.MemoryMB.Usage,
-			LocalGB:  pc.LocalGB.Usage,
-		},
-		Traits: h.Traits,
-	})
 }

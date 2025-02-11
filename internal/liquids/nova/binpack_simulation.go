@@ -31,15 +31,14 @@ import (
 	"github.com/sapcc/go-bits/logg"
 )
 
-// TODO: Remove yaml tags when switching to liquid-nova
 // BinpackBehavior contains configuration parameters for the binpack simulation.
 type BinpackBehavior struct {
 	// When ranking nodes during placement, do not include the VCPU count dimension in the score.
-	ScoreIgnoresCores bool `yaml:"score_ignores_cores" json:"score_ignores_cores"`
+	ScoreIgnoresCores bool `json:"score_ignores_cores"`
 	// When ranking nodes during placement, do not include the disk size dimension in the score.
-	ScoreIgnoresDisk bool `yaml:"score_ignores_disk" json:"score_ignores_disk"`
+	ScoreIgnoresDisk bool `json:"score_ignores_disk"`
 	// When ranking nodes during placement, do not include the RAM size dimension in the score.
-	ScoreIgnoresRAM bool `yaml:"score_ignores_ram" json:"score_ignores_ram"`
+	ScoreIgnoresRAM bool `json:"score_ignores_ram"`
 }
 
 // BinpackHypervisor models an entire Nova hypervisor for the purposes of the

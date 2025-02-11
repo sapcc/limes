@@ -32,7 +32,6 @@ import (
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/liquids"
 )
 
@@ -77,40 +76,6 @@ func (c PartialCapacity) CappedToUsage() PartialCapacity {
 	}
 }
 
-// TODO: Remove when switching to liquid-nova
-func (c PartialCapacity) DeprecatedIntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []any) core.CapacityData {
-	switch resourceName {
-	case "cores":
-		return core.CapacityData{
-			Capacity:      c.VCPUs.Capacity,
-			Usage:         &c.VCPUs.Usage,
-			Subcapacities: subcapacities,
-		}
-	case "ram":
-		return core.CapacityData{
-			Capacity:      c.MemoryMB.Capacity,
-			Usage:         &c.MemoryMB.Usage,
-			Subcapacities: subcapacities,
-		}
-	case "instances":
-		amount := 10000 * uint64(len(c.MatchingAggregates))
-		if maxRootDiskSize != 0 {
-			maxAmount := uint64(float64(c.LocalGB.Capacity) / maxRootDiskSize)
-			if amount > maxAmount {
-				amount = maxAmount
-			}
-		}
-		return core.CapacityData{
-			Capacity:      amount,
-			Usage:         &c.RunningVMs,
-			Subcapacities: subcapacities,
-		}
-	default:
-		panic(fmt.Sprintf("called with unknown resourceName %q", resourceName))
-	}
-}
-
-// TODO: Remove nolint:dupl when switching to liquid-nova
 func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) liquid.AZResourceCapacityReport {
 	switch resourceName {
 	case "cores":
