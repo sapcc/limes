@@ -233,7 +233,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 
 		if h.ShadowedByTrait == "" {
-			bh, err := PrepareHypervisorForBinpacking(h)
+			bh, err := PrepareHypervisorForBinpacking(h, pooledExtraSpecs)
 			if err != nil {
 				return err
 			}
@@ -470,7 +470,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		// Only consider hypersivors in the calculation that match all extra specs the pooled flavors agreed on
 		var matchingHypervisors BinpackHypervisors
 		for _, h := range hypervisors {
-			if FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h.Match) {
+			if h.AcceptsPooledFlavors {
 				matchingHypervisors = append(matchingHypervisors, h)
 			}
 		}

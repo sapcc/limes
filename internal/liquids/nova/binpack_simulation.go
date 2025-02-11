@@ -50,8 +50,9 @@ type BinpackBehavior struct {
 // total capacity and the MaxUnit value on the inventories. We have to make the
 // assumption that the individual nodes are of identical size.
 type BinpackHypervisor struct {
-	Match MatchingHypervisor
-	Nodes []*BinpackNode
+	Match                MatchingHypervisor
+	Nodes                []*BinpackNode
+	AcceptsPooledFlavors bool
 }
 
 // BinpackHypervisors adds methods to type []BinpackHypervisor.
@@ -91,7 +92,7 @@ func guessNodeCountFromMetric(metric string, inv resourceproviders.Inventory) (u
 }
 
 // PrepareHypervisorForBinpacking converts a MatchingHypervisor into a BinpackHypervisor.
-func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, error) {
+func PrepareHypervisorForBinpacking(h MatchingHypervisor, pooledExtraSpecs map[string]string) (BinpackHypervisor, error) {
 	// compute node count based on the assumption of equal-size nodes:
 	//     nodeCount = (total - reserved) / maxUnit
 	nodeCountAccordingToVCPU, err := guessNodeCountFromMetric("VCPU", h.Inventories["VCPU"])
@@ -134,8 +135,9 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		},
 	}
 	result := BinpackHypervisor{
-		Match: h,
-		Nodes: make([]*BinpackNode, int(nodeCount)), //nolint:gosec // uint64 -> int conversion is okay, if there is more than 2^63 elements, we have other problems
+		Match:                h,
+		Nodes:                make([]*BinpackNode, int(nodeCount)), //nolint:gosec // uint64 -> int conversion is okay, if there is more than 2^63 elements, we have other problems
+		AcceptsPooledFlavors: FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h),
 	}
 	for idx := range result.Nodes {
 		node := nodeTemplate // this is an important copy which has nothing to do with loop-variable aliasing!
@@ -200,17 +202,16 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 			totalFree = totalFree.Add(node.free())
 		}
 	}
-	if !blockedCapacity.Add(vmSize).FitsIn(totalFree) {
-		logg.Debug("refusing to place %s with %s because of blocked capacity %s (total free = %s)",
-			flavor.Name, vmSize.String(), blockedCapacity.String(), totalFree.String())
-		return false
-	}
+	exceedsCapacity := !blockedCapacity.Add(vmSize).FitsIn(totalFree)
 
 	var (
 		bestNode  *BinpackNode
 		bestScore = 0.0
 	)
 	for _, hypervisor := range hh {
+		if hypervisor.AcceptsPooledFlavors && exceedsCapacity {
+			continue
+		}
 		// skip hypervisors that the flavor does not accept
 		if !skipTraitMatch && !FlavorMatchesHypervisor(flavor, hypervisor.Match) {
 			continue
@@ -230,6 +231,11 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 			f := nodeFree.Div(node.Capacity)
 			dotProduct := s.Dot(f, bb)
 			score := dotProduct * dotProduct / (s.Dot(s, bb) * f.Dot(f, bb))
+			// Always favor nodes on nongeneral-purpose hypervisors if they have capacity
+			// Upperbound of score calculation is 1.0
+			if !hypervisor.AcceptsPooledFlavors {
+				score += 1.1
+			}
 
 			// choose node with best score
 			if score > bestScore {
@@ -240,6 +246,11 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	}
 
 	if bestNode == nil {
+		if exceedsCapacity {
+			logg.Debug("refusing to place %s with %s because of blocked capacity %s (total free = %s)",
+				flavor.Name, vmSize.String(), blockedCapacity.String(), totalFree.String())
+			return false
+		}
 		logg.Debug("refusing to place %s with %s because no node has enough space", flavor.Name, vmSize.String())
 		return false
 	} else {

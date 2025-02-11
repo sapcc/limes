@@ -208,7 +208,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		}
 
 		if h.ShadowedByTrait == "" {
-			bh, err := nova.PrepareHypervisorForBinpacking(h)
+			bh, err := nova.PrepareHypervisorForBinpacking(h, make(map[string]string))
 			if err != nil {
 				return err
 			}
