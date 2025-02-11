@@ -653,6 +653,307 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 	}, resourceInfo)
 }
 
+func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
+	// This test is based on real behavior observed in the wild for baremetal
+	// flavors that only exist in specific AZs. When enforcing MinQuota overrides,
+	// quota should preferably be given in those AZs that have capacity.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 10, // only AZ with capacity > 0
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1,
+		ProjectBaseQuota: 0,
+	}
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(5)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			// this is the only AZ with capacity, so the MinQuota should all be allocated here
+			401: {Allocated: 3},
+			402: {Allocated: 5},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	// Multiple AZs with capacity.
+	// Sufficient total capacity for quota demand.
+	// Distribute quota w.r.t. available capacity
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 1, // Capacity available here as well
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 10,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(5)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 1},
+			402: {Allocated: 1},
+		},
+		"az-three": {
+			401: {Allocated: 2},
+			402: {Allocated: 4},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	// Multiple AZs with capacity.
+	// Total capacity can not fully satisfy quota demand.
+	// Distribute quota to fulfill min quota constraint ignoring capacity limits.
+	// Distribute proportional to available capacity.
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 1,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 2,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(6)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 1},
+			402: {Allocated: 2},
+		},
+		"az-three": {
+			401: {Allocated: 2},
+			402: {Allocated: 4},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+}
+
+func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
+	// This tests how min quota overrides deals with very large numbers
+	// (as can occur e.g. for Swift capacity measured in bytes).
+	// This can be problematic since the min quota distribution is proportional to desire / available capacity.
+	val := uint64(200000000000000)
+
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: val / 2, // Potential overflow due to capacity scaling
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: val / 6, // Potential overflow due to capacity scaling
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1,
+		ProjectBaseQuota: 0,
+	}
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(val)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: val / 4 * 3},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: val / 4},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: val,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// Potential overflow due to desire scaling
+				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 2},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: val,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// Potential overflow due to desire scaling
+				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 6},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(val)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: val / 4 * 3},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: val / 4},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
