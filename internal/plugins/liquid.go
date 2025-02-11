@@ -44,13 +44,6 @@ type liquidQuotaPlugin struct {
 	LiquidServiceType string         `yaml:"liquid_service_type"`
 	ServiceType       db.ServiceType `yaml:"-"`
 
-	// TODO: remove EndpointOverride once obsolete
-	//
-	// My ultimate goal is to move the test harness for quota/capacity plugins into limesctl, once the
-	// plugins are rewritten into liquids. Until then, this override can be set to something like
-	// "http://localhost:8000" to target a development copy of a liquid.
-	EndpointOverride string `yaml:"endpoint_override"`
-
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
 	LiquidClient      *liquidapi.Client  `yaml:"-"`
@@ -75,10 +68,7 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{
-		ServiceType:      p.LiquidServiceType,
-		EndpointOverride: p.EndpointOverride,
-	})
+	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
 	if err != nil {
 		return fmt.Errorf("cannot initialize ServiceClient for liquid-%s: %w", serviceType, err)
 	}
