@@ -30,7 +30,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// TODO: Remove yaml tags when switching to liquid-nova
 // FlavorSelection describes a set of public flavors.
 //
 // This is used for matching flavors that we enumerate via the flavor API
@@ -38,9 +37,9 @@ import (
 // name, type FlavorNameSelection is used.
 type FlavorSelection struct {
 	// Only match flavors that have all of these extra specs.
-	RequiredExtraSpecs map[string]string `yaml:"required_extra_specs" json:"required_extra_specs"`
+	RequiredExtraSpecs map[string]string `json:"required_extra_specs"`
 	// Exclude flavors that have any of these extra specs.
-	ExcludedExtraSpecs map[string]string `yaml:"excluded_extra_specs" json:"excluded_extra_specs"`
+	ExcludedExtraSpecs map[string]string `json:"excluded_extra_specs"`
 }
 
 func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {

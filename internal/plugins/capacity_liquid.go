@@ -39,7 +39,6 @@ type liquidCapacityPlugin struct {
 	// configuration
 	ServiceType       db.ServiceType `yaml:"service_type"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
-	EndpointOverride  string         `yaml:"endpoint_override"` // see comment on liquidQuotaPlugin for details
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -64,10 +63,7 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{
-		ServiceType:      p.LiquidServiceType,
-		EndpointOverride: p.EndpointOverride,
-	})
+	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
 	if err != nil {
 		return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
 	}

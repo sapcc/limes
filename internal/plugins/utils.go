@@ -39,15 +39,6 @@ func SortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
 }
 
 func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
-	// TODO: remove this special case once liquid-ceph has rolled out their topology support
-	//       (if you come across this, it's probably time; ping Stefan M. to ask for confirmation)
-	for resName, resInfo := range serviceInfo.Resources {
-		if resName == "objectstore_region_3_hdd_capacity" && resInfo.Topology == "" {
-			resInfo.Topology = liquid.FlatResourceTopology
-			serviceInfo.Resources[resName] = resInfo
-		}
-	}
-
 	var errs []error
 	resources := serviceInfo.Resources
 
