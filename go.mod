@@ -1,6 +1,6 @@
 module github.com/sapcc/limes
 
-go 1.23
+go 1.24
 
 require (
 	github.com/databus23/goslo.policy v0.0.0-20210929125152-81bf2876dbdb
