@@ -117,7 +117,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 
 	var s Setup
-	s.Ctx = context.Background()
+	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
