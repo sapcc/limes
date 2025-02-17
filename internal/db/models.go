@@ -207,6 +207,13 @@ const (
 	CommitmentStateExpired    CommitmentState = "expired"
 )
 
+type MailNotification struct {
+	ProjectID      ProjectID `db:"project_id"`
+	Subject        string    `db:"subject"`
+	Body           string    `db:"body"`
+	NextSubMission time.Time `db:"next_submission_at"`
+}
+
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
