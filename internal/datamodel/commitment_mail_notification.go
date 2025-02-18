@@ -24,10 +24,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-api-declarations/liquid"
-
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -38,13 +34,8 @@ type MailInfo struct {
 }
 
 type CommitmentInfo struct {
-	CreatorName      string
-	Amount           uint64
-	Duration         limesresources.CommitmentDuration
-	Date             *time.Time
-	ServiceName      db.ServiceType
-	ResourceName     liquid.ResourceName
-	AvailabilityZone limes.AvailabilityZone
+	Commitment db.ProjectCommitment
+	Resource   AZResourceLocation
 }
 
 func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {

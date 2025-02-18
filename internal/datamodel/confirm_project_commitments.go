@@ -51,12 +51,9 @@ var (
 	`)
 
 	getConfirmedCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pc.creator_name, pc.amount, pc.duration, pc.confirmed_at, ps.type, pr.name, par.az
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		WHERE pc.id = ANY($1)
+		SELECT creator_name, amount, duration, duration
+		  FROM project_commitments
+		WHERE id = ANY($1)
 `)
 )
 
@@ -166,7 +163,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 
 	var emails []db.MailNotification
 	for projectID := range confirmedCommitments {
-		mailInfo, err := PrepareMailNotification(cluster, dbi, projectID, confirmedCommitments[projectID])
+		mailInfo, err := PrepareMailNotification(cluster, dbi, loc, projectID, confirmedCommitments[projectID])
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +178,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 	return emails, nil
 }
 
-func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (*MailInfo, error) {
+func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc AZResourceLocation, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (*MailInfo, error) {
 	mailInfo := MailInfo{}
 	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
 	if err != nil {
@@ -191,7 +188,8 @@ func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, projectID 
 	queryArgs := []any{pq.Array(confirmedCommitments)}
 	err = sqlext.ForeachRow(dbi, getConfirmedCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c CommitmentInfo
-		err := rows.Scan(&c.CreatorName, &c.Amount, &c.Duration, &c.Date, &c.ServiceName, &c.ResourceName, &c.AvailabilityZone)
+		err := rows.Scan(&c.Commitment.CreatorName, &c.Commitment.Amount, &c.Commitment.Duration, &c.Commitment.Duration)
+		c.Resource = loc
 		mailInfo.Commitments = append(mailInfo.Commitments, c)
 		return err
 	})
