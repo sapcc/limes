@@ -216,7 +216,7 @@ type MailNotification struct {
 	ProjectID         ProjectID `db:"project_id"`
 	Subject           string    `db:"subject"`
 	Body              string    `db:"body"`
-	NextSubMissionAt  time.Time `db:"next_submission_at"`
+	NextSubmissionAt  time.Time `db:"next_submission_at"`
 	FailedSubmissions int64     `db:"failed_submissions"`
 }
 

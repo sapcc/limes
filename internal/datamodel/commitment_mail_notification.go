@@ -61,7 +61,7 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 		ProjectID:        projectID,
 		Subject:          subject,
 		Body:             body,
-		NextSubMissionAt: now,
+		NextSubmissionAt: now,
 	}
 
 	return &notification, nil
