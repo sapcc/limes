@@ -141,7 +141,7 @@ func main() {
 	if len(os.Args) < 3 {
 		printUsageAndExit(1)
 	}
-	taskName, configPath, mailPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3], os.Args[4:]
+	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 	bininfo.SetTaskName(taskName)
 	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
@@ -150,7 +150,7 @@ func main() {
 	must.Succeed(err)
 
 	// load configuration and connect to cluster
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), must.Return(os.ReadFile(mailPath)))
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()

@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -132,9 +133,9 @@ const (
 		quota_distribution_configs:
 			# test automatic project quota calculation with non-default settings on */capacity resources
 			- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
+		mail_templates:
+			confirmed_commitments: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }}Creator:{{ .CreatorName }} Amount:{{ .Amount }} Duration:{{ .Duration }} Service:{{ .ServiceName }} Resource:{{ .ResourceName }} AZ:{{ .AvailabilityZone }}{{ end }}"
 	`
-
-	emailTemplateYAML = `Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }}Creator:{{ .CreatorName }} Amount:{{ .Amount }} Duration:{{ .Duration }} Service:{{ .ServiceName }} Resource:{{ .ResourceName }} AZ:{{ .AvailabilityZone }}{{ end }}`
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -616,10 +617,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	}
 }
 
-func TestScanCapacityWithEmailNotification(t *testing.T) {
+func TestScanCapacityWithMailNotification(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
-		test.WithMailConfig(emailTemplateYAML),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
 	)
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -707,7 +707,7 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 	`, timestampUpdates(), scrapedAt2.Unix())
 
 	// day 3: reject empty mail body
-	s.Cluster.MailTemplate = nil
+	s.Cluster.Config.MailTemplates = core.MailTemplates{ConfirmedCommitments: ""}
 	s.Clock.StepBy(24 * time.Hour)
 	_, err = s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=4;")
 	if err != nil {
@@ -715,6 +715,6 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 	}
 	err = jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins))
 	if err == nil {
-		t.Fatal("execution without email template must fail")
+		t.Fatal("execution without mail template must fail")
 	}
 }

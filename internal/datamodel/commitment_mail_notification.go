@@ -21,13 +21,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"text/template"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -47,12 +47,12 @@ type CommitmentInfo struct {
 	AvailabilityZone limes.AvailabilityZone
 }
 
-func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
+func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
 	if len(m.Commitments) == 0 {
 		return db.MailNotification{}, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
 
-	body, err := m.getEmailContent(cluster)
+	body, err := m.getEmailContent(tpl)
 	if err != nil {
 		return db.MailNotification{}, err
 	}
@@ -67,12 +67,17 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 	return notification, nil
 }
 
-func (m MailInfo) getEmailContent(cluster *core.Cluster) (string, error) {
+func (m MailInfo) getEmailContent(tpl string) (string, error) {
 	var ioBuffer bytes.Buffer
-	if cluster.MailTemplate == nil {
+	if tpl == "" {
 		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
 	}
-	err := cluster.MailTemplate.Execute(&ioBuffer, m)
+	mailTpl, err := template.New("limes").Parse(tpl)
+	if err != nil {
+		return "", fmt.Errorf("could not parse mail template: %w", err)
+	}
+
+	err = mailTpl.Execute(&ioBuffer, m)
 	if err != nil {
 		return "", err
 	}

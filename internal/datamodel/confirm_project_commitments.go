@@ -170,7 +170,8 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		if err != nil {
 			return nil, err
 		}
-		email, err := mailInfo.CreateMailNotification(cluster, "Your recent commitment confirmations", projectID, now)
+		template := cluster.Config.MailTemplates.ConfirmedCommitments
+		email, err := mailInfo.CreateMailNotification(template, "Your recent commitment confirmations", projectID, now)
 		if err != nil {
 			return nil, err
 		}

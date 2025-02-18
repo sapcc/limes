@@ -48,7 +48,6 @@ type setupParams struct {
 	DBSetupOptions []easypg.TestSetupOption
 	DBFixtureFile  string
 	ConfigYAML     string
-	MailYaml       string
 	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
 	APIMiddlewares []httpapi.API
 }
@@ -70,12 +69,6 @@ func WithDBFixtureFile(file string) SetupOption {
 func WithConfig(yamlStr string) SetupOption {
 	return func(params *setupParams) {
 		params.ConfigYAML = normalizeInlineYAML(yamlStr)
-	}
-}
-
-func WithMailConfig(mailStr string) SetupOption {
-	return func(params *setupParams) {
-		params.MailYaml = normalizeInlineYAML(mailStr)
 	}
 }
 
@@ -126,7 +119,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, params.MailYaml)
+	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
 
@@ -185,8 +178,8 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML, mailYaml string) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), []byte(mailYaml))
+func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {
+	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
 	if errs.IsEmpty() {
 		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
 	}

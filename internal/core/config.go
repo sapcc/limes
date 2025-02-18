@@ -21,7 +21,6 @@ package core
 
 import (
 	"fmt"
-	"text/template"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -48,6 +47,11 @@ type ClusterConfiguration struct {
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
+	MailTemplates            MailTemplates                     `yaml:"mail_templates"`
+}
+type MailTemplates struct {
+	ConfirmedCommitments string `yaml:"confirmed_commitments"`
+	ExpiringCommitments  string `yaml:"expiring_commitments"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -150,7 +154,7 @@ type AutogrowQuotaDistributionConfiguration struct {
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
 // Errors are logged and will result in program termination, causing the function to not return.
-func NewClusterFromYAML(configBytes, mailTemplate []byte) (cluster *Cluster, errs errext.ErrorSet) {
+func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
@@ -164,12 +168,6 @@ func NewClusterFromYAML(configBytes, mailTemplate []byte) (cluster *Cluster, err
 		return nil, errs
 	}
 
-	mailTpl, err := template.New("limes").Parse(string(mailTemplate))
-	if err != nil {
-		errs.Addf("could not parse mail template: %w", err)
-		return nil, errs
-	}
-
 	// inflate the ClusterConfiguration instances into Cluster, thereby validating
 	// the existence of the requested quota and capacity plugins and initializing
 	// some handy lookup tables
@@ -177,7 +175,7 @@ func NewClusterFromYAML(configBytes, mailTemplate []byte) (cluster *Cluster, err
 		// choose default discovery method
 		config.Discovery.Method = "list"
 	}
-	return NewCluster(config, mailTpl)
+	return NewCluster(config)
 }
 
 func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
