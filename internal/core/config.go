@@ -21,6 +21,7 @@ package core
 
 import (
 	"fmt"
+	"text/template"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -38,7 +39,6 @@ import (
 // cluster. It is instantiated from YAML and then transformed into type
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
-	Region            string                   `yaml:"region"`
 	AvailabilityZones []limes.AvailabilityZone `yaml:"availability_zones"`
 	CatalogURL        string                   `yaml:"catalog_url"`
 	Discovery         DiscoveryConfiguration   `yaml:"discovery"`
@@ -150,7 +150,7 @@ type AutogrowQuotaDistributionConfiguration struct {
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
 // Errors are logged and will result in program termination, causing the function to not return.
-func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.ErrorSet) {
+func NewClusterFromYAML(configBytes, mailTemplate []byte) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
@@ -164,6 +164,12 @@ func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.Error
 		return nil, errs
 	}
 
+	mailTpl, err := template.New("limes").Parse(string(mailTemplate))
+	if err != nil {
+		errs.Addf("parse mail template: %w", err)
+		return nil, errs
+	}
+
 	// inflate the ClusterConfiguration instances into Cluster, thereby validating
 	// the existence of the requested quota and capacity plugins and initializing
 	// some handy lookup tables
@@ -171,7 +177,7 @@ func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.Error
 		// choose default discovery method
 		config.Discovery.Method = "list"
 	}
-	return NewCluster(config)
+	return NewCluster(config, mailTpl)
 }
 
 func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {

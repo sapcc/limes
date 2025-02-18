@@ -208,10 +208,12 @@ const (
 )
 
 type MailNotification struct {
-	ProjectID      ProjectID `db:"project_id"`
-	Subject        string    `db:"subject"`
-	Body           string    `db:"body"`
-	NextSubMission time.Time `db:"next_submission_at"`
+	ID                int64     `db:"id"`
+	ProjectID         ProjectID `db:"project_id"`
+	Subject           string    `db:"subject"`
+	Body              string    `db:"body"`
+	NextSubMissionAt  time.Time `db:"next_submission_at"`
+	FailedSubmissions int64     `db:"failed_submissions"`
 }
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
@@ -227,4 +229,5 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
+	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "project_id")
 }

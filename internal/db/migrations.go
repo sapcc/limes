@@ -200,7 +200,8 @@ var sqlMigrations = map[string]string{
 	`,
 	"048_project_mail_notifications.up.sql": `
 		CREATE TABLE project_mail_notifications (
-			project_id BIGSERIAL NOT NULL REFERENCES projects ON DELETE RESTRICT,
+			id BIGSERIAL NOT NULL PRIMARY KEY,
+			project_id BIGINT NOT NULL REFERENCES projects ON DELETE CASCADE,
   			subject TEXT NOT NULL,
   			body TEXT NOT NULL,
   			next_submission_at TIMESTAMP NOT NULL DEFAULT NOW(),

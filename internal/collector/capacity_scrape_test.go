@@ -133,6 +133,8 @@ const (
 			# test automatic project quota calculation with non-default settings on */capacity resources
 			- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
 	`
+
+	emailTemplateYAML = `Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }}Creator:{{ .CreatorName }} Amount:{{ .Amount }} Duration:{{ .Duration }} Service:{{ .ServiceName }} Resource:{{ .ResourceName }} AZ:{{ .AvailabilityZone }}{{ end }}`
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -612,4 +614,110 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			assert.DeepEqual(t, desc, actualDemands.PerAZ, expectedDemands)
 		}
 	}
+}
+
+func TestScanCapacityWithEmailNotification(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
+		test.WithMailConfig(emailTemplateYAML),
+		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+	)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	// in each of the test steps below, the timestamp updates on cluster_capacitors will always be the same
+	timestampUpdates := func() string {
+		scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt2 := s.Clock.Now()
+		return strings.TrimSpace(fmt.Sprintf(`
+					UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'scans-first';
+					UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'scans-second';
+				`,
+			scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
+			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
+		))
+	}
+
+	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	desyncedAt2 := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 13 AND resource_id = 10 AND az = 'any';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 250 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 21 AND resource_id = 5 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 23 AND resource_id = 8 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 24 AND resource_id = 8 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 25 AND resource_id = 8 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 26 AND resource_id = 11 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 5 AND resource_id = 4 AND az = 'any';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 9 AND resource_id = 7 AND az = 'any';
+		UPDATE project_resources SET quota = 0 WHERE id = 1 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET quota = 0 WHERE id = 10 AND service_id = 4 AND name = 'things';
+		UPDATE project_resources SET quota = 10 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
+		UPDATE project_resources SET quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0 WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0 WHERE id = 7 AND service_id = 3 AND name = 'things';
+		UPDATE project_resources SET quota = 10 WHERE id = 8 AND service_id = 3 AND name = 'capacity';
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'first';
+		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND type = 'second';
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 3 AND project_id = 2 AND type = 'first';
+		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND type = 'second';
+	`, timestampUpdates(), desyncedAt1.Unix(), desyncedAt2.Unix())
+
+	// positive: schedule two mails for different projects
+	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
+	_, err := s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// (Commitment ID: 11) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
+	_, err = s.DB.Exec(`
+			INSERT INTO project_commitments
+			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, notify_on_confirm)
+			VALUES(11, 27, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active', notify_on_confirm = TRUE WHERE id = 1 AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm) VALUES (11, 27, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlinCreator:dummy Amount:10 Duration:10 days Service:first Resource:capacity AZ:az-one', %[2]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresdenCreator:dummy Amount:1 Duration:2 days Service:second Resource:capacity AZ:az-one', %[3]d);
+		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+	`, timestampUpdates(), scrapedAt1.Unix(), scrapedAt2.Unix())
+
+	// positive: schedule one mail with two commitments for the same project.
+	// (Commitment ID: 12) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
+	_, err = s.DB.Exec(`
+			INSERT INTO project_commitments
+			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm)
+			VALUES(12, 27, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	tr.DBChanges().AssertEqualf(``)
+
+	// negative: reject empty mail body
 }

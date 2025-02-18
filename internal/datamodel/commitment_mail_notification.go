@@ -20,20 +20,17 @@ package datamodel
 import (
 	"bytes"
 	"fmt"
-	"path"
-	"text/template"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/osext"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
 type MailInfo struct {
-	Region      string
 	DomainName  string
 	ProjectName string
 	Commitments []CommitmentInfo
@@ -49,33 +46,33 @@ type CommitmentInfo struct {
 	AvailabilityZone limes.AvailabilityZone
 }
 
-func (m MailInfo) ScheduleMailNotification(dbi db.Interface, subject string, projectID db.ProjectID) error {
-	body, err := m.getEmailContent()
-	if err != nil {
-		return err
+func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, projectID db.ProjectID, now time.Time) (*db.MailNotification, error) {
+	if len(m.Commitments) == 0 {
+		return nil, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
 
-	_, err = dbi.Exec(`UPDATE project_mail_notifications SET project_id = $1, subject = $2, body = $3, next_submission_at = $4`,
-		projectID, subject, body, time.Now())
+	body, err := m.getEmailContent(cluster)
 	if err != nil {
-		return fmt.Errorf("while creating an email notification for project: %d, %w", projectID, err)
+		return nil, err
 	}
 
-	return nil
+	if body == "" {
+		return nil, fmt.Errorf("mail: body is empty. Check the accessiblity of the mail template. ProjectID: %v", projectID)
+	}
+
+	notification := db.MailNotification{
+		ProjectID:        projectID,
+		Subject:          subject,
+		Body:             body,
+		NextSubMissionAt: now,
+	}
+
+	return &notification, nil
 }
 
-func (m MailInfo) getEmailContent() (string, error) {
-	tplPath, err := osext.NeedGetenv("email_template")
-	if err != nil {
-		return "", err
-	}
-	emailTpl, err := template.New(path.Base(tplPath)).ParseFiles(tplPath)
-	if err != nil {
-		return "", err
-	}
-
+func (m MailInfo) getEmailContent(cluster *core.Cluster) (string, error) {
 	var ioBuffer bytes.Buffer
-	err = emailTpl.Execute(&ioBuffer, m)
+	err := cluster.MailTemplate.Execute(&ioBuffer, m)
 	if err != nil {
 		return "", err
 	}

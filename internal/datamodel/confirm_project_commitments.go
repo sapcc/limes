@@ -51,7 +51,7 @@ var (
 	`)
 
 	getConfirmedCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pc.creator_name, pc.amount, pc.duration, pc.confirmed_at, ps.type, p.name, par.az
+		SELECT pc.creator_name, pc.amount, pc.duration, pc.confirmed_at, ps.type, pr.name, par.az
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
@@ -104,12 +104,12 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]*db.MailNotification, error) {
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stats := statsByAZ[loc.AvailabilityZone]
 
@@ -132,7 +132,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+		return nil, fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
 
 	// foreach confirmable commitment...
@@ -149,7 +149,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
 			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
-			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 		}
 
 		if c.NotifyOnConfirm {
@@ -164,24 +164,24 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		}
 	}
 
+	var emails []*db.MailNotification
 	for projectID := range confirmedCommitments {
 		mailInfo, err := PrepareMailNotification(cluster, dbi, projectID, confirmedCommitments[projectID])
 		if err != nil {
-			return err
+			return nil, err
 		}
-		err = mailInfo.ScheduleMailNotification(dbi, "Your recent commitment confirmations", projectID)
+		email, err := mailInfo.CreateMailNotification(cluster, "Your recent commitment confirmations", projectID, now)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		emails = append(emails, email)
 	}
 
-	return nil
+	return emails, nil
 }
 
 func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (*MailInfo, error) {
-	mailInfo := MailInfo{
-		Region: cluster.Config.Region,
-	}
+	mailInfo := MailInfo{}
 	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
 	if err != nil {
 		return nil, err

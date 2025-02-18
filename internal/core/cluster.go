@@ -22,6 +22,7 @@ package core
 import (
 	"context"
 	"slices"
+	"text/template"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -40,6 +41,7 @@ import (
 // cluster.
 type Cluster struct {
 	Config          ClusterConfiguration
+	MailTemplate    *template.Template
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[db.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
@@ -48,9 +50,10 @@ type Cluster struct {
 // NewCluster creates a new Cluster instance with the given ID and
 // configuration, and also initializes all quota and capacity plugins. Errors
 // will be logged when some of the requested plugins cannot be found.
-func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, mailTpl *template.Template) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:          config,
+		MailTemplate:    mailTpl,
 		QuotaPlugins:    make(map[db.ServiceType]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 	}
