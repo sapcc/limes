@@ -47,14 +47,14 @@ type CommitmentInfo struct {
 	AvailabilityZone limes.AvailabilityZone
 }
 
-func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, projectID db.ProjectID, now time.Time) (*db.MailNotification, error) {
+func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
 	if len(m.Commitments) == 0 {
-		return nil, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
+		return db.MailNotification{}, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
 
 	body, err := m.getEmailContent(cluster)
 	if err != nil {
-		return nil, err
+		return db.MailNotification{}, err
 	}
 
 	notification := db.MailNotification{
@@ -64,7 +64,7 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 		NextSubmissionAt: now,
 	}
 
-	return &notification, nil
+	return notification, nil
 }
 
 func (m MailInfo) getEmailContent(cluster *core.Cluster) (string, error) {

@@ -394,7 +394,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 		}
 
 		for _, mail := range mails {
-			err := tx.Insert(mail)
+			err := tx.Insert(&mail)
 			if err != nil {
 				return err
 			}

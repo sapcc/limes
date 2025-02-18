@@ -104,7 +104,7 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]*db.MailNotification, error) {
+func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
@@ -164,7 +164,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		}
 	}
 
-	var emails []*db.MailNotification
+	var emails []db.MailNotification
 	for projectID := range confirmedCommitments {
 		mailInfo, err := PrepareMailNotification(cluster, dbi, projectID, confirmedCommitments[projectID])
 		if err != nil {
