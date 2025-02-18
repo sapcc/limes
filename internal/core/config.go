@@ -166,7 +166,7 @@ func NewClusterFromYAML(configBytes, mailTemplate []byte) (cluster *Cluster, err
 
 	mailTpl, err := template.New("limes").Parse(string(mailTemplate))
 	if err != nil {
-		errs.Addf("parse mail template: %w", err)
+		errs.Addf("could not parse mail template: %w", err)
 		return nil, errs
 	}
 
