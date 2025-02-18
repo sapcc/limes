@@ -19,6 +19,7 @@ package datamodel
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,7 +70,7 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 func (m MailInfo) getEmailContent(cluster *core.Cluster) (string, error) {
 	var ioBuffer bytes.Buffer
 	if cluster.MailTemplate == nil {
-		return "", fmt.Errorf("mail: body is empty. Check the accessiblity of the mail template.")
+		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
 	}
 	err := cluster.MailTemplate.Execute(&ioBuffer, m)
 	if err != nil {
