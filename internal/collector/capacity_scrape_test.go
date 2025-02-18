@@ -747,6 +747,6 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 	}
 	err = jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins))
 	if err == nil {
-		logg.Fatal("execution without email template must fail.")
+		t.Fatal("execution without email template must fail")
 	}
 }
