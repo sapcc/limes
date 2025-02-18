@@ -56,10 +56,6 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 		return nil, err
 	}
 
-	if body == "" {
-		return nil, fmt.Errorf("mail: body is empty. Check the accessiblity of the mail template. ProjectID: %v", projectID)
-	}
-
 	notification := db.MailNotification{
 		ProjectID:        projectID,
 		Subject:          subject,
@@ -72,6 +68,9 @@ func (m MailInfo) CreateMailNotification(cluster *core.Cluster, subject string, 
 
 func (m MailInfo) getEmailContent(cluster *core.Cluster) (string, error) {
 	var ioBuffer bytes.Buffer
+	if cluster.MailTemplate == nil {
+		return "", fmt.Errorf("mail: body is empty. Check the accessiblity of the mail template.")
+	}
 	err := cluster.MailTemplate.Execute(&ioBuffer, m)
 	if err != nil {
 		return "", err

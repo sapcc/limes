@@ -178,7 +178,7 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 		easypg.ClearTables("cluster_capacitors", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
 			"cluster_services", "cluster_resources", "cluster_az_resources",
-			"domains", "projects", "project_commitments",
+			"domains", "projects", "project_commitments", "project_mail_notifications",
 			"project_services", "project_resources", "project_az_resources",
 		),
 	)

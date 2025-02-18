@@ -229,5 +229,5 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
-	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "project_id")
+	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "id")
 }

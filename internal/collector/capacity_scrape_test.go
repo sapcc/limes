@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -676,7 +677,7 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND type = 'second';
 	`, timestampUpdates(), desyncedAt1.Unix(), desyncedAt2.Unix())
 
-	// positive: schedule two mails for different projects
+	// day 1: schedule two mails for different projects
 	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
 	_, err := s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
 	if err != nil {
@@ -705,7 +706,7 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix(), scrapedAt2.Unix())
 
-	// positive: schedule one mail with two commitments for the same project.
+	// day 2: schedule one mail with two commitments for the same project.
 	// (Commitment ID: 12) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
@@ -716,8 +717,26 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 	}
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 110 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
+		UPDATE project_commitments SET state = 'expired' WHERE id = 11 AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm) VALUES (12, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE);
+		UPDATE project_commitments SET confirmed_at = 172825, state = 'active' WHERE id = 2 AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL;
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresdenCreator:dummy Amount:1 Duration:2 days Service:second Resource:capacity AZ:az-one', %d);
+		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+	`, timestampUpdates(), scrapedAt2.Unix())
 
-	tr.DBChanges().AssertEqualf(``)
-
-	// negative: reject empty mail body
+	// day 3: reject empty mail body
+	s.Cluster.MailTemplate = nil
+	s.Clock.StepBy(24 * time.Hour)
+	_, err = s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=4;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins))
+	if err == nil {
+		logg.Fatal("execution without email template must fail.")
+	}
 }

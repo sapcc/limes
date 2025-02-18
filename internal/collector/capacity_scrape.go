@@ -388,14 +388,13 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 			ResourceName:     resourceName,
 			AvailabilityZone: az,
 		}
-		emails, err := datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now)
+		mails, err := datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now)
 		if err != nil {
 			return err
 		}
 
-		for _, email := range emails {
-			logg.Info("%#v", email)
-			err := tx.Insert(email)
+		for _, mail := range mails {
+			err := tx.Insert(mail)
 			if err != nil {
 				return err
 			}
