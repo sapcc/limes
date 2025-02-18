@@ -161,21 +161,21 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		}
 	}
 
-	var emails []db.MailNotification
+	var mails []db.MailNotification
 	for projectID := range confirmedCommitments {
 		mailInfo, err := PrepareMailNotification(cluster, dbi, loc, projectID, confirmedCommitments[projectID])
 		if err != nil {
 			return nil, err
 		}
 		template := cluster.Config.MailTemplates.ConfirmedCommitments
-		email, err := mailInfo.CreateMailNotification(template, "Your recent commitment confirmations", projectID, now)
+		mail, err := mailInfo.CreateMailNotification(template, "Your recent commitment confirmations", projectID, now)
 		if err != nil {
 			return nil, err
 		}
-		emails = append(emails, email)
+		mails = append(mails, mail)
 	}
 
-	return emails, nil
+	return mails, nil
 }
 
 func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc AZResourceLocation, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (*MailInfo, error) {

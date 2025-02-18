@@ -43,7 +43,7 @@ func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.Proje
 		return db.MailNotification{}, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
 
-	body, err := m.getEmailContent(tpl)
+	body, err := m.getMailContent(tpl)
 	if err != nil {
 		return db.MailNotification{}, err
 	}
@@ -58,7 +58,7 @@ func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.Proje
 	return notification, nil
 }
 
-func (m MailInfo) getEmailContent(tpl string) (string, error) {
+func (m MailInfo) getMailContent(tpl string) (string, error) {
 	var ioBuffer bytes.Buffer
 	if tpl == "" {
 		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
