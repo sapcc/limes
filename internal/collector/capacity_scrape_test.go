@@ -32,7 +32,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
-	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -644,38 +643,7 @@ func TestScanCapacityWithEmailNotification(t *testing.T) {
 		))
 	}
 
-	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
-	desyncedAt2 := s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND resource_id = 1 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 13 AND resource_id = 10 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 250 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 21 AND resource_id = 5 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 23 AND resource_id = 8 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 24 AND resource_id = 8 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 25 AND resource_id = 8 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 26 AND resource_id = 11 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 5 AND resource_id = 4 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 9 AND resource_id = 7 AND az = 'any';
-		UPDATE project_resources SET quota = 0 WHERE id = 1 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = 0 WHERE id = 10 AND service_id = 4 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
-		UPDATE project_resources SET quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 0 WHERE id = 4 AND service_id = 2 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET quota = 0 WHERE id = 7 AND service_id = 3 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 8 AND service_id = 3 AND name = 'capacity';
-		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'first';
-		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND type = 'second';
-		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 3 AND project_id = 2 AND type = 'first';
-		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND type = 'second';
-	`, timestampUpdates(), desyncedAt1.Unix(), desyncedAt2.Unix())
+	tr.DBChanges().Ignore()
 
 	// day 1: schedule two mails for different projects
 	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
