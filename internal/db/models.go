@@ -195,8 +195,8 @@ type ProjectCommitment struct {
 	// This field is updated by the CapacityScrapeJob.
 	State CommitmentState `db:"state"`
 
-	// During commitment planning, a user should be able to specify
-	// if a mail should be send after the commitments confirmation.
+	// During commitment planning, a user can specify
+	// if a mail should be sent after the commitments confirmation.
 	NotifyOnConfirm bool `db:"notify_on_confirm"`
 }
 
