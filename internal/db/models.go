@@ -194,6 +194,10 @@ type ProjectCommitment struct {
 	//
 	// This field is updated by the CapacityScrapeJob.
 	State CommitmentState `db:"state"`
+
+	// During commitment planning, a user should be able to specify
+	// if a mail should be send after the commitments confirmation.
+	NotifyOnConfirm bool `db:"notify_on_confirm"`
 }
 
 // CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
