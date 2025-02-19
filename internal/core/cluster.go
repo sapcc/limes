@@ -22,6 +22,7 @@ package core
 import (
 	"context"
 	"slices"
+	"text/template"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -43,6 +44,12 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[db.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
+	MailTemplates   MailTemplates
+}
+
+type MailTemplates struct {
+	ConfirmedCommitments *template.Template
+	ExpiringCommitments  *template.Template
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -78,6 +85,18 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		}
 		c.CapacityPlugins[capa.ID] = plugin
 	}
+
+	// Create mail templates
+	confirmTPl, err := template.New("confirm").Parse(config.MailForms.ConfirmedCommitments)
+	if err != nil {
+		errs.Addf("could not parse mail template: %w", err)
+	}
+	c.MailTemplates.ConfirmedCommitments = confirmTPl
+	expireTpl, err := template.New("expire").Parse(config.MailForms.ExpiringCommitments)
+	if err != nil {
+		errs.Addf("could not parse mail template: %w", err)
+	}
+	c.MailTemplates.ExpiringCommitments = expireTpl
 
 	return c, errs
 }

@@ -38,7 +38,7 @@ type CommitmentInfo struct {
 	Resource   AZResourceLocation
 }
 
-func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
+func (m MailInfo) CreateMailNotification(tpl *template.Template, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
 	if len(m.Commitments) == 0 {
 		return db.MailNotification{}, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
@@ -58,17 +58,13 @@ func (m MailInfo) CreateMailNotification(tpl, subject string, projectID db.Proje
 	return notification, nil
 }
 
-func (m MailInfo) getMailContent(tpl string) (string, error) {
+func (m MailInfo) getMailContent(tpl *template.Template) (string, error) {
 	var ioBuffer bytes.Buffer
-	if tpl == "" {
+	if tpl == nil {
 		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
 	}
-	mailTpl, err := template.New("limes").Parse(tpl)
-	if err != nil {
-		return "", fmt.Errorf("could not parse mail template: %w", err)
-	}
 
-	err = mailTpl.Execute(&ioBuffer, m)
+	err := tpl.Execute(&ioBuffer, m)
 	if err != nil {
 		return "", err
 	}

@@ -707,7 +707,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	`, timestampUpdates(), scrapedAt2.Unix())
 
 	// day 3: reject empty mail body
-	s.Cluster.Config.MailTemplates = core.MailTemplates{ConfirmedCommitments: ""}
+	s.Cluster.MailTemplates = core.MailTemplates{ConfirmedCommitments: nil}
 	s.Clock.StepBy(24 * time.Hour)
 	_, err = s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=4;")
 	if err != nil {
