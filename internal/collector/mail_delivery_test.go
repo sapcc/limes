@@ -82,7 +82,7 @@ func Test_MailDelivery(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`UPDATE project_mail_notifications SET next_submission_at = %d, failed_submissions = 1 WHERE id = 2;`, nextDelivery.Unix())
 
-	// day 3: send another mail successfully
+	// day 3: send another mail successfully. Now notification with ID 2 and 3 overlap.
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 3;`)

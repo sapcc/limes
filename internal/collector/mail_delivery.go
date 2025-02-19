@@ -68,6 +68,8 @@ var (
 	findMailsToProcessQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_mail_notifications
 		WHERE next_submission_at <= $1
+		-- if a requeue overlaps with another notification, prioritise the one with fewer attempts
+		ORDER BY failed_submissions
 		LIMIT 1
 	`)
 )
