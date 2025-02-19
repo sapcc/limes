@@ -158,7 +158,9 @@ func main() {
 	// select task
 	switch taskName {
 	case "collect":
-		taskCollect(ctx, cluster, remainingArgs)
+		mailClient, err := collector.NewMailClient(provider, eo, collector.MailOpts{ServiceType: "limes-campfire"})
+		must.Succeed(err)
+		taskCollect(ctx, cluster, mailClient, remainingArgs)
 	case "serve":
 		taskServe(ctx, cluster, remainingArgs, provider, eo)
 	case "serve-data-metrics":
@@ -194,7 +196,7 @@ func printUsageAndExit(exitCode int) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
+func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collector.MailDelivery, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
@@ -227,6 +229,9 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
 	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.CleanupOldCommitmentsJob(nil).Run(ctx)
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
+
+	// start mail delivery
+	go c.MailDeliveryJob(nil, mailClient).Run(ctx)
 
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})

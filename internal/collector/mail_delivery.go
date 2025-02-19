@@ -18,3 +18,92 @@
 *******************************************************************************/
 
 package collector
+
+import (
+	"context"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/sqlext"
+
+	"github.com/sapcc/limes/internal/db"
+)
+
+type MailRequest struct {
+	ProjectID db.ProjectID `json:"project_id"`
+	Subject   string       `json:"subject"`
+	MimeType  string       `json:"mime_type"`
+	MailText  string       `json:"mail_text"`
+}
+
+const (
+	// how long to wait after error before retrying sending mails
+	mailDeliveryErrorInterval = 24 * time.Hour
+)
+
+func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailDelivery) jobloop.Job {
+	return (&jobloop.ProducerConsumerJob[MailDeliveryTask]{
+		Metadata: jobloop.JobMetadata{
+			ReadableName: "mail delivery",
+			CounterOpts: prometheus.CounterOpts{
+				Name: "limes_mail_delivery",
+				Help: "Counter for mail delivery operations.",
+			},
+		},
+		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (MailDeliveryTask, error) {
+			return c.discoverMailDeliveryTask(ctx, labels, client)
+		},
+		ProcessTask: c.processMailDeliveryTask,
+	}).Setup(registerer)
+
+}
+
+type MailDeliveryTask struct {
+	Client           MailDelivery
+	MailNotification db.MailNotification
+}
+
+var (
+	findMailsToProcessQuery = sqlext.SimplifyWhitespace(`
+		SELECT * FROM project_mail_notifications
+		WHERE next_submission_at <= $1
+		LIMIT 1
+	`)
+)
+
+func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Labels, client MailDelivery) (task MailDeliveryTask, err error) {
+	task.Client = client
+	startTime := c.MeasureTime()
+	err = c.DB.SelectOne(&task.MailNotification, findMailsToProcessQuery, startTime)
+	return task, err
+}
+
+func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDeliveryTask, _ prometheus.Labels) error {
+	mail := task.MailNotification
+	request := BuildMailRequest(mail, "text/html")
+	err := task.Client.PostMail(ctx, request)
+	if err != nil {
+		mail.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
+		mail.FailedSubmissions++
+		_, err := c.DB.Update(&mail)
+		if err != nil {
+			return err
+		}
+		return err
+	}
+	_, err = c.DB.Delete(&mail)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BuildMailRequest(content db.MailNotification, mimeType string) MailRequest {
+	return MailRequest{
+		ProjectID: content.ProjectID,
+		Subject:   content.Subject,
+		MimeType:  mimeType,
+		MailText:  content.Body,
+	}
+}
