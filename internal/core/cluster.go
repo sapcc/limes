@@ -89,12 +89,12 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	// Create mail templates
 	confirmTPl, err := template.New("confirm").Parse(config.MailForms.ConfirmedCommitments)
 	if err != nil {
-		errs.Addf("could not parse mail template: %w", err)
+		errs.Addf("could not parse confirmation mail template: %w", err)
 	}
 	c.MailTemplates.ConfirmedCommitments = confirmTPl
 	expireTpl, err := template.New("expire").Parse(config.MailForms.ExpiringCommitments)
 	if err != nil {
-		errs.Addf("could not parse mail template: %w", err)
+		errs.Addf("could not parse expiration mail template: %w", err)
 	}
 	c.MailTemplates.ExpiringCommitments = expireTpl
 
