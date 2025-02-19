@@ -56,7 +56,6 @@ func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client Mai
 		},
 		ProcessTask: c.processMailDeliveryTask,
 	}).Setup(registerer)
-
 }
 
 type MailDeliveryTask struct {
