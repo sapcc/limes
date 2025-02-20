@@ -36,7 +36,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
-	"github.com/sapcc/go-bits/sqlext"
 	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/core"
@@ -158,17 +157,9 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	return s
 }
 
-var cleanupProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
-	DELETE FROM project_commitments WHERE id NOT IN (
-		SELECT predecessor_id FROM project_commitments WHERE predecessor_id IS NOT NULL
-	)
-`)
-
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
-		// project_commitments needs a specialized cleanup strategy because of an "ON DELETE RESTRICT" constraint
-		easypg.ClearContentsWith(cleanupProjectCommitmentsQuery),
-		easypg.ClearTables("cluster_capacitors", "cluster_services", "domains"),
+		easypg.ClearTables("project_commitments", "cluster_capacitors", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
 			"cluster_services", "cluster_resources", "cluster_az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",

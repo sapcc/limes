@@ -656,8 +656,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	// (Commitment ID: 11) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
-			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, notify_on_confirm)
-			VALUES(11, 27, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
+			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(11, 27, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +670,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active', notify_on_confirm = TRUE WHERE id = 1 AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm) VALUES (11, 27, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE);
+		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json) VALUES (11, 27, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE, '{}');
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[2]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:second Resource:capacity AZ:az-one', %[3]d);
 		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
@@ -680,15 +680,15 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	// (Commitment IDs: 12, 13) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
-			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm)
-			VALUES(12, 27, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(12, 27, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
-			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm)
-			VALUES(13, 27, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(13, 27, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,8 +700,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_az_resources SET quota = 7 WHERE id = 26 AND resource_id = 11 AND az = 'any';
 		UPDATE project_az_resources SET quota = 2 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
 		UPDATE project_commitments SET state = 'expired' WHERE id = 11 AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm) VALUES (12, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE);
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm) VALUES (13, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE);
+		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json) VALUES (12, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}');
+		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json) VALUES (13, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}');
 		UPDATE project_commitments SET confirmed_at = 172825, state = 'active' WHERE id = 2 AND transfer_token = NULL;
 		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:second Resource:capacity AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:second Resource:capacity AZ:az-one', %d);

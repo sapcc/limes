@@ -1468,3 +1468,232 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 }
+
+func Test_MergeCommitments(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	// Create two confirmed commitments on the same resource
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            10,
+		"duration":          "1 hour",
+	}
+	req2 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            5,
+		"duration":          "2 hours",
+	}
+	// Create confirmed commit in different AZ
+	req3 := assert.JSONObject{
+		"id":                3,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            1,
+		"duration":          "2 hours",
+	}
+	// Create confirmed commitment on different resource
+	req4 := assert.JSONObject{
+		"id":                4,
+		"service_type":      "second",
+		"resource_name":     "capacity_portion",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"duration":          "2 hours",
+	}
+	resp3 := assert.JSONObject{
+		"id":                3,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            1,
+		"unit":              "B",
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      0,
+		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+	}
+	resp4 := assert.JSONObject{
+		"id":                4,
+		"service_type":      "second",
+		"resource_name":     "capacity_portion",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"unit":              "B",
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      0,
+		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+	}
+	// Merged commitment
+	resp5 := assert.JSONObject{
+		"id":                5,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            15,
+		"unit":              "B",
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      0,
+		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req2},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req3},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req4},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// No authentication
+	// Missing edit permissions
+	s.TokenValidator.Enforcer.AllowEdit = false
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectStatus: http.StatusForbidden,
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowEdit = true
+
+	// Unknown domain, project and commitment
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectStatus: http.StatusNotFound,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/unknown/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectStatus: http.StatusNotFound,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2000}},
+		ExpectStatus: http.StatusNotFound,
+	}.Check(t, s.Handler)
+
+	// Check that there are at least 2 commits to merge
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1}},
+		ExpectStatus: http.StatusBadRequest,
+	}.Check(t, s.Handler)
+
+	// Do not merge commitments in different AZs
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 3}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+	// Do not merge commitments on different resources
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 4}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Do not merge commitments with states other than "active"
+	unmergableStates := []db.CommitmentState{db.CommitmentStatePlanned, db.CommitmentStatePending, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
+	for _, state := range unmergableStates {
+		_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.HTTPRequest{
+			Method:       http.MethodPost,
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+			Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+			ExpectStatus: http.StatusConflict,
+		}.Check(t, s.Handler)
+	}
+	_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", db.CommitmentStateActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Happy path
+	// New merged commitment should be returned with latest expiration date of all commitments
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectBody:   assert.JSONObject{"commitment": resp5},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	// Check that commitments not involved in the merge remained the same
+	// Check that new merged commitment is present and that superseded commitments are not reported anymore
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp3, resp4, resp5}},
+		ExpectStatus: http.StatusOK,
+	}.Check(t, s.Handler)
+	// Validate that commitments that were merged are now superseded and have the correct context
+	var supersededCommitment db.ProjectCommitment
+	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
+	expectedContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{5}}
+	var supersedeContext db.CommitmentWorkflowContext
+	err = json.Unmarshal(*supersededCommitment.SupersedeContext, &supersedeContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
+	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
+	err = json.Unmarshal(*supersededCommitment.SupersedeContext, &supersedeContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
+}

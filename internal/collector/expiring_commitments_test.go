@@ -76,7 +76,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	mailTemplates := s.Cluster.Config.MailNotifications.Templates
 	s.Cluster.Config.MailNotifications.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: template.New("")}}
 	// commitments that are already sent out for a notification are not visible in the result set anymore - a new one gets created.
-	_, err := s.DB.Exec("INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (99, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'expired');")
+	_, err := s.DB.Exec("INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, creation_context_json) VALUES (99, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'expired', '{}'::jsonb);")
 	tr.DBChanges().Ignore()
 	mustT(t, err)
 	err = (job.ProcessOne(s.Ctx))
