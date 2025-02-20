@@ -545,6 +545,17 @@ Returns 201 (Created) on success. Result is a JSON document like:
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
 If `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
 
+### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/merge
+
+Merges active commitments on the same resource within the given project. The newly created merged commitment receives the latest expiration date of all given commitments. Requires a project-admin token, and a request body that is a JSON document like:
+
+```json
+{
+  "commitment_ids": [1,2,5]
+}
+```
+Returns 202 (Accepted) on success, and returns the merged commitment as a JSON document.
+
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/can-confirm
 
 Checks if a new commitment within the given project could be confirmed immediately.
