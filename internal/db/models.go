@@ -198,6 +198,10 @@ type ProjectCommitment struct {
 	// During commitment planning, a user can specify
 	// if a mail should be sent after the commitments confirmation.
 	NotifyOnConfirm bool `db:"notify_on_confirm"`
+
+	// If commitments are about to expire, they get added into the mail queue.
+	// This attribute helps to identify commitments that are already queued.
+	NotifiedForExpiration bool `db:"notified_for_expiration"`
 }
 
 // CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
