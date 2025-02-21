@@ -51,7 +51,7 @@ var (
 	`)
 
 	getConfirmedCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT creator_name, amount, duration, duration
+		SELECT creator_name, amount, duration, confirmed_at
 		  FROM project_commitments
 		WHERE id = ANY($1)
 `)
@@ -188,7 +188,8 @@ func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc AZReso
 	queryArgs := []any{pq.Array(confirmedCommitments)}
 	err = sqlext.ForeachRow(dbi, getConfirmedCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c CommitmentInfo
-		err := rows.Scan(&c.Commitment.CreatorName, &c.Commitment.Amount, &c.Commitment.Duration, &c.Commitment.Duration)
+		err := rows.Scan(&c.Commitment.CreatorName, &c.Commitment.Amount, &c.Commitment.Duration, &c.Commitment.ConfirmedAt)
+		c.Date = c.Commitment.ConfirmedAt.Format(time.DateOnly)
 		c.Resource = loc
 		mailInfo.Commitments = append(mailInfo.Commitments, c)
 		return err

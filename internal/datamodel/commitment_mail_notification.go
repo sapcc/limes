@@ -35,6 +35,7 @@ type MailInfo struct {
 
 type CommitmentInfo struct {
 	Commitment db.ProjectCommitment
+	Date       string
 	Resource   AZResourceLocation
 }
 
