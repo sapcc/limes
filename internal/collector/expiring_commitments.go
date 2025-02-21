@@ -145,15 +145,14 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	}
 
 	// sort notifications per project_id in order to have consistent unit tests
-	keys := make([]db.ProjectID, 0, len(task.Notifications))
-	for k := range task.Notifications {
-		keys = append(keys, k)
+	projectIDs := make([]db.ProjectID, 0, len(task.Notifications))
+	for projectID := range task.Notifications {
+		projectIDs = append(projectIDs, projectID)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
 
-	for _, key := range keys {
-		projectID := key
-		commitments := task.Notifications[key]
+	for _, projectID := range projectIDs {
+		commitments := task.Notifications[projectID]
 		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
 		if err != nil {
 			return err
