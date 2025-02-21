@@ -116,7 +116,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 		return ExpiringCommitments{}, err
 	}
 
-	// mark short-term commitments as notified without queuing them.
+	// mark short-term commitments as notified without queueing them.
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return ExpiringCommitments{}, err
