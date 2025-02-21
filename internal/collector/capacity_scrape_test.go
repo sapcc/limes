@@ -674,7 +674,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	`, timestampUpdates(), scrapedAt1.Unix(), scrapedAt2.Unix())
 
 	// day 2: schedule one mail with two commitments for the same project.
-	// (Commitment ID: 12) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
+	// (Commitment IDs: 12, 13) Confirmed commitment for first/capacity_portion in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
 			(id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm)
