@@ -32,18 +32,18 @@ import (
 
 const (
 	testMailNoopYAML = `
-availability_zones: [ az-one, az-two ]
-discovery:
-	method: --test-static
-services:
-	- service_type: shared
-		type: --test-generic
-capacitors:
-- id: noop
-	type: --test-static
-	params:
-		capacity: 0
-		resources: []
+		availability_zones: [ az-one, az-two ]
+		discovery:
+			method: --test-static
+		services:
+			- service_type: shared
+				type: --test-generic
+		capacitors:
+		- id: noop
+			type: --test-static
+			params:
+				capacity: 0
+				resources: []
 `
 )
 

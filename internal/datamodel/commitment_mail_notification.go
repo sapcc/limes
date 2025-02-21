@@ -48,6 +48,9 @@ func (m MailInfo) CreateMailNotification(tpl *template.Template, subject string,
 	if err != nil {
 		return db.MailNotification{}, err
 	}
+	if body == "" {
+		return db.MailNotification{}, fmt.Errorf("mail: body is empty for projectID: %v", projectID)
+	}
 
 	notification := db.MailNotification{
 		ProjectID:        projectID,

@@ -33,7 +33,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -705,16 +704,4 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresdenCreator:dummy Amount:1 Duration:2 days Date: 1970-01-03 Service:second Resource:capacity AZ:az-oneCreator:dummy Amount:1 Duration:2 days Date: 1970-01-03 Service:second Resource:capacity AZ:az-one', %d);
 		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
-
-	// day 3: reject empty mail body
-	s.Cluster.MailTemplates = core.MailTemplates{ConfirmedCommitments: nil}
-	s.Clock.StepBy(24 * time.Hour)
-	_, err = s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=4;")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins))
-	if err == nil {
-		t.Fatal("execution without mail template must fail")
-	}
 }

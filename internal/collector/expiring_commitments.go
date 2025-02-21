@@ -21,6 +21,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,6 +30,10 @@ import (
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+)
+
+const (
+	nextSumbissionInteval = 3 * time.Minute
 )
 
 // Add commitments that are about to expire within the next month into the mail queue.
@@ -54,24 +59,41 @@ type ExpiringCommitments struct {
 }
 
 var (
+	getScrapeLookAhead = sqlext.SimplifyWhitespace(`
+		SELECT date_trunc('month', $1::timestamp) + Interval '2 month - 1 day' AS Time;
+	`)
 	findExpiringCommitments = sqlext.SimplifyWhitespace(`
 		SELECT ps.project_id, ps.type, pr.name, par.az, pc.id, pc.creator_name, pc.amount, pc.duration, pc.expires_at
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		WHERE pc.expires_at BETWEEN NOW() AND DATE_TRUNC('month', NOW()) + Interval '2 month - 1 day';
+		WHERE pc.expires_at <= $1
+		ORDER BY ps.type, pr.name, par.az ASC, pc.amount DESC;
+	`)
+	updateCommitmentAsNotified = sqlext.SimplifyWhitespace(`
+		UPDATE project_commitments SET notified_for_expiration = true WHERE id = $1;
 	`)
 )
 
-// TODO: Detect short term commitments. Also add unit tests.
 func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (ExpiringCommitments, error) {
+	now := c.MeasureTime()
 	commitments := ExpiringCommitments{
 		Notifications:  make(map[db.ProjectID][]datamodel.CommitmentInfo),
-		NextSubmission: c.MeasureTime(),
+		NextSubmission: now.Add(c.AddJitter(nextSumbissionInteval)),
 	}
 
-	err := sqlext.ForeachRow(c.DB, findExpiringCommitments, nil, func(rows *sql.Rows) error {
+	var scrapeLookAhead struct {
+		Time time.Time
+	}
+
+	err := c.DB.SelectOne(&scrapeLookAhead, getScrapeLookAhead, now)
+	if err != nil {
+		return ExpiringCommitments{}, err
+	}
+
+	var shortTermCommitments []db.ProjectCommitmentID
+	err = sqlext.ForeachRow(c.DB, findExpiringCommitments, []any{scrapeLookAhead.Time}, func(rows *sql.Rows) error {
 		var pid db.ProjectID
 		var info datamodel.CommitmentInfo
 		err := rows.Scan(
@@ -79,9 +101,34 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 			&info.Resource.ServiceType, &info.Resource.ResourceName, &info.Resource.AvailabilityZone,
 			&info.Commitment.ID, &info.Commitment.CreatorName, &info.Commitment.Amount, &info.Commitment.Duration, &info.Commitment.ExpiresAt,
 		)
-		commitments.Notifications[pid] = append(commitments.Notifications[pid], info)
-		return err
+		info.Date = info.Commitment.ExpiresAt.Format(time.DateOnly)
+		if err != nil {
+			return err
+		}
+		if info.Commitment.Duration.AddTo(now).Before(scrapeLookAhead.Time) {
+			shortTermCommitments = append(shortTermCommitments, info.Commitment.ID)
+		} else {
+			commitments.Notifications[pid] = append(commitments.Notifications[pid], info)
+		}
+		return nil
 	})
+	if err != nil {
+		return ExpiringCommitments{}, err
+	}
+
+	// mark short-term commitments as notified without queuing them.
+	tx, err := c.DB.Begin()
+	if err != nil {
+		return ExpiringCommitments{}, err
+	}
+	for _, shortTerm := range shortTermCommitments {
+		_, err = tx.Exec(updateCommitmentAsNotified, shortTerm)
+		if err != nil {
+			return ExpiringCommitments{}, err
+		}
+	}
+	err = tx.Commit()
+
 	if err != nil {
 		return ExpiringCommitments{}, err
 	}
@@ -97,7 +144,16 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 		return err
 	}
 
-	for projectID, commitments := range task.Notifications {
+	// sort notifications per project_id in order to have consistent unit tests
+	keys := make([]db.ProjectID, 0, len(task.Notifications))
+	for k := range task.Notifications {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	for _, key := range keys {
+		projectID := key
+		commitments := task.Notifications[key]
 		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
 		if err != nil {
 			return err
@@ -114,7 +170,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 		}
 
 		for _, c := range commitments {
-			_, err = tx.Exec("UPDATE project_commitments SET notified_for_expiration = true WHERE commitment_id = $1", c.Commitment.ID)
+			_, err = tx.Exec(updateCommitmentAsNotified, c.Commitment.ID)
 			if err != nil {
 				return err
 			}
