@@ -79,7 +79,10 @@ func Test_MailDelivery(t *testing.T) {
 	// day 2: fail a mail delivery and increase the fail counter
 	s.Clock.StepBy(24 * time.Hour)
 	nextDelivery := s.Clock.Now().Add(24 * time.Hour)
-	mustT(t, job.ProcessOne(s.Ctx))
+	err := job.ProcessOne(s.Ctx)
+	if err == nil {
+		t.Fatal("failed mail delivery has to return an error")
+	}
 	tr.DBChanges().AssertEqualf(`UPDATE project_mail_notifications SET next_submission_at = %d, failed_submissions = 1 WHERE id = 2;`, nextDelivery.Unix())
 
 	// day 3: send another mail successfully. Now notification with ID 2 and 3 overlap.

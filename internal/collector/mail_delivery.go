@@ -89,17 +89,17 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDelive
 		MailText:  mail.Body,
 	}
 
-	err := task.Client.PostMail(ctx, request)
-	if err != nil {
+	mailErr := task.Client.PostMail(ctx, request)
+	if mailErr != nil {
 		mail.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		mail.FailedSubmissions++
-		_, err := c.DB.Update(&mail)
-		if err != nil {
-			return err
+		_, queueErr := c.DB.Update(&mail)
+		if queueErr != nil {
+			return queueErr
 		}
-		return err
+		return mailErr
 	}
-	_, err = c.DB.Delete(&mail)
+	_, err := c.DB.Delete(&mail)
 	if err != nil {
 		return err
 	}
