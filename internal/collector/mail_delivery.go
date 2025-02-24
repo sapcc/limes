@@ -85,7 +85,7 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDelive
 	request := BuildMailRequest(mail, "text/html")
 	err := task.Client.PostMail(ctx, request)
 	if err != nil {
-		mail.NextSubmissionAt = c.MeasureTime().Add(mailDeliveryErrorInterval)
+		mail.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		mail.FailedSubmissions++
 		_, err := c.DB.Update(&mail)
 		if err != nil {

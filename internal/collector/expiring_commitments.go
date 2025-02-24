@@ -101,10 +101,10 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 			&info.Resource.ServiceType, &info.Resource.ResourceName, &info.Resource.AvailabilityZone,
 			&info.Commitment.ID, &info.Commitment.CreatorName, &info.Commitment.Amount, &info.Commitment.Duration, &info.Commitment.ExpiresAt,
 		)
-		info.Date = info.Commitment.ExpiresAt.Format(time.DateOnly)
 		if err != nil {
 			return err
 		}
+		info.Date = info.Commitment.ExpiresAt.Format(time.DateOnly)
 		if info.Commitment.Duration.AddTo(now).Before(scrapeLookAhead.Time) {
 			shortTermCommitments = append(shortTermCommitments, info.Commitment.ID)
 		} else {
