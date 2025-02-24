@@ -137,8 +137,6 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 }
 
 func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task ExpiringCommitments, _ prometheus.Labels) error {
-	var mailInfo datamodel.MailInfo
-
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
@@ -149,6 +147,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
 
 	for _, projectID := range projectIDs {
+		var mailInfo datamodel.MailInfo
 		commitments := task.Notifications[projectID]
 		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
 		if err != nil {
