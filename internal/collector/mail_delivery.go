@@ -47,7 +47,7 @@ func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client Mai
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "mail delivery",
 			CounterOpts: prometheus.CounterOpts{
-				Name: "limes_mail_delivery",
+				Name: "limes_mail_deliveries",
 				Help: "Counter for mail delivery operations.",
 			},
 		},
