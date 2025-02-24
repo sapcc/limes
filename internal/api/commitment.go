@@ -387,16 +387,16 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	dbCommitment := db.ProjectCommitment{
-		AZResourceID:    azResourceID,
-		Amount:          req.Amount,
-		Duration:        req.Duration,
-		CreatedAt:       now,
-		CreatorUUID:     token.UserUUID(),
-		CreatorName:     fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmBy:       confirmBy,
-		ConfirmedAt:     nil, // may be set below
-		ExpiresAt:       req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
-		CreationContext: json.RawMessage(buf),
+		AZResourceID:        azResourceID,
+		Amount:              req.Amount,
+		Duration:            req.Duration,
+		CreatedAt:           now,
+		CreatorUUID:         token.UserUUID(),
+		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+		ConfirmBy:           confirmBy,
+		ConfirmedAt:         nil, // may be set below
+		ExpiresAt:           req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
+		CreationContextJSON: json.RawMessage(buf),
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
@@ -559,7 +559,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	dbMergedCommitment.CreationContext = json.RawMessage(buf)
+	dbMergedCommitment.CreationContextJSON = json.RawMessage(buf)
 
 	// Insert into database
 	err = tx.Insert(&dbMergedCommitment)
@@ -578,7 +578,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	for _, dbCommitment := range dbCommitments {
 		dbCommitment.SupersededAt = &now
-		dbCommitment.SupersedeContext = liquids.PointerTo(json.RawMessage(buf))
+		dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
 		dbCommitment.State = db.CommitmentStateSuperseded
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -794,7 +794,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 		dbCommitment.State = db.CommitmentStateSuperseded
 		dbCommitment.SupersededAt = &now
-		dbCommitment.SupersedeContext = liquids.PointerTo(json.RawMessage(buf))
+		dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -846,17 +846,17 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		return db.ProjectCommitment{}, err
 	}
 	return db.ProjectCommitment{
-		AZResourceID:    dbCommitment.AZResourceID,
-		Amount:          amount,
-		Duration:        dbCommitment.Duration,
-		CreatedAt:       now,
-		CreatorUUID:     dbCommitment.CreatorUUID,
-		CreatorName:     dbCommitment.CreatorName,
-		ConfirmBy:       dbCommitment.ConfirmBy,
-		ConfirmedAt:     dbCommitment.ConfirmedAt,
-		ExpiresAt:       dbCommitment.ExpiresAt,
-		CreationContext: json.RawMessage(buf),
-		State:           dbCommitment.State,
+		AZResourceID:        dbCommitment.AZResourceID,
+		Amount:              amount,
+		Duration:            dbCommitment.Duration,
+		CreatedAt:           now,
+		CreatorUUID:         dbCommitment.CreatorUUID,
+		CreatorName:         dbCommitment.CreatorName,
+		ConfirmBy:           dbCommitment.ConfirmBy,
+		ConfirmedAt:         dbCommitment.ConfirmedAt,
+		ExpiresAt:           dbCommitment.ExpiresAt,
+		CreationContextJSON: json.RawMessage(buf),
+		State:               dbCommitment.State,
 	}, nil
 }
 
@@ -1253,7 +1253,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	dbCommitment.State = db.CommitmentStateSuperseded
 	dbCommitment.SupersededAt = &now
-	dbCommitment.SupersedeContext = liquids.PointerTo(json.RawMessage(buf))
+	dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return

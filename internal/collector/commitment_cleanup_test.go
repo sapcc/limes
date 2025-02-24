@@ -76,29 +76,29 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:              1,
-		AZResourceID:    1,
-		Amount:          10,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now(),
-		ConfirmedAt:     pointerTo(s.Clock.Now()),
-		ExpiresAt:       commitmentForThreeYears.AddTo(s.Clock.Now()),
-		State:           db.CommitmentStateActive,
-		CreationContext: buf,
+		ID:                  1,
+		AZResourceID:        1,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now(),
+		ConfirmedAt:         pointerTo(s.Clock.Now()),
+		ExpiresAt:           commitmentForThreeYears.AddTo(s.Clock.Now()),
+		State:               db.CommitmentStateActive,
+		CreationContextJSON: buf,
 	}))
 
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:              2,
-		AZResourceID:    1,
-		Amount:          10,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay)),
-		ExpiresAt:       s.Clock.Now(),
-		State:           db.CommitmentStateActive,
-		CreationContext: buf,
+		ID:                  2,
+		AZResourceID:        1,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ExpiresAt:           s.Clock.Now(),
+		State:               db.CommitmentStateActive,
+		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()
 
@@ -121,30 +121,30 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:              3,
-		AZResourceID:    1,
-		Amount:          10,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay)),
-		ExpiresAt:       s.Clock.Now(),
-		SupersededAt:    pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
-		State:           db.CommitmentStateSuperseded,
-		CreationContext: buf,
+		ID:                  3,
+		AZResourceID:        1,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ExpiresAt:           s.Clock.Now(),
+		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		State:               db.CommitmentStateSuperseded,
+		CreationContextJSON: buf,
 	}))
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:              4,
-		AZResourceID:    2,
-		Amount:          10,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay)),
-		ExpiresAt:       s.Clock.Now(),
-		State:           db.CommitmentStateActive,
-		CreationContext: buf,
+		ID:                  4,
+		AZResourceID:        2,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ExpiresAt:           s.Clock.Now(),
+		State:               db.CommitmentStateActive,
+		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()
 
@@ -165,44 +165,44 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	commitment5 := db.ProjectCommitment{
-		ID:              5,
-		AZResourceID:    1,
-		Amount:          10,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay)),
-		ExpiresAt:       s.Clock.Now(),
-		SupersededAt:    pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
-		State:           db.CommitmentStateSuperseded,
-		CreationContext: buf,
+		ID:                  5,
+		AZResourceID:        1,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ExpiresAt:           s.Clock.Now(),
+		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		State:               db.CommitmentStateSuperseded,
+		CreationContextJSON: buf,
 	}
 	mustT(t, c.DB.Insert(&commitment5))
 	commitment6 := db.ProjectCommitment{
-		ID:              6,
-		AZResourceID:    1,
-		Amount:          5,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
-		ExpiresAt:       s.Clock.Now().Add(5 * time.Minute),
-		SupersededAt:    pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
-		State:           db.CommitmentStateSuperseded,
-		CreationContext: buf,
+		ID:                  6,
+		AZResourceID:        1,
+		Amount:              5,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
+		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		State:               db.CommitmentStateSuperseded,
+		CreationContextJSON: buf,
 	}
 	mustT(t, c.DB.Insert(&commitment6))
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{5, 6}}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:              7,
-		AZResourceID:    1,
-		Amount:          15,
-		Duration:        commitmentForOneDay,
-		CreatedAt:       s.Clock.Now().Add(-oneDay).Add(10 * time.Minute),
-		ConfirmedAt:     pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
-		ExpiresAt:       s.Clock.Now().Add(5 * time.Minute),
-		State:           db.CommitmentStateActive,
-		CreationContext: buf,
+		ID:                  7,
+		AZResourceID:        1,
+		Amount:              15,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(10 * time.Minute),
+		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
+		State:               db.CommitmentStateActive,
+		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()
 
