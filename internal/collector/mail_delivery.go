@@ -43,7 +43,7 @@ const (
 )
 
 func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailDelivery) jobloop.Job {
-	return (&jobloop.ProducerConsumerJob[MailDeliveryTask]{
+	return (&jobloop.ProducerConsumerJob[db.MailNotification]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "mail delivery",
 			CounterOpts: prometheus.CounterOpts{
@@ -51,16 +51,11 @@ func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client Mai
 				Help: "Counter for mail delivery operations.",
 			},
 		},
-		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (MailDeliveryTask, error) {
-			return c.discoverMailDeliveryTask(ctx, labels, client)
+		DiscoverTask: c.discoverMailDeliveryTask,
+		ProcessTask: func(ctx context.Context, task db.MailNotification, labels prometheus.Labels) error {
+			return c.processMailDeliveryTask(ctx, task, client, labels)
 		},
-		ProcessTask: c.processMailDeliveryTask,
 	}).Setup(registerer)
-}
-
-type MailDeliveryTask struct {
-	Client           MailDelivery
-	MailNotification db.MailNotification
 }
 
 var (
@@ -73,33 +68,31 @@ var (
 	`)
 )
 
-func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Labels, client MailDelivery) (task MailDeliveryTask, err error) {
-	task.Client = client
+func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Labels) (task db.MailNotification, err error) {
 	startTime := c.MeasureTime()
-	err = c.DB.SelectOne(&task.MailNotification, findMailsToProcessQuery, startTime)
+	err = c.DB.SelectOne(&task, findMailsToProcessQuery, startTime)
 	return task, err
 }
 
-func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDeliveryTask, _ prometheus.Labels) error {
-	mail := task.MailNotification
+func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailDelivery, _ prometheus.Labels) error {
 	request := MailRequest{
-		ProjectID: mail.ProjectID,
-		Subject:   mail.Subject,
+		ProjectID: task.ProjectID,
+		Subject:   task.Subject,
 		MimeType:  "text/html",
-		MailText:  mail.Body,
+		MailText:  task.Body,
 	}
 
-	mailErr := task.Client.PostMail(ctx, request)
+	mailErr := client.PostMail(ctx, request)
 	if mailErr != nil {
-		mail.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
-		mail.FailedSubmissions++
-		_, queueErr := c.DB.Update(&mail)
+		task.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
+		task.FailedSubmissions++
+		_, queueErr := c.DB.Update(&task)
 		if queueErr != nil {
 			return queueErr
 		}
 		return mailErr
 	}
-	_, err := c.DB.Delete(&mail)
+	_, err := c.DB.Delete(&task)
 	if err != nil {
 		return err
 	}
