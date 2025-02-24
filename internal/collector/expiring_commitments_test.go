@@ -44,7 +44,7 @@ const (
 				capacity: 0
 				resources: []
 		mail_templates:
-			expiring_commitments: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date: {{ .Date }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+			expiring_commitments: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .Date }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
 `
 )
 
@@ -66,8 +66,8 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 7 AND transfer_token = NULL;
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 8 AND transfer_token = NULL;
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 9 AND transfer_token = NULL;
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date: 1970-01-01 Service:first Resource:things AZ:az-one Creator:dummy Amount:10 Duration:1 year Date: 1970-01-01 Service:first Resource:things AZ:az-two', %[1]d);
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date: 1970-02-01 Service:first Resource:things AZ:az-one Creator:dummy Amount:10 Duration:1 year Date: 1970-02-01 Service:first Resource:things AZ:az-two', %[1]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date:1970-01-01 Service:first Resource:things AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:first Resource:things AZ:az-two', %[1]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date:1970-01-27 Service:first Resource:things AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-27 Service:first Resource:things AZ:az-two', %[1]d);
 	`, c.MeasureTime().Add(3*time.Minute).Unix())
 
 	// mail queue with an empty template should fail

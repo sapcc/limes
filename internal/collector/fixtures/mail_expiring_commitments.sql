@@ -24,8 +24,9 @@ INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator
 -- expiring commitments for each project
 INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (4, 1, 5, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'expired');
 INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (5, 2, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'expired');
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (6, 3, 5, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(2678400), 'active');
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (7, 4, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(2678400), 'active');
+-- expiring commitments, marked as one year to make them pass the short-term commitment check, but they will expire within the scrape timeframe.
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (6, 3, 5, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(2246400), 'active');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (7, 4, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(2246400), 'active');
 
 -- expiring short-term commitments should not be queued and be marked as notified
 INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (8, 1, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400), 'planned');

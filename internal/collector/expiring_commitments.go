@@ -35,7 +35,8 @@ import (
 )
 
 const (
-	nextSumbissionInteval = 3 * time.Minute
+	expiringCommitmentsNoticePeriod = 28 * 24 * time.Hour // 4 weeks
+	nextSumbissionInteval           = 3 * time.Minute
 )
 
 // Add commitments that are about to expire within the next month into the mail queue.
@@ -59,9 +60,6 @@ type ExpiringCommitments struct {
 }
 
 var (
-	getScrapeLookAhead = sqlext.SimplifyWhitespace(`
-		SELECT date_trunc('month', $1::timestamp) + Interval '2 month - 1 day' AS Time;
-	`)
 	findExpiringCommitments = sqlext.SimplifyWhitespace(`
 		SELECT ps.project_id, ps.type, pr.name, par.az, pc.id, pc.creator_name, pc.amount, pc.duration, pc.expires_at
 		  FROM project_services ps
@@ -78,22 +76,14 @@ var (
 
 func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (ExpiringCommitments, error) {
 	now := c.MeasureTime()
+	cutoff := now.Add(expiringCommitmentsNoticePeriod)
 	commitments := ExpiringCommitments{
 		Notifications:  make(map[db.ProjectID][]datamodel.CommitmentInfo),
 		NextSubmission: now.Add(c.AddJitter(nextSumbissionInteval)),
 	}
 
-	var scrapeLookAhead struct {
-		Time time.Time
-	}
-
-	err := c.DB.SelectOne(&scrapeLookAhead, getScrapeLookAhead, now)
-	if err != nil {
-		return ExpiringCommitments{}, err
-	}
-
 	var shortTermCommitments []db.ProjectCommitmentID
-	err = sqlext.ForeachRow(c.DB, findExpiringCommitments, []any{scrapeLookAhead.Time}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, findExpiringCommitments, []any{cutoff}, func(rows *sql.Rows) error {
 		var pid db.ProjectID
 		var info datamodel.CommitmentInfo
 		err := rows.Scan(
@@ -105,7 +95,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 			return err
 		}
 		info.Date = info.Commitment.ExpiresAt.Format(time.DateOnly)
-		if info.Commitment.Duration.AddTo(now).Before(scrapeLookAhead.Time) {
+		if info.Commitment.Duration.AddTo(now).Before(cutoff) {
 			shortTermCommitments = append(shortTermCommitments, info.Commitment.ID)
 		} else {
 			commitments.Notifications[pid] = append(commitments.Notifications[pid], info)

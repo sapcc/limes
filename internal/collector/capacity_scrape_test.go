@@ -133,7 +133,7 @@ const (
 			# test automatic project quota calculation with non-default settings on */capacity resources
 			- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
 		mail_templates:
-			confirmed_commitments: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date: {{ .Date }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+			confirmed_commitments: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .Date }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
 	`
 )
 
@@ -668,8 +668,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active', notify_on_confirm = TRUE WHERE id = 1 AND transfer_token = NULL;
 		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm) VALUES (11, 27, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE);
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date: 1970-01-02 Service:first Resource:capacity AZ:az-one', %[2]d);
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date: 1970-01-02 Service:second Resource:capacity AZ:az-one', %[3]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[2]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:second Resource:capacity AZ:az-one', %[3]d);
 		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix(), scrapedAt2.Unix())
 
@@ -701,7 +701,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm) VALUES (13, 27, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE);
 		UPDATE project_commitments SET confirmed_at = 172825, state = 'active' WHERE id = 2 AND transfer_token = NULL;
 		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL;
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date: 1970-01-03 Service:second Resource:capacity AZ:az-one Creator:dummy Amount:1 Duration:2 days Date: 1970-01-03 Service:second Resource:capacity AZ:az-one', %d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:second Resource:capacity AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:second Resource:capacity AZ:az-one', %d);
 		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
 }
