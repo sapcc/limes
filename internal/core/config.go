@@ -47,7 +47,7 @@ type ClusterConfiguration struct {
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
-	MailForms                MailForms                         `yaml:"mail_templates"`
+	MailTemplates            MailTemplateConfiguration         `yaml:"mail_templates"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -148,7 +148,7 @@ type AutogrowQuotaDistributionConfiguration struct {
 	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
 }
 
-type MailForms struct {
+type MailTemplateConfiguration struct {
 	ConfirmedCommitments string `yaml:"confirmed_commitments"`
 	ExpiringCommitments  string `yaml:"expiring_commitments"`
 }
