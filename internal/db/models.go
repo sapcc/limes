@@ -216,11 +216,14 @@ const (
 	CommitmentStateExpired    CommitmentState = "expired"
 )
 
+// CommitmentWorkflowContext is the type definition for the JSON payload in the
+// CreationContextJSON and SupersedeContextJSON fields of type ProjectCommitment.
 type CommitmentWorkflowContext struct {
 	Reason               CommitmentReason      `json:"reason"`
 	RelatedCommitmentIDs []ProjectCommitmentID `json:"related_ids,omitempty"`
 }
 
+// CommitmentReason is an enum. It appears in type CommitmentWorkflowContext.
 type CommitmentReason string
 
 const (
