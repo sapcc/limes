@@ -223,7 +223,7 @@ var sqlMigrations = map[string]string{
 		-- Step 1: Create new fields for commitment workflow contexts
 		ALTER TABLE project_commitments
 			ADD COLUMN creation_context_json JSONB,
-  			ADD COLUMN supersede_context_json JSONB;
+			ADD COLUMN supersede_context_json JSONB;
 
 		-- Step 2: Populate creation context
 		WITH creation_context_data AS (
@@ -233,14 +233,17 @@ var sqlMigrations = map[string]string{
 					WHEN EXISTS (
 						SELECT 1
 						FROM project_commitments pc2
-						-- Since the az_resource_id can change if a commitment is transferred to a different project, 
-						-- we need to join up to project_resources and compare the resource name
+						-- Since the az_resource_id can change if a commitment is transferred to a different project,
+						-- we need to join up to project_services and compare the service type and resource name
 						JOIN project_az_resources pc2_az_res ON pc2.az_resource_id = pc2_az_res.id
 						JOIN project_resources pc2_res ON pc2_az_res.resource_id = pc2_res.id
+						JOIN project_services pc2_srv ON pc2_res.service_id = pc2_srv.id
 						JOIN project_az_resources pc_az_res ON pc.az_resource_id = pc_az_res.id
-                		JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_services pc_srv ON pc_res.service_id = pc_srv.id
 						WHERE pc2.id = pc.predecessor_id
 						AND pc2_res.name = pc_res.name
+						AND pc2_srv.type = pc_srv.type
 					) THEN 'split'
 					ELSE 'convert'
 				END AS creation_reason
@@ -270,14 +273,17 @@ var sqlMigrations = map[string]string{
 						SELECT 1
 						FROM project_az_resources pc2_az_res
 						JOIN project_resources pc2_res ON pc2_az_res.resource_id = pc2_res.id
+						JOIN project_services pc2_srv ON pc2_res.service_id = pc2_srv.id
 						JOIN project_az_resources pc_az_res ON pc.az_resource_id = pc_az_res.id
-                		JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_services pc_srv ON pc_res.service_id = pc_srv.id
 						WHERE pc2_az_res.id = pc2.az_resource_id
 						AND pc2_res.name = pc_res.name
+						AND pc2_srv.type = pc_srv.type
 					) THEN 'split'
 					ELSE 'convert'
 				END AS supersede_reason
-			FROM project_commitments pc 
+			FROM project_commitments pc
 			JOIN project_commitments pc2
 				ON pc.id = pc2.predecessor_id
 			WHERE pc.state = 'superseded'
