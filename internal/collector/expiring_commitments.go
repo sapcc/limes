@@ -46,9 +46,7 @@ func (c *Collector) AddExpiringCommitmentsAsMailJob(registerer prometheus.Regist
 				Help: "Counts jobs that enqueue mail notifications for expiring commitments.",
 			},
 		},
-		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (ExpiringCommitments, error) {
-			return c.discoverExpiringCommitments(ctx, labels)
-		},
+		DiscoverTask: c.discoverExpiringCommitments,
 		ProcessTask: c.processExpiringCommitmentTask,
 	}).Setup(registerer)
 }
