@@ -39,7 +39,7 @@ type MailRequest struct {
 
 const (
 	// how long to wait after error before retrying sending mails
-	mailDeliveryErrorInterval = 24 * time.Hour
+	mailDeliveryErrorInterval = 2 * time.Minute
 )
 
 func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailDelivery) jobloop.Job {

@@ -78,7 +78,7 @@ func Test_MailDelivery(t *testing.T) {
 
 	// day 2: fail a mail delivery and increase the fail counter
 	s.Clock.StepBy(24 * time.Hour)
-	nextDelivery := s.Clock.Now().Add(24 * time.Hour)
+	nextDelivery := s.Clock.Now().Add(2 * time.Minute)
 	err := job.ProcessOne(s.Ctx)
 	if err == nil {
 		t.Fatal("failed mail delivery has to return an error")
