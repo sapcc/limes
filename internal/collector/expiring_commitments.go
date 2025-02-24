@@ -36,7 +36,7 @@ import (
 
 const (
 	expiringCommitmentsNoticePeriod = 28 * 24 * time.Hour // 4 weeks
-	nextSumbissionInteval           = 3 * time.Minute
+	nextSumbissionInteval           = 2 * time.Minute
 )
 
 // Add commitments that are about to expire within the next month into the mail queue.
@@ -55,21 +55,22 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 type ExpiringCommitments struct {
-	Notifications  map[db.ProjectID][]datamodel.CommitmentInfo
-	NextSubmission time.Time
+	Notifications        map[db.ProjectID][]datamodel.CommitmentInfo
+	NextSubmission       time.Time
+	ShortTermCommitments []db.ProjectCommitmentID // to be excluded from mail notifications.
 }
 
 var (
-	findExpiringCommitments = sqlext.SimplifyWhitespace(`
+	findExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.project_id, ps.type, pr.name, par.az, pc.id, pc.creator_name, pc.amount, pc.duration, pc.expires_at
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		WHERE pc.expires_at <= $1
+		WHERE pc.expires_at <= $1 AND NOT pc.notified_for_expiration
 		ORDER BY ps.type, pr.name, par.az ASC, pc.amount DESC;
 	`)
-	updateCommitmentAsNotified = sqlext.SimplifyWhitespace(`
+	updateCommitmentAsNotifiedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_commitments SET notified_for_expiration = true WHERE id = $1;
 	`)
 )
@@ -83,7 +84,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 	}
 
 	var shortTermCommitments []db.ProjectCommitmentID
-	err := sqlext.ForeachRow(c.DB, findExpiringCommitments, []any{cutoff}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, findExpiringCommitmentsQuery, []any{cutoff}, func(rows *sql.Rows) error {
 		var pid db.ProjectID
 		var info datamodel.CommitmentInfo
 		err := rows.Scan(
@@ -106,22 +107,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 		return ExpiringCommitments{}, err
 	}
 
-	// mark short-term commitments as notified without queueing them.
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return ExpiringCommitments{}, err
-	}
-	for _, shortTerm := range shortTermCommitments {
-		_, err = tx.Exec(updateCommitmentAsNotified, shortTerm)
-		if err != nil {
-			return ExpiringCommitments{}, err
-		}
-	}
-	err = tx.Commit()
-
-	if err != nil {
-		return ExpiringCommitments{}, err
-	}
+	commitments.ShortTermCommitments = shortTermCommitments
 
 	return commitments, nil
 }
@@ -131,11 +117,19 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	if err != nil {
 		return err
 	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	// mark short-term commitments as notified without queueing them.
+	for _, shortTermCommitment := range task.ShortTermCommitments {
+		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, shortTermCommitment)
+		if err != nil {
+			return err
+		}
+	}
 
 	// sort notifications per project_id in order to have consistent unit tests
 	projectIDs := slices.Collect(maps.Keys(task.Notifications))
 	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
-
 	for _, projectID := range projectIDs {
 		var mailInfo datamodel.MailInfo
 		commitments := task.Notifications[projectID]
@@ -155,7 +149,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 		}
 
 		for _, c := range commitments {
-			_, err = tx.Exec(updateCommitmentAsNotified, c.Commitment.ID)
+			_, err = tx.Exec(updateCommitmentAsNotifiedQuery, c.Commitment.ID)
 			if err != nil {
 				return err
 			}
