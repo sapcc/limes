@@ -82,7 +82,13 @@ func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Lab
 
 func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDeliveryTask, _ prometheus.Labels) error {
 	mail := task.MailNotification
-	request := BuildMailRequest(mail, "text/html")
+	request := MailRequest{
+		ProjectID: mail.ProjectID,
+		Subject:   mail.Subject,
+		MimeType:  "text/html",
+		MailText:  mail.Body,
+	}
+
 	err := task.Client.PostMail(ctx, request)
 	if err != nil {
 		mail.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
@@ -98,13 +104,4 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task MailDelive
 		return err
 	}
 	return nil
-}
-
-func BuildMailRequest(content db.MailNotification, mimeType string) MailRequest {
-	return MailRequest{
-		ProjectID: content.ProjectID,
-		Subject:   content.Subject,
-		MimeType:  mimeType,
-		MailText:  content.Body,
-	}
 }
