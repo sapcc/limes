@@ -143,10 +143,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	}
 
 	// sort notifications per project_id in order to have consistent unit tests
-	projectIDs := make([]db.ProjectID, 0, len(task.Notifications))
-	for projectID := range task.Notifications {
-		projectIDs = append(projectIDs, projectID)
-	}
+	projectIDs := slices.Collect(maps.Keys(task.Notifications))
 	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
 
 	for _, projectID := range projectIDs {
