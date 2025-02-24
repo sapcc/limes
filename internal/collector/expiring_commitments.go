@@ -172,9 +172,5 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 		}
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	return nil
+	return tx.Commit()
 }
