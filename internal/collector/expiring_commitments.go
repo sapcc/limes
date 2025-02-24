@@ -37,7 +37,7 @@ const (
 )
 
 // Add commitments that are about to expire within the next month into the mail queue.
-func (c *Collector) AddExpiringCommitmentsAsMailJob(registerer prometheus.Registerer) jobloop.Job {
+func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[ExpiringCommitments]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "add expiring commitments to mail queue",
@@ -47,7 +47,7 @@ func (c *Collector) AddExpiringCommitmentsAsMailJob(registerer prometheus.Regist
 			},
 		},
 		DiscoverTask: c.discoverExpiringCommitments,
-		ProcessTask: c.processExpiringCommitmentTask,
+		ProcessTask:  c.processExpiringCommitmentTask,
 	}).Setup(registerer)
 }
 

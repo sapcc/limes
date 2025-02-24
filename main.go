@@ -231,7 +231,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collecto
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
 
 	// start mail processing
-	go c.AddExpiringCommitmentsAsMailJob(nil).Run(ctx)
+	go c.ExpiringCommitmentNotificationJob(nil).Run(ctx)
 	go c.MailDeliveryJob(nil, mailClient).Run(ctx)
 
 	// use main thread to emit Prometheus metrics
