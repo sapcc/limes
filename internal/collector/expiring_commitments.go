@@ -42,8 +42,8 @@ func (c *Collector) AddExpiringCommitmentsAsMailJob(registerer prometheus.Regist
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "add expiring commitments to mail queue",
 			CounterOpts: prometheus.CounterOpts{
-				Name: "expiring_commitments_to_mail",
-				Help: "Counts syncs to the notification queue",
+				Name: "limes_expiring_commitments_discoveries",
+				Help: "Counts jobs that enqueue mail notifications for expiring commitments.",
 			},
 		},
 		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (ExpiringCommitments, error) {
