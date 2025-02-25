@@ -25,6 +25,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
@@ -69,9 +70,7 @@ var (
 		WHERE pc.expires_at <= $1 AND NOT pc.notified_for_expiration
 		ORDER BY ps.type, pr.name, par.az ASC, pc.amount DESC;
 	`)
-	updateCommitmentAsNotifiedQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments SET notified_for_expiration = true WHERE id = $1;
-	`)
+	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = true WHERE id = ANY($1)`
 )
 
 func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (ExpiringCommitments, error) {
@@ -120,11 +119,9 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// mark short-term commitments as notified without queueing them.
-	for _, shortTermCommitment := range task.ShortTermCommitments {
-		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, shortTermCommitment)
-		if err != nil {
-			return err
-		}
+	_, err = tx.Exec(updateCommitmentAsNotifiedQuery, pq.Array(task.ShortTermCommitments))
+	if err != nil {
+		return err
 	}
 
 	// sort notifications per project_id in order to have consistent unit tests
@@ -146,11 +143,13 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 			return err
 		}
 
-		for _, c := range commitments {
-			_, err = tx.Exec(updateCommitmentAsNotifiedQuery, c.Commitment.ID)
-			if err != nil {
-				return err
-			}
+		commitmentIDs := make([]db.ProjectCommitmentID, len(commitments))
+		for idx, c := range commitments {
+			commitmentIDs[idx] = c.Commitment.ID
+		}
+		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, pq.Array(commitmentIDs))
+		if err != nil {
+			return err
 		}
 	}
 
