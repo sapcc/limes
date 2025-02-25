@@ -148,6 +148,7 @@ type AutogrowQuotaDistributionConfiguration struct {
 	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
 }
 
+// MailTemplateConfiguration appears in type Configuration.
 type MailTemplateConfiguration struct {
 	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
 	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`

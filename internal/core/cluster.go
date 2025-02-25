@@ -22,7 +22,6 @@ package core
 import (
 	"context"
 	"slices"
-	"text/template"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -81,16 +80,14 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	}
 
 	// Create mail templates
-	confirmTPl, err := template.New("confirm").Parse(config.MailTemplates.ConfirmedCommitments.Body)
+	err := c.Config.MailTemplates.ConfirmedCommitments.Compile()
 	if err != nil {
 		errs.Addf("could not parse confirmation mail template: %w", err)
 	}
-	c.Config.MailTemplates.ConfirmedCommitments.Compiled = confirmTPl
-	expireTpl, err := template.New("expire").Parse(config.MailTemplates.ExpiringCommitments.Body)
+	err = c.Config.MailTemplates.ExpiringCommitments.Compile()
 	if err != nil {
 		errs.Addf("could not parse expiration mail template: %w", err)
 	}
-	c.Config.MailTemplates.ExpiringCommitments.Compiled = expireTpl
 
 	return c, errs
 }
