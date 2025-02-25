@@ -158,10 +158,7 @@ func main() {
 	// select task
 	switch taskName {
 	case "collect":
-		mailEndpoint := osext.MustGetenv("MAIL_ENDPOINT")
-		mailClient, err := collector.NewMailClient(provider, mailEndpoint)
-		must.Succeed(err)
-		taskCollect(ctx, cluster, mailClient, remainingArgs)
+		taskCollect(ctx, cluster, remainingArgs, provider, eo)
 	case "serve":
 		taskServe(ctx, cluster, remainingArgs, provider, eo)
 	case "serve-data-metrics":
@@ -197,7 +194,7 @@ func printUsageAndExit(exitCode int) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collector.MailClient, args []string) {
+func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, _ gophercloud.EndpointOpts) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
@@ -205,6 +202,10 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collecto
 
 	// connect to database
 	dbm := db.InitORM(must.Return(db.Init()))
+
+	// setup mail client (TODO: make this optional; if MAIL_ENDPOINT is not given, do not expect mail templates in the config, and do not generate and send mail notifications)
+	mailEndpoint := osext.MustGetenv("MAIL_ENDPOINT")
+	mailClient := must.Return(collector.NewMailClient(provider, mailEndpoint))
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	// stop channel to shutdown threads in a controlled manner. I decided against
