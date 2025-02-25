@@ -158,7 +158,7 @@ func main() {
 	// select task
 	switch taskName {
 	case "collect":
-		mailEndpoint := osext.MustGetenv("mail_endpoint")
+		mailEndpoint := osext.MustGetenv("MAIL_ENDPOINT")
 		mailClient, err := collector.NewMailClient(provider, mailEndpoint)
 		must.Succeed(err)
 		taskCollect(ctx, cluster, mailClient, remainingArgs)
