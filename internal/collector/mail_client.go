@@ -26,34 +26,32 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-type MailDelivery interface {
+// The MailClient interface provides the common methods to communicate with a mail backend service.
+type MailClient interface {
 	PostMail(ctx context.Context, req MailRequest) error
 }
 
-type MailClient struct {
+// mailClientImpl is implmentation of MailClient.
+// It builds the request to send a mail to the target mail server.
+type mailClientImpl struct {
 	gophercloud.ServiceClient
 }
 
-type MailOpts struct {
-	ServiceType string
-}
-
-func NewMailClient(client *gophercloud.ProviderClient, endpointOpts gophercloud.EndpointOpts, opts MailOpts) (*MailClient, error) {
-	if opts.ServiceType == "" {
+func NewMailClient(provider *gophercloud.ProviderClient, endpoint string) (MailClient, error) {
+	if endpoint == "" {
 		return nil, errors.New("mail: service type for the endpoint needs to be set")
 	}
-	endpoint := opts.ServiceType
 
-	return &MailClient{
+	return mailClientImpl{
 		ServiceClient: gophercloud.ServiceClient{
-			ProviderClient: client,
+			ProviderClient: provider,
 			Endpoint:       endpoint,
-			Type:           opts.ServiceType,
+			Type:           "mailClient",
 		},
 	}, nil
 }
 
-func (c MailClient) PostMail(ctx context.Context, req MailRequest) error {
+func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) error {
 	url := c.ServiceURL("v1", "send-email?from=limes")
 	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
 	resp, err := c.Post(ctx, url, req, nil, &opts)

@@ -158,7 +158,8 @@ func main() {
 	// select task
 	switch taskName {
 	case "collect":
-		mailClient, err := collector.NewMailClient(provider, eo, collector.MailOpts{ServiceType: "limes-campfire"})
+		mailEndpoint := osext.MustGetenv("mail_endpoint")
+		mailClient, err := collector.NewMailClient(provider, mailEndpoint)
 		must.Succeed(err)
 		taskCollect(ctx, cluster, mailClient, remainingArgs)
 	case "serve":
@@ -196,7 +197,7 @@ func printUsageAndExit(exitCode int) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collector.MailDelivery, args []string) {
+func taskCollect(ctx context.Context, cluster *core.Cluster, mailClient collector.MailClient, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}

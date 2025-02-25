@@ -42,7 +42,7 @@ const (
 	mailDeliveryErrorInterval = 2 * time.Minute
 )
 
-func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailDelivery) jobloop.Job {
+func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailClient) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[db.MailNotification]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "mail delivery",
@@ -74,7 +74,7 @@ func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Lab
 	return task, err
 }
 
-func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailDelivery, _ prometheus.Labels) error {
+func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailClient, _ prometheus.Labels) error {
 	request := MailRequest{
 		ProjectID: task.ProjectID,
 		Subject:   task.Subject,
