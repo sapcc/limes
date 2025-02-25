@@ -25,10 +25,13 @@ import (
 	"time"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -39,7 +42,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: unittest
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 				commitment_behavior_per_resource:
 					- key: capacity
 						value:
@@ -52,6 +58,30 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		test.WithConfig(testCleanupOldCommitmentsConfigYAML),
 	)
 	c := getCollector(t, s)
+
+	// the Scrape job needs a report that at least satisfies the topology constraints
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {},
+					"az-two": {},
+				},
+			},
+			"capacity_portion": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {},
+					"az-two": {},
+				},
+			},
+			"things": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"any": {},
+				},
+			},
+		},
+	})
 
 	// to be able to create commitments, we need to have the projects discovered
 	// and their respective project resources created

@@ -24,9 +24,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -36,6 +39,32 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
+
+	// the Scrape job needs a report that at least satisfies the topology constraints
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
+			"capacity": {
+				Quota: pointerTo(int64(100)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {},
+					"az-two": {},
+				},
+			},
+			"capacity_portion": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {},
+					"az-two": {},
+				},
+			},
+			"things": {
+				Quota: pointerTo(int64(42)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"any": {},
+				},
+			},
+		},
+	})
 
 	c := getCollector(t, s)
 	scrapeJob := c.ResourceScrapeJob(s.Registry)

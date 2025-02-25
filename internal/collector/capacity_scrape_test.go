@@ -46,11 +46,23 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
+				params:
+					area: shared
+					test_mode: true
+					liquid_service_type: generic-shared
 			- service_type: unshared
-				type: --test-generic
+				type: liquid
+				params:
+					area: unshared
+					test_mode: true
+					liquid_service_type: generic-unshared
 			- service_type: unshared2
-				type: --test-generic
+				type: liquid
+				params:
+					area: unshared2
+					test_mode: true
+					liquid_service_type: generic-unshared2
 		capacitors:
 		- id: unittest
 			type: --test-static
@@ -82,7 +94,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
+				params:
+					area: shared
+					test_mode: true
 		capacitors:
 		- id: noop
 			type: --test-static
@@ -104,13 +119,19 @@ const (
 						- { id: uuid-for-dresden, name: dresden }
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			- service_type: second
-				type: --test-generic
+				type: liquid
+				params:
+					area: second
+					test_mode: true
 				commitment_behavior_per_resource: *commitment-on-capacity
 		capacitors:
 		- id: scans-first

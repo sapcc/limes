@@ -1,18 +1,18 @@
+# HELP capacity_usage 
+# TYPE capacity_usage gauge
+capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20
+capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 20
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
-limes_newest_scraped_at{service="unittest",service_name="generic-unittest"} 9070
+limes_newest_scraped_at{service="unittest",service_name="generic-unittest"} 7260
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
-limes_oldest_scraped_at{service="unittest",service_name="generic-unittest"} 9065
+limes_oldest_scraped_at{service="unittest",service_name="generic-unittest"} 7255
 # HELP limes_plugin_metrics_ok Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.
 # TYPE limes_plugin_metrics_ok gauge
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",service="unittest",service_name="generic-unittest"} 1
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",service="unittest",service_name="generic-unittest"} 1
-# HELP limes_unittest_capacity_usage 
-# TYPE limes_unittest_capacity_usage gauge
-limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20
-limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 20
-# HELP limes_unittest_things_usage 
-# TYPE limes_unittest_things_usage gauge
-limes_unittest_things_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 5
-limes_unittest_things_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 5
+# HELP things_usage 
+# TYPE things_usage gauge
+things_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 3
+things_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 3

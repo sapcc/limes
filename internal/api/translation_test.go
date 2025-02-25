@@ -24,13 +24,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const (
@@ -40,7 +39,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 	`
 )
 
@@ -91,12 +93,15 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 func TestTranslateIronicSubcapacities(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
 		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+		attrs := map[string]any{
 			"cores":    5,
 			"ram_mib":  23,
 			"disk_gib": 42,
-		}}
+		}
+		buf := must.Return(json.Marshal(attrs))
+		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
+		resInfo.Attributes = json.RawMessage(buf)
+		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
 	}
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
@@ -326,13 +331,16 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 
 func TestTranslateIronicSubresources(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
-		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+		// this subresource translation depends on ResourceInfo.Attributes on the respective resource
+		attrs := map[string]any{
 			"cores":    5,
 			"ram_mib":  23,
 			"disk_gib": 42,
-		}}
+		}
+		buf := must.Return(json.Marshal(attrs))
+		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
+		resInfo.Attributes = json.RawMessage(buf)
+		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
 	}
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
