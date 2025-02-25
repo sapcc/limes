@@ -44,12 +44,6 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[db.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
-	MailTemplates   MailTemplates
-}
-
-type MailTemplates struct {
-	ConfirmedCommitments *template.Template
-	ExpiringCommitments  *template.Template
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -87,16 +81,16 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	}
 
 	// Create mail templates
-	confirmTPl, err := template.New("confirm").Parse(config.MailTemplates.ConfirmedCommitments)
+	confirmTPl, err := template.New("confirm").Parse(config.MailTemplates.ConfirmedCommitments.Body)
 	if err != nil {
 		errs.Addf("could not parse confirmation mail template: %w", err)
 	}
-	c.MailTemplates.ConfirmedCommitments = confirmTPl
-	expireTpl, err := template.New("expire").Parse(config.MailTemplates.ExpiringCommitments)
+	c.Config.MailTemplates.ConfirmedCommitments.Compiled = confirmTPl
+	expireTpl, err := template.New("expire").Parse(config.MailTemplates.ExpiringCommitments.Body)
 	if err != nil {
 		errs.Addf("could not parse expiration mail template: %w", err)
 	}
-	c.MailTemplates.ExpiringCommitments = expireTpl
+	c.Config.MailTemplates.ExpiringCommitments.Compiled = expireTpl
 
 	return c, errs
 }

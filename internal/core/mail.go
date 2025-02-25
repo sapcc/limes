@@ -1,6 +1,6 @@
 /******************************************************************************
 *
-*  Copyright 2025 SAP SE
+*  Copyright 2023 SAP SE
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 *  limitations under the License.
 *
 ******************************************************************************/
-package datamodel
+
+package core
 
 import (
 	"bytes"
@@ -24,37 +25,58 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
+
 	"github.com/sapcc/limes/internal/db"
 )
 
-type MailInfo struct {
+// CommitmentGroupNotification contains data for rendering mails notifying about commitment workflows (confirmation or expiration).
+type CommitmentGroupNotification struct {
 	DomainName  string
 	ProjectName string
-	Commitments []CommitmentInfo
+	Commitments []CommitmentNotification
 }
 
-type CommitmentInfo struct {
+// AZResourceLocation is a tuple identifying an AZ resource within a project.
+type AZResourceLocation struct {
+	ServiceType      db.ServiceType
+	ResourceName     liquid.ResourceName
+	AvailabilityZone limes.AvailabilityZone
+}
+
+// CommitmentNotification appears in type CommitmentGroupNotification.
+type CommitmentNotification struct {
 	Commitment db.ProjectCommitment
-	Date       string
+	DateString string
 	Resource   AZResourceLocation
 }
 
-func (m MailInfo) CreateMailNotification(tpl *template.Template, subject string, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
+type MailTemplate struct {
+	Subject  string             `yaml:"subject"`
+	Body     string             `yaml:"body"`
+	Compiled *template.Template `yaml:"-"` // filled during Config.Validate()
+}
+
+func (t MailTemplate) Render(m CommitmentGroupNotification, projectID db.ProjectID, now time.Time) (db.MailNotification, error) {
 	if len(m.Commitments) == 0 {
 		return db.MailNotification{}, fmt.Errorf("mail: no commitments provided for projectID: %v", projectID)
 	}
 
-	body, err := m.getMailContent(tpl)
+	if t.Subject == "" {
+		return db.MailNotification{}, fmt.Errorf("mail: subject is empty for projectID: %v", projectID)
+	}
+	body, err := t.getMailContent(m)
 	if err != nil {
 		return db.MailNotification{}, err
 	}
 	if body == "" {
-		return db.MailNotification{}, fmt.Errorf("mail: body is empty for projectID: %v", projectID)
+		return db.MailNotification{}, fmt.Errorf("mail: body has no content. Check the mail template. Halted at projectID: %v", projectID)
 	}
 
 	notification := db.MailNotification{
 		ProjectID:        projectID,
-		Subject:          subject,
+		Subject:          t.Subject,
 		Body:             body,
 		NextSubmissionAt: now,
 	}
@@ -62,8 +84,9 @@ func (m MailInfo) CreateMailNotification(tpl *template.Template, subject string,
 	return notification, nil
 }
 
-func (m MailInfo) getMailContent(tpl *template.Template) (string, error) {
+func (t MailTemplate) getMailContent(m CommitmentGroupNotification) (string, error) {
 	var ioBuffer bytes.Buffer
+	tpl := t.Compiled
 	if tpl == nil {
 		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
 	}

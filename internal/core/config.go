@@ -149,8 +149,8 @@ type AutogrowQuotaDistributionConfiguration struct {
 }
 
 type MailTemplateConfiguration struct {
-	ConfirmedCommitments string `yaml:"confirmed_commitments"`
-	ExpiringCommitments  string `yaml:"expiring_commitments"`
+	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
+	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.

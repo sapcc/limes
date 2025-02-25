@@ -30,7 +30,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/internal/datamodel"
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -55,7 +55,7 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 type ExpiringCommitments struct {
-	Notifications        map[db.ProjectID][]datamodel.CommitmentInfo
+	Notifications        map[db.ProjectID][]core.CommitmentNotification
 	NextSubmission       time.Time
 	ShortTermCommitments []db.ProjectCommitmentID // to be excluded from mail notifications.
 }
@@ -79,14 +79,14 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 	now := c.MeasureTime()
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
 	commitments := ExpiringCommitments{
-		Notifications:  make(map[db.ProjectID][]datamodel.CommitmentInfo),
+		Notifications:  make(map[db.ProjectID][]core.CommitmentNotification),
 		NextSubmission: now.Add(c.AddJitter(nextSumbissionInteval)),
 	}
 
 	var shortTermCommitments []db.ProjectCommitmentID
 	err := sqlext.ForeachRow(c.DB, findExpiringCommitmentsQuery, []any{cutoff}, func(rows *sql.Rows) error {
 		var pid db.ProjectID
-		var info datamodel.CommitmentInfo
+		var info core.CommitmentNotification
 		err := rows.Scan(
 			&pid,
 			&info.Resource.ServiceType, &info.Resource.ResourceName, &info.Resource.AvailabilityZone,
@@ -95,7 +95,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 		if err != nil {
 			return err
 		}
-		info.Date = info.Commitment.ExpiresAt.Format(time.DateOnly)
+		info.DateString = info.Commitment.ExpiresAt.Format(time.DateOnly)
 		if info.Commitment.Duration.AddTo(now).Before(cutoff) {
 			shortTermCommitments = append(shortTermCommitments, info.Commitment.ID)
 		} else {
@@ -113,6 +113,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 }
 
 func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task ExpiringCommitments, _ prometheus.Labels) error {
+	template := c.Cluster.Config.MailTemplates.ExpiringCommitments
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
@@ -131,14 +132,14 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	projectIDs := slices.Collect(maps.Keys(task.Notifications))
 	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
 	for _, projectID := range projectIDs {
-		var mailInfo datamodel.MailInfo
+		var notification core.CommitmentGroupNotification
 		commitments := task.Notifications[projectID]
-		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
+		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
 		if err != nil {
 			return err
 		}
-		mailInfo.Commitments = commitments
-		mail, err := mailInfo.CreateMailNotification(c.Cluster.MailTemplates.ExpiringCommitments, "Information about expiring commitments", projectID, task.NextSubmission)
+		notification.Commitments = commitments
+		mail, err := template.Render(notification, projectID, task.NextSubmission)
 		if err != nil {
 			return err
 		}

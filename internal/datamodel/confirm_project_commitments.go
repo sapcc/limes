@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -57,16 +55,9 @@ var (
 `)
 )
 
-// AZResourceLocation is a tuple identifying an AZ resource within a project.
-type AZResourceLocation struct {
-	ServiceType      db.ServiceType
-	ResourceName     liquid.ResourceName
-	AvailabilityZone limes.AvailabilityZone
-}
-
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResourceID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanConfirmNewCommitment(loc core.AZResourceLocation, resourceID db.ProjectResourceID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
@@ -83,7 +74,7 @@ func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResour
 // CanMoveExistingCommitment returns whether a commitment of the given amount
 // at the given AZ resource location can be moved from one project to another.
 // The projects are identified by their resource IDs.
-func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceResourceID, targetResourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourceResourceID, targetResourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
@@ -101,7 +92,7 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
+func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
@@ -163,12 +154,12 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 
 	var mails []db.MailNotification
 	for projectID := range confirmedCommitments {
-		mailInfo, err := PrepareMailNotification(cluster, dbi, loc, projectID, confirmedCommitments[projectID])
+		notification, err := PrepareMailNotification(cluster, dbi, loc, projectID, confirmedCommitments[projectID])
 		if err != nil {
 			return nil, err
 		}
-		template := cluster.MailTemplates.ConfirmedCommitments
-		mail, err := mailInfo.CreateMailNotification(template, "Your recent commitment confirmations", projectID, now)
+		template := cluster.Config.MailTemplates.ConfirmedCommitments
+		mail, err := template.Render(notification, projectID, now)
 		if err != nil {
 			return nil, err
 		}
@@ -178,25 +169,25 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 	return mails, nil
 }
 
-func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc AZResourceLocation, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (*MailInfo, error) {
-	mailInfo := MailInfo{}
-	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&mailInfo.DomainName, &mailInfo.ProjectName)
+func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (core.CommitmentGroupNotification, error) {
+	notification := core.CommitmentGroupNotification{}
+	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
 	if err != nil {
-		return nil, err
+		return core.CommitmentGroupNotification{}, err
 	}
 
 	queryArgs := []any{pq.Array(confirmedCommitments)}
 	err = sqlext.ForeachRow(dbi, getConfirmedCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
-		var c CommitmentInfo
+		var c core.CommitmentNotification
 		err := rows.Scan(&c.Commitment.CreatorName, &c.Commitment.Amount, &c.Commitment.Duration, &c.Commitment.ConfirmedAt)
-		c.Date = c.Commitment.ConfirmedAt.Format(time.DateOnly)
+		c.DateString = c.Commitment.ConfirmedAt.Format(time.DateOnly)
 		c.Resource = loc
-		mailInfo.Commitments = append(mailInfo.Commitments, c)
+		notification.Commitments = append(notification.Commitments, c)
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return core.CommitmentGroupNotification{}, err
 	}
 
-	return &mailInfo, nil
+	return notification, nil
 }
