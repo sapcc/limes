@@ -35,7 +35,7 @@ import (
 
 const (
 	expiringCommitmentsNoticePeriod = 28 * 24 * time.Hour // 4 weeks
-	nextSumbissionInteval           = 2 * time.Minute
+	nextSumbissionInterval          = 2 * time.Minute
 )
 
 // Add commitments that are about to expire within the next month into the mail queue.
@@ -79,7 +79,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
 	commitments := ExpiringCommitments{
 		Notifications:  make(map[db.ProjectID][]core.CommitmentNotification),
-		NextSubmission: now.Add(c.AddJitter(nextSumbissionInteval)),
+		NextSubmission: now.Add(c.AddJitter(nextSumbissionInterval)),
 	}
 
 	var shortTermCommitments []db.ProjectCommitmentID
