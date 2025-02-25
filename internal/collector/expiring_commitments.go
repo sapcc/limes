@@ -23,7 +23,6 @@ import (
 	"database/sql"
 	"maps"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -129,9 +128,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, task Expi
 	}
 
 	// sort notifications per project_id in order to have consistent unit tests
-	projectIDs := slices.Collect(maps.Keys(task.Notifications))
-	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
-	for _, projectID := range projectIDs {
+	for _, projectID := range slices.Sorted(maps.Keys(task.Notifications)) {
 		var notification core.CommitmentGroupNotification
 		commitments := task.Notifications[projectID]
 		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
