@@ -47,12 +47,6 @@ var (
 		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3 AND pc.state = 'pending'
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`)
-
-	getConfirmedCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT creator_name, amount, duration, confirmed_at
-		  FROM project_commitments
-		WHERE id = ANY($1)
-`)
 )
 
 // CanConfirmNewCommitment returns whether the given commitment request can be
@@ -111,7 +105,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		NotifyOnConfirm   bool
 	}
 	var confirmableCommitments []confirmableCommitment
-	confirmedCommitments := make(map[db.ProjectID][]db.ProjectCommitmentID)
+	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
@@ -141,7 +135,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		}
 
 		if c.NotifyOnConfirm {
-			confirmedCommitments[c.ProjectID] = append(confirmedCommitments[c.ProjectID], c.CommitmentID)
+			confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.CommitmentID)
 		}
 
 		// block its allocation from being committed again in this loop
@@ -152,14 +146,10 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		}
 	}
 
+	// prepare mail notifications (this needs to be done in a separate loop because we collate notifications by project)
 	var mails []db.MailNotification
-	for projectID := range confirmedCommitments {
-		notification, err := PrepareMailNotification(cluster, dbi, loc, projectID, confirmedCommitments[projectID])
-		if err != nil {
-			return nil, err
-		}
-		template := cluster.Config.MailTemplates.ConfirmedCommitments
-		mail, err := template.Render(notification, projectID, now)
+	for projectID := range confirmedCommitmentIDs {
+		mail, err := prepareConfirmationMail(cluster, dbi, loc, projectID, confirmedCommitmentIDs[projectID], now)
 		if err != nil {
 			return nil, err
 		}
@@ -169,25 +159,25 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 	return mails, nil
 }
 
-func PrepareMailNotification(cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitments []db.ProjectCommitmentID) (core.CommitmentGroupNotification, error) {
-	notification := core.CommitmentGroupNotification{}
-	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
+func prepareConfirmationMail(cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitmentIDs []db.ProjectCommitmentID, now time.Time) (db.MailNotification, error) {
+	var n core.CommitmentGroupNotification
+	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&n.DomainName, &n.ProjectName)
 	if err != nil {
-		return core.CommitmentGroupNotification{}, err
+		return db.MailNotification{}, err
 	}
 
-	queryArgs := []any{pq.Array(confirmedCommitments)}
-	err = sqlext.ForeachRow(dbi, getConfirmedCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
-		var c core.CommitmentNotification
-		err := rows.Scan(&c.Commitment.CreatorName, &c.Commitment.Amount, &c.Commitment.Duration, &c.Commitment.ConfirmedAt)
-		c.DateString = c.Commitment.ConfirmedAt.Format(time.DateOnly)
-		c.Resource = loc
-		notification.Commitments = append(notification.Commitments, c)
-		return err
-	})
+	var commitments []db.ProjectCommitment
+	_, err = dbi.Select(&commitments, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(confirmedCommitmentIDs))
 	if err != nil {
-		return core.CommitmentGroupNotification{}, err
+		return db.MailNotification{}, err
+	}
+	for _, c := range commitments {
+		n.Commitments = append(n.Commitments, core.CommitmentNotification{
+			Commitment: c,
+			DateString: c.ConfirmedAt.Format(time.DateOnly),
+			Resource:   loc,
+		})
 	}
 
-	return notification, nil
+	return cluster.Config.MailTemplates.ConfirmedCommitments.Render(n, projectID, now)
 }
