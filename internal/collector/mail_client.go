@@ -31,7 +31,7 @@ type MailClient interface {
 	PostMail(ctx context.Context, req MailRequest) error
 }
 
-// mailClientImpl is implmentation of MailClient.
+// mailClientImpl is an implmentation of MailClient.
 // It builds the request to send a mail to the target mail server.
 type mailClientImpl struct {
 	gophercloud.ServiceClient
