@@ -23,8 +23,11 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -33,15 +36,12 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-			params:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 		services:
 			- service_type: unittest
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 	`
 	liquidCapacityTestConfigYAML = `
 		availability_zones: [ az-one, az-two ]
@@ -49,19 +49,58 @@ const (
 			method: --test-static
 		services:
 			- service_type: unittest
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 		capacitors:
 		- id: unittest
-			type: --test-static
+			type: liquid
+			params:
+				service_type: unittest
+				test_mode: true
+		resource_behavior:
+		- { resource: unittest/capacity, overcommit_factor: 1.5, topology: flat }
 	`
 )
 
-func TestGetServiceCapacityRequest(t *testing.T) {
+func commonLiquidTestSetup(t *testing.T) (s test.Setup) {
 	t.Helper()
-	s := test.NewSetup(t,
+	s = test.NewSetup(t,
 		test.WithConfig(liquidCapacityTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithProject(core.KeystoneProject{
+			Name: "project-1",
+			UUID: "uuid-for-project-1",
+		}),
+		test.WithEmptyRecordsAsNeeded,
 	)
+	return
+}
+
+func TestGetServiceCapacityRequest(t *testing.T) {
+	s := commonLiquidTestSetup(t)
+
+	// modify the default Resource that the Setup creates
+	s.ProjectAZResources[0].Usage = 10
+	_, err := s.DB.Update(s.ProjectAZResources[0])
+	mustT(t, err)
+
+	s.Cluster.CapacityPlugins["unittest"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.FlatResourceTopology,
+				HasCapacity:         true,
+				NeedsResourceDemand: true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				HasCapacity: false,
+			},
+		},
+	}
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
@@ -112,18 +151,15 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 }
 
 func TestServiceUsageRequest(t *testing.T) {
-	t.Helper()
-	s := test.NewSetup(t,
-		test.WithConfig(liquidQuotaTestConfigYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithDBFixtureFile("fixtures/start-data.sql"),
-	)
+	s := commonLiquidTestSetup(t)
+
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = liquid.ServiceInfo{UsageReportNeedsProjectMetadata: true}
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-berlin",
+		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowView = true
@@ -131,7 +167,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error when service type is missing
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-berlin",
+		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("missing required parameter: service_type\n"),
 	}.Check(t, s.Handler)
@@ -147,7 +183,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error for invalid service type
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-berlin",
+		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("invalid service type\n"),
 	}.Check(t, s.Handler)
@@ -163,18 +199,25 @@ func TestServiceUsageRequest(t *testing.T) {
 	// happy path
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-berlin",
+		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
 		ExpectStatus: 200,
 		ExpectBody: assert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},
 			"projectMetadata": assert.JSONObject{
-				"uuid": "uuid-for-berlin",
-				"name": "berlin",
+				"uuid": "uuid-for-project-1",
+				"name": "project-1",
 				"domain": assert.JSONObject{
-					"uuid": "uuid-for-germany",
-					"name": "germany",
+					"uuid": "uuid-for-domain-1",
+					"name": "domain-1",
 				},
 			},
 		},
 	}.Check(t, s.Handler)
+}
+
+func mustT(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
 }

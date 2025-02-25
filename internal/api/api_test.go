@@ -43,8 +43,9 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
+	testplugins "github.com/sapcc/limes/internal/test/plugins"
 )
 
 func TestMain(m *testing.M) {
@@ -61,11 +62,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
 				params:
-					rate_infos:
-						"service/shared/objects:delete":    { unit: MiB }
-						"service/shared/objects:unlimited": { unit: KiB }
+					area: shared
+					test_mode: true
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -86,10 +86,10 @@ const (
 							window: 1s
 
 			- service_type: unshared
-				type: --test-generic
+				type: liquid
 				params:
-					rate_infos:
-						"service/unshared/instances:delete": {}
+					area: unshared
+					test_mode: true
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -113,13 +113,21 @@ const (
 	`
 )
 
-func setupTest(t *testing.T, startData string) test.Setup {
+func setupTest(t *testing.T, startData string) (s test.Setup) {
 	t.Helper()
-	return test.NewSetup(t,
+	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
+	s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/shared/objects:delete":    {Unit: liquid.UnitMebibytes},
+		"service/shared/objects:unlimited": {Unit: liquid.UnitKibibytes},
+	}
+	s.Cluster.QuotaPlugins["unshared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/unshared/instances:delete": {},
+	}
+	return
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
@@ -288,7 +296,7 @@ func Test_ClusterOperations(t *testing.T) {
 
 func Test_DomainOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -366,7 +374,7 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_ProjectOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`

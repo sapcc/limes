@@ -41,9 +41,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 			- service_type: second
-				type: --test-generic
+				type: liquid
+				params:
+					area: second
+					test_mode: true
 	`
 
 	testQuotaOverridesWithRenamingConfigYAML = `
@@ -52,9 +58,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 			- service_type: second
-				type: --test-generic
+				type: liquid
+				params:
+					area: second
+					test_mode: true
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
