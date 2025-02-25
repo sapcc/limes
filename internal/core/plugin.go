@@ -282,5 +282,50 @@ var (
 	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
 
+// LiquidClient is a wrapper for liquidapi.Client
+// Allows for the implementation of a mock client that is used in unit tests
+type LiquidClient interface {
+	GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error)
+	GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error)
+	GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error)
+	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
+}
+
+// TODO: this should go in internal/test this does not work due to import cycles
+// MockLiquidClient implements the LiquidClient interface
+type MockLiquidClient struct {
+	serviceInfo           liquid.ServiceInfo
+	serviceCapacityReport liquid.ServiceCapacityReport
+	serviceUsageReport    liquid.ServiceUsageReport
+}
+
+func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
+	return l.serviceInfo, nil
+}
+
+func (l *MockLiquidClient) SetServiceInfo(info liquid.ServiceInfo) {
+	l.serviceInfo = info
+}
+
+func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
+	return l.serviceCapacityReport, nil
+}
+
+func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
+	l.serviceCapacityReport = capacityReport
+}
+
+func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
+	return l.serviceUsageReport, nil
+}
+
+func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
+	l.serviceUsageReport = usageReport
+}
+
+func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
+	return nil
+}
+
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
 var ErrNotALiquid = errors.New("this plugin is not a liquid")
