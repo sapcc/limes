@@ -84,7 +84,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         pointerTo(s.Clock.Now()),
 		ExpiresAt:           commitmentForThreeYears.AddTo(s.Clock.Now()),
 		State:               db.CommitmentStateActive,
-		CreationContextJSON: buf,
+		CreationContextJSON: json.RawMessage(buf),
 	}))
 
 	// test 1: create an expired commitment
@@ -98,7 +98,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
 		State:               db.CommitmentStateActive,
-		CreationContextJSON: buf,
+		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
 
@@ -117,24 +117,25 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// test 2: simulate a commitment that was created yesterday,
 	// and then moved to a different project five minutes later
-	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonSplit, RelatedCommitmentIDs: []db.ProjectCommitmentID{4}}
-	buf, err = json.Marshal(creationContext)
-	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
-		ID:                  3,
-		AZResourceID:        1,
-		Amount:              10,
-		Duration:            commitmentForOneDay,
-		CreatedAt:           s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
-		ExpiresAt:           s.Clock.Now(),
-		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
-		State:               db.CommitmentStateSuperseded,
-		CreationContextJSON: buf,
-	}))
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
+	supersedeContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonSplit, RelatedCommitmentIDs: []db.ProjectCommitmentID{4}}
+	supersedeBuf, err := json.Marshal(supersedeContext)
+	mustT(t, err)
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+		ID:                   3,
+		AZResourceID:         1,
+		Amount:               10,
+		Duration:             commitmentForOneDay,
+		CreatedAt:            s.Clock.Now().Add(-oneDay),
+		ConfirmedAt:          pointerTo(s.Clock.Now().Add(-oneDay)),
+		ExpiresAt:            s.Clock.Now(),
+		SupersededAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		State:                db.CommitmentStateSuperseded,
+		CreationContextJSON:  json.RawMessage(buf),
+		SupersedeContextJSON: pointerTo(json.RawMessage(supersedeBuf)),
+	}))
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  4,
 		AZResourceID:        2,
@@ -144,7 +145,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
 		State:               db.CommitmentStateActive,
-		CreationContextJSON: buf,
+		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
 
@@ -174,7 +175,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ExpiresAt:           s.Clock.Now(),
 		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		State:               db.CommitmentStateSuperseded,
-		CreationContextJSON: buf,
+		CreationContextJSON: json.RawMessage(buf),
 	}
 	mustT(t, c.DB.Insert(&commitment5))
 	commitment6 := db.ProjectCommitment{
@@ -202,7 +203,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
 		State:               db.CommitmentStateActive,
-		CreationContextJSON: buf,
+		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
 
