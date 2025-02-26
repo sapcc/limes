@@ -98,6 +98,9 @@ github.com/klauspost/compress/zstd/internal/xxhash
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
+# github.com/majewsky/gg v1.0.0
+## explicit; go 1.24
+github.com/majewsky/gg/option
 # github.com/majewsky/schwift/v2 v2.0.0
 ## explicit; go 1.22
 github.com/majewsky/schwift/v2

@@ -148,18 +148,20 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 
 	// prepare mail notifications (this needs to be done in a separate loop because we collate notifications by project)
 	var mails []db.MailNotification
-	for projectID := range confirmedCommitmentIDs {
-		mail, err := prepareConfirmationMail(cluster, dbi, loc, projectID, confirmedCommitmentIDs[projectID], now)
-		if err != nil {
-			return nil, err
+	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
+		for projectID := range confirmedCommitmentIDs {
+			mail, err := prepareConfirmationMail(mailConfig.Templates.ConfirmedCommitments, dbi, loc, projectID, confirmedCommitmentIDs[projectID], now)
+			if err != nil {
+				return nil, err
+			}
+			mails = append(mails, mail)
 		}
-		mails = append(mails, mail)
 	}
 
 	return mails, nil
 }
 
-func prepareConfirmationMail(cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitmentIDs []db.ProjectCommitmentID, now time.Time) (db.MailNotification, error) {
+func prepareConfirmationMail(tpl core.MailTemplate, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitmentIDs []db.ProjectCommitmentID, now time.Time) (db.MailNotification, error) {
 	var n core.CommitmentGroupNotification
 	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&n.DomainName, &n.ProjectName)
 	if err != nil {
@@ -179,5 +181,5 @@ func prepareConfirmationMail(cluster *core.Cluster, dbi db.Interface, loc core.A
 		})
 	}
 
-	return cluster.Config.MailNotifications.Templates.ConfirmedCommitments.Render(n, projectID, now)
+	return tpl.Render(n, projectID, now)
 }
