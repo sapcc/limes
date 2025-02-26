@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
@@ -383,14 +384,21 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {
-		loc := datamodel.AZResourceLocation{
+		loc := core.AZResourceLocation{
 			ServiceType:      serviceType,
 			ResourceName:     resourceName,
 			AvailabilityZone: az,
 		}
-		err = datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now)
+		mails, err := datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now)
 		if err != nil {
 			return err
+		}
+
+		for _, mail := range mails {
+			err := tx.Insert(&mail)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()

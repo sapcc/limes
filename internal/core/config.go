@@ -47,6 +47,7 @@ type ClusterConfiguration struct {
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
+	MailNotifications        MailConfiguration                 `yaml:"mail_notifications"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -145,6 +146,20 @@ type AutogrowQuotaDistributionConfiguration struct {
 	GrowthMultiplier                          float64                      `yaml:"growth_multiplier"`
 	GrowthMinimum                             uint64                       `yaml:"growth_minimum"`
 	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
+}
+
+// MailConfiguration appears in type Configuration.
+type MailConfiguration struct {
+	Endpoint  string                    `yaml:"endpoint"`
+	Templates MailTemplateConfiguration `yaml:"templates"`
+}
+
+// MailTemplateConfiguration appears in type Configuration.
+// It contains the mail template for each notification case.
+// The templates will be filled with the details collected from the limes collect job.
+type MailTemplateConfiguration struct {
+	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
+	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.

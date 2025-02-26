@@ -79,6 +79,16 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		c.CapacityPlugins[capa.ID] = plugin
 	}
 
+	// Create mail templates
+	err := c.Config.MailNotifications.Templates.ConfirmedCommitments.Compile()
+	if err != nil {
+		errs.Addf("could not parse confirmation mail template: %w", err)
+	}
+	err = c.Config.MailNotifications.Templates.ExpiringCommitments.Compile()
+	if err != nil {
+		errs.Addf("could not parse expiration mail template: %w", err)
+	}
+
 	return c, errs
 }
 

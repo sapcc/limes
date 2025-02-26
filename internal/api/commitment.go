@@ -150,11 +150,11 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	filter := reports.ReadFilter(r, p.Cluster)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
-	azResourceLocationsByID := make(map[db.ProjectAZResourceID]datamodel.AZResourceLocation)
+	azResourceLocationsByID := make(map[db.ProjectAZResourceID]core.AZResourceLocation)
 	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			id  db.ProjectAZResourceID
-			loc datamodel.AZResourceLocation
+			loc core.AZResourceLocation
 		)
 		err := rows.Scan(&id, &loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 		if err != nil {
@@ -193,7 +193,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc datamodel.AZResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
 	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
@@ -216,7 +216,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	}
 }
 
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *datamodel.AZResourceLocation, *core.ResourceBehavior) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *core.AZResourceLocation, *core.ResourceBehavior) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
@@ -262,7 +262,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		return nil, nil, nil
 	}
 
-	loc := datamodel.AZResourceLocation{
+	loc := core.AZResourceLocation{
 		ServiceType:      dbServiceType,
 		ResourceName:     dbResourceName,
 		AvailabilityZone: req.AvailabilityZone,
@@ -476,7 +476,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	var loc datamodel.AZResourceLocation
+	var loc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -630,7 +630,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var loc datamodel.AZResourceLocation
+	var loc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -702,7 +702,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	var loc datamodel.AZResourceLocation
+	var loc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -753,7 +753,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var loc datamodel.AZResourceLocation
+	var loc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -918,7 +918,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	var sourceLoc datamodel.AZResourceLocation
+	var sourceLoc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&sourceLoc.ServiceType, &sourceLoc.ResourceName, &sourceLoc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1006,7 +1006,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
 	}
-	targetLoc := datamodel.AZResourceLocation{
+	targetLoc := core.AZResourceLocation{
 		ServiceType:      targetServiceType,
 		ResourceName:     targetResourceName,
 		AvailabilityZone: sourceLoc.AvailabilityZone,
@@ -1134,7 +1134,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var loc datamodel.AZResourceLocation
+	var loc core.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {

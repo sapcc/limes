@@ -194,6 +194,14 @@ type ProjectCommitment struct {
 	//
 	// This field is updated by the CapacityScrapeJob.
 	State CommitmentState `db:"state"`
+
+	// During commitment planning, a user can specify
+	// if a mail should be sent after the commitments confirmation.
+	NotifyOnConfirm bool `db:"notify_on_confirm"`
+
+	// If commitments are about to expire, they get added into the mail queue.
+	// This attribute helps to identify commitments that are already queued.
+	NotifiedForExpiration bool `db:"notified_for_expiration"`
 }
 
 // CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
@@ -206,6 +214,15 @@ const (
 	CommitmentStateSuperseded CommitmentState = "superseded"
 	CommitmentStateExpired    CommitmentState = "expired"
 )
+
+type MailNotification struct {
+	ID                int64     `db:"id"`
+	ProjectID         ProjectID `db:"project_id"`
+	Subject           string    `db:"subject"`
+	Body              string    `db:"body"`
+	NextSubmissionAt  time.Time `db:"next_submission_at"`
+	FailedSubmissions int64     `db:"failed_submissions"`
+}
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
@@ -220,4 +237,5 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
+	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "id")
 }

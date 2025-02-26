@@ -187,4 +187,33 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_az_resources
 			ADD COLUMN backend_quota BIGINT default NULL;
 	`,
+	"047_confirmation_notification.down.sql": `
+	ALTER TABLE project_commitments
+		DROP COLUMN notify_on_confirm;
+	`,
+	"047_confirmation_notification.up.sql": `
+		ALTER TABLE project_commitments
+			ADD COLUMN notify_on_confirm BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
+	"048_confirmation_notification.down.sql": `
+	ALTER TABLE project_commitments
+		DROP COLUMN notified_for_expiration;
+	`,
+	"048_confirmation_notification.up.sql": `
+		ALTER TABLE project_commitments
+			ADD COLUMN notified_for_expiration BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
+	"049_project_mail_notifications.down.sql": `
+		DROP TABLE project_mail_notifications;
+	`,
+	"049_project_mail_notifications.up.sql": `
+		CREATE TABLE project_mail_notifications (
+			id BIGSERIAL NOT NULL PRIMARY KEY,
+			project_id BIGINT NOT NULL REFERENCES projects ON DELETE CASCADE,
+  			subject TEXT NOT NULL,
+  			body TEXT NOT NULL,
+  			next_submission_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  			failed_submissions BIGINT NOT NULL DEFAULT 0
+		);
+	`,
 }

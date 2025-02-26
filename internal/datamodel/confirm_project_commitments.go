@@ -23,8 +23,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/lib/pq"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -40,7 +39,7 @@ var (
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, pc.id, pc.amount
+		SELECT ps.project_id, pr.id, pc.id, pc.amount, pc.notify_on_confirm
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
@@ -50,16 +49,9 @@ var (
 	`)
 )
 
-// AZResourceLocation is a tuple identifying an AZ resource within a project.
-type AZResourceLocation struct {
-	ServiceType      db.ServiceType
-	ResourceName     liquid.ResourceName
-	AvailabilityZone limes.AvailabilityZone
-}
-
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResourceID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanConfirmNewCommitment(loc core.AZResourceLocation, resourceID db.ProjectResourceID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
@@ -76,7 +68,7 @@ func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResour
 // CanMoveExistingCommitment returns whether a commitment of the given amount
 // at the given AZ resource location can be moved from one project to another.
 // The projects are identified by their resource IDs.
-func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceResourceID, targetResourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourceResourceID, targetResourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
@@ -94,32 +86,35 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stats := statsByAZ[loc.AvailabilityZone]
 
 	// load confirmable commitments (we need to load them into a buffer first, since
 	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
+		ProjectID         db.ProjectID
 		ProjectResourceID db.ProjectResourceID
 		CommitmentID      db.ProjectCommitmentID
 		Amount            uint64
+		NotifyOnConfirm   bool
 	}
 	var confirmableCommitments []confirmableCommitment
+	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
-		err := rows.Scan(&c.ProjectResourceID, &c.CommitmentID, &c.Amount)
+		err := rows.Scan(&c.ProjectID, &c.ProjectResourceID, &c.CommitmentID, &c.Amount, &c.NotifyOnConfirm)
 		confirmableCommitments = append(confirmableCommitments, c)
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+		return nil, fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
 
 	// foreach confirmable commitment...
@@ -136,7 +131,11 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
 			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
-			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+		}
+
+		if c.NotifyOnConfirm {
+			confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.CommitmentID)
 		}
 
 		// block its allocation from being committed again in this loop
@@ -147,5 +146,38 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		}
 	}
 
-	return nil
+	// prepare mail notifications (this needs to be done in a separate loop because we collate notifications by project)
+	var mails []db.MailNotification
+	for projectID := range confirmedCommitmentIDs {
+		mail, err := prepareConfirmationMail(cluster, dbi, loc, projectID, confirmedCommitmentIDs[projectID], now)
+		if err != nil {
+			return nil, err
+		}
+		mails = append(mails, mail)
+	}
+
+	return mails, nil
+}
+
+func prepareConfirmationMail(cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID, confirmedCommitmentIDs []db.ProjectCommitmentID, now time.Time) (db.MailNotification, error) {
+	var n core.CommitmentGroupNotification
+	err := dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&n.DomainName, &n.ProjectName)
+	if err != nil {
+		return db.MailNotification{}, err
+	}
+
+	var commitments []db.ProjectCommitment
+	_, err = dbi.Select(&commitments, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(confirmedCommitmentIDs))
+	if err != nil {
+		return db.MailNotification{}, err
+	}
+	for _, c := range commitments {
+		n.Commitments = append(n.Commitments, core.CommitmentNotification{
+			Commitment: c,
+			DateString: c.ConfirmedAt.Format(time.DateOnly),
+			Resource:   loc,
+		})
+	}
+
+	return cluster.Config.MailNotifications.Templates.ConfirmedCommitments.Render(n, projectID, now)
 }
