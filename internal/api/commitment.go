@@ -680,7 +680,9 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
 	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending || commitment.State == db.CommitmentStateActive {
-		if p.timeNow().Before(commitment.CreatedAt.Add(24 * time.Hour)) {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
 			if token.Check("project:edit") {
 				return true
 			}
@@ -861,9 +863,28 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 }
 
 func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ProjectAZResourceID, amount uint64) (db.ProjectCommitment, error) {
-	commitment, err := p.buildSplitCommitment(dbCommitment, amount)
-	commitment.AZResourceID = azResourceID
-	return commitment, err
+	now := p.timeNow()
+	creationContext := db.CommitmentWorkflowContext{
+		Reason:               db.CommitmentReasonConvert,
+		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+	}
+	buf, err := json.Marshal(creationContext)
+	if err != nil {
+		return db.ProjectCommitment{}, err
+	}
+	return db.ProjectCommitment{
+		AZResourceID:        azResourceID,
+		Amount:              amount,
+		Duration:            dbCommitment.Duration,
+		CreatedAt:           now,
+		CreatorUUID:         dbCommitment.CreatorUUID,
+		CreatorName:         dbCommitment.CreatorName,
+		ConfirmBy:           dbCommitment.ConfirmBy,
+		ConfirmedAt:         dbCommitment.ConfirmedAt,
+		ExpiresAt:           dbCommitment.ExpiresAt,
+		CreationContextJSON: json.RawMessage(buf),
+		State:               dbCommitment.State,
+	}, nil
 }
 
 // GetCommitmentByTransferToken handles GET /v1/commitments/{token}

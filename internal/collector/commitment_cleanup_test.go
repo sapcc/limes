@@ -116,11 +116,11 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 2 AND transfer_token = NULL;`)
 
 	// test 2: simulate a commitment that was created yesterday,
-	// and then moved to a different project five minutes later
+	// and then converted five minutes later
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	supersedeContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonSplit, RelatedCommitmentIDs: []db.ProjectCommitmentID{4}}
+	supersedeContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonConvert, RelatedCommitmentIDs: []db.ProjectCommitmentID{4}}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
@@ -136,6 +136,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreationContextJSON:  json.RawMessage(buf),
 		SupersedeContextJSON: pointerTo(json.RawMessage(supersedeBuf)),
 	}))
+	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonConvert, RelatedCommitmentIDs: []db.ProjectCommitmentID{3}}
+	buf, err = json.Marshal(creationContext)
+	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  4,
 		AZResourceID:        2,
