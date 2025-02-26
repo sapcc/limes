@@ -42,6 +42,9 @@ const (
 	mailDeliveryErrorInterval = 2 * time.Minute
 )
 
+// MailDeliveryJob is a jobloop.CronJob. A task searches for a queued mail notification.
+// If any is found, it builds the mail request body and posts the mail to the mail API.
+// Unsuccessful mail deliveries will increase the fail counter and will be requeued with an updated submission timestamp.
 func (c *Collector) MailDeliveryJob(registerer prometheus.Registerer, client MailClient) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[db.MailNotification]{
 		Metadata: jobloop.JobMetadata{

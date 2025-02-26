@@ -38,7 +38,9 @@ const (
 	expiringCommitmentsNoticePeriod = 28 * 24 * time.Hour // 4 weeks
 )
 
-// Add commitments that are about to expire within the next month into the mail queue.
+// ExpiringCommitmentNotificationJob is a jobloop.Job. A task scrapes commitments that are or are about to expire.
+// For all applicable commitments within a project the mail content to inform customers will be prepared and added to a queue.
+// Long-term commitments will be queued while short-term commitments will only be marked as notified.
 func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[[]db.ProjectCommitment]{
 		Metadata: jobloop.JobMetadata{

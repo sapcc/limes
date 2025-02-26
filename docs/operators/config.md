@@ -48,6 +48,7 @@ These audit events can be sent to a RabbitMQ server which can then forward them 
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 | `LIMES_QUOTA_OVERRIDES_PATH` | *(optional)* | Path to a JSON file containing the quota overrides for this cluster. |
+| `MAIL_ENDPOINT` | *(required)* | Is used to sent informational content, like the status of commitments, to the customer. The endpoints definition expects a trailing slash `/`. The provided endpoint serves requests to a `send-email` API which accepts the recipients, subject and type of content (`text/html`, `text/plain`) to be sent.
 
 If present, the quota overrides file must be a four-leveled object, with the keys being domain name, project name,
 service type and resource name in that order. If API-level resource renaming is used (see configuration option

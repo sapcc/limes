@@ -149,6 +149,8 @@ type AutogrowQuotaDistributionConfiguration struct {
 }
 
 // MailTemplateConfiguration appears in type Configuration.
+// It contains the mail template for each notification case.
+// The templates will be filled with the details collected from the limes collect job.
 type MailTemplateConfiguration struct {
 	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
 	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`
