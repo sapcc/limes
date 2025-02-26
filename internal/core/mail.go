@@ -22,7 +22,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"text/template"
+	"html/template"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"

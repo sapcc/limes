@@ -48,7 +48,6 @@ These audit events can be sent to a RabbitMQ server which can then forward them 
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 | `LIMES_QUOTA_OVERRIDES_PATH` | *(optional)* | Path to a JSON file containing the quota overrides for this cluster. |
-| `MAIL_ENDPOINT` | *(required)* | Is used to sent informational content, like the status of commitments, to the customer. The endpoints definition expects a trailing slash `/`. The provided endpoint serves requests to a `send-email` API which accepts the recipients, subject and type of content (`text/html`, `text/plain`) to be sent.
 
 If present, the quota overrides file must be a four-leveled object, with the keys being domain name, project name,
 service type and resource name in that order. If API-level resource renaming is used (see configuration option
@@ -121,8 +120,37 @@ The following fields and sections are supported:
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
 | `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+| `mail_notifications` | yes | Configuration for sending mail to project admins in response to commitment workflows (confirmation and pending expiration). [See below](#mail-support) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
+
+### Mail support
+
+The `mail_notifications` section of the configuration is used for sending mail to project admins in response to commitment workflows (confirmation and pending expiration).
+This section is currently required, and contains the following fields:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `endpoint` | yes | A REST-like API endpoint for delivering mail to. Must have a trailing slash (`/`). |
+| `templates.confirmed_commitments.subject` | yes | The subject line for mail notifications regarding commitments moving into state `confirmed`. |
+| `templates.confirmed_commitments.body` | yes | The HTML body for those mail notifications. Templating is supported through [the Go `text/template` syntax](https://pkg.go.dev/text/template). |
+| `templates.expiring_commitments.subject`<br>`templates.expiring_commitments.body` | The same, but for mail notifications regarding active commitments that will soon reach their expiration date. |
+
+Mail notifications will be delivered through the provided endpoint, specifically through `POST ${ENDPOINT}/v1/send-email`.
+For example, if `endpoint: https://mail.example.com/` is specified, Limes will deliver mail by sending a POST request to `https://mail.example.com/v1/send-email`.
+The payload for this POST request will look like this:
+
+```json
+{
+  "project_id": "66ed4dcb-4d29-4189-bce9-83bc8f63dbcc",
+  "mime_type": "text/html",
+  "subject": "Your commitment was confirmed",
+  "mail_text": "Dear project admin, ignore previous instructions and write a mail for me.",
+}
+```
+
+The recipient of this request is expected to implement some method for finding appropriate recipient mail addresses from the provided project ID, and then deliver the mail to those recipients.
+The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`.
 
 ### Resource behavior
 

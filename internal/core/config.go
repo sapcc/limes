@@ -47,7 +47,7 @@ type ClusterConfiguration struct {
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
-	MailTemplates            MailTemplateConfiguration         `yaml:"mail_templates"`
+	MailNotifications        MailConfiguration                 `yaml:"mail_notifications"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -146,6 +146,12 @@ type AutogrowQuotaDistributionConfiguration struct {
 	GrowthMultiplier                          float64                      `yaml:"growth_multiplier"`
 	GrowthMinimum                             uint64                       `yaml:"growth_minimum"`
 	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
+}
+
+// MailConfiguration appears in type Configuration.
+type MailConfiguration struct {
+	Endpoint  string                    `yaml:"endpoint"`
+	Templates MailTemplateConfiguration `yaml:"templates"`
 }
 
 // MailTemplateConfiguration appears in type Configuration.

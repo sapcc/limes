@@ -179,5 +179,5 @@ func prepareConfirmationMail(cluster *core.Cluster, dbi db.Interface, loc core.A
 		})
 	}
 
-	return cluster.Config.MailTemplates.ConfirmedCommitments.Render(n, projectID, now)
+	return cluster.Config.MailNotifications.Templates.ConfirmedCommitments.Render(n, projectID, now)
 }

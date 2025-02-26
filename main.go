@@ -203,9 +203,8 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// connect to database
 	dbm := db.InitORM(must.Return(db.Init()))
 
-	// setup mail client (TODO: make this optional; if MAIL_ENDPOINT is not given, do not expect mail templates in the config, and do not generate and send mail notifications)
-	mailEndpoint := osext.MustGetenv("MAIL_ENDPOINT")
-	mailClient := must.Return(collector.NewMailClient(provider, mailEndpoint))
+	// setup mail client (TODO: make this optional; if cfg.MailNotifications is not given, do not generate and send mail notifications)
+	mailClient := must.Return(collector.NewMailClient(provider, cluster.Config.MailNotifications.Endpoint))
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	// stop channel to shutdown threads in a controlled manner. I decided against

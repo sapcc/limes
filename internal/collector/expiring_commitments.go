@@ -132,7 +132,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 	}
 
 	// generate notifications ordered by project_id for deterministic behavior in unit tests
-	template := c.Cluster.Config.MailTemplates.ExpiringCommitments
+	template := c.Cluster.Config.MailNotifications.Templates.ExpiringCommitments
 	for _, projectID := range slices.Sorted(maps.Keys(notifications)) {
 		var notification core.CommitmentGroupNotification
 		commitments := notifications[projectID]
