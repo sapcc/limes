@@ -505,7 +505,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if dbCommitment.State != db.CommitmentStateActive {
-			http.Error(w, "only active commits can be merged", http.StatusConflict)
+			http.Error(w, "only active commitments may be merged", http.StatusConflict)
 			return
 		}
 	}

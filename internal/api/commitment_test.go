@@ -1493,7 +1493,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"amount":            5,
 		"duration":          "2 hours",
 	}
-	// Create confirmed commit in different AZ
+	// Create confirmed commitment in different AZ
 	req3 := assert.JSONObject{
 		"id":                3,
 		"service_type":      "second",

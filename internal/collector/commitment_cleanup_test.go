@@ -157,9 +157,10 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// when cleaning up, both commitments should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(
-		`DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL;
-		DELETE FROM project_commitments WHERE id = 4 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 4 AND transfer_token = NULL;
+	`)
 
 	// test 3: simulate two commitments with different expiration dates that were merged
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{7}}
@@ -216,9 +217,11 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// when cleaning up, all commitments related to the merge should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 5 AND transfer_token = NULL;
-	DELETE FROM project_commitments WHERE id = 6 AND transfer_token = NULL;
-	DELETE FROM project_commitments WHERE id = 7 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_commitments WHERE id = 5 AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 6 AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 7 AND transfer_token = NULL;
+	`)
 }
 
 func pointerTo[T any](val T) *T {
