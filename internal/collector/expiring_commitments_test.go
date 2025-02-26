@@ -73,8 +73,9 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	`, c.MeasureTime().Unix())
 
 	// mail queue with an empty template should fail
-	mailTemplates := s.Cluster.Config.MailNotifications.Templates
-	s.Cluster.Config.MailNotifications.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: template.New("")}}
+	mailConfig := s.Cluster.Config.MailNotifications.UnwrapOrPanic("MailNotifications == nil!")
+	originalMailTemplates := mailConfig.Templates
+	mailConfig.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: template.New("")}}
 	// commitments that are already sent out for a notification are not visible in the result set anymore - a new one gets created.
 	_, err := s.DB.Exec("INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state) VALUES (99, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'expired');")
 	tr.DBChanges().Ignore()
@@ -83,14 +84,14 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	if err == nil {
 		t.Fatal("execution without mail template must fail")
 	}
-	s.Cluster.Config.MailNotifications.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: nil}}
+	mailConfig.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: nil}}
 	err = (job.ProcessOne(s.Ctx))
 	if err == nil {
 		t.Fatal("execution without mail template must fail")
 	}
 
 	// create a notification for the created commitment. Do not send another notification for commitments that are already marked as notified.
-	s.Cluster.Config.MailNotifications.Templates = mailTemplates
+	mailConfig.Templates = originalMailTemplates
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 99 AND transfer_token = NULL;

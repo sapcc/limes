@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -203,8 +204,11 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// connect to database
 	dbm := db.InitORM(must.Return(db.Init()))
 
-	// setup mail client (TODO: make this optional; if cfg.MailNotifications is not given, do not generate and send mail notifications)
-	mailClient := must.Return(collector.NewMailClient(provider, cluster.Config.MailNotifications.Endpoint))
+	// setup mail client if requested
+	mailClient := None[collector.MailClient]()
+	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
+		mailClient = Some(must.Return(collector.NewMailClient(provider, mailConfig.Endpoint)))
+	}
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	// stop channel to shutdown threads in a controlled manner. I decided against
@@ -231,9 +235,11 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	go c.CleanupOldCommitmentsJob(nil).Run(ctx)
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
 
-	// start mail processing
-	go c.ExpiringCommitmentNotificationJob(nil).Run(ctx)
-	go c.MailDeliveryJob(nil, mailClient).Run(ctx)
+	// start mail processing if requested
+	if mc, ok := mailClient.Unpack(); ok {
+		go c.ExpiringCommitmentNotificationJob(nil).Run(ctx)
+		go c.MailDeliveryJob(nil, mc).Run(ctx)
+	}
 
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})

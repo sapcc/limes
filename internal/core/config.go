@@ -22,6 +22,7 @@ package core
 import (
 	"fmt"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -47,7 +48,7 @@ type ClusterConfiguration struct {
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
-	MailNotifications        MailConfiguration                 `yaml:"mail_notifications"`
+	MailNotifications        Option[*MailConfiguration]        `yaml:"mail_notifications"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.

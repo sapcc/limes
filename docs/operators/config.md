@@ -120,21 +120,22 @@ The following fields and sections are supported:
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
 | `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
-| `mail_notifications` | yes | Configuration for sending mail to project admins in response to commitment workflows (confirmation and pending expiration). [See below](#mail-support) for details. |
+| `mail_notifications` | no | Configuration for sending mail to project admins in response to commitment workflows (confirmation and pending expiration). [See below](#mail-support) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
 
 ### Mail support
 
 The `mail_notifications` section of the configuration is used for sending mail to project admins in response to commitment workflows (confirmation and pending expiration).
-This section is currently required, and contains the following fields:
+The entire section can be omitted if sending mail notifications is not desired.
+If the section is given, it contains the following fields:
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `endpoint` | yes | A REST-like API endpoint for delivering mail to. Must have a trailing slash (`/`). |
 | `templates.confirmed_commitments.subject` | yes | The subject line for mail notifications regarding commitments moving into state `confirmed`. |
 | `templates.confirmed_commitments.body` | yes | The HTML body for those mail notifications. Templating is supported through [the Go `text/template` syntax](https://pkg.go.dev/text/template). |
-| `templates.expiring_commitments.subject`<br>`templates.expiring_commitments.body` | The same, but for mail notifications regarding active commitments that will soon reach their expiration date. |
+| `templates.expiring_commitments.subject`<br>`templates.expiring_commitments.body` | yes | The same, but for mail notifications regarding active commitments that will soon reach their expiration date. |
 
 Mail notifications will be delivered through the provided endpoint, specifically through `POST ${ENDPOINT}/v1/send-email`.
 For example, if `endpoint: https://mail.example.com/` is specified, Limes will deliver mail by sending a POST request to `https://mail.example.com/v1/send-email`.
