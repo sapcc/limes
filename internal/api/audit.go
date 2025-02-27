@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/sapcc/limes/internal/db"
+
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -101,12 +103,12 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 // commitmentEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding commitments.
 type commitmentEventTarget struct {
-	DomainID             string
-	DomainName           string
-	ProjectID            string
-	ProjectName          string
-	SupersededCommitment *limesresources.Commitment
-	Commitments          []limesresources.Commitment // must have at least one entry
+	DomainID        string
+	DomainName      string
+	ProjectID       string
+	ProjectName     string
+	Commitments     []limesresources.Commitment // must have at least one entry
+	WorkflowContext *db.CommitmentWorkflowContext
 }
 
 // Render implements the audittools.Target interface.
@@ -131,8 +133,8 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		attachment := must.Return(cadf.NewJSONAttachment(name, commitment))
 		res.Attachments = append(res.Attachments, attachment)
 	}
-	if t.SupersededCommitment != nil {
-		attachment := must.Return(cadf.NewJSONAttachment("superseded-payload", *t.SupersededCommitment))
+	if t.WorkflowContext != nil {
+		attachment := must.Return(cadf.NewJSONAttachment("context-payload", *t.WorkflowContext))
 		res.Attachments = append(res.Attachments, attachment)
 	}
 	return res

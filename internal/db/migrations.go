@@ -216,4 +216,97 @@ var sqlMigrations = map[string]string{
   			failed_submissions BIGINT NOT NULL DEFAULT 0
 		);
 	`,
+	"050_commitment_workflow_context.down.sql": `
+		-- We will probably not need this, no implementation for now
+	`,
+	"050_commitment_workflow_context.up.sql": `
+		-- Step 1: Create new fields for commitment workflow contexts
+		ALTER TABLE project_commitments
+			ADD COLUMN creation_context_json JSONB,
+			ADD COLUMN supersede_context_json JSONB;
+
+		-- Step 2: Populate creation context
+		WITH creation_context_data AS (
+			SELECT pc.id as commitment_id, pc.predecessor_id,
+				CASE 
+					WHEN pc.predecessor_id IS NULL THEN 'create'
+					WHEN EXISTS (
+						SELECT 1
+						FROM project_commitments pc2
+						-- Since the az_resource_id can change if a commitment is transferred to a different project,
+						-- we need to join up to project_services and compare the service type and resource name
+						JOIN project_az_resources pc2_az_res ON pc2.az_resource_id = pc2_az_res.id
+						JOIN project_resources pc2_res ON pc2_az_res.resource_id = pc2_res.id
+						JOIN project_services pc2_srv ON pc2_res.service_id = pc2_srv.id
+						JOIN project_az_resources pc_az_res ON pc.az_resource_id = pc_az_res.id
+						JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_services pc_srv ON pc_res.service_id = pc_srv.id
+						WHERE pc2.id = pc.predecessor_id
+						AND pc2_res.name = pc_res.name
+						AND pc2_srv.type = pc_srv.type
+					) THEN 'split'
+					ELSE 'convert'
+				END AS creation_reason
+			FROM project_commitments pc
+		)
+		UPDATE project_commitments
+		SET creation_context_json = jsonb_build_object(
+			'reason', creation_context_data.creation_reason,
+			'related_ids',
+			CASE 
+				WHEN creation_context_data.predecessor_id IS NULL THEN '[]'::jsonb
+				ELSE jsonb_build_array(creation_context_data.predecessor_id)
+			END
+		)
+		FROM creation_context_data
+		WHERE project_commitments.id = creation_context_data.commitment_id;
+
+		-- Step 3: Make creation context mandatory after populating with values
+		ALTER TABLE project_commitments
+			ALTER COLUMN creation_context_json SET NOT NULL;
+
+		-- Step 4: Populate supersede context
+		WITH supersede_context_data AS (
+			SELECT pc.id AS superseded_id, pc2.id AS successor_id, pc2.az_resource_id AS successor_az_resource_id,
+				CASE 
+					WHEN EXISTS (
+						SELECT 1
+						FROM project_az_resources pc2_az_res
+						JOIN project_resources pc2_res ON pc2_az_res.resource_id = pc2_res.id
+						JOIN project_services pc2_srv ON pc2_res.service_id = pc2_srv.id
+						JOIN project_az_resources pc_az_res ON pc.az_resource_id = pc_az_res.id
+						JOIN project_resources pc_res ON pc_az_res.resource_id = pc_res.id
+						JOIN project_services pc_srv ON pc_res.service_id = pc_srv.id
+						WHERE pc2_az_res.id = pc2.az_resource_id
+						AND pc2_res.name = pc_res.name
+						AND pc2_srv.type = pc_srv.type
+					) THEN 'split'
+					ELSE 'convert'
+				END AS supersede_reason
+			FROM project_commitments pc
+			JOIN project_commitments pc2
+				ON pc.id = pc2.predecessor_id
+			WHERE pc.state = 'superseded'
+		),
+		-- When splitting or during conversion, it is possible that two or more successor commits are created
+		aggregated_successors AS (
+			SELECT superseded_id,
+				jsonb_agg(successor_id) AS related_successors
+			FROM supersede_context_data
+			GROUP BY superseded_id
+		)
+		UPDATE project_commitments p1
+		SET supersede_context_json = jsonb_build_object(
+				'reason', scd.supersede_reason,
+				'related_ids', aggregated_successors.related_successors
+			)
+		FROM supersede_context_data scd
+		JOIN aggregated_successors
+			ON scd.superseded_id = aggregated_successors.superseded_id
+		WHERE p1.id = scd.superseded_id;
+
+		-- Step 5: Remove deprecated field predecessor_id
+		ALTER TABLE project_commitments
+			DROP COLUMN predecessor_id;
+	`,
 }

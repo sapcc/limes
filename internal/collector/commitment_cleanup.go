@@ -63,23 +63,14 @@ func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels
 
 	// step 2: delete expired commitments after a grace period
 	//
-	// NOTE 1: Expired commitments do not contribute to any calculations, so it would
+	// NOTE: Expired commitments do not contribute to any calculations, so it would
 	// be fine to delete them immediately from a technical perspective. However,
 	// they don't take up that much space in the short run, and having them stick
 	// around in the DB for a little bit (in this case, one month) can
 	// potentially help in investigations when customers complain about
 	// commitments expiring unexpectedly.
-	//
-	// NOTE 2: We cannot delete superseded commitments that have undeleted
-	// successors because the foreign key on project_commitments.predecessor_id
-	// is intentionally specified as `ON DELETE RESTRICT`. The cleanup query is
-	// written such that we have to cleanup the successors first, and then the
-	// predecessors can be deleted recursively. This does not happen all at once,
-	// but since the jobloop runs every few minutes, it happens quickly enough.
 	query = sqlext.SimplifyWhitespace(`
-		DELETE FROM project_commitments pc WHERE expires_at + interval '1 month' <= $1 AND id NOT IN (
-			SELECT DISTINCT predecessor_id FROM project_commitments WHERE predecessor_id IS NOT NULL
-		)
+		DELETE FROM project_commitments pc WHERE expires_at + interval '1 month' <= $1
 	`)
 	_, err = c.DB.Exec(query, now)
 	if err != nil {

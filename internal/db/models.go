@@ -20,6 +20,7 @@
 package db
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -170,11 +171,11 @@ type ProjectCommitment struct {
 	ConfirmedAt  *time.Time                        `db:"confirmed_at"`
 	ExpiresAt    time.Time                         `db:"expires_at"`
 
-	// A commitment can be superseded e.g. by splitting it into smaller parts.
-	// When that happens, the new commitments will point to the one that they
-	// superseded through the PredecessorID field.
-	SupersededAt  *time.Time           `db:"superseded_at"`
-	PredecessorID *ProjectCommitmentID `db:"predecessor_id"`
+	// Commitments can be superseded due to splits, conversions or merges.
+	// The context columns contain information about the reason and related commitments
+	SupersededAt         *time.Time       `db:"superseded_at"`
+	CreationContextJSON  json.RawMessage  `db:"creation_context_json"`
+	SupersedeContextJSON *json.RawMessage `db:"supersede_context_json"`
 
 	// For a commitment to be transferred between projects, it must first be
 	// marked for transfer in the source project. Then a new commitment can be
@@ -213,6 +214,23 @@ const (
 	CommitmentStateActive     CommitmentState = "active"
 	CommitmentStateSuperseded CommitmentState = "superseded"
 	CommitmentStateExpired    CommitmentState = "expired"
+)
+
+// CommitmentWorkflowContext is the type definition for the JSON payload in the
+// CreationContextJSON and SupersedeContextJSON fields of type ProjectCommitment.
+type CommitmentWorkflowContext struct {
+	Reason               CommitmentReason      `json:"reason"`
+	RelatedCommitmentIDs []ProjectCommitmentID `json:"related_ids,omitempty"`
+}
+
+// CommitmentReason is an enum. It appears in type CommitmentWorkflowContext.
+type CommitmentReason string
+
+const (
+	CommitmentReasonCreate  CommitmentReason = "create"
+	CommitmentReasonSplit   CommitmentReason = "split"
+	CommitmentReasonConvert CommitmentReason = "convert"
+	CommitmentReasonMerge   CommitmentReason = "merge"
 )
 
 type MailNotification struct {
