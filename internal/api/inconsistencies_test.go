@@ -22,8 +22,10 @@ package api
 import (
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -34,9 +36,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 			- service_type: unshared
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 	`
 )
 
@@ -47,6 +55,24 @@ func TestFullInconsistencyReport(t *testing.T) {
 		test.WithConfig(inconsistenciesTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
+
+	serviceInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.FlatResourceTopology,
+				HasCapacity:         true,
+				NeedsResourceDemand: true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				HasCapacity: false,
+			},
+		},
+	}
+	s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
+	s.Cluster.QuotaPlugins["unshared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
 
 	assert.HTTPRequest{
 		Method:       "GET",

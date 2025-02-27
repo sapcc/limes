@@ -92,6 +92,10 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 				HasCapacity:         true,
 				NeedsResourceDemand: true,
 			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				HasCapacity: false,
+			},
 		},
 	}
 	s.Cluster.CapacityPlugins["unittest"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo

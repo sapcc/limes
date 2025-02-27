@@ -20,7 +20,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -183,8 +182,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	for idx, project := range params.Projects {
 		dbDomain := &db.Domain{
 			ID:   db.DomainID(idx),
-			Name: fmt.Sprintf("domain-%s", strconv.Itoa(idx+1)),
-			UUID: fmt.Sprintf("uuid-for-domain-%s", strconv.Itoa(idx+1)),
+			Name: "domain-" + strconv.Itoa(idx+1),
+			UUID: "uuid-for-domain-" + strconv.Itoa(idx+1),
 		}
 		mustDo(t, s.DB.Insert(dbDomain))
 		dbProject := &db.Project{
@@ -211,7 +210,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				dbProjectService := &db.ProjectService{
 					ID:             db.ProjectServiceID(len(s.ProjectServices) + 1),
 					ProjectID:      dbProject.ID,
-					Type:           db.ServiceType(svcConfig.ServiceType),
+					Type:           svcConfig.ServiceType,
 					ScrapedAt:      &t0,
 					RatesScrapedAt: &t0,
 					CheckedAt:      &t0,
