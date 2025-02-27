@@ -51,11 +51,11 @@ type MockMail struct{}
 
 func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 	switch req.ProjectID {
-	case 1:
+	case "uuid-for-waldorf":
 		return nil
-	case 2:
+	case "uuid-for-berlin":
 		return errors.New("fail project id 1")
-	case 3:
+	case "uuid-for-dresden":
 		return nil
 	}
 	return nil

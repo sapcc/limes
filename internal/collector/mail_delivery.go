@@ -31,10 +31,10 @@ import (
 )
 
 type MailRequest struct {
-	ProjectID db.ProjectID `json:"project_id"`
-	Subject   string       `json:"subject"`
-	MimeType  string       `json:"mime_type"`
-	MailText  string       `json:"mail_text"`
+	ProjectID string `json:"project_id"`
+	Subject   string `json:"subject"`
+	MimeType  string `json:"mime_type"`
+	MailText  string `json:"mail_text"`
 }
 
 const (
@@ -78,8 +78,13 @@ func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Lab
 }
 
 func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailClient, _ prometheus.Labels) error {
+	var projectUUID string
+	err := c.DB.SelectOne(&projectUUID, "SELECT uuid FROM projects WHERE id = $1", task.ProjectID)
+	if err != nil {
+		return err
+	}
 	request := MailRequest{
-		ProjectID: task.ProjectID,
+		ProjectID: projectUUID,
 		Subject:   task.Subject,
 		MimeType:  "text/html",
 		MailText:  task.Body,
@@ -95,7 +100,7 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 		}
 		return mailErr
 	}
-	_, err := c.DB.Delete(&task)
+	_, err = c.DB.Delete(&task)
 	if err != nil {
 		return err
 	}
