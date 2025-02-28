@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/test"
@@ -47,7 +48,11 @@ const (
 `
 )
 
-type MockMail struct{}
+var errMailUndeliverable = errors.New("mail undeliverable")
+
+type MockMail struct {
+	UndeliverableMails uint64
+}
 
 func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 	switch req.ProjectID {
@@ -57,6 +62,9 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 		return errors.New("fail project id 1")
 	case "uuid-for-dresden":
 		return nil
+	case "uuid-for-frankfurt":
+		m.UndeliverableMails++
+		return UndeliverableMailError{Inner: errMailUndeliverable}
 	}
 	return nil
 }
@@ -89,4 +97,11 @@ func Test_MailDelivery(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 3;`)
+
+	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
+	s.Clock.StepBy(24 * time.Hour)
+	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 0)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
+	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 1)
 }

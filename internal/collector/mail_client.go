@@ -59,5 +59,20 @@ func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) error {
 	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
 	resp, err := c.Post(ctx, url, req, nil, &opts)
 	resp.Body.Close()
+	if resp.StatusCode == http.StatusTeapot {
+		return UndeliverableMailError{Inner: err}
+	}
 	return err
 }
+
+// UndeliverableMailError is a custom error type to define udeliverable mails.
+// Used in the MailClient interface implementations.
+type UndeliverableMailError struct {
+	Inner error
+}
+
+// implements https://pkg.go.dev/builtin#error
+func (e UndeliverableMailError) Error() string { return e.Inner.Error() }
+
+// implements the interface implied by https://pkg.go.dev/errors
+func (e UndeliverableMailError) Unwrap() error { return e.Inner }
