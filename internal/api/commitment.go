@@ -213,6 +213,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
+		NotifyOnConfirm:  c.NotifyOnConfirm,
 	}
 }
 
@@ -397,6 +398,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		ConfirmedAt:         nil, // may be set below
 		ExpiresAt:           req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
 		CreationContextJSON: json.RawMessage(buf),
+	}
+	if req.ConfirmBy != nil {
+		dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)

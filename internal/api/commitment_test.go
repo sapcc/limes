@@ -130,6 +130,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"amount":            10,
 		"duration":          "1 hour",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+		"notify_on_confirm": true,
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
@@ -145,6 +146,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        req1["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
+		"notify_on_confirm": true,
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -432,6 +434,39 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		Body:         request(maxCommittableCapacity),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+
+	// try to create a commitment with a mail notification flag (only possible to set for planned commitments)
+	notificationReq := assert.JSONObject{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"duration":          "1 hour",
+		"notify_on_confirm": true,
+	}
+	notificationResp := assert.JSONObject{
+		"id":                2,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      s.Clock.Now().Unix(),
+		"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": notificationReq},
+		ExpectBody:   assert.JSONObject{"commitment": notificationResp},
+		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 }
 
