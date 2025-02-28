@@ -21,6 +21,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -96,18 +97,20 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 	if mailErr != nil {
 		// remove the mail queue for (sub)projects with no maintained metadata
 		if uerr, ok := errext.As[UndeliverableMailError](mailErr); ok {
+			logg.Error("Mail delivery detected a project with no managed metadata. ProjectID: %v with Error: %s", task.ProjectID, uerr)
 			_, err := c.DB.Delete(&task)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w (additional error while trying to remove mail from DB queue: %s)", mailErr, err.Error())
 			}
-			logg.Error("Mail delivery detected a project with no managed metadata. ProjectID: %v with Error: %s", task.ProjectID, uerr)
-			return uerr
+			// since the error was logged, do not report it upwards (otherwise, the jobloop will count the task as failed,
+			// which may trigger alerts for the mail delivery being broken)
+			return nil
 		}
 		task.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		task.FailedSubmissions++
 		_, queueErr := c.DB.Update(&task)
 		if queueErr != nil {
-			return queueErr
+			return fmt.Errorf("%w (additional error while trying to update the DB mail queue: %s)", mailErr, queueErr.Error())
 		}
 		return mailErr
 	}
