@@ -66,7 +66,7 @@ func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) error {
 }
 
 // UndeliverableMailError is a custom error type to define udeliverable mails.
-// Used in the MailClient interface.
+// Used in the MailClient interface implementations.
 type UndeliverableMailError struct {
 	Inner error
 }
