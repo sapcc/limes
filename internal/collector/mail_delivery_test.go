@@ -22,6 +22,8 @@ package collector
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 
@@ -49,16 +51,20 @@ const (
 
 type MockMail struct{}
 
-func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
+func (m *MockMail) PostMail(ctx context.Context, req MailRequest) (*http.Response, error) {
+	resp := http.Response{Body: io.NopCloser(nil)}
 	switch req.ProjectID {
 	case "uuid-for-waldorf":
-		return nil
+		return &resp, nil
 	case "uuid-for-berlin":
-		return errors.New("fail project id 1")
+		return &resp, errors.New("fail project id 1")
 	case "uuid-for-dresden":
-		return nil
+		return &resp, nil
+	case "uuid-for-frankfurt":
+		noMasterData := http.Response{Body: io.NopCloser(nil)}
+		return &noMasterData, errors.New("fail no project recipient resolve.")
 	}
-	return nil
+	return &resp, nil
 }
 
 func Test_MailDelivery(t *testing.T) {
@@ -89,4 +95,9 @@ func Test_MailDelivery(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 3;`)
+
+	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
 }

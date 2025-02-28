@@ -29,7 +29,7 @@ import (
 // MailClient is an interface that provides the methods to communicate with a mail backend service.
 type MailClient interface {
 	// Builds the request to sent the mail content to a mail API.
-	PostMail(ctx context.Context, req MailRequest) error
+	PostMail(ctx context.Context, req MailRequest) (*http.Response, error)
 }
 
 // mailClientImpl is an implmentation of MailClient.
@@ -54,10 +54,8 @@ func NewMailClient(provider *gophercloud.ProviderClient, endpoint string) (MailC
 }
 
 // PostMail implements the method of MailClient to sent the mail content to the mail API.
-func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) error {
+func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) (*http.Response, error) {
 	url := c.ServiceURL("v1", "send-email?from=limes")
 	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
-	resp, err := c.Post(ctx, url, req, nil, &opts)
-	resp.Body.Close()
-	return err
+	return c.Post(ctx, url, req, nil, &opts)
 }

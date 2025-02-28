@@ -21,10 +21,12 @@ package collector
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/db"
@@ -90,8 +92,17 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 		MailText:  task.Body,
 	}
 
-	mailErr := client.PostMail(ctx, request)
+	resp, mailErr := client.PostMail(ctx, request)
 	if mailErr != nil {
+		defer resp.Body.Close()
+		// remove the mail queue for (sub)projects with no maintained metadata
+		if resp.StatusCode == http.StatusTeapot {
+			_, err := c.DB.Delete(&task)
+			if err != nil {
+				return err
+			}
+			logg.Error("Mail delivery detected a project with no managed metadata. ProjectID: %s", task.ProjectID)
+		}
 		task.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		task.FailedSubmissions++
 		_, queueErr := c.DB.Update(&task)
@@ -100,6 +111,7 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 		}
 		return mailErr
 	}
+	defer resp.Body.Close()
 	_, err = c.DB.Delete(&task)
 	if err != nil {
 		return err
