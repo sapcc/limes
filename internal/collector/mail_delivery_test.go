@@ -47,7 +47,7 @@ const (
 `
 )
 
-var errMailUnderliverable = errors.New("mail underliverable")
+var errMailUndeliverable = errors.New("mail undeliverable")
 
 type MockMail struct{}
 
@@ -60,7 +60,7 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 	case "uuid-for-dresden":
 		return nil
 	case "uuid-for-frankfurt":
-		return UndeliverableMailError{Inner: errMailUnderliverable}
+		return UndeliverableMailError{Inner: errMailUndeliverable}
 	}
 	return nil
 }
@@ -96,6 +96,6 @@ func Test_MailDelivery(t *testing.T) {
 
 	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
 	s.Clock.StepBy(24 * time.Hour)
-	mustFailT(t, job.ProcessOne(s.Ctx), errMailUnderliverable)
+	mustFailT(t, job.ProcessOne(s.Ctx), errMailUndeliverable)
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
 }
