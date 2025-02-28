@@ -29,7 +29,7 @@ import (
 // MailClient is an interface that provides the methods to communicate with a mail backend service.
 type MailClient interface {
 	// Builds the request to sent the mail content to a mail API.
-	PostMail(ctx context.Context, req MailRequest) (*http.Response, error)
+	PostMail(ctx context.Context, req MailRequest) error
 }
 
 // mailClientImpl is an implmentation of MailClient.
@@ -54,8 +54,25 @@ func NewMailClient(provider *gophercloud.ProviderClient, endpoint string) (MailC
 }
 
 // PostMail implements the method of MailClient to sent the mail content to the mail API.
-func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) (*http.Response, error) {
+func (c mailClientImpl) PostMail(ctx context.Context, req MailRequest) error {
 	url := c.ServiceURL("v1", "send-email?from=limes")
 	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
-	return c.Post(ctx, url, req, nil, &opts)
+	resp, err := c.Post(ctx, url, req, nil, &opts)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusTeapot {
+		return UndeliverableMailError{Inner: err}
+	}
+	return err
 }
+
+// UndeliverableMailError is a custom error type to define udeliverable mails.
+// Used in the MailClient interface.
+type UndeliverableMailError struct {
+	Inner error
+}
+
+// implements https://pkg.go.dev/builtin#error
+func (e UndeliverableMailError) Error() string { return e.Inner.Error() }
+
+// implements the interface implied by https://pkg.go.dev/errors
+func (e UndeliverableMailError) Unwrap() error { return e.Inner }

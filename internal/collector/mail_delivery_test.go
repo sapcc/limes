@@ -22,8 +22,6 @@ package collector
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
 	"testing"
 	"time"
 
@@ -49,22 +47,22 @@ const (
 `
 )
 
+var errMailUnderliverable = errors.New("mail underliverable")
+
 type MockMail struct{}
 
-func (m *MockMail) PostMail(ctx context.Context, req MailRequest) (*http.Response, error) {
-	resp := http.Response{Body: io.NopCloser(nil)}
+func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 	switch req.ProjectID {
 	case "uuid-for-waldorf":
-		return &resp, nil
+		return nil
 	case "uuid-for-berlin":
-		return &resp, errors.New("fail project id 1")
+		return errors.New("fail project id 1")
 	case "uuid-for-dresden":
-		return &resp, nil
+		return nil
 	case "uuid-for-frankfurt":
-		noMasterData := http.Response{Body: io.NopCloser(nil)}
-		return &noMasterData, errors.New("fail no project recipient resolve.")
+		return UndeliverableMailError{Inner: errMailUnderliverable}
 	}
-	return &resp, nil
+	return nil
 }
 
 func Test_MailDelivery(t *testing.T) {
@@ -98,6 +96,6 @@ func Test_MailDelivery(t *testing.T) {
 
 	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, job.ProcessOne(s.Ctx))
+	mustFailT(t, job.ProcessOne(s.Ctx), errMailUnderliverable)
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
 }
