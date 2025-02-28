@@ -101,7 +101,7 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 				return err
 			}
 			logg.Error("Mail delivery detected a project with no managed metadata. ProjectID: %v with Error: %s", task.ProjectID, uerr)
-			return mailErr
+			return uerr
 		}
 		task.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		task.FailedSubmissions++
