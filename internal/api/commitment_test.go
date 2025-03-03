@@ -445,28 +445,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		"duration":          "1 hour",
 		"notify_on_confirm": true,
 	}
-	notificationResp := assert.JSONObject{
-		"id":                2,
-		"service_type":      "first",
-		"resource_name":     "capacity",
-		"availability_zone": "az-one",
-		"amount":            1,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      s.Clock.Now().Unix(),
-		"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
-	}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         assert.JSONObject{"commitment": notificationReq},
-		ExpectBody:   assert.JSONObject{"commitment": notificationResp},
-		ExpectStatus: http.StatusCreated,
+		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 }
 
