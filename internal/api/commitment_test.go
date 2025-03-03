@@ -25,9 +25,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -91,10 +94,10 @@ const testConvertCommitmentsYAML = `
 				area: second
 				test_mode: true
 		- service_type: third
-			type: --test-noop
+			type: liquid
 			params:
-				with_empty_resource: true
-				with_convert_commitments: true
+				area: testing
+				test_mode: true
 	resource_behavior:
 		- resource: first/.*
 			commitment_durations: ["1 hour", "2 hours"]
@@ -1110,6 +1113,14 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	s.Cluster.QuotaPlugins["third"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true},
+		"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true},
+	}
+
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []assert.JSONObject{
 		{
@@ -1159,6 +1170,14 @@ func Test_ConvertCommitments(t *testing.T) {
 		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
+
+	s.Cluster.QuotaPlugins["third"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true},
+		"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true},
+	}
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{

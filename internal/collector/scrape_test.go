@@ -616,7 +616,10 @@ const (
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 		services:
 			- service_type: noop
-				type: --test-noop
+				type: liquid
+				params:	
+					area: testing
+					test_mode: true
 	`
 )
 
@@ -662,9 +665,10 @@ const (
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 		services:
 			- service_type: noop
-				type: --test-noop
+				type: liquid
 				params:
-					with_empty_resource: true
+					area: testing
+					test_mode: true
 	`
 )
 
@@ -687,8 +691,6 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (1, 1, 'any', 0, '{"t":[%[1]d],"v":[0]}');
-		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, 0);
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
