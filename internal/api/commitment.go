@@ -612,6 +612,55 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
+// MergeProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/renew.
+func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/renew")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+	var parseTarget struct {
+		CommitmentIDs []db.ProjectCommitmentID `json:"commitment_ids"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+
+	commitmentIDs := parseTarget.CommitmentIDs
+	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
+	for i, commitmentID := range commitmentIDs {
+		err := p.DB.SelectOne(&dbCommitments[i], findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no such commitment", http.StatusNotFound)
+			return
+		} else if respondwith.ErrorText(w, err) {
+			return
+		}
+	}
+
+	// Check if commitments are renewable
+	var unrenewableCommitmentIDs []db.ProjectCommitmentID
+	for _, dbCommitment := range dbCommitments {
+		if p.timeNow().Before(dbCommitment.ExpiresAt.Add(-(90 * 24 * time.Hour))) || p.timeNow().After(dbCommitment.ExpiresAt) {
+			unrenewableCommitmentIDs = append(unrenewableCommitmentIDs, dbCommitment.ID)
+		}
+	}
+	if len(unrenewableCommitmentIDs) > 0 {
+		msg := fmt.Sprintf("The following commitmentIDs are unrenewable: %v", unrenewableCommitmentIDs)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+
+}
+
 // DeleteProjectCommitment handles DELETE /v1/domains/:domain_id/projects/:project_id/commitments/:id.
 func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id")
