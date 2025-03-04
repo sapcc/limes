@@ -680,9 +680,8 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	dbRenewedCommitments := make([]db.ProjectCommitment, len(dbCommitments))
-	creationContexts := make([]db.CommitmentWorkflowContext, len(dbCommitments))
-	for i, commitment := range dbCommitments {
+	dbRenewedCommitments := make(map[*db.ProjectCommitment]db.CommitmentWorkflowContext)
+	for _, commitment := range dbCommitments {
 		creationContext := db.CommitmentWorkflowContext{
 			Reason:               db.CommitmentReasonRenew,
 			RelatedCommitmentIDs: []db.ProjectCommitmentID{commitment.ID},
@@ -708,8 +707,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		dbRenewedCommitments[i] = dbRenewedCommitment
-		creationContexts[i] = creationContext
+		dbRenewedCommitments[&dbRenewedCommitment] = creationContext
 
 		commitment.WasExtended = true
 		_, err = tx.Update(&commitment)
@@ -726,7 +724,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	// Create resultset and auditlogs
 	var commitments []limesresources.Commitment
 	var auditEvents []commitmentEventTarget
-	for i, commitment := range dbRenewedCommitments {
+	for commitment, context := range dbRenewedCommitments {
 		var loc core.AZResourceLocation
 		err := p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, commitment.AZResourceID).
 			Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
@@ -737,7 +735,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		c := p.convertCommitmentToDisplayForm(commitment, loc, token)
+		c := p.convertCommitmentToDisplayForm(*commitment, loc, token)
 		commitments = append(commitments, c)
 		auditEvents = append(auditEvents, commitmentEventTarget{
 			DomainID:        dbDomain.UUID,
@@ -745,7 +743,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			ProjectID:       dbProject.UUID,
 			ProjectName:     dbProject.Name,
 			Commitments:     []limesresources.Commitment{c},
-			WorkflowContext: &creationContexts[i],
+			WorkflowContext: &context,
 		})
 	}
 
