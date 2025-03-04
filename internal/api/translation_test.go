@@ -29,8 +29,8 @@ import (
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const (
@@ -40,7 +40,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 	`
 )
 
@@ -91,12 +94,15 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 func TestTranslateIronicSubcapacities(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
 		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+		attrs := map[string]any{
 			"cores":    5,
 			"ram_mib":  23,
 			"disk_gib": 42,
-		}}
+		}
+		buf := must.Return(json.Marshal(attrs))
+		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
+		resInfo.Attributes = json.RawMessage(buf)
+		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
 	}
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
@@ -205,6 +211,23 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
+	serviceInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.AZAwareResourceTopology,
+				HasCapacity:         true,
+				NeedsResourceDemand: true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				HasCapacity: false,
+			},
+		},
+	}
+	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
+
 	if extraSetup != nil {
 		extraSetup(&s)
 	}
@@ -233,11 +256,10 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *
 					"min_scraped_at": 11,
 					"max_scraped_at": 11,
 					"resources": []assert.JSONObject{{
-						"name":          "capacity",
-						"unit":          "B",
-						"capacity":      0,
-						"domains_quota": 0,
-						"usage":         0,
+						"name":     "capacity",
+						"unit":     "B",
+						"capacity": 0,
+						"usage":    0,
 						"per_availability_zone": []assert.JSONObject{
 							{"capacity": 0, "name": "az-one"},
 							{"capacity": 0, "name": "az-two"},
@@ -246,8 +268,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *
 							"az-one": assert.JSONObject{"capacity": 0, "usage": 0, "subcapacities": subcapacitiesInLegacyFormat},
 							"az-two": assert.JSONObject{"capacity": 0, "usage": 0},
 						},
-						"quota_distribution_model": "autogrow",
-						"subcapacities":            subcapacitiesInLegacyFormat,
+						"subcapacities": subcapacitiesInLegacyFormat,
 					}},
 				}},
 			},
@@ -326,13 +347,16 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 
 func TestTranslateIronicSubresources(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
-		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+		// this subresource translation depends on ResourceInfo.Attributes on the respective resource
+		attrs := map[string]any{
 			"cores":    5,
 			"ram_mib":  23,
 			"disk_gib": 42,
-		}}
+		}
+		buf := must.Return(json.Marshal(attrs))
+		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
+		resInfo.Attributes = json.RawMessage(buf)
+		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
 	}
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
@@ -501,6 +525,23 @@ func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
+	serviceInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.AZAwareResourceTopology,
+				HasCapacity:         true,
+				NeedsResourceDemand: true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				HasCapacity: false,
+			},
+		},
+	}
+	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
+
 	if extraSetup != nil {
 		extraSetup(&s)
 	}
@@ -529,17 +570,14 @@ func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *
 						"scraped_at": 11,
 						"resources": []assert.JSONObject{
 							{
-								"name":         "capacity",
-								"unit":         "B",
-								"quota":        0,
-								"usable_quota": 0,
-								"usage":        0,
+								"name":  "capacity",
+								"unit":  "B",
+								"usage": 0,
 								"per_az": assert.JSONObject{
 									"az-one": assert.JSONObject{"quota": 0, "usage": 0, "subresources": subresourcesInLegacyFormat},
 									"az-two": assert.JSONObject{"quota": 0, "usage": 0},
 								},
-								"quota_distribution_model": "autogrow",
-								"subresources":             subresourcesInLegacyFormat,
+								"subresources": subresourcesInLegacyFormat,
 							},
 						},
 					},
