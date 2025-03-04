@@ -297,6 +297,8 @@ type MockLiquidClient struct {
 	serviceInfo           liquid.ServiceInfo
 	serviceCapacityReport liquid.ServiceCapacityReport
 	serviceUsageReport    liquid.ServiceUsageReport
+	FailUsageReport       bool
+	FailCapacityReport    bool
 	quotaError            error
 }
 
@@ -333,6 +335,9 @@ func (l *MockLiquidClient) SetServiceInfo(info liquid.ServiceInfo) {
 }
 
 func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
+	if l.FailCapacityReport {
+		return liquid.ServiceCapacityReport{}, errors.New("failed to get capacity report")
+	}
 	return l.serviceCapacityReport, nil
 }
 
@@ -341,6 +346,9 @@ func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapaci
 }
 
 func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
+	if l.FailUsageReport {
+		return liquid.ServiceUsageReport{}, errors.New("failed to get usage report")
+	}
 	return l.serviceUsageReport, nil
 }
 

@@ -29,6 +29,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
@@ -629,6 +630,12 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
+	// override some defaults we set in the MockQuotaPlugin
+	s.Cluster.QuotaPlugins["noop"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = liquid.ServiceInfo{
+		Version:   0,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
+	}
+
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
@@ -652,31 +659,19 @@ func Test_ScrapeButNoResources(t *testing.T) {
 ////////////////////////////////////////////////////////////////////////////////
 // test for empty UsageData
 
-const (
-	testNoUsageDataConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: --test-static
-			params:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-		services:
-			- service_type: noop
-				type: liquid
-				params:
-					area: testing
-					test_mode: true
-	`
-)
-
 func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(testNoUsageDataConfigYAML),
+		test.WithConfig(testNoopConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
+
+	// override some defaults we set in the MockQuotaPlugin
+	s.Cluster.QuotaPlugins["noop"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = liquid.ServiceInfo{
+		Version: 0,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"things": {Unit: limes.UnitNone, HasQuota: true},
+		},
+	}
 
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
@@ -685,16 +680,18 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	// check that Scrape() behaves properly when encountering a quota plugin with
 	// no Resources() (in the wild, this can happen because some quota plugins
 	// only have Rates())
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during resource scrape of project germany/berlin: missing report for resource "things"`))
 
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, -1);
+		INSERT INTO project_services (id, project_id, type, scraped_at, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, %[1]d, 'missing report for resource "things"', %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
-		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
+		scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
 	)
 }
 
