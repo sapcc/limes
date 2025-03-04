@@ -612,7 +612,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-// MergeProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/renew.
+// RenewProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/renew.
 func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/renew")
 	token := p.CheckToken(r)
@@ -684,7 +684,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	creationContexts := make([]db.CommitmentWorkflowContext, len(dbCommitments))
 	for i, commitment := range dbCommitments {
 		creationContext := db.CommitmentWorkflowContext{
-			Reason:               db.CommitmentReasonMerge,
+			Reason:               db.CommitmentReasonRenew,
 			RelatedCommitmentIDs: []db.ProjectCommitmentID{commitment.ID},
 		}
 		buf, err := json.Marshal(creationContext)
