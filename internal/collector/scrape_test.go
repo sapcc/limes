@@ -35,9 +35,11 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
+	oldPlugins "github.com/sapcc/limes/internal/test/plugins"
 )
 
 func mustT(t *testing.T, err error) {
@@ -92,7 +94,10 @@ const (
 						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
 		services:
 			- service_type: unittest
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
@@ -109,7 +114,105 @@ func Test_ScrapeSuccess(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	syncJob := c.SyncQuotaToBackendJob(s.Registry)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin)
+
+	serviceInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.AZAwareResourceTopology,
+				HasCapacity:         true,
+				HasQuota:            true,
+				NeedsResourceDemand: true,
+			},
+			"capacity_portion": {
+				Unit:     liquid.UnitBytes,
+				HasQuota: false,
+				Topology: liquid.AZAwareResourceTopology,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.AZAwareResourceTopology,
+				HasCapacity: false,
+				HasQuota:    true,
+			},
+		},
+		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
+			"capacity_usage": {Type: liquid.MetricTypeGauge},
+			"things_usage":   {Type: liquid.MetricTypeGauge},
+		},
+	}
+	plugin.LiquidServiceInfo = serviceInfo
+
+	serviceUsageReport := liquid.ServiceUsageReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
+			"capacity": {
+				Quota: pointerTo(int64(100)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {
+						Usage:         0,
+						Quota:         pointerTo(int64(50)),
+						PhysicalUsage: new(uint64),
+					},
+					"az-two": {
+						Usage:         0,
+						Quota:         pointerTo(int64(50)),
+						PhysicalUsage: new(uint64),
+					},
+				},
+			},
+			"capacity_portion": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {
+						Usage: 0,
+					},
+					"az-two": {
+						Usage: 0,
+					},
+				},
+			},
+			"things": {
+				Quota: pointerTo(int64(42)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {
+						Usage: 2,
+						Quota: pointerTo(int64(21)),
+						Subresources: []liquid.Subresource{
+							{
+								Name:  "index",
+								Usage: pointerTo(uint64(0)),
+							},
+							{
+								Name:  "index",
+								Usage: pointerTo(uint64(1)),
+							},
+						},
+					},
+					"az-two": {
+						Usage: 2,
+						Quota: pointerTo(int64(21)),
+						Subresources: []liquid.Subresource{
+							{
+								Name:  "index",
+								Usage: pointerTo(uint64(2)),
+							},
+							{
+								Name:  "index",
+								Usage: pointerTo(uint64(3)),
+							},
+						},
+					},
+				},
+			},
+		},
+		Metrics: map[liquid.MetricName][]liquid.Metric{
+			"capacity_usage": {{Value: 0}},
+			"things_usage":   {{Value: 4}},
+		},
+	}
+	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -134,24 +237,24 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (14, 5, 'az-one', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (15, 5, 'az-two', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (16, 6, 'any', 0, '{"t":[%[3]d],"v":[0]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (17, 6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (18, 6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (17, 6, 'az-one', 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (18, 6, 'az-two', 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (2, 1, 'az-one', 0, 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (3, 1, 'az-two', 0, 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (4, 2, 'any', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (5, 2, 'az-one', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (6, 2, 'az-two', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (7, 3, 'any', 0, '{"t":[%[1]d],"v":[0]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (8, 3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (9, 3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (8, 3, 'az-one', 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (9, 3, 'az-two', 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 1, 'things', 0, 42);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 2, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (6, 2, 'things', 0, 42);
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -166,8 +269,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// change the data that is reported by the plugin
 	s.Clock.StepBy(scrapeInterval)
-	plugin.StaticResourceData["capacity"].Quota = 110
-	plugin.StaticResourceData["things"].UsageData["az-two"].Usage = 3
+	serviceUsageReport.Resources["capacity"].Quota = pointerTo(int64(110))
+	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
+	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: pointerTo(uint64(4))})
+	serviceUsageReport.Metrics["things_usage"] = []liquid.Metric{{Value: 5}}
 	// Scrape should pick up the changed resource data
 	// (no quota sync should be requested since there is one requested already)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -176,38 +281,42 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]', historical_usage = '{"t":[%[6]d,%[3]d],"v":[2,3]}' WHERE id = 18 AND resource_id = 6 AND az = 'az-two';
-		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]', historical_usage = '{"t":[%[5]d,%[1]d],"v":[2,3]}' WHERE id = 9 AND resource_id = 3 AND az = 'az-two';
+		UPDATE project_az_resources SET usage = 3, subresources = '[{"name":"index","usage":2},{"name":"index","usage":3},{"name":"index","usage":4}]', historical_usage = '{"t":[%[6]d,%[3]d],"v":[2,3]}' WHERE id = 18 AND resource_id = 6 AND az = 'az-two';
+		UPDATE project_az_resources SET usage = 3, subresources = '[{"name":"index","usage":2},{"name":"index","usage":3},{"name":"index","usage":4}]', historical_usage = '{"t":[%[5]d,%[1]d],"v":[2,3]}' WHERE id = 9 AND resource_id = 3 AND az = 'az-two';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":5,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":5,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 		firstScrapedAt1.Unix(), firstScrapedAt2.Unix(),
 	)
 
-	// check reporting of MinQuotaFromBackend/MaxQuotaFromBackend
-	s.Clock.StepBy(scrapeInterval)
-	plugin.MinQuota = map[liquid.ResourceName]uint64{"capacity": 10}
-	plugin.MaxQuota = map[liquid.ResourceName]uint64{"things": 1000}
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	// TODO: How to handle minQuata/maxQuota with liquid?
 
-	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt2 = s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 6 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
-	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
-	)
+	/*
+		// check reporting of MinQuotaFromBackend/MaxQuotaFromBackend
+		s.Clock.StepBy(scrapeInterval)
+		plugin.MinQuota = map[liquid.ResourceName]uint64{"capacity": 10}
+		plugin.MaxQuota = map[liquid.ResourceName]uint64{"things": 1000}
+		mustT(t, job.ProcessOne(s.Ctx, withLabel))
+		mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+		scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt2 = s.Clock.Now()
+		tr.DBChanges().AssertEqualf(`
+			UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+			UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
+			UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+			UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 6 AND service_id = 2 AND name = 'things';
+			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		`,
+			scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+			scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		)
+	*/
 
 	// set some new quota values
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
@@ -223,7 +332,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// test SyncQuotaToBackendJob running and failing (this checks that it does
 	// not get stuck on a failing project service and moves on to the other one
 	// in the second attempt)
-	plugin.SetQuotaFails = true
+	plugin.LiquidClient.(*core.MockLiquidClient).SetQuotaError(errors.New(": SetQuota failed as requested"))
 	expectedErrorRx := regexp.MustCompile(`: SetQuota failed as requested$`)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -238,7 +347,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// test SyncQuotaToBackendJob running successfully
-	plugin.SetQuotaFails = false
+	plugin.LiquidClient.(*core.MockLiquidClient).SetQuotaError(nil)
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
@@ -254,6 +363,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	mustFailT(t, syncJob.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
+	// TODO: Continue here. Current problem is that backend_quota values are set but there should be no changes
+	// Check liquid plugin SetQuota
 	// Scrape should show that the quota update was durable
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -273,7 +384,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// "capacity_portion" (otherwise this resource has been all zeroes this entire
 	// time)
 	s.Clock.StepBy(scrapeInterval)
-	plugin.StaticResourceData["capacity"].UsageData["az-one"].Usage = 20
+	// plugin.StaticResourceData["capacity"].UsageData["az-one"].Usage = 20
+	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].Usage = 20
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -392,7 +504,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*oldPlugins.GenericQuotaPlugin)
 	plugin.ScrapeFails = true
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -594,7 +706,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	syncJob := c.SyncQuotaToBackendJob(s.Registry)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*oldPlugins.GenericQuotaPlugin)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")

@@ -297,6 +297,7 @@ type MockLiquidClient struct {
 	serviceInfo           liquid.ServiceInfo
 	serviceCapacityReport liquid.ServiceCapacityReport
 	serviceUsageReport    liquid.ServiceUsageReport
+	quotaError            error
 }
 
 func NewMockClient() *MockLiquidClient {
@@ -308,15 +309,18 @@ func NewMockClient() *MockLiquidClient {
 					Unit:                liquid.UnitBytes,
 					Topology:            liquid.AZAwareResourceTopology,
 					HasCapacity:         true,
+					HasQuota:            true,
 					NeedsResourceDemand: true,
 				},
 				"things": {
 					Unit:        liquid.UnitNone,
 					Topology:    liquid.FlatResourceTopology,
 					HasCapacity: false,
+					HasQuota:    true,
 				},
 			},
 		},
+		quotaError: nil,
 	}
 }
 
@@ -344,8 +348,12 @@ func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport)
 	l.serviceUsageReport = usageReport
 }
 
+func (l *MockLiquidClient) SetQuotaError(err error) {
+	l.quotaError = err
+}
+
 func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
-	return nil
+	return l.quotaError
 }
 
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
