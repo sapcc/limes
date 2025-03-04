@@ -634,6 +634,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Load commitments
 	commitmentIDs := parseTarget.CommitmentIDs
 	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
 	for i, commitmentID := range commitmentIDs {
@@ -645,20 +646,121 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
+	now := p.timeNow()
 
 	// Check if commitments are renewable
-	var unrenewableCommitmentIDs []db.ProjectCommitmentID
 	for _, dbCommitment := range dbCommitments {
-		if p.timeNow().Before(dbCommitment.ExpiresAt.Add(-(90 * 24 * time.Hour))) || p.timeNow().After(dbCommitment.ExpiresAt) {
-			unrenewableCommitmentIDs = append(unrenewableCommitmentIDs, dbCommitment.ID)
+		msg := []string{fmt.Sprintf("CommitmentID: %v", dbCommitment.ID)}
+		if dbCommitment.State != db.CommitmentStateActive {
+			msg = append(msg, fmt.Sprintf("invalid commitment state: %s", dbCommitment.State))
+		}
+		if now.Before(dbCommitment.ExpiresAt.Add(-(3 * 30 * 24 * time.Hour))) {
+			msg = append(msg, "renewal attempt too early")
+		}
+		if now.After(dbCommitment.ExpiresAt) {
+			msg = append(msg, "commitment expired")
+		}
+		if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
+			msg = append(msg, "commitment in transfer")
+		}
+		if dbCommitment.WasExtended {
+			msg = append(msg, "commitment already renewed")
+		}
+
+		if len(msg) > 1 {
+			http.Error(w, strings.Join(msg, " - "), http.StatusConflict)
+			return
 		}
 	}
-	if len(unrenewableCommitmentIDs) > 0 {
-		msg := fmt.Sprintf("The following commitmentIDs are unrenewable: %v", unrenewableCommitmentIDs)
-		http.Error(w, msg, http.StatusConflict)
+
+	// Create renewed commitments
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	dbRenewedCommitments := make([]db.ProjectCommitment, len(dbCommitments))
+	creationContexts := make([]db.CommitmentWorkflowContext, len(dbCommitments))
+	for i, commitment := range dbCommitments {
+		creationContext := db.CommitmentWorkflowContext{
+			Reason:               db.CommitmentReasonMerge,
+			RelatedCommitmentIDs: []db.ProjectCommitmentID{commitment.ID},
+		}
+		buf, err := json.Marshal(creationContext)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbRenewedCommitment := db.ProjectCommitment{
+			AZResourceID:        commitment.AZResourceID,
+			Amount:              commitment.Amount,
+			Duration:            commitment.Duration,
+			CreatedAt:           now,
+			CreatorUUID:         token.UserUUID(),
+			CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+			ConfirmBy:           &commitment.ExpiresAt,
+			ExpiresAt:           commitment.Duration.AddTo(unwrapOrDefault(&commitment.ExpiresAt, now)),
+			State:               db.CommitmentStatePlanned,
+			CreationContextJSON: json.RawMessage(buf),
+		}
+
+		err = tx.Insert(&dbRenewedCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbRenewedCommitments[i] = dbRenewedCommitment
+		creationContexts[i] = creationContext
+
+		commitment.WasExtended = true
+		_, err = tx.Update(&commitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
+	// Create resultset and auditlogs
+	var commitments []limesresources.Commitment
+	var auditEvents []commitmentEventTarget
+	for i, commitment := range dbRenewedCommitments {
+		var loc core.AZResourceLocation
+		err := p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, commitment.AZResourceID).
+			Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no route to this commitment", http.StatusNotFound)
+			return
+		} else if respondwith.ErrorText(w, err) {
+			return
+		}
+
+		c := p.convertCommitmentToDisplayForm(commitment, loc, token)
+		commitments = append(commitments, c)
+		auditEvents = append(auditEvents, commitmentEventTarget{
+			DomainID:        dbDomain.UUID,
+			DomainName:      dbDomain.Name,
+			ProjectID:       dbProject.UUID,
+			ProjectName:     dbProject.Name,
+			Commitments:     []limesresources.Commitment{c},
+			WorkflowContext: &creationContexts[i],
+		})
+	}
+
+	for _, auditEvent := range auditEvents {
+		p.auditor.Record(audittools.Event{
+			Time:       p.timeNow(),
+			Request:    r,
+			User:       token,
+			ReasonCode: http.StatusAccepted,
+			Action:     cadf.UpdateAction,
+			Target:     auditEvent,
+		})
+	}
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitments": commitments})
 }
 
 // DeleteProjectCommitment handles DELETE /v1/domains/:domain_id/projects/:project_id/commitments/:id.

@@ -1697,3 +1697,153 @@ func Test_MergeCommitments(t *testing.T) {
 	}
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
 }
+
+func Test_RenewCommitments(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            2,
+		"duration":          "1 hour",
+	}
+	req2 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "second",
+		"resource_name":     "capacity_portion",
+		"availability_zone": "az-two",
+		"amount":            1,
+		"duration":          "2 hours",
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req2},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	resp1 := assert.JSONObject{
+		"id":                3,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            2,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirm_by":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+	}
+	resp2 := assert.JSONObject{
+		"id":                4,
+		"service_type":      "second",
+		"resource_name":     "capacity_portion",
+		"availability_zone": "az-two",
+		"amount":            1,
+		"unit":              "B",
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirm_by":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"expires_at":        s.Clock.Now().Add(4 * time.Hour).Unix(),
+	}
+
+	// Renew applicable commitments successfully
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// Ensure that already renewed commitments can't be renewed again
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Do not allow to renew already expired commitments (that are not tagged as ones yet)
+	req3 := assert.JSONObject{
+		"id":                5,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"duration":          "1 hour",
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req3},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	s.Clock.StepBy(2 * time.Hour)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	s.Clock.StepBy(-2 * time.Hour)
+	// Do not allow to renew explicit expired commitments
+	_, err := s.DB.Exec("UPDATE project_commitments SET state = $1 WHERE id = 5", db.CommitmentStateExpired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Reject requests that try to renew commitments too early (more than 3 month before expiring date)
+	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, state = $3 WHERE id = 5",
+		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), db.CommitmentStateActive,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Do not allow to renew commitments that are still in transferring state
+	_, err = s.DB.Exec("UPDATE project_commitments SET transfer_status = 'public' WHERE id = 5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
+		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+}

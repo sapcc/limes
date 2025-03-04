@@ -203,6 +203,10 @@ type ProjectCommitment struct {
 	// If commitments are about to expire, they get added into the mail queue.
 	// This attribute helps to identify commitments that are already queued.
 	NotifiedForExpiration bool `db:"notified_for_expiration"`
+
+	// Identify if a commitment was already renewed.
+	// This attribute prevents more than one renewal for the same commitment.
+	WasExtended bool `db:"was_extended"`
 }
 
 // CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
@@ -231,6 +235,7 @@ const (
 	CommitmentReasonSplit   CommitmentReason = "split"
 	CommitmentReasonConvert CommitmentReason = "convert"
 	CommitmentReasonMerge   CommitmentReason = "merge"
+	CommitmentReasonRenew   CommitmentReason = "renew"
 )
 
 type MailNotification struct {
