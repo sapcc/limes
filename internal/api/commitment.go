@@ -680,8 +680,22 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	dbRenewedCommitments := make(map[*db.ProjectCommitment]db.CommitmentWorkflowContext)
+	type locationContext struct {
+		location core.AZResourceLocation
+		context  db.CommitmentWorkflowContext
+	}
+	dbRenewedCommitments := make(map[*db.ProjectCommitment]locationContext)
 	for _, commitment := range dbCommitments {
+		var loc core.AZResourceLocation
+		err := p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, commitment.AZResourceID).
+			Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no route to this commitment", http.StatusNotFound)
+			return
+		} else if respondwith.ErrorText(w, err) {
+			return
+		}
+
 		creationContext := db.CommitmentWorkflowContext{
 			Reason:               db.CommitmentReasonRenew,
 			RelatedCommitmentIDs: []db.ProjectCommitmentID{commitment.ID},
@@ -707,7 +721,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		dbRenewedCommitments[&dbRenewedCommitment] = creationContext
+		dbRenewedCommitments[&dbRenewedCommitment] = locationContext{location: loc, context: creationContext}
 
 		commitment.WasExtended = true
 		_, err = tx.Update(&commitment)
@@ -723,31 +737,18 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create resultset and auditlogs
 	var commitments []limesresources.Commitment
-	var auditEvents []commitmentEventTarget
-	for commitment, context := range dbRenewedCommitments {
-		var loc core.AZResourceLocation
-		err := p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, commitment.AZResourceID).
-			Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no route to this commitment", http.StatusNotFound)
-			return
-		} else if respondwith.ErrorText(w, err) {
-			return
-		}
-
-		c := p.convertCommitmentToDisplayForm(*commitment, loc, token)
+	for commitment, lc := range dbRenewedCommitments {
+		c := p.convertCommitmentToDisplayForm(*commitment, lc.location, token)
 		commitments = append(commitments, c)
-		auditEvents = append(auditEvents, commitmentEventTarget{
+		auditEvent := commitmentEventTarget{
 			DomainID:        dbDomain.UUID,
 			DomainName:      dbDomain.Name,
 			ProjectID:       dbProject.UUID,
 			ProjectName:     dbProject.Name,
 			Commitments:     []limesresources.Commitment{c},
-			WorkflowContext: &context,
-		})
-	}
+			WorkflowContext: &lc.context,
+		}
 
-	for _, auditEvent := range auditEvents {
 		p.auditor.Record(audittools.Event{
 			Time:       p.timeNow(),
 			Request:    r,
