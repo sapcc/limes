@@ -25,12 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const day = 24 * time.Hour
@@ -41,9 +39,15 @@ const testCommitmentsYAML = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 	resource_behavior:
 		# the resources in "first" have commitments, the ones in "second" do not
 		- resource: first/.*
@@ -56,9 +60,15 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 	resource_behavior:
 		# the resources in "first" have commitments, the ones in "second" do not
 		- resource: second/.*
@@ -71,9 +81,15 @@ const testConvertCommitmentsYAML = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 		- service_type: third
 			type: --test-noop
 			params:
@@ -108,10 +124,6 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin2 := s.Cluster.QuotaPlugins["second"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
-	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
 
 	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
@@ -470,9 +482,6 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-
-	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatResourceTopology}}
 
 	request := assert.JSONObject{
 		"service_type":      "first",

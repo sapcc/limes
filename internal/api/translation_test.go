@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
@@ -210,23 +209,6 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
-
-	serviceInfo := liquid.ServiceInfo{
-		Version: 1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"capacity": {
-				Unit:                liquid.UnitBytes,
-				Topology:            liquid.AZAwareResourceTopology,
-				HasCapacity:         true,
-				NeedsResourceDemand: true,
-			},
-			"things": {
-				Unit:        liquid.UnitNone,
-				HasCapacity: false,
-			},
-		},
-	}
-	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
 
 	if extraSetup != nil {
 		extraSetup(&s)
@@ -524,23 +506,6 @@ func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
-
-	serviceInfo := liquid.ServiceInfo{
-		Version: 1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"capacity": {
-				Unit:                liquid.UnitBytes,
-				Topology:            liquid.AZAwareResourceTopology,
-				HasCapacity:         true,
-				NeedsResourceDemand: true,
-			},
-			"things": {
-				Unit:        liquid.UnitNone,
-				HasCapacity: false,
-			},
-		},
-	}
-	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
 
 	if extraSetup != nil {
 		extraSetup(&s)

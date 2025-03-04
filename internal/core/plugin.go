@@ -299,6 +299,27 @@ type MockLiquidClient struct {
 	serviceUsageReport    liquid.ServiceUsageReport
 }
 
+func NewMockClient() *MockLiquidClient {
+	return &MockLiquidClient{
+		serviceInfo: liquid.ServiceInfo{
+			Version: 1,
+			Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+				"capacity": {
+					Unit:                liquid.UnitBytes,
+					Topology:            liquid.AZAwareResourceTopology,
+					HasCapacity:         true,
+					NeedsResourceDemand: true,
+				},
+				"things": {
+					Unit:        liquid.UnitNone,
+					Topology:    liquid.FlatResourceTopology,
+					HasCapacity: false,
+				},
+			},
+		},
+	}
+}
+
 func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
 	return l.serviceInfo, nil
 }
