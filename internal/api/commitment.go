@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -680,11 +681,12 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	type locationContext struct {
-		location core.AZResourceLocation
-		context  db.CommitmentWorkflowContext
+	type renewContext struct {
+		commitment db.ProjectCommitment
+		location   core.AZResourceLocation
+		context    db.CommitmentWorkflowContext
 	}
-	dbRenewedCommitments := make(map[*db.ProjectCommitment]locationContext)
+	dbRenewedCommitments := make(map[db.ProjectCommitmentID]renewContext)
 	for _, commitment := range dbCommitments {
 		var loc core.AZResourceLocation
 		err := p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, commitment.AZResourceID).
@@ -721,7 +723,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		dbRenewedCommitments[&dbRenewedCommitment] = locationContext{location: loc, context: creationContext}
+		dbRenewedCommitments[dbRenewedCommitment.ID] = renewContext{commitment: dbRenewedCommitment, location: loc, context: creationContext}
 
 		commitment.WasExtended = true
 		_, err = tx.Update(&commitment)
@@ -737,8 +739,9 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create resultset and auditlogs
 	var commitments []limesresources.Commitment
-	for commitment, lc := range dbRenewedCommitments {
-		c := p.convertCommitmentToDisplayForm(*commitment, lc.location, token)
+	for _, key := range slices.Sorted(maps.Keys(dbRenewedCommitments)) {
+		ctx := dbRenewedCommitments[key]
+		c := p.convertCommitmentToDisplayForm(ctx.commitment, ctx.location, token)
 		commitments = append(commitments, c)
 		auditEvent := commitmentEventTarget{
 			DomainID:        dbDomain.UUID,
@@ -746,7 +749,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			ProjectID:       dbProject.UUID,
 			ProjectName:     dbProject.Name,
 			Commitments:     []limesresources.Commitment{c},
-			WorkflowContext: &lc.context,
+			WorkflowContext: &ctx.context,
 		}
 
 		p.auditor.Record(audittools.Event{
