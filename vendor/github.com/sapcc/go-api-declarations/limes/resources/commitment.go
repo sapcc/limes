@@ -56,6 +56,9 @@ type Commitment struct {
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  *string                  `json:"transfer_token,omitempty"`
+	// NotifyOnConfirm can only be set if ConfirmBy is filled.
+	// Used to send a mail notification at commitment confirmation.
+	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`
 }
 
 // CommitmentRequest is the API representation of a *new* commitment as requested by a user.
@@ -66,6 +69,7 @@ type CommitmentRequest struct {
 	Amount           uint64                 `json:"amount"`
 	Duration         CommitmentDuration     `json:"duration"`
 	ConfirmBy        *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
+	NotifyOnConfirm  bool                   `json:"notify_on_confirm,omitempty"`
 }
 
 // CommitmentConversionRule is the API representation of how commitments can be converted into a different resource.

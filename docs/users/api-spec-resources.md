@@ -498,7 +498,8 @@ The following fields can appear in the response body:
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
 | `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Note that the duration counts from `confirm_by` (or from `created_at` for immediately-confirmed commitments) and is calculated at creation time, so this is also shown on unconfirmed commitments. |
 | `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
-
+| `commitments[].notify_on_confirm` | boolean | Whether a mail notification should be sent if a created commitment is confirmed. Can only be set if the commitment contains a confirm_by value. |
+ 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
 
 Creates a new commitment within the given project. Requires a project-admin token, and a request body that is a JSON document like:
