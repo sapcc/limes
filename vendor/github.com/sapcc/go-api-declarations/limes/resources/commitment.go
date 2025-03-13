@@ -56,6 +56,8 @@ type Commitment struct {
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  *string                  `json:"transfer_token,omitempty"`
+	// WasExtended is only filled if a commitment was renewed.
+	WasExtended bool `json:"was_extended,omitempty"`
 }
 
 // CommitmentRequest is the API representation of a *new* commitment as requested by a user.
