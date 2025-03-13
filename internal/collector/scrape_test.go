@@ -186,11 +186,11 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(0)),
+								Usage: p2u64(0),
 							},
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(1)),
+								Usage: p2u64(1),
 							},
 						},
 					},
@@ -200,11 +200,11 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(2)),
+								Usage: p2u64(2),
 							},
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(3)),
+								Usage: p2u64(3),
 							},
 						},
 					},
@@ -281,7 +281,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	serviceUsageReport.Resources["capacity"].Quota = p2i64(110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
-	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: pointerTo(uint64(4))})
+	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: p2u64(4)})
 	serviceUsageReport.Metrics["things_usage"] = []liquid.Metric{{Value: 3}}
 	// Scrape should pick up the changed resource data
 	// (no quota sync should be requested since there is one requested already)
