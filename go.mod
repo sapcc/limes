@@ -13,7 +13,7 @@ require (
 	github.com/majewsky/gg v1.0.0
 	github.com/majewsky/schwift/v2 v2.0.0
 	github.com/prometheus/client_golang v1.21.1
-	github.com/prometheus/common v0.62.0
+	github.com/prometheus/common v0.63.0
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.14.0
 	github.com/sapcc/go-bits v0.0.0-20250307173044-634e8ce82c05
@@ -40,5 +40,5 @@ require (
 	github.com/sergi/go-diff v1.3.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	google.golang.org/protobuf v1.36.1 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 )
