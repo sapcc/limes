@@ -556,6 +556,17 @@ Merges active commitments on the same resource within the given project. The new
 ```
 Returns 202 (Accepted) on success, and returns the merged commitment as a JSON document.
 
+### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/renew
+
+Renews active commitments within the given project. The newly created commitments will be pending commitments. Their activation date `confirm_by` will be set to the `expiration_date` of the old commitments. The renewal of a commitment can take place 90 days before its expiration. Requires a project-admin token, and a request body that is a JSON document like:
+
+```json
+{
+  "commitment_ids": [1,2,5]
+}
+```
+Returns 202 (Accepted) on success, and returns the renewed commitments as a JSON document.
+
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/can-confirm
 
 Checks if a new commitment within the given project could be confirmed immediately.
