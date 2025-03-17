@@ -460,7 +460,7 @@ decision about how to adjust her quotas.
 
 ### GET /v1/domains/:domain\_id/projects/:project\_id/commitments
 
-List commitments for a single project. Requires at least a project-scoped token.
+List commitments for a single project which are not yet superseded by another commitment or expired. Requires at least a project-scoped token.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
