@@ -72,7 +72,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 				405: {Allocated: 10},
 				406: {Allocated: 10},
 			},
-		}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
+		}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 	}
 }
 
@@ -157,7 +157,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				406: {Allocated: 10},
 				407: {Allocated: 5},
 			},
-		}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+		}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 	}
 }
 
@@ -219,7 +219,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 				406: {Allocated: 10}, // Basequota
 				407: {Allocated: 10}, // Basequota
 			},
-		}, liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology})
+		}, liquid.ResourceInfo{Topology: liquid.AZSeparatedTopology})
 	}
 }
 
@@ -262,7 +262,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 5},
 			405: {Allocated: 5},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 2: There is enough capacity for the minimum quotas, but not for the
 	// desired quotas.
@@ -281,7 +281,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 3: There is enough capacity for the hard minimum quotas, but not for
 	// the soft minimum quotas.
@@ -300,7 +300,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
 	input["any"] = clusterAZAllocationStats{
@@ -318,7 +318,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 }
 
 func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
@@ -369,7 +369,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {Allocated: 10},
 			405: {Allocated: 10},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with quota overcommit forbidden (85% allocation is above 80%)
 	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 80
@@ -389,7 +389,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {},
 			405: {},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
@@ -437,7 +437,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 36},
 			402: {Allocated: 16},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MinQuota constraints
 	//
@@ -463,7 +463,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 16},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
@@ -483,7 +483,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MaxQuota constraints that constrain the base quota
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
@@ -503,7 +503,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 26},
 			402: {Allocated: 6},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
@@ -593,11 +593,11 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 			404: {Allocated: 5},
 			405: {Allocated: 5},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 func TestAllForbiddenWithAZSeparated(t *testing.T) {
-	resourceInfo := liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
+	resourceInfo := liquid.ResourceInfo{Topology: liquid.AZSeparatedTopology}
 
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
@@ -621,7 +621,7 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 				402: constantUsage(0),
 			},
 		},
-		// NOTE: no entry for "any" because this resource has AZSeparatedResourceTopology
+		// NOTE: no entry for "any" because this resource has AZSeparatedTopology
 	}
 
 	cfg := core.AutogrowQuotaDistributionConfiguration{
@@ -714,7 +714,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// Multiple AZs with capacity.
 	// Sufficient total capacity for quota demand.
@@ -772,7 +772,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// Multiple AZs with capacity.
 	// Total capacity can not fully satisfy quota demand.
@@ -831,7 +831,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
@@ -895,7 +895,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
@@ -951,7 +951,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 // Shortcut to avoid repetition in projectAZAllocationStats literals.

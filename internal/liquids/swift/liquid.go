@@ -54,7 +54,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:        liquid.UnitBytes,
-				Topology:    liquid.FlatResourceTopology,
+				Topology:    liquid.FlatTopology,
 				HasCapacity: false,
 				HasQuota:    true,
 			},

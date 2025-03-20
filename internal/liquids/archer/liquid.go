@@ -44,12 +44,12 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"endpoints": {
 				Unit:     liquid.UnitNone,
-				Topology: liquid.FlatResourceTopology,
+				Topology: liquid.FlatTopology,
 				HasQuota: true,
 			},
 			"services": {
 				Unit:     liquid.UnitNone,
-				Topology: liquid.FlatResourceTopology,
+				Topology: liquid.FlatTopology,
 				HasQuota: true,
 			},
 		},
