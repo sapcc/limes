@@ -607,7 +607,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// positive: Sync az-separated quota values with the backend
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedTopology}, "things": {Topology: liquid.AZSeparatedTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "az-two": {}}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -676,7 +676,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 
 	// topology of a resource changes. Reset AZ-separated backend_quota
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZAwareResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedTopology}, "things": {Topology: liquid.AZAwareTopology}}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -705,7 +705,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	// positive: missing AZ in resource report will be created by the scraper in order to assign basequota later.
 	// warning: any AZs will be removed, because resource things switches from AZAware to AZSeparated.
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedTopology}, "things": {Topology: liquid.AZSeparatedTopology}}
 	delete(plugin.StaticResourceData["things"].UsageData, "az-two")
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -731,18 +731,18 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with flat topology returns invalid AZs
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "az-two": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: flat returned AZs: [az-one az-two]"))
 
 	// negative: scrape with az-aware topology returns invalid any AZ
-	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology}
+	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"any": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with topology type: az-aware returned AZs: [any]"))
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with az-separated topology returns invalid AZs any and unknown
-	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
+	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "unknown": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [az-one unknown]"))
 
@@ -752,13 +752,13 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: multiple resources with mismatching topology to AZ responses
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedTopology}, "things": {Topology: liquid.AZSeparatedTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"unknown": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with topology type: az-separated returned AZs: [unknown]"))
 
 	s.Clock.StepBy(scrapeInterval)
-	// negative: empty topology should be treated as FlatResourceTopology
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatResourceTopology}}
+	// negative: empty topology should be treated as FlatTopology
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: things: scrape with topology type: flat returned AZs: [az-one]"))
 }

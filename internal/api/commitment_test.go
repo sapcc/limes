@@ -110,8 +110,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	)
 	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
 	plugin2 := s.Cluster.QuotaPlugins["second"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
-	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
+	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
 
 	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
@@ -472,7 +472,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	)
 
 	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatTopology}}
 
 	request := assert.JSONObject{
 		"service_type":      "first",

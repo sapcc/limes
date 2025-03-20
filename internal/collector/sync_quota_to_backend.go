@@ -94,7 +94,7 @@ func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectServ
 
 var (
 	// NOTE: This query does not use `AND quota IS NOT NULL` to filter out NoQuota resources
-	// because it would also filter out resources with AZSeparatedResourceTopology.
+	// because it would also filter out resources with AZSeparatedTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT id, name, backend_quota, quota
 		  FROM project_resources
@@ -158,8 +158,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		}
 
 		var targetQuota uint64
-		if resInfo.Topology == liquid.AZSeparatedResourceTopology {
-			// for AZSeparatedResourceTopology, project_resources.quota is effectively empty (always set to zero)
+		if resInfo.Topology == liquid.AZSeparatedTopology {
+			// for AZSeparatedTopology, project_resources.quota is effectively empty (always set to zero)
 			// and `targetQuota` needs to be computed by summing over project_az_resources.quota
 			targetQuota = 0
 			err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{resourceID}, func(rows *sql.Rows) error {
@@ -191,7 +191,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 				return err
 			}
 		} else {
-			// for anything except AZSeparatedResourceTopology, the total target quota is just what we have in project_resources.quota
+			// for anything except AZSeparatedTopology, the total target quota is just what we have in project_resources.quota
 			if targetQuotaPtr == nil {
 				return fmt.Errorf("found unexpected NULL value in project_resources.quota for id = %d", resourceID)
 			}

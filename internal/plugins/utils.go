@@ -55,19 +55,19 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 	return
 }
 
-func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]V, topology liquid.ResourceTopology) (err error) {
+func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]V, topology liquid.Topology) (err error) {
 	_, anyExists := perAZReport[liquid.AvailabilityZoneAny]
 	_, unknownExists := perAZReport[liquid.AvailabilityZoneUnknown]
 	switch topology {
-	case liquid.FlatResourceTopology:
+	case liquid.FlatTopology:
 		if len(perAZReport) == 1 && anyExists {
 			return
 		}
-	case liquid.AZAwareResourceTopology:
+	case liquid.AZAwareTopology:
 		if len(perAZReport) > 0 && !anyExists {
 			return
 		}
-	case liquid.AZSeparatedResourceTopology:
+	case liquid.AZSeparatedTopology:
 		if len(perAZReport) > 0 && !anyExists && !unknownExists {
 			return
 		}

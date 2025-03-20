@@ -216,7 +216,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		} else {
 			// AZ separated resources will not include "any" AZ. The basequota will be distributed towards the existing AZs.
 			// If an AZ is not available within the scrape response, it will be created to store the basequota.
-			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+			if resInfo.Topology == liquid.AZSeparatedTopology {
 				for _, availabilityZone := range c.Cluster.Config.AvailabilityZones {
 					_, exists := resData.UsageData[availabilityZone]
 					if !exists {
@@ -257,7 +257,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if resInfo.HasQuota {
-			if resInfo.Topology != liquid.AZSeparatedResourceTopology {
+			if resInfo.Topology != liquid.AZSeparatedTopology {
 				res.BackendQuota = &backendQuota
 			}
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
@@ -319,7 +319,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 				// set AZ backend quota.
 				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
+				if resInfo.Topology == liquid.AZSeparatedTopology && resInfo.HasQuota {
 					azRes.BackendQuota = data.Quota
 				} else {
 					azRes.BackendQuota = nil

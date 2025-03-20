@@ -380,7 +380,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	committableAZs := c.Cluster.Config.AvailabilityZones
-	if resInfo.Topology == liquid.FlatResourceTopology {
+	if resInfo.Topology == liquid.FlatTopology {
 		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {
