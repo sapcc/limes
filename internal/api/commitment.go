@@ -213,6 +213,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
+		NotifyOnConfirm:  c.NotifyOnConfirm,
 	}
 }
 
@@ -398,6 +399,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		ExpiresAt:           req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
 		CreationContextJSON: json.RawMessage(buf),
 	}
+	if req.NotifyOnConfirm && req.ConfirmBy == nil {
+		http.Error(w, "notification on confirm cannot be set for commitments with immediate confirmation", http.StatusConflict)
+		return
+	}
+	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
+
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		ok, err := datamodel.CanConfirmNewCommitment(*loc, resourceID, req.Amount, p.Cluster, tx)
