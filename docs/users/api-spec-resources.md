@@ -559,7 +559,7 @@ Returns 202 (Accepted) on success, and returns the merged commitment as a JSON d
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/renew
 
-Renews active commitments within the given project. The newly created commitments will be pending commitments. Their activation date `confirm_by` will be set to the `expiration_date` of the old commitments. The renewal of a commitment can take place 90 days before its expiration. Requires a project-admin token, and a request body that is a JSON document like:
+Renews active commitments within the given project. The newly created commitments will be pending commitments. Their activation date `confirm_by` will be set to the `expires_by` time of the old commitments. The renewal of a commitment can take place 90 days before its expiration. Requires a project-admin token, and a request body that is a JSON document like:
 
 ```json
 {
