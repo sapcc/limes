@@ -621,6 +621,9 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
+// As per the API spec, commitments can be renewed 90 days in advance at the earliest.
+const commitmentRenewalPeriod = 90 * 24 * time.Hour
+
 // RenewProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/renew.
 func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/renew")
@@ -663,7 +666,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if dbCommitment.State != db.CommitmentStateActive {
 			msg = append(msg, fmt.Sprintf("invalid commitment state: %s", dbCommitment.State))
 		}
-		if now.Before(dbCommitment.ExpiresAt.Add(-(3 * 30 * 24 * time.Hour))) {
+		if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
 			msg = append(msg, "renewal attempt too early")
 		}
 		if now.After(dbCommitment.ExpiresAt) {
