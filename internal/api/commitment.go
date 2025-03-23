@@ -723,7 +723,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			CreatorUUID:         token.UserUUID(),
 			CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 			ConfirmBy:           &commitment.ExpiresAt,
-			ExpiresAt:           commitment.Duration.AddTo(unwrapOrDefault(&commitment.ExpiresAt, now)),
+			ExpiresAt:           commitment.Duration.AddTo(commitment.ExpiresAt),
 			State:               db.CommitmentStatePlanned,
 			CreationContextJSON: json.RawMessage(buf),
 		}
