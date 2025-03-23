@@ -400,7 +400,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		CreationContextJSON: json.RawMessage(buf),
 	}
 	if req.NotifyOnConfirm && req.ConfirmBy == nil {
-		http.Error(w, "notification on confirm can't be set for commitments with immediate confirmation", http.StatusConflict)
+		http.Error(w, "notification on confirm cannot be set for commitments with immediate confirmation", http.StatusConflict)
 		return
 	}
 	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
