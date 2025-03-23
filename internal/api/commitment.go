@@ -672,9 +672,6 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
 			errs.Addf("renewal attempt too early")
 		}
-		if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
-			errs.Addf("commitment in transfer")
-		}
 		if dbCommitment.WasRenewed {
 			errs.Addf("already renewed")
 		}

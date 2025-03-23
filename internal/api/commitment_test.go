@@ -1853,16 +1853,4 @@ func Test_RenewCommitments(t *testing.T) {
 		Body:         assert.JSONObject{"commitment_ids": []int{5}},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-
-	// Do not allow to renew commitments that are still in transferring state
-	_, err = s.DB.Exec("UPDATE project_commitments SET transfer_status = 'public' WHERE id = 5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{5}},
-		ExpectStatus: http.StatusConflict,
-	}.Check(t, s.Handler)
 }
