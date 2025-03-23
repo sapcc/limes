@@ -214,7 +214,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
-		WasExtended:      c.WasExtended,
+		WasRenewed:       c.WasExtended,
 	}
 }
 
