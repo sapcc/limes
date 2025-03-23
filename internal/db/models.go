@@ -206,7 +206,7 @@ type ProjectCommitment struct {
 
 	// Identify if a commitment was already renewed.
 	// This attribute prevents more than one renewal for the same commitment.
-	WasExtended bool `db:"was_extended"`
+	WasRenewed bool `db:"was_renewed"`
 }
 
 // CommitmentState is an enum. The possible values below are sorted in roughly chronological order.

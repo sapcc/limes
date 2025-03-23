@@ -215,7 +215,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
 		NotifyOnConfirm:  c.NotifyOnConfirm,
-		WasRenewed:       c.WasExtended,
+		WasRenewed:       c.WasRenewed,
 	}
 }
 
@@ -672,7 +672,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
 			msg = append(msg, "commitment in transfer")
 		}
-		if dbCommitment.WasExtended {
+		if dbCommitment.WasRenewed {
 			msg = append(msg, "commitment already renewed")
 		}
 
@@ -733,7 +733,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		}
 		dbRenewedCommitments[dbRenewedCommitment.ID] = renewContext{commitment: dbRenewedCommitment, location: loc, context: creationContext}
 
-		commitment.WasExtended = true
+		commitment.WasRenewed = true
 		_, err = tx.Update(&commitment)
 		if respondwith.ErrorText(w, err) {
 			return
