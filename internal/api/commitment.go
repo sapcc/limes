@@ -35,6 +35,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -662,25 +663,25 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Check if commitments are renewable
 	for _, dbCommitment := range dbCommitments {
-		msg := []string{fmt.Sprintf("CommitmentID: %v", dbCommitment.ID)}
+		var errs errext.ErrorSet
 		if dbCommitment.State != db.CommitmentStateActive {
-			msg = append(msg, fmt.Sprintf("invalid commitment state: %s", dbCommitment.State))
+			errs.Addf("invalid state %q", dbCommitment.State)
+		} else if now.After(dbCommitment.ExpiresAt) {
+			errs.Addf("invalid state %q", db.CommitmentStateExpired)
 		}
 		if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
-			msg = append(msg, "renewal attempt too early")
-		}
-		if now.After(dbCommitment.ExpiresAt) {
-			msg = append(msg, "commitment expired")
+			errs.Addf("renewal attempt too early")
 		}
 		if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
-			msg = append(msg, "commitment in transfer")
+			errs.Addf("commitment in transfer")
 		}
 		if dbCommitment.WasRenewed {
-			msg = append(msg, "commitment already renewed")
+			errs.Addf("already renewed")
 		}
 
-		if len(msg) > 1 {
-			http.Error(w, strings.Join(msg, " - "), http.StatusConflict)
+		if !errs.IsEmpty() {
+			msg := fmt.Sprintf("cannot renew commitment %d: %s", dbCommitment.ID, errs.Join(", "))
+			http.Error(w, msg, http.StatusConflict)
 			return
 		}
 	}
