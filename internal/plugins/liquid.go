@@ -136,7 +136,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 				PhysicalUsage: azReport.PhysicalUsage,
 				Subresources:  castSliceToAny(azReport.Subresources),
 			}
-			if resInfo.Topology == liquid.AZSeparatedResourceTopology && azReport.Quota != nil {
+			if resInfo.Topology == liquid.AZSeparatedTopology && azReport.Quota != nil {
 				resData.UsageData[az].Quota = azReport.Quota
 			}
 		}

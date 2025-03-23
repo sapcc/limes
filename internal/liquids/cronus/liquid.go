@@ -46,10 +46,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version: 1,
 		Rates: map[liquid.RateName]liquid.RateInfo{
-			"attachment_size":   {HasUsage: true, Unit: liquid.UnitBytes},
-			"data_transfer_in":  {HasUsage: true, Unit: liquid.UnitBytes},
-			"data_transfer_out": {HasUsage: true, Unit: liquid.UnitBytes},
-			"recipients":        {HasUsage: true, Unit: liquid.UnitNone},
+			"attachment_size":   {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_transfer_in":  {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_transfer_out": {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"recipients":        {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
 		},
 	}, nil
 }

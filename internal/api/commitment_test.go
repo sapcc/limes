@@ -110,8 +110,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	)
 	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
 	plugin2 := s.Cluster.QuotaPlugins["second"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
-	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareResourceTopology}, "things": {Topology: liquid.FlatResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
+	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
 
 	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
@@ -130,6 +130,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"amount":            10,
 		"duration":          "1 hour",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+		"notify_on_confirm": true,
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
@@ -145,6 +146,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        req1["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
+		"notify_on_confirm": true,
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -433,6 +435,23 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
+
+	// try to create a commitment with a mail notification flag (only possible to set for planned commitments)
+	notificationReq := assert.JSONObject{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            1,
+		"duration":          "1 hour",
+		"notify_on_confirm": true,
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": notificationReq},
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
@@ -472,7 +491,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	)
 
 	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatResourceTopology}}
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatTopology}}
 
 	request := assert.JSONObject{
 		"service_type":      "first",

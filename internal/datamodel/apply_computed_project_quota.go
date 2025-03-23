@@ -176,8 +176,8 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				if err != nil {
 					return fmt.Errorf("in AZ %s in project resource %d: %w", az, resourceID, err)
 				}
-				// AZSeparatedResourceTopology does not update resource quota. Therefore the service desync needs to be queued right here.
-				if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+				// AZSeparatedTopology does not update resource quota. Therefore the service desync needs to be queued right here.
+				if resInfo.Topology == liquid.AZSeparatedTopology {
 					var serviceID db.ProjectServiceID
 					err := tx.SelectOne(&serviceID, `SELECT service_id FROM project_resources WHERE id = $1`, resourceID)
 					if err != nil {
@@ -203,11 +203,11 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
 		for resourceID, quota := range quotasByResourceID {
-			// Resources with AZSeparatedResourceTopology will report `backendQuota == nil` during scrape.
+			// Resources with AZSeparatedTopology will report `backendQuota == nil` during scrape.
 			// If we set anything other than nil here, this would lead to unnecessary quota syncs with the backend,
 			// because backendQuota != quota.
 			quotaToWrite := &quota
-			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+			if resInfo.Topology == liquid.AZSeparatedTopology {
 				quotaToWrite = nil
 			}
 
@@ -314,7 +314,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 	slices.Sort(allAZsInOrder)
-	if cfg.ProjectBaseQuota > 0 && resInfo.Topology != liquid.AZSeparatedResourceTopology {
+	if cfg.ProjectBaseQuota > 0 && resInfo.Topology != liquid.AZSeparatedTopology {
 		// base quota is given out in the pseudo-AZ "any", so we need to calculate quota for "any", too
 		isRelevantAZ[limes.AvailabilityZoneAny] = struct{}{}
 	}
@@ -335,7 +335,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
 	// in all the real AZs, so it can only allow quota overcommit if all AZs do
-	if isAZAware && resInfo.Topology != liquid.AZSeparatedResourceTopology {
+	if isAZAware && resInfo.Topology != liquid.AZSeparatedTopology {
 		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allRealAZsAllowQuotaOvercommit
 	}
 
@@ -389,7 +389,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			}
 			if sumOfLocalizedQuotas < cfg.ProjectBaseQuota {
 				// AZ separated topology receives the basequota to all available AZs
-				if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+				if resInfo.Topology == liquid.AZSeparatedTopology {
 					for az := range isRelevantAZ {
 						target[az][resourceID].Desired = cfg.ProjectBaseQuota
 					}
@@ -398,7 +398,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				}
 			}
 		}
-		if resInfo.Topology != liquid.AZSeparatedResourceTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
+		if resInfo.Topology != liquid.AZSeparatedTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
 		target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectResourceID, isAZAware)

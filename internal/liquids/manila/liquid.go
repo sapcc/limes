@@ -151,9 +151,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	l.ShareTypeIDByName.Set(shareTypeIDByName)
 
 	// build ResourceInfo set
-	topology := liquid.FlatResourceTopology
+	topology := liquid.FlatTopology
 	if l.AZMetrics != nil {
-		topology = liquid.AZAwareResourceTopology
+		topology = liquid.AZAwareTopology
 	}
 	resInfoForCapacity := liquid.ResourceInfo{
 		Unit:                liquid.UnitGibibytes,
@@ -179,7 +179,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+1)
 	resources["share_networks"] = liquid.ResourceInfo{
 		Unit:        liquid.UnitNone,
-		Topology:    liquid.FlatResourceTopology,
+		Topology:    liquid.FlatTopology,
 		HasCapacity: true,
 		HasQuota:    true,
 	}
