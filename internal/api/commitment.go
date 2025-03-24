@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -215,7 +216,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
 		NotifyOnConfirm:  c.NotifyOnConfirm,
-		WasRenewed:       c.WasRenewed,
+		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
 }
 
@@ -661,7 +662,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
 		errs.Addf("renewal attempt too early")
 	}
-	if dbCommitment.WasRenewed {
+	if dbCommitment.RenewContextJSON.IsSome() {
 		errs.Addf("already renewed")
 	}
 
@@ -714,7 +715,15 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	dbCommitment.WasRenewed = true
+	renewContext := db.CommitmentWorkflowContext{
+		Reason:               db.CommitmentReasonRenew,
+		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbRenewedCommitment.ID},
+	}
+	buf, err = json.Marshal(renewContext)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return

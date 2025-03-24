@@ -310,11 +310,11 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN predecessor_id;
 	`,
 	"051_commitment_renwal.down.sql": `
-	ALTER TABLE project_commitments
-		DROP COLUMN was_renewed;
+		ALTER TABLE project_commitments
+			DROP COLUMN renew_context_json;
 	`,
 	"051_commitment_renewal.up.sql": `
 		ALTER TABLE project_commitments
-			ADD COLUMN was_renewed BOOLEAN NOT NULL DEFAULT FALSE;
+			ADD COLUMN renew_context_json JSONB;
 	`,
 }
