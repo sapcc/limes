@@ -1788,17 +1788,21 @@ func Test_RenewCommitments(t *testing.T) {
 	// Renew applicable commitments successfully
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/renew",
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/renew",
+		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
 	// Ensure that already renewed commitments can't be renewed again
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/renew",
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
@@ -1822,8 +1826,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
@@ -1835,8 +1838,7 @@ func Test_RenewCommitments(t *testing.T) {
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
@@ -1849,8 +1851,7 @@ func Test_RenewCommitments(t *testing.T) {
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/renew",
-		Body:         assert.JSONObject{"commitment_ids": []int{5}},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 }
