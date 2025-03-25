@@ -485,7 +485,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
-		if !resource.ResourceInfo.NoQuota {
+		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
 			// We need to set a default value here. Otherwise zero values will never
