@@ -274,7 +274,7 @@ func ListNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pa
 
 // ExtractNodesInto is like `nodes.ExtractNodesInto()`, but using our custom page type.
 func ExtractNodesInto(r pagination.Page, v any) error {
-	return r.(nodePage).Result.ExtractIntoSlicePtr(v, "nodes")
+	return r.(nodePage).ExtractIntoSlicePtr(v, "nodes")
 }
 
 type nodePage struct {
