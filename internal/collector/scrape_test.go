@@ -110,7 +110,7 @@ const (
 	`
 )
 
-func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopology liquid.ResourceTopology) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, plugin *plugins.LiquidQuotaPlugin, serviceInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
+func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionTopology liquid.Topology) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, plugin *plugins.LiquidQuotaPlugin, serviceInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
 	s = test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
@@ -127,7 +127,7 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:                liquid.UnitBytes,
-				Topology:            nonCapacityPortionResourceTopology,
+				Topology:            nonCapacityPortionTopology,
 				HasCapacity:         true,
 				HasQuota:            true,
 				NeedsResourceDemand: true,
@@ -135,11 +135,11 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 			"capacity_portion": {
 				Unit:     liquid.UnitBytes,
 				HasQuota: false,
-				Topology: liquid.AZAwareResourceTopology,
+				Topology: liquid.AZAwareTopology,
 			},
 			"things": {
 				Unit:        liquid.UnitNone,
-				Topology:    nonCapacityPortionResourceTopology,
+				Topology:    nonCapacityPortionTopology,
 				HasCapacity: false,
 				HasQuota:    true,
 			},
@@ -187,11 +187,11 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(0)),
+								Usage: p2u64(0),
 							},
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(1)),
+								Usage: p2u64(1),
 							},
 						},
 					},
@@ -201,11 +201,11 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(2)),
+								Usage: p2u64(2),
 							},
 							{
 								Name:  "index",
-								Usage: pointerTo(uint64(3)),
+								Usage: p2u64(3),
 							},
 						},
 					},
@@ -221,7 +221,7 @@ func commonComplexScrapeTestSetup(t *testing.T, nonCapacityPortionResourceTopolo
 }
 
 func Test_ScrapeSuccess(t *testing.T) {
-	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareResourceTopology)
+	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareTopology)
 	plugin.LiquidServiceInfo = serviceInfo
 	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
@@ -282,7 +282,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	serviceUsageReport.Resources["capacity"].Quota = p2i64(110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
-	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: pointerTo(uint64(4))})
+	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: p2u64(4)})
 	serviceUsageReport.Metrics["things_usage"] = []liquid.Metric{{Value: 3}}
 	// Scrape should pick up the changed resource data
 	// (no quota sync should be requested since there is one requested already)
@@ -507,7 +507,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	s, job, withLabel, _, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareResourceTopology)
+	s, job, withLabel, _, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareTopology)
 
 	// we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^during resource scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
@@ -721,7 +721,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 }
 
 func Test_TopologyScrapes(t *testing.T) {
-	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZSeparatedResourceTopology)
+	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZSeparatedTopology)
 	plugin.LiquidServiceInfo = serviceInfo
 	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
@@ -797,7 +797,7 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	// topology of a resource changes. Reset AZ-separated backend_quota
 	resourceEntry := serviceInfo.Resources["things"]
-	resourceEntry.Topology = liquid.AZAwareResourceTopology
+	resourceEntry.Topology = liquid.AZAwareTopology
 	serviceInfo.Resources["things"] = resourceEntry
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -827,7 +827,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	// positive: missing AZ in resource report will be created by the scraper in order to assign basequota later.
 	// warning: any AZs will be removed, because resource things switches from AZAware to AZSeparated.
-	resourceEntry.Topology = liquid.AZSeparatedResourceTopology
+	resourceEntry.Topology = liquid.AZSeparatedTopology
 	serviceInfo.Resources["things"] = resourceEntry
 	delete(serviceUsageReport.Resources["things"].PerAZ, "az-two")
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -855,12 +855,12 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with flat topology returns invalid AZs
 	resourceEntry = serviceInfo.Resources["capacity"]
-	resourceEntry.Topology = liquid.FlatResourceTopology
+	resourceEntry.Topology = liquid.FlatTopology
 	serviceInfo.Resources["capacity"] = resourceEntry
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: resource: capacity: scrape with topology type: flat returned AZs: [az-one az-two]"))
 
 	// negative: scrape with az-aware topology returns invalid any AZ
-	resourceEntry.Topology = liquid.AZAwareResourceTopology
+	resourceEntry.Topology = liquid.AZAwareTopology
 	serviceInfo.Resources["capacity"] = resourceEntry
 	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{
 		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
@@ -871,7 +871,7 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with az-separated topology returns invalid AZs any and unknown
-	resourceEntry.Topology = liquid.AZSeparatedResourceTopology
+	resourceEntry.Topology = liquid.AZSeparatedTopology
 	serviceInfo.Resources["capacity"] = resourceEntry
 	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{
 		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
@@ -891,10 +891,10 @@ func Test_TopologyScrapes(t *testing.T) {
 	mustFailT(t, plugins.CheckResourceTopologies(serviceInfo), errors.New("invalid topology: invalidAZ1 on resource: capacity\ninvalid topology: invalidAZ2 on resource: things"))
 
 	// negative: multiple resources with mismatching topology to AZ responses
-	resourceEntry.Topology = liquid.AZSeparatedResourceTopology
+	resourceEntry.Topology = liquid.AZSeparatedTopology
 	serviceInfo.Resources["things"] = resourceEntry
 	resourceEntry = serviceInfo.Resources["capacity"]
-	resourceEntry.Topology = liquid.AZSeparatedResourceTopology
+	resourceEntry.Topology = liquid.AZSeparatedTopology
 	serviceInfo.Resources["capacity"] = resourceEntry
 
 	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{

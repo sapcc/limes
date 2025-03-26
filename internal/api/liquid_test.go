@@ -91,7 +91,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:                liquid.UnitBytes,
-				Topology:            liquid.FlatResourceTopology,
+				Topology:            liquid.FlatTopology,
 				HasCapacity:         true,
 				NeedsResourceDemand: true,
 			},
