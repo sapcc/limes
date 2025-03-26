@@ -227,7 +227,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 					}
 					mustDo(t, s.DB.Insert(dbProjectResource))
 					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
-					if rsBehavior.Topology == liquid.FlatResourceTopology {
+					if rsBehavior.Topology == liquid.FlatTopology {
 						dbProjectAZResource := &db.ProjectAZResource{
 							ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
 							ResourceID:       dbProjectResource.ID,
@@ -268,12 +268,6 @@ func mustDo(t *testing.T, err error) {
 		t.Fatal(err.Error())
 	}
 }
-
-var cleanupProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
-	DELETE FROM project_commitments WHERE id NOT IN (
-		SELECT predecessor_id FROM project_commitments WHERE predecessor_id IS NOT NULL
-	)
-`)
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),

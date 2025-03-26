@@ -309,7 +309,7 @@ func NewMockClient() *MockLiquidClient {
 			Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 				"capacity": {
 					Unit:                liquid.UnitBytes,
-					Topology:            liquid.AZAwareResourceTopology,
+					Topology:            liquid.AZAwareTopology,
 					HasCapacity:         true,
 					HasQuota:            true,
 					NeedsResourceDemand: true,
@@ -317,12 +317,12 @@ func NewMockClient() *MockLiquidClient {
 				// TODO: not sure about rest of the settings, might need changes to run all tests without problems
 				"capacity_portion": {
 					Unit:     liquid.UnitBytes,
-					Topology: liquid.AZAwareResourceTopology,
+					Topology: liquid.AZAwareTopology,
 					HasQuota: false,
 				},
 				"things": {
 					Unit:        liquid.UnitNone,
-					Topology:    liquid.FlatResourceTopology,
+					Topology:    liquid.FlatTopology,
 					HasCapacity: false,
 					HasQuota:    true,
 				},
