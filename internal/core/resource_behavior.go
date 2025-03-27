@@ -43,6 +43,7 @@ type ResourceBehavior struct {
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	TranslationRuleInV1API   TranslationRule                     `yaml:"translation_rule_in_v1_api"`
 	Category                 string                              `yaml:"category"`
+	Topology                 liquid.Topology                     `yaml:"topology"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
