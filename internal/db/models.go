@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -173,9 +174,10 @@ type ProjectCommitment struct {
 
 	// Commitments can be superseded due to splits, conversions or merges.
 	// The context columns contain information about the reason and related commitments
-	SupersededAt         *time.Time       `db:"superseded_at"`
-	CreationContextJSON  json.RawMessage  `db:"creation_context_json"`
-	SupersedeContextJSON *json.RawMessage `db:"supersede_context_json"`
+	SupersededAt         *time.Time              `db:"superseded_at"`
+	CreationContextJSON  json.RawMessage         `db:"creation_context_json"`
+	SupersedeContextJSON *json.RawMessage        `db:"supersede_context_json"`
+	RenewContextJSON     Option[json.RawMessage] `db:"renew_context_json"`
 
 	// For a commitment to be transferred between projects, it must first be
 	// marked for transfer in the source project. Then a new commitment can be
@@ -231,6 +233,7 @@ const (
 	CommitmentReasonSplit   CommitmentReason = "split"
 	CommitmentReasonConvert CommitmentReason = "convert"
 	CommitmentReasonMerge   CommitmentReason = "merge"
+	CommitmentReasonRenew   CommitmentReason = "renew"
 )
 
 type MailNotification struct {

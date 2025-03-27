@@ -59,6 +59,9 @@ type Commitment struct {
 	// NotifyOnConfirm can only be set if ConfirmBy is filled.
 	// Used to send a mail notification at commitment confirmation.
 	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`
+	// WasRenewed indicates whether this commitment has been renewed.
+	// This means that a new commitment was created that will be confirmed when this commitment is set to expire.
+	WasRenewed bool `json:"was_renewed,omitempty"`
 }
 
 // CommitmentRequest is the API representation of a *new* commitment as requested by a user.

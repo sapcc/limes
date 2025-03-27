@@ -29,11 +29,13 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -214,6 +216,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
 		NotifyOnConfirm:  c.NotifyOnConfirm,
+		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
 }
 
@@ -607,6 +610,141 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		Commitments:     []limesresources.Commitment{c},
 		WorkflowContext: &creationContext,
 	}
+	p.auditor.Record(audittools.Event{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusAccepted,
+		Action:     cadf.UpdateAction,
+		Target:     auditEvent,
+	})
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
+// As per the API spec, commitments can be renewed 90 days in advance at the earliest.
+const commitmentRenewalPeriod = 90 * 24 * time.Hour
+
+// RenewProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/:id/renew.
+func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/renew")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	// Load commitment
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	now := p.timeNow()
+
+	// Check if commitment can be renewed
+	var errs errext.ErrorSet
+	if dbCommitment.State != db.CommitmentStateActive {
+		errs.Addf("invalid state %q", dbCommitment.State)
+	} else if now.After(dbCommitment.ExpiresAt) {
+		errs.Addf("invalid state %q", db.CommitmentStateExpired)
+	}
+	if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
+		errs.Addf("renewal attempt too early")
+	}
+	if dbCommitment.RenewContextJSON.IsSome() {
+		errs.Addf("already renewed")
+	}
+
+	if !errs.IsEmpty() {
+		msg := "cannot renew this commitment: " + errs.Join(", ")
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+
+	// Create renewed commitment
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	var loc core.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	creationContext := db.CommitmentWorkflowContext{
+		Reason:               db.CommitmentReasonRenew,
+		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+	}
+	buf, err := json.Marshal(creationContext)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	dbRenewedCommitment := db.ProjectCommitment{
+		AZResourceID:        dbCommitment.AZResourceID,
+		Amount:              dbCommitment.Amount,
+		Duration:            dbCommitment.Duration,
+		CreatedAt:           now,
+		CreatorUUID:         token.UserUUID(),
+		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+		ConfirmBy:           &dbCommitment.ExpiresAt,
+		ExpiresAt:           dbCommitment.Duration.AddTo(dbCommitment.ExpiresAt),
+		State:               db.CommitmentStatePlanned,
+		CreationContextJSON: json.RawMessage(buf),
+	}
+
+	err = tx.Insert(&dbRenewedCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	renewContext := db.CommitmentWorkflowContext{
+		Reason:               db.CommitmentReasonRenew,
+		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbRenewedCommitment.ID},
+	}
+	buf, err = json.Marshal(renewContext)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// Create resultset and auditlogs
+	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token)
+	auditEvent := commitmentEventTarget{
+		DomainID:        dbDomain.UUID,
+		DomainName:      dbDomain.Name,
+		ProjectID:       dbProject.UUID,
+		ProjectName:     dbProject.Name,
+		Commitments:     []limesresources.Commitment{c},
+		WorkflowContext: &creationContext,
+	}
+
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
