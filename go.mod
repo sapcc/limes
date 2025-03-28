@@ -6,7 +6,7 @@ require (
 	github.com/databus23/goslo.policy v0.0.0-20250326134918-4afc2c56a903
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
-	github.com/gofrs/uuid/v5 v5.3.1
+	github.com/gofrs/uuid/v5 v5.3.2
 	github.com/gophercloud/gophercloud/v2 v2.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
