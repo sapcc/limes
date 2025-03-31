@@ -62,10 +62,16 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 
 		logg.Info("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		err := dbi.Insert(&db.ProjectService{
-			ProjectID:         project.ID,
-			Type:              serviceType,
+			ProjectID: project.ID,
+			Type:      serviceType,
+			// immediate scraping of this new service is required to create `project_resources`
+			// and `project_az_resources` entries and thus make the project service fully functional
 			NextScrapeAt:      now,
 			RatesNextScrapeAt: now,
+			// setting the stale flags prioritizes scraping of this service over the
+			// existing backlog of routine scrapes, even if the backlog is very long
+			Stale:      true,
+			RatesStale: true,
 		})
 		if err != nil {
 			return err
