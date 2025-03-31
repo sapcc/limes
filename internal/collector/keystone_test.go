@@ -107,9 +107,10 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
+	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (7, 4, 'shared', %[1]d, %[1]d);
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (8, 4, 'unshared', %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, stale, rates_stale, next_scrape_at, rates_next_scrape_at) VALUES (7, 4, 'shared', TRUE, TRUE, %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, stale, rates_stale, next_scrape_at, rates_next_scrape_at) VALUES (8, 4, 'unshared', TRUE, TRUE, %[1]d, %[1]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france');
 	`,
 		s.Clock.Now().Unix(),

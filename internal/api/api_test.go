@@ -530,6 +530,13 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
 
+	// DiscoverProjects sets `stale` and `rates_stale` on new project_services;
+	// clear this to avoid confusion in the next test
+	_, err := s.DB.Exec(`UPDATE project_services SET stale = FALSE, rates_stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// check SyncProject
 	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
 	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
@@ -553,18 +560,8 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
-
-	// check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
-	// implementation with SyncProject)
-	_, _ = s.DB.Exec(`UPDATE project_services SET stale = 'f'`) //nolint:errcheck
-	assert.HTTPRequest{
-		Method:       "POST",
-		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
-		ExpectStatus: 202,
-		ExpectBody:   assert.StringData(""),
-	}.Check(t, s.Handler)
-	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
-	expectStaleProjectServices(t, s.DB, "rates_stale", "dresden:shared", "dresden:unshared")
+	// since the project is entirely new, rate scraping is also marked as being needed immediately
+	expectStaleProjectServices(t, s.DB, "rates_stale", "walldorf:shared", "walldorf:unshared")
 
 	// check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -604,7 +601,7 @@ func Test_ProjectOperations(t *testing.T) {
 		actualLimit  uint64
 		actualWindow limesrates.Window
 	)
-	err := s.DB.QueryRow(`
+	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
 		JOIN project_services ps ON ps.id = pra.service_id
 		JOIN projects p ON p.id = ps.project_id
