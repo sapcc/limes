@@ -69,12 +69,6 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 					"az-two": {},
 				},
 			},
-			"capacity_portion": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-					"az-one": {},
-					"az-two": {},
-				},
-			},
 			"things": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"any": {},

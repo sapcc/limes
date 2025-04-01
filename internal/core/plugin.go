@@ -314,12 +314,6 @@ func NewMockClient() *MockLiquidClient {
 					HasQuota:            true,
 					NeedsResourceDemand: true,
 				},
-				// TODO: not sure about rest of the settings, might need changes to run all tests without problems
-				"capacity_portion": {
-					Unit:     liquid.UnitBytes,
-					Topology: liquid.AZAwareTopology,
-					HasQuota: false,
-				},
 				"things": {
 					Unit:        liquid.UnitNone,
 					Topology:    liquid.FlatTopology,
