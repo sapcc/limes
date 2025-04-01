@@ -100,13 +100,6 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 				AllowQuotaOvercommitUntilAllocatedPercent: 0,
 			},
 		}, {
-			FullResourceNameRx: "unittest/capacity_portion",
-			Model:              "autogrow",
-			Autogrow: &core.AutogrowQuotaDistributionConfiguration{
-				GrowthMultiplier: 1,
-				AllowQuotaOvercommitUntilAllocatedPercent: 0,
-			},
-		}, {
 			FullResourceNameRx: "unittest/things",
 			Model:              "autogrow",
 			Autogrow: &core.AutogrowQuotaDistributionConfiguration{
@@ -120,9 +113,6 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 		"capacity": {
 			Unit: liquid.UnitNone,
 		},
-		"capacity_portion": {
-			Unit: liquid.UnitNone,
-		},
 		"things": {
 			Unit: liquid.UnitNone,
 		},
@@ -133,13 +123,6 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 0,
-					},
-				},
-			},
-			"capacity_portion": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 0,

@@ -35,11 +35,6 @@
             "physical_usage": 5
           },
           {
-            "name": "capacity_portion",
-            "unit": "B",
-            "usage": 3
-          },
-          {
             "name": "things",
             "quota_distribution_model": "autogrow",
             "commitment_config": {
@@ -69,11 +64,6 @@
             "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
-          },
-          {
-            "name": "capacity_portion",
-            "unit": "B",
-            "usage": 3
           },
           {
             "name": "things",

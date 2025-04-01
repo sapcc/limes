@@ -1541,6 +1541,11 @@ func Test_MergeCommitments(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	s.Cluster.QuotaPlugins["second"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["other"] = liquid.ResourceInfo{
+		Unit:     limes.UnitBytes,
+		Topology: liquid.AZAwareTopology,
+	}
+
 	// Create two confirmed commitments on the same resource
 	req1 := assert.JSONObject{
 		"id":                1,
@@ -1571,7 +1576,7 @@ func Test_MergeCommitments(t *testing.T) {
 	req4 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "other",
 		"availability_zone": "az-one",
 		"amount":            1,
 		"duration":          "2 hours",
@@ -1594,7 +1599,7 @@ func Test_MergeCommitments(t *testing.T) {
 	resp4 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "other",
 		"availability_zone": "az-one",
 		"amount":            1,
 		"unit":              "B",
@@ -1781,7 +1786,7 @@ func Test_RenewCommitments(t *testing.T) {
 	req2 := assert.JSONObject{
 		"id":                2,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            1,
 		"duration":          "2 hours",
@@ -1818,7 +1823,7 @@ func Test_RenewCommitments(t *testing.T) {
 	resp2 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            1,
 		"unit":              "B",

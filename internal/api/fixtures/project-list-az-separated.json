@@ -10,9 +10,10 @@
           "area": "shared",
           "resources": [
             {
-              "name": "capacity_portion",
+              "name": "capacity_az_separated",
               "unit": "B",
-              "category": "portion",
+              "category": "foo_category",
+              "quota_distribution_model": "autogrow",
               "per_az": {
                 "az-one": {
                   "quota": 5,
