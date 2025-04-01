@@ -51,12 +51,6 @@ func TestApplyQuotaOverrides(t *testing.T) {
 					"az-two": {},
 				},
 			},
-			"capacity_portion": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-					"az-one": {},
-					"az-two": {},
-				},
-			},
 			"things": {
 				Quota: pointerTo(int64(42)),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
@@ -89,7 +83,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 2 AND service_id = 1 AND name = 'things';
 	`)
 
 	// test changing and removing quota overrides
@@ -103,8 +97,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 15 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 	`)
 
 	// test quota overrides referring to nonexistent domains and projects (should be ignored without error)
