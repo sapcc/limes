@@ -148,7 +148,17 @@ func (l *Logic) scanCapacityForShareType(ctx context.Context, vst VirtualShareTy
 		SnapshotCapacity:   liquid.ResourceCapacityReport{PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)},
 		SnapmirrorCapacity: liquid.ResourceCapacityReport{PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)},
 	}
-	for az, azPools := range allPoolsByAZ {
+	allAZsWithUnknown := append(slices.Clone(allAZs), liquid.AvailabilityZoneUnknown)
+	for _, az := range allAZsWithUnknown {
+		azPools, exists := allPoolsByAZ[az]
+		if !exists {
+			result.Shares.PerAZ[az] = &liquid.AZResourceCapacityReport{}
+			result.Snapshots.PerAZ[az] = &liquid.AZResourceCapacityReport{}
+			result.ShareCapacity.PerAZ[az] = &liquid.AZResourceCapacityReport{}
+			result.SnapshotCapacity.PerAZ[az] = &liquid.AZResourceCapacityReport{}
+			result.SnapmirrorCapacity.PerAZ[az] = &liquid.AZResourceCapacityReport{}
+			continue
+		}
 		azResult, err := l.scanCapacityForShareTypeAndAZ(vst, uint64(len(allAZs)), az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az], snapmirrorCapacityDemand[az])
 		if err != nil {
 			return capacityForShareType{}, err
