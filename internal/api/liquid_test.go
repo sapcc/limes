@@ -60,7 +60,7 @@ const (
 				service_type: unittest
 				test_mode: true
 		resource_behavior:
-		- { resource: unittest/capacity, overcommit_factor: 1.5, topology: flat }
+		- { resource: unittest/capacity, overcommit_factor: 1.5}
 	`
 )
 
@@ -81,7 +81,7 @@ func commonLiquidTestSetup(t *testing.T) (s test.Setup) {
 func TestGetServiceCapacityRequest(t *testing.T) {
 	s := commonLiquidTestSetup(t)
 
-	// modify the default Resource that the Setup creates
+	// modify the first Resource that the Setup creates
 	s.ProjectAZResources[0].Usage = 10
 	_, err := s.DB.Update(s.ProjectAZResources[0])
 	mustT(t, err)
@@ -91,7 +91,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:                liquid.UnitBytes,
-				Topology:            liquid.FlatTopology,
+				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
 				NeedsResourceDemand: true,
 			},
@@ -138,8 +138,13 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 				"capacity": assert.JSONObject{
 					"overcommitFactor": 1.5,
 					"perAZ": assert.JSONObject{
-						"any": assert.JSONObject{
+						"az-one": assert.JSONObject{
 							"usage":              10,
+							"unusedCommitments":  0,
+							"pendingCommitments": 0,
+						},
+						"az-two": assert.JSONObject{
+							"usage":              0,
 							"unusedCommitments":  0,
 							"pendingCommitments": 0,
 						},
