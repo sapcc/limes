@@ -166,7 +166,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	}
 
 	if len(p.LiquidServiceInfo.Resources) > 0 {
-		err := plugins.CheckResourceTopologies(p.LiquidServiceInfo)
+		err := liquid.ValidateServiceInfo(p.LiquidServiceInfo)
 		if err != nil {
 			return nil, nil, err
 		}

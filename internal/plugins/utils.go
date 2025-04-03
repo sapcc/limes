@@ -20,7 +20,6 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -36,23 +35,6 @@ func SortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
 	sortedKeys := slices.Collect(maps.Keys(mapToSort))
 	slices.Sort(sortedKeys)
 	return sortedKeys
-}
-
-func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
-	var errs []error
-	resources := serviceInfo.Resources
-
-	resourceNames := SortedMapKeys(resources)
-	for _, resourceName := range resourceNames {
-		topology := resources[resourceName].Topology
-		if !topology.IsValid() {
-			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", topology, resourceName))
-		}
-	}
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-	return
 }
 
 func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]V, topology liquid.Topology) (err error) {
