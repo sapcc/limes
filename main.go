@@ -252,7 +252,12 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
-		httpapi.HealthCheckAPI{SkipRequestLog: true},
+		httpapi.HealthCheckAPI{
+			SkipRequestLog: true,
+			Check: func() error {
+				return dbm.Db.PingContext(ctx)
+			},
+		},
 	))
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -327,7 +332,12 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
-		httpapi.HealthCheckAPI{SkipRequestLog: true},
+		httpapi.HealthCheckAPI{
+			SkipRequestLog: true,
+			Check: func() error {
+				return dbm.Db.PingContext(ctx)
+			},
+		},
 	))
 	mux.Handle("/metrics", &dmr)
 
