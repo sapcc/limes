@@ -70,7 +70,7 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 	}
 
 	if p.TestMode {
-		p.LiquidClient = core.NewMockClient()
+		p.LiquidClient = core.NewMockLiquidClient()
 		p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
 		return err
 	}

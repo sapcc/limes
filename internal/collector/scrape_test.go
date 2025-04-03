@@ -37,7 +37,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
@@ -208,7 +207,7 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 func Test_ScrapeSuccess(t *testing.T) {
 	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareTopology)
 	plugin.LiquidServiceInfo = serviceInfo
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -323,7 +322,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// test SyncQuotaToBackendJob running and failing (this checks that it does
 	// not get stuck on a failing project service and moves on to the other one
 	// in the second attempt)
-	plugin.LiquidClient.(*core.MockLiquidClient).SetQuotaError(errors.New("SetQuota failed as requested"))
+	plugin.LiquidClient.(*test.MockLiquidClient).SetQuotaError(errors.New("SetQuota failed as requested"))
 	expectedErrorRx := regexp.MustCompile(`SetQuota failed as requested$`)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -338,7 +337,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// test SyncQuotaToBackendJob running successfully
-	plugin.LiquidClient.(*core.MockLiquidClient).SetQuotaError(nil)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetQuotaError(nil)
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
@@ -494,7 +493,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -534,9 +533,9 @@ func Test_ScrapeFailure(t *testing.T) {
 	// once the backend starts working, we start to see plausible data again
 	s.Clock.StepBy(scrapeInterval)
 
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReportError(nil)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReportError(nil)
 	plugin.LiquidServiceInfo = serviceInfo
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
@@ -571,7 +570,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// touch neither scraped_at nor the existing resources (this also tests that a
 	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	s.Clock.StepBy(scrapeInterval)
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -618,7 +617,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		Version:   1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
@@ -658,7 +657,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 			"things": {Unit: limes.UnitNone, HasQuota: true},
 		},
 	}
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
@@ -685,7 +684,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 func Test_TopologyScrapes(t *testing.T) {
 	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZSeparatedTopology)
 	plugin.LiquidServiceInfo = serviceInfo
-	plugin.LiquidClient.(*core.MockLiquidClient).SetUsageReport(serviceUsageReport)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
