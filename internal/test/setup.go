@@ -30,7 +30,6 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
@@ -217,21 +216,27 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				for _, rsBehavior := range s.Cluster.Config.ResourceBehaviors {
+				for resName, resInfo := range s.Cluster.QuotaPlugins[svcConfig.ServiceType].Resources() {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
 						ServiceID:    dbProjectService.ID,
-						Name:         liquid.ResourceName(strings.Split(string(rsBehavior.FullResourceNameRx), "/")[1]),
+						Name:         resName,
 						Quota:        new(uint64),
 						BackendQuota: new(int64),
 					}
 					mustDo(t, s.DB.Insert(dbProjectResource))
 					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
-					if rsBehavior.Topology == liquid.FlatTopology {
+					var allAZs []liquid.AvailabilityZone
+					if resInfo.Topology == liquid.FlatTopology {
+						allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
+					} else {
+						allAZs = s.Cluster.Config.AvailabilityZones
+					}
+					for _, az := range allAZs {
 						dbProjectAZResource := &db.ProjectAZResource{
 							ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
 							ResourceID:       dbProjectResource.ID,
-							AvailabilityZone: limes.AvailabilityZoneAny,
+							AvailabilityZone: az,
 							Quota:            new(uint64),
 							Usage:            0,
 							PhysicalUsage:    nil,
@@ -239,20 +244,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 						}
 						mustDo(t, s.DB.Insert(dbProjectAZResource))
 						s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
-					} else {
-						for _, az := range s.Cluster.Config.AvailabilityZones {
-							dbProjectAZResource := &db.ProjectAZResource{
-								ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
-								ResourceID:       dbProjectResource.ID,
-								AvailabilityZone: az,
-								Quota:            new(uint64),
-								Usage:            0,
-								PhysicalUsage:    nil,
-								SubresourcesJSON: "{}",
-							}
-							mustDo(t, s.DB.Insert(dbProjectAZResource))
-							s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
-						}
 					}
 				}
 			}
