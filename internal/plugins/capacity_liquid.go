@@ -65,7 +65,7 @@ func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 	}
 
 	if p.TestMode {
-		p.LiquidClient = &core.MockLiquidClient{}
+		p.LiquidClient = core.NewMockLiquidClient()
 		return nil
 	}
 

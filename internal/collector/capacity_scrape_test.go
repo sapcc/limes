@@ -34,7 +34,6 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/plugins"
@@ -208,7 +207,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin.LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport)
+	plugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
 	capacityReport2 := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
@@ -222,7 +221,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin2.LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport2)
+	plugin2.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -352,7 +351,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	subcapacityPlugin.LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport4)
+	subcapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport4)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
@@ -454,7 +453,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	azCapacityPlugin.LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport5)
+	azCapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport5)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
@@ -719,8 +718,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
 	s.Cluster.QuotaPlugins["second"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
 
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport)
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport2)
+	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
+	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
 
 	// first run should create the cluster_resources and cluster_az_resources, but
 	// not confirm any commitments because they all start with `confirm_by > now`
@@ -904,8 +903,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
 	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
 
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport)
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*core.MockLiquidClient).SetCapacityReport(capacityReport2)
+	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
+	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
 
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 

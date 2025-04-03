@@ -118,8 +118,8 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 		},
 	}
 
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetUsageReport(usageReport)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetCapacityReport(liquid.ServiceCapacityReport{
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -226,7 +226,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(2048)
 	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(4096)
 	usageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetUsageReport(usageReport)
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
 
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -234,7 +234,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(4096)
 	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(8192)
 	usageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient).SetUsageReport(usageReport)
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -287,7 +287,7 @@ func Test_RateScrapeFailure(t *testing.T) {
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// ScrapeRates should not touch the DB when scraping fails
-	client := s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*core.MockLiquidClient)
+	client := s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient)
 	client.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 
