@@ -25,12 +25,6 @@
             "backend_quota": 100
           },
           {
-            "name": "capacity_portion",
-            "unit": "B",
-            "category": "portion",
-            "usage": 1
-          },
-          {
             "name": "things",
             "quota_distribution_model": "autogrow",
             "commitment_config": {
@@ -58,12 +52,6 @@
             "quota": 10,
             "usable_quota": 10,
             "usage": 2
-          },
-          {
-            "name": "capacity_portion",
-            "unit": "B",
-            "category": "portion",
-            "usage": 1
           },
           {
             "name": "things",

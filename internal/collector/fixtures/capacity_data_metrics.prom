@@ -3,9 +3,6 @@
 limes_autogrow_growth_multiplier{resource="capacity",service="shared",service_name="generic-shared"} 1
 limes_autogrow_growth_multiplier{resource="capacity",service="unshared",service_name="generic-unshared"} 1
 limes_autogrow_growth_multiplier{resource="capacity",service="unshared2",service_name="generic-unshared2"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="shared",service_name="generic-shared"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 1
 limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1
@@ -14,9 +11,6 @@ limes_autogrow_growth_multiplier{resource="things",service="unshared2",service_n
 limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="shared",service_name="generic-shared"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unshared",service_name="generic-unshared"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unshared2",service_name="generic-unshared2"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="shared",service_name="generic-shared"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="shared",service_name="generic-shared"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unshared",service_name="generic-unshared"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unshared2",service_name="generic-unshared2"} 0
@@ -25,9 +19,6 @@ limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="uns
 limes_cluster_capacity{resource="capacity",service="shared",service_name="generic-shared"} 0
 limes_cluster_capacity{resource="capacity",service="unshared",service_name="generic-unshared"} 42
 limes_cluster_capacity{resource="capacity",service="unshared2",service_name="generic-unshared2"} 0
-limes_cluster_capacity{resource="capacity_portion",service="shared",service_name="generic-shared"} 0
-limes_cluster_capacity{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 0
-limes_cluster_capacity{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 0
 limes_cluster_capacity{resource="things",service="shared",service_name="generic-shared"} 23
 limes_cluster_capacity{resource="things",service="unshared",service_name="generic-unshared"} 10
 limes_cluster_capacity{resource="things",service="unshared2",service_name="generic-unshared2"} 30
@@ -44,9 +35,6 @@ limes_cluster_usage_per_az{availability_zone="az-two",resource="things",service=
 limes_unit_multiplier{resource="capacity",service="shared",service_name="generic-shared"} 1
 limes_unit_multiplier{resource="capacity",service="unshared",service_name="generic-unshared"} 1
 limes_unit_multiplier{resource="capacity",service="unshared2",service_name="generic-unshared2"} 1
-limes_unit_multiplier{resource="capacity_portion",service="shared",service_name="generic-shared"} 1
-limes_unit_multiplier{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 1
-limes_unit_multiplier{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 1
 limes_unit_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
 limes_unit_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
 limes_unit_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1

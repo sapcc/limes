@@ -23,13 +23,9 @@ INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at
 
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1,  1, 'things',   0, 0);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2,  1, 'capacity', 0, 0);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3,  1, 'capacity_portion', NULL, NULL);
 
--- "capacity" and "capacity_portion" are modeled as AZ-aware, "things" is not
+-- "capacity" is modeled as AZ-aware, "things" is not
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (1,  1,  'any',    0,    0, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  2,  'any',    0,    0, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (3,  2,  'az-one', 0,    0, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (4,  2,  'az-two', 0,    0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (5,  3,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (6,  3,  'az-one', NULL, 0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (7,  3,  'az-two', NULL, 0, NULL, '');
