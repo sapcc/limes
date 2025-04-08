@@ -89,12 +89,6 @@ func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourc
 func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
 	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 
-	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
-	if err != nil {
-		return nil, err
-	}
-	stats := statsByAZ[loc.AvailabilityZone]
-
 	// load confirmable commitments (we need to load them into a buffer first, since
 	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
@@ -107,7 +101,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 	var confirmableCommitments []confirmableCommitment
 	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
 		err := rows.Scan(&c.ProjectID, &c.ProjectResourceID, &c.CommitmentID, &c.Amount, &c.NotifyOnConfirm)
 		confirmableCommitments = append(confirmableCommitments, c)
@@ -116,6 +110,17 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 	if err != nil {
 		return nil, fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
+
+	// optimization: do not load allocation stats if we do not have anything to confirm
+	if len(confirmableCommitments) == 0 {
+		return nil, nil
+	}
+
+	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
+	if err != nil {
+		return nil, err
+	}
+	stats := statsByAZ[loc.AvailabilityZone]
 
 	// foreach confirmable commitment...
 	for _, c := range confirmableCommitments {
