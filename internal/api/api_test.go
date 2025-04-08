@@ -1025,19 +1025,19 @@ func TestResourceRenaming(t *testing.T) {
 		case "shared":
 			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
 			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.Durations = makeDurations(2 * time.Second)
+			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
 			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
-			scfg.CommitmentBehaviorPerResource[1].Value.Durations = makeDurations(3 * time.Second)
+			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
 			scfg.CommitmentBehaviorPerResource[2].Key = "things"
-			scfg.CommitmentBehaviorPerResource[2].Value.Durations = makeDurations(4 * time.Second)
+			scfg.CommitmentBehaviorPerResource[2].Value.DurationsPerDomain = makeDurations(4 * time.Second)
 		case "unshared":
 			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
 			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.Durations = makeDurations(5 * time.Second)
+			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(5 * time.Second)
 			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
-			scfg.CommitmentBehaviorPerResource[1].Value.Durations = makeDurations(6 * time.Second)
+			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(6 * time.Second)
 			scfg.CommitmentBehaviorPerResource[2].Key = "things"
-			scfg.CommitmentBehaviorPerResource[2].Value.Durations = makeDurations(7 * time.Second)
+			scfg.CommitmentBehaviorPerResource[2].Value.DurationsPerDomain = makeDurations(7 * time.Second)
 		}
 		s.Cluster.Config.Services[idx] = scfg
 	}

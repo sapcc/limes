@@ -37,8 +37,8 @@ type CommitmentBehavior struct {
 	// This ConfigSet is keyed on domain name, because commitment durations
 	// (and thus committability) are allowed to differ per domain.
 	//
-	// If Durations.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
-	Durations regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `yaml:"durations_per_domain"`
+	// If DurationsPerDomain.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
+	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `yaml:"durations_per_domain"`
 
 	MinConfirmDate Option[time.Time]                `yaml:"min_confirm_date"`
 	UntilPercent   Option[float64]                  `yaml:"until_percent"`
@@ -74,7 +74,7 @@ type ScopedCommitmentBehavior struct {
 // ForDomain resolves Durations.Pick() using the provided domain name.
 func (b CommitmentBehavior) ForDomain(domainName string) ScopedCommitmentBehavior {
 	return ScopedCommitmentBehavior{
-		Durations:      b.Durations.Pick(domainName).UnwrapOr(nil),
+		Durations:      b.DurationsPerDomain.Pick(domainName).UnwrapOr(nil),
 		MinConfirmDate: b.MinConfirmDate,
 		UntilPercent:   b.UntilPercent,
 		ConversionRule: b.ConversionRule,
@@ -86,7 +86,7 @@ func (b CommitmentBehavior) ForDomain(domainName string) ScopedCommitmentBehavio
 func (b CommitmentBehavior) ForCluster() ScopedCommitmentBehavior {
 	// merge all `b.Durations[].Value` together
 	var allDurations []limesresources.CommitmentDuration
-	for _, entry := range b.Durations {
+	for _, entry := range b.DurationsPerDomain {
 		if len(allDurations) == 0 {
 			// optimization: avoid the loop below if possible
 			allDurations = slices.Clone(entry.Value)
