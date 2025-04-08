@@ -130,7 +130,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 			resData.Quota = *resReport.Quota
 		}
 		if resReport.Forbidden {
-			resData.MaxQuota = p2u64(0) // this is a temporary approximation; TODO: make Forbidden a first-class citizen in Limes core
+			resData.MaxQuota = new(uint64) // this is a temporary approximation; TODO: make Forbidden a first-class citizen in Limes core
 		}
 
 		resData.UsageData = make(core.PerAZ[core.UsageData], len(resReport.PerAZ))
