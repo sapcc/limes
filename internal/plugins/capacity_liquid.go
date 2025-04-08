@@ -71,7 +71,7 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 	if err != nil {
 		return err
 	}
-	err = CheckResourceTopologies(p.LiquidServiceInfo)
+	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
 	return err
 }
 
@@ -89,6 +89,10 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	if resp.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+	}
+	err = liquid.ValidateCapacityReport(resp, req, p.LiquidServiceInfo)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
@@ -110,23 +114,6 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 			}
 		}
 		resultInService[resName] = resData
-	}
-
-	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
-	var errs []error
-	for _, resourceName := range resourceNames {
-		if !p.LiquidServiceInfo.Resources[resourceName].HasCapacity {
-			continue
-		}
-		perAZ := resp.Resources[resourceName].PerAZ
-		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
-		err := MatchLiquidReportToTopology(perAZ, topology)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
-		}
-	}
-	if len(errs) > 0 {
-		return nil, nil, errors.Join(errs...)
 	}
 
 	result = map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{

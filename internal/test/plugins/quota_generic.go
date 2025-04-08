@@ -24,7 +24,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,7 +36,6 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/plugins"
 )
 
 func init() {
@@ -166,7 +167,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	}
 
 	if len(p.LiquidServiceInfo.Resources) > 0 {
-		err := plugins.CheckResourceTopologies(p.LiquidServiceInfo)
+		err := liquid.ValidateServiceInfo(p.LiquidServiceInfo)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -174,10 +175,10 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 
 	if len(p.ReportedAZs) > 0 {
 		var errs []error
-		resourceNames := plugins.SortedMapKeys(p.LiquidServiceInfo.Resources)
+		resourceNames := sortedMapKeys(p.LiquidServiceInfo.Resources)
 		for _, resourceName := range resourceNames {
 			topology := p.LiquidServiceInfo.Resources[resourceName].Topology
-			err := plugins.MatchLiquidReportToTopology(p.ReportedAZs, topology)
+			err := matchLiquidReportToTopology(p.ReportedAZs, topology)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
 			}
@@ -320,4 +321,34 @@ func (p *GenericQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project
 		project.Domain.UUID, project.UUID,
 	)
 	return nil
+}
+
+func sortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
+	sortedKeys := slices.Collect(maps.Keys(mapToSort))
+	slices.Sort(sortedKeys)
+	return sortedKeys
+}
+
+func matchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]V, topology liquid.Topology) (err error) {
+	_, anyExists := perAZReport[liquid.AvailabilityZoneAny]
+	_, unknownExists := perAZReport[liquid.AvailabilityZoneUnknown]
+	switch topology {
+	case liquid.FlatTopology:
+		if len(perAZReport) == 1 && anyExists {
+			return
+		}
+	case liquid.AZAwareTopology:
+		if len(perAZReport) > 0 && !anyExists {
+			return
+		}
+	case liquid.AZSeparatedTopology:
+		if len(perAZReport) > 0 && !anyExists && !unknownExists {
+			return
+		}
+	case "":
+		return
+	}
+
+	reportedAZs := sortedMapKeys(perAZReport)
+	return fmt.Errorf("scrape with topology type: %s returned AZs: %v", topology, reportedAZs)
 }
