@@ -790,7 +790,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 				result["limes_autogrow_quota_overcommit_threshold_percent"] = append(result["limes_autogrow_quota_overcommit_threshold_percent"], metric)
 			}
 
-			for _, duration := range behavior.CommitmentDurations {
+			for _, duration := range behaviorCache.GetCommitmentBehavior(dbServiceType, dbResourceName).Durations {
 				labels := fmt.Sprintf(`duration=%q,resource=%q,service=%q,service_name=%q`,
 					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 				)
@@ -855,18 +855,24 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.Se
 // Caches the result of repeated cluster.BehaviorForResource() calls.
 //
 // NOTE: This looks like something that should be baked into BehaviorForResource() itself.
-// But since the entire handling of ServiceInfo and ResourceInfo is due for an overhaul soonish,
-// I don't want to complicate the core implementation over there.
+// But then cache access would need to be protected by a mutex, which would likely negate the performance gain from caching.
+// We could revisit the idea of more central caching once <https://github.com/golang/go/issues/71076> makes thread-safe maps more viable.
+//
+// Alternatively, once ServiceInfo and ResourceInfo gets refactored towards being stored in the DB,
+// we could consider persisting behavior information there as well. But this might introduce additional
+// complications to account for behaviors being updated without the underlying ResourceInfo changing.
 type resourceAndRateBehaviorCache struct {
 	cluster   *core.Cluster
 	cache     map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
 	rateCache map[db.ServiceType]map[liquid.RateName]core.RateBehavior
+	cbCache   map[db.ServiceType]map[liquid.ResourceName]core.ScopedCommitmentBehavior
 }
 
 func newResourceAndRateBehaviorCache(cluster *core.Cluster) resourceAndRateBehaviorCache {
 	cache := make(map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior)
 	rateCache := make(map[db.ServiceType]map[liquid.RateName]core.RateBehavior)
-	return resourceAndRateBehaviorCache{cluster, cache, rateCache}
+	cbCache := make(map[db.ServiceType]map[liquid.ResourceName]core.ScopedCommitmentBehavior)
+	return resourceAndRateBehaviorCache{cluster, cache, rateCache, cbCache}
 }
 
 func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
@@ -889,6 +895,18 @@ func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateNam
 	if !exists {
 		behavior = c.cluster.BehaviorForRate(srvType, rateName)
 		c.rateCache[srvType][rateName] = behavior
+	}
+	return behavior
+}
+
+func (c resourceAndRateBehaviorCache) GetCommitmentBehavior(srvType db.ServiceType, resName liquid.ResourceName) core.ScopedCommitmentBehavior {
+	if c.cbCache[srvType] == nil {
+		c.cbCache[srvType] = make(map[liquid.ResourceName]core.ScopedCommitmentBehavior)
+	}
+	behavior, exists := c.cbCache[srvType][resName]
+	if !exists {
+		behavior = c.cluster.CommitmentBehaviorForResource(srvType, resName).ForCluster()
+		c.cbCache[srvType][resName] = behavior
 	}
 	return behavior
 }

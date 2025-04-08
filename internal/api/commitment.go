@@ -19,6 +19,7 @@
 package api
 
 import (
+	"cmp"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -220,7 +221,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	}
 }
 
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *core.AZResourceLocation, *core.ResourceBehavior) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (*limesresources.CommitmentRequest, *core.AZResourceLocation, *core.ScopedCommitmentBehavior) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
@@ -238,9 +239,9 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return nil, nil, nil
 	}
-	behavior := p.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
 	resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
-	if len(behavior.CommitmentDurations) == 0 {
+	if len(behavior.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil
 	}
@@ -255,8 +256,8 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 			return nil, nil, nil
 		}
 	}
-	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) // panic on error is acceptable here, marshals should never fail
+	if !slices.Contains(behavior.Durations, req.Duration) {
+		buf := must.Return(json.Marshal(behavior.Durations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return nil, nil, nil
@@ -289,7 +290,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
 	if req == nil {
 		return
 	}
@@ -313,7 +314,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
-	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
+	if !behavior.CanConfirmCommitmentsAt(now) {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
@@ -341,7 +342,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
 	if req == nil {
 		return
 	}
@@ -368,9 +369,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
 		return
 	}
-	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
-		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
-			msg := "this commitment needs a `confirm_by` timestamp at or after " + behavior.CommitmentMinConfirmDate.Format(time.RFC3339)
+	if minConfirmBy, ok := behavior.MinConfirmDate.Unpack(); ok && minConfirmBy.After(now) {
+		if req.ConfirmBy == nil || req.ConfirmBy.Before(minConfirmBy) {
+			msg := "this commitment needs a `confirm_by` timestamp at or after " + minConfirmBy.Format(time.RFC3339)
 			http.Error(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
@@ -1179,6 +1180,16 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// TODO v2 API: This endpoint should be project-scoped in order to make it
+	// easier to select the correct domain scope for the CommitmentBehavior.
+	forTokenScope := func(behavior core.CommitmentBehavior) core.ScopedCommitmentBehavior {
+		name := cmp.Or(token.ProjectScopeDomainName(), token.DomainScopeName(), "")
+		if name != "" {
+			return behavior.ForDomain(name)
+		}
+		return behavior.ForCluster()
+	}
+
 	// validate request
 	vars := mux.Vars(r)
 	nm := core.BuildResourceNameMapping(p.Cluster)
@@ -1191,36 +1202,33 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
+	sourceBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(sourceServiceType, sourceResourceName))
 	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
-	for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
-		for targetResourceName, targetResInfo := range quotaPlugin.Resources() {
-			targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
-			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
-				continue
-			}
-			if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
-				continue
-			}
-			if sourceResInfo.Unit != targetResInfo.Unit {
-				continue
-			}
-			if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
-				continue
-			}
+	if sourceBehavior.ConversionRule.IsSome() {
+		for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
+			for targetResourceName, targetResInfo := range quotaPlugin.Resources() {
+				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
+					continue
+				}
+				if sourceResInfo.Unit != targetResInfo.Unit {
+					continue
+				}
 
-			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-			apiServiceType, apiResourceName, ok := nm.MapToV1API(targetServiceType, targetResourceName)
-			if ok {
-				conversions = append(conversions, limesresources.CommitmentConversionRule{
-					FromAmount:     fromAmount,
-					ToAmount:       toAmount,
-					TargetService:  apiServiceType,
-					TargetResource: apiResourceName,
-				})
+				targetBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(targetServiceType, targetResourceName))
+				if rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior).Unpack(); ok {
+					apiServiceType, apiResourceName, ok := nm.MapToV1API(targetServiceType, targetResourceName)
+					if ok {
+						conversions = append(conversions, limesresources.CommitmentConversionRule{
+							FromAmount:     rate.FromAmount,
+							ToAmount:       rate.ToAmount,
+							TargetService:  apiServiceType,
+							TargetResource: apiResourceName,
+						})
+					}
+				}
 			}
 		}
 	}
@@ -1277,7 +1285,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
+	sourceBehavior := p.Cluster.CommitmentBehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName).ForDomain(dbDomain.Name)
 
 	// section: targetBehavior
 	var parseTarget struct {
@@ -1299,17 +1307,18 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
+	targetBehavior := p.Cluster.CommitmentBehaviorForResource(targetServiceType, targetResourceName).ForDomain(dbDomain.Name)
 	if sourceLoc.ResourceName == targetResourceName && sourceLoc.ServiceType == targetServiceType {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
 	}
-	if len(targetBehavior.CommitmentDurations) == 0 {
+	if len(targetBehavior.Durations) == 0 {
 		msg := fmt.Sprintf("commitments are not enabled for resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+	rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior).Unpack()
+	if !ok {
 		msg := fmt.Sprintf("commitment is not convertible into resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
@@ -1321,11 +1330,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
-	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
-	remainderAmount := req.SourceAmount % fromAmount
+	conversionAmount := (req.SourceAmount / rate.FromAmount) * rate.ToAmount
+	remainderAmount := req.SourceAmount % rate.FromAmount
 	if remainderAmount > 0 {
-		msg := fmt.Sprintf("amount: %v does not fit into conversion rate of: %v", req.SourceAmount, fromAmount)
+		msg := fmt.Sprintf("amount: %v does not fit into conversion rate of: %v", req.SourceAmount, rate.FromAmount)
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
@@ -1448,13 +1456,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {
-	divisor := GetGreatestCommonDivisor(source.CommitmentConversion.Weight, target.CommitmentConversion.Weight)
-	fromAmount = target.CommitmentConversion.Weight / divisor
-	toAmount = source.CommitmentConversion.Weight / divisor
-	return fromAmount, toAmount
-}
-
 // ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
 func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration")
@@ -1514,9 +1515,9 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	behavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
-	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, behavior.CommitmentDurations)
+	behavior := p.Cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName).ForDomain(dbDomain.Name)
+	if !slices.Contains(behavior.Durations, req.Duration) {
+		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, behavior.Durations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}

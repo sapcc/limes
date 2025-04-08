@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -39,6 +38,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -84,6 +84,11 @@ const (
 						- name:   service/shared/objects:read/list
 							limit:  3
 							window: 1s
+				commitment_behavior_per_resource:
+					- key: 'capacity|things'
+						value:
+							durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
+							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 
 			- service_type: unshared
 				type: --test-generic
@@ -106,10 +111,6 @@ const (
 			# check that category mapping is reported
 			- resource: '.+/capacity_portion'
 				category: portion
-			# check how commitment config is reported
-			- resource: 'shared/(capacity|things)$'
-				commitment_durations: ["1 hour", "2 hours"]
-				commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 	`
 )
 
@@ -731,6 +732,10 @@ func Test_LargeProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data-minimal.sql")
 	// we don't care about the various ResourceBehaviors in this test
 	s.Cluster.Config.ResourceBehaviors = nil
+	for idx, scfg := range s.Cluster.Config.Services {
+		scfg.CommitmentBehaviorPerResource = nil
+		s.Cluster.Config.Services[idx] = scfg
+	}
 
 	// template for how a single project will look in the output JSON
 	makeProjectJSON := func(idx int, projectName, projectUUID string) assert.JSONObject {
@@ -1001,9 +1006,13 @@ func Test_Historical_Usage(t *testing.T) {
 func TestResourceRenaming(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
-	// a shorthand constructor
-	makeDurations := func(d time.Duration) []limesresources.CommitmentDuration {
-		return []limesresources.CommitmentDuration{{Short: d}}
+	// a shorthand constructor (unfortunately it is hard to construct regexpext.ConfigSet
+	// by hand because the element type (the Key/Value pair) not a named type)
+	makeDurations := func(d time.Duration) regexpext.ConfigSet[string, []limesresources.CommitmentDuration] {
+		result := make(regexpext.ConfigSet[string, []limesresources.CommitmentDuration], 1)
+		result[0].Key = ".*"
+		result[0].Value = []limesresources.CommitmentDuration{{Short: d}}
+		return result
 	}
 
 	// I want to test with various renaming configs, but matching on the full
@@ -1011,13 +1020,26 @@ func TestResourceRenaming(t *testing.T) {
 	// throughout, making a compact match; as a proxy, we set a different
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
-	baseBehaviors := []core.ResourceBehavior{
-		{FullResourceNameRx: "shared/capacity", CommitmentDurations: makeDurations(2 * time.Second)},
-		{FullResourceNameRx: "shared/capacity_portion", CommitmentDurations: makeDurations(3 * time.Second)},
-		{FullResourceNameRx: "shared/things", CommitmentDurations: makeDurations(4 * time.Second)},
-		{FullResourceNameRx: "unshared/capacity", CommitmentDurations: makeDurations(5 * time.Second)},
-		{FullResourceNameRx: "unshared/capacity_portion", CommitmentDurations: makeDurations(6 * time.Second)},
-		{FullResourceNameRx: "unshared/things", CommitmentDurations: makeDurations(7 * time.Second)},
+	for idx, scfg := range s.Cluster.Config.Services {
+		switch scfg.ServiceType {
+		case "shared":
+			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
+			scfg.CommitmentBehaviorPerResource[0].Value.Durations = makeDurations(2 * time.Second)
+			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
+			scfg.CommitmentBehaviorPerResource[1].Value.Durations = makeDurations(3 * time.Second)
+			scfg.CommitmentBehaviorPerResource[2].Key = "things"
+			scfg.CommitmentBehaviorPerResource[2].Value.Durations = makeDurations(4 * time.Second)
+		case "unshared":
+			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
+			scfg.CommitmentBehaviorPerResource[0].Value.Durations = makeDurations(5 * time.Second)
+			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
+			scfg.CommitmentBehaviorPerResource[1].Value.Durations = makeDurations(6 * time.Second)
+			scfg.CommitmentBehaviorPerResource[2].Key = "things"
+			scfg.CommitmentBehaviorPerResource[2].Value.Durations = makeDurations(7 * time.Second)
+		}
+		s.Cluster.Config.Services[idx] = scfg
 	}
 
 	// helper function that makes one GET query per structural level and checks
@@ -1110,7 +1132,7 @@ func TestResourceRenaming(t *testing.T) {
 	}
 
 	// baseline
-	s.Cluster.Config.ResourceBehaviors = slices.Clone(baseBehaviors)
+	s.Cluster.Config.ResourceBehaviors = nil
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1130,12 +1152,10 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// rename resources within a service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
-			FullResourceNameRx: "shared/things",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "shared", Name: "items"},
-		},
-	)
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNameRx: "shared/things",
+		IdentityInV1API:    core.ResourceRef{ServiceType: "shared", Name: "items"},
+	}}
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1157,12 +1177,10 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resource to a different, existing service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
-			FullResourceNameRx: "shared/things",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", Name: "other_things"},
-		},
-	)
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNameRx: "shared/things",
+		IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", Name: "other_things"},
+	}}
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1189,16 +1207,16 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resources to a different, new service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+		{
 			FullResourceNameRx: "shared/capacity",
 			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "all"},
 		},
-		core.ResourceBehavior{
+		{
 			FullResourceNameRx: "shared/capacity_portion",
 			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "part"},
 		},
-	)
+	}
 	expect("?",
 		"2 seconds: shared_capacity/all",
 		"3 seconds: shared_capacity/part",

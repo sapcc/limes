@@ -200,8 +200,22 @@ func (c *Cluster) InfoForService(serviceType db.ServiceType) ServiceInfo {
 	return plugin.ServiceInfo()
 }
 
-// BehaviorForResource returns the ResourceBehavior for the given resource in
-// the given scope.
+// This is used to reach ConfigSets stored inside type ServiceConfiguration.
+func (c *Cluster) configForService(serviceType db.ServiceType) ServiceConfiguration {
+	for _, cfg := range c.Config.Services {
+		if cfg.ServiceType == serviceType {
+			return cfg
+		}
+	}
+	return ServiceConfiguration{}
+}
+
+// CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
+func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentBehavior {
+	return c.configForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
+}
+
+// BehaviorForResource returns the ResourceBehavior for the given resource in the given service.
 func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) ResourceBehavior {
 	// default behavior
 	result := ResourceBehavior{

@@ -42,13 +42,14 @@ const testCommitmentsYAML = `
 	services:
 		- service_type: first
 			type: --test-generic
+			commitment_behavior_per_resource:
+				- key: '.*'
+					value:
+						durations_per_domain: [{ key: '.*', value: ["1 hour", "2 hours"] }]
+						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		- service_type: second
 			type: --test-generic
-	resource_behavior:
-		# the resources in "first" have commitments, the ones in "second" do not
-		- resource: first/.*
-			commitment_durations: ["1 hour", "2 hours"]
-			commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
+			commitment_behavior_per_resource: []
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
 	availability_zones: [ az-one, az-two ]
@@ -57,12 +58,13 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	services:
 		- service_type: first
 			type: --test-generic
+			commitment_behavior_per_resource: []
 		- service_type: second
 			type: --test-generic
-	resource_behavior:
-		# the resources in "first" have commitments, the ones in "second" do not
-		- resource: second/.*
-			commitment_durations: ["1 hour", "2 hours", "3 hours"]
+			commitment_behavior_per_resource:
+				- key: '.*'
+					value:
+						durations_per_domain: [{ key: '.*', value: ["1 hour", "2 hours", "3 hours"] }]
 `
 
 const testConvertCommitmentsYAML = `
@@ -72,34 +74,50 @@ const testConvertCommitmentsYAML = `
 	services:
 		- service_type: first
 			type: --test-generic
+			commitment_behavior_per_resource:
+				- key: capacity
+					value:
+						durations_per_domain: &durations [{ key: '.*', value: ["1 hour", "2 hours"] }]
+						conversion_rule: { identifier: flavor1, weight: 48 }
+				- key: '.*'
+					value: { durations_per_domain: *durations }
 		- service_type: second
 			type: --test-generic
+			commitment_behavior_per_resource:
+				- key: capacity
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor1, weight: 32 }
+				- key: '.*'
+					value: { durations_per_domain: *durations }
 		- service_type: third
 			type: --test-noop
 			params:
 				with_empty_resource: true
 				with_convert_commitments: true
-	resource_behavior:
-		- resource: first/.*
-			commitment_durations: ["1 hour", "2 hours"]
-		- resource: second/.*
-			commitment_durations: ["1 hour", "2 hours"]
-		- resource: third/.*
-			commitment_durations: ["1 hour", "2 hours"]
-		- resource: first/capacity
-			commitment_conversion: {identifier: flavor1, weight: 48}
-		- resource: second/capacity
-			commitment_conversion: {identifier: flavor1, weight: 32}
-		- resource: third/capacity_c32
-			commitment_conversion: {identifier: flavor1, weight: 32}
-		- resource: third/capacity_c48
-			commitment_conversion: {identifier: flavor1, weight: 48}
-		- resource: third/capacity_c96
-			commitment_conversion: {identifier: flavor1, weight: 96}
-		- resource: third/capacity_c120
-			commitment_conversion: {identifier: flavor1, weight: 120}
-		- resource: third/capacity2_c144
-			commitment_conversion: {identifier: flavor2, weight: 144}
+			commitment_behavior_per_resource:
+				- key: capacity_c32
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor1, weight: 32 }
+				- key: capacity_c48
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor1, weight: 48 }
+				- key: capacity_c96
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor1, weight: 96 }
+				- key: capacity_c120
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor1, weight: 120 }
+				- key: capacity2_c144
+					value:
+						durations_per_domain: *durations
+						conversion_rule: { identifier: flavor2, weight: 144 }
+				- key: '.*'
+					value: { durations_per_domain: *durations }
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {

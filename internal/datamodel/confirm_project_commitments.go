@@ -59,7 +59,7 @@ func CanConfirmNewCommitment(loc core.AZResourceLocation, resourceID db.ProjectR
 	stats := statsByAZ[loc.AvailabilityZone]
 
 	additions := map[db.ProjectResourceID]uint64{resourceID: amount}
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 	logg.Debug("checking CanConfirmNewCommitment in %s/%s/%s: resourceID = %d, amount = %d",
 		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, resourceID, amount)
 	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
@@ -77,7 +77,7 @@ func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourc
 
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: resourceID = %d -> %d, amount = %d",
 		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, sourceResourceID, targetResourceID, amount)
 	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
@@ -87,7 +87,7 @@ func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourc
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
 func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {

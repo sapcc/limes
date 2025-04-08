@@ -313,11 +313,3 @@ func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject d
 	}
 	return result, nil
 }
-
-// GetGreatestCommonDivisor is used to calculate the conversion ratios between different commitment resoucetypes.
-func GetGreatestCommonDivisor(a, b uint64) uint64 {
-	if b == 0 {
-		return a
-	}
-	return GetGreatestCommonDivisor(b, a%b)
-}
