@@ -40,9 +40,10 @@ const (
 		services:
 			- service_type: unittest
 				type: --test-generic
-		resource_behavior:
-			# enable commitments for the */capacity resources
-			- { resource: '.*/capacity', commitment_durations: [ '1 day', '3 years' ] }
+				commitment_behavior_per_resource:
+					- key: capacity
+						value:
+							durations_per_domain: [{ key: '.*', value: [ '1 day', '3 years' ] }]
 	`
 )
 

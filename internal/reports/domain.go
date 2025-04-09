@@ -360,7 +360,7 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.DomainResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
-			CommitmentConfig: behavior.ToCommitmentConfig(now),
+			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),
 		}
 		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)

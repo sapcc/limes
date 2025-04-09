@@ -361,15 +361,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 }
 
 func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
-	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName)
+	behavior := c.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
 	resInfo := c.Cluster.InfoForResource(serviceType, resourceName)
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
-	if len(behavior.CommitmentDurations) == 0 {
-		return nil
-	}
-	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
+	if len(behavior.Durations) == 0 || !behavior.CanConfirmCommitmentsAt(now) {
 		return nil
 	}
 

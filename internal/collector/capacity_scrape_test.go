@@ -105,8 +105,13 @@ const (
 		services:
 			- service_type: first
 				type: --test-generic
+				commitment_behavior_per_resource: &commitment-on-capacity
+					- key: capacity
+						value:
+							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			- service_type: second
 				type: --test-generic
+				commitment_behavior_per_resource: *commitment-on-capacity
 		capacitors:
 		- id: scans-first
 			type: --test-static
@@ -125,8 +130,6 @@ const (
 					- second/capacity
 					- second/things
 		resource_behavior:
-			# enable commitments for the */capacity resources
-			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ] }
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
 		quota_distribution_configs:

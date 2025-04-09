@@ -92,11 +92,15 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	ServiceType db.ServiceType `yaml:"service_type"`
-	PluginType  string         `yaml:"type"`
+	ServiceType db.ServiceType      `yaml:"service_type"`
+	PluginType  string              `yaml:"type"`
+	Parameters  util.YamlRawMessage `yaml:"params"` // will be unmarshalled into the QuotaPlugin instance
+
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
-	Parameters util.YamlRawMessage           `yaml:"params"`
+
+	// Use Cluster.CommitmentBehaviorForResource() to access this.
+	CommitmentBehaviorPerResource regexpext.ConfigSet[liquid.ResourceName, CommitmentBehavior] `yaml:"commitment_behavior_per_resource"`
 }
 
 // ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
@@ -208,6 +212,9 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		}
 		if srv.PluginType == "" {
 			missing(fmt.Sprintf("services[%d].type", idx))
+		}
+		for idx2, behavior := range srv.CommitmentBehaviorPerResource {
+			errs.Append(behavior.Value.Validate(fmt.Sprintf("services[%d].commitment_behavior_per_resource[%d]", idx, idx2)))
 		}
 	}
 	for idx, capa := range cluster.Capacitors {

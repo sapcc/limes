@@ -118,7 +118,7 @@ The following fields and sections are supported:
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
 | `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
-| `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
+| `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for [supported service types](#supported-service-types) and for [additional service-level configuration](#service-level-configuration). |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `mail_notifications` | no | Configuration for sending mail to project admins in response to commitment workflows (confirmation and pending expiration). [See below](#mail-support) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
@@ -153,6 +153,41 @@ The payload for this POST request will look like this:
 The recipient of this request is expected to implement some method for finding appropriate recipient mail addresses from the provided project ID, and then deliver the mail to those recipients.
 The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`.
 
+### Service-level configuration
+
+Each `services[]` section of the configuration file must contain the fields `type`, `service_type` and `params` as explained under [Supported service types](#supported-service-types) below.
+Besides that, additional configuration options are available to control special behavior for specific resources:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `commitment_behavior_per_resource` | [ConfigSet](#configset) keyed on resource name | Describes whether matching resources accept commitments, and if so, how these commitments behave. |
+| `commitment_behavior_per_resource[].value.durations_per_domain` | [ConfigSet](#configset) keyed on domain name | Commitments for matching resources can be created with any of the matching durations. Each value in this ConfigSet must be a list of duration strings in the same format as in the `commitments[].duration` attribute that appears on the resource API. If no value matches in this set, or if the matching value is explicitly an empty list, commitments may not be created in the matching resource and domain. |
+| `commitment_behavior_per_resource[].min_confirm_date` | timestamp in RFC 3339 format | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
+| `commitment_behavior_per_resource[].until_percent` | float | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
+| `commitment_behavior_per_resource[].conversion_rule.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
+| `commitment_behavior_per_resource[].conversion_rule.weight` | no | If given, must contain an integer. When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources gives the conversion rate for the commitment amount. (Or put another way, the product of commitment amount and conversion weight must remain the same before and after the conversion.) For example, if resource `foo` has a weight of 2 and `bar` has a weight of 5, the conversion rate is 2:5, meaning that a commitment for 25 units of `foo` would be converted into a commitment for 10 units of `bar`. |
+
+#### ConfigSet
+
+Every field that is documented to be "a ConfigSet keyed on some string identifier" is structured as a list of key and value pairs, like so:
+
+```yaml
+example_set:
+  - { key: 'foo.*', value: 23 }
+  - { key: '.+bar', value: 42 }
+  - { key: five,    value:  5 }
+```
+
+The keys in the set are [regexes](https://pkg.go.dev/regexp/syntax) that are matched against the identifier in question.
+When matching, the anchors `^` and `$` are implied at both ends, respectively, so the regex must match the entire identifier.
+The first matching entry in order will apply to the identified object.
+
+For example, suppose that the example set shown above is a ConfigSet keyed on resource names.
+The resource `foobar` would match the value of 23, because the first rule matches.
+The value 42 would not be used, even though the second rule matches, because the first matching rule takes priority.
+The resource `unknown` would not match any value, because no rule matches.
+If you want to have a fallback value that matches if nothing else does, put a rule at the end of the list with the key `.*`.
+
 ### Resource behavior
 
 Some special behaviors for resources can be configured in the `resource_behavior[]` section. Each entry in this section can match multiple resources.
@@ -161,11 +196,6 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | --- | --- | --- |
 | `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
 | `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
-| `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. If empty, this resource does not accept commitments. |
-| `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
-| `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
-| `resource_behavior[].commitment_conversion.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
-| `resource_behavior[].commitment_conversion.weight` | no | If given, must contain an integer. When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources gives the conversion rate for the commitment amount. For example, if resource `foo` has a weight of 2 and `bar` has a weight of 5, the conversion rate is 2:5, meaning that a commitment for 10 units of `foo` would be converted into a commitment for 25 units of `bar`. |
 | `resource_behavior[].identity_in_v1_api` | no | If given, must be a slash-concatenated pair of service type and resource name, e.g. `myservice/someresource`. The resource will appear as having the specified name and occurring within the specified service when queried on the v1 API. See [*Resource renaming*](#resource-renaming) for details. |
 | `resource_behavior[].category` | no | If given, matching resources belong to the given category. This is a UI hint to subdivide resources within the same service into logical groupings. |
 

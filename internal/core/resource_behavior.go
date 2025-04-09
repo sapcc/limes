@@ -22,7 +22,6 @@ package core
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -34,15 +33,11 @@ import (
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
-	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
-	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
-	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
-	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
-	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
-	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
-	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
-	TranslationRuleInV1API   TranslationRule                     `yaml:"translation_rule_in_v1_api"`
-	Category                 string                              `yaml:"category"`
+	FullResourceNameRx     regexpext.BoundedRegexp `yaml:"resource"`
+	OvercommitFactor       liquid.OvercommitFactor `yaml:"overcommit_factor"`
+	IdentityInV1API        ResourceRef             `yaml:"identity_in_v1_api"`
+	TranslationRuleInV1API TranslationRule         `yaml:"translation_rule_in_v1_api"`
+	Category               string                  `yaml:"category"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
@@ -53,28 +48,8 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
 	}
-	if b.CommitmentUntilPercent != nil {
-		if *b.CommitmentUntilPercent > 100 {
-			errs.Addf("invalid value: %s.commitment_until_percent may not be bigger than 100", path)
-		}
-	}
 
 	return errs
-}
-
-// ToCommitmentConfig returns the CommitmentConfiguration for this resource,
-// or nil if commitments are not allowed on this resource.
-func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.CommitmentConfiguration {
-	if len(b.CommitmentDurations) == 0 {
-		return nil
-	}
-	result := limesresources.CommitmentConfiguration{
-		Durations: b.CommitmentDurations,
-	}
-	if b.CommitmentMinConfirmDate != nil && b.CommitmentMinConfirmDate.After(now) {
-		result.MinConfirmBy = &limes.UnixEncodedTime{Time: *b.CommitmentMinConfirmDate}
-	}
-	return &result
 }
 
 // BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
@@ -93,17 +68,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 	if other.OvercommitFactor != 0 {
 		b.OvercommitFactor = other.OvercommitFactor
 	}
-	b.CommitmentDurations = append(b.CommitmentDurations, other.CommitmentDurations...)
-	if other.CommitmentMinConfirmDate != nil {
-		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
-			b.CommitmentMinConfirmDate = other.CommitmentMinConfirmDate
-		}
-	}
-	if other.CommitmentUntilPercent != nil {
-		if b.CommitmentUntilPercent == nil || *b.CommitmentUntilPercent > *other.CommitmentUntilPercent {
-			b.CommitmentUntilPercent = other.CommitmentUntilPercent
-		}
-	}
 	if other.IdentityInV1API != (ResourceRef{}) {
 		b.IdentityInV1API.ServiceType = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.ServiceType, fullResourceName)
 		b.IdentityInV1API.Name = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.Name, fullResourceName)
@@ -113,9 +77,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 	}
 	if other.Category != "" {
 		b.Category = interpolateFromNameMatch(other.FullResourceNameRx, other.Category, fullResourceName)
-	}
-	if other.CommitmentConversion != (CommitmentConversion{}) {
-		b.CommitmentConversion = other.CommitmentConversion
 	}
 }
 
@@ -164,9 +125,4 @@ func (r *RefInService[S, R]) UnmarshalYAML(unmarshal func(any) error) error {
 		Name:        R(fields[1]),
 	}
 	return nil
-}
-
-type CommitmentConversion struct {
-	Identifier string `yaml:"identifier"`
-	Weight     uint64 `yaml:"weight"`
 }

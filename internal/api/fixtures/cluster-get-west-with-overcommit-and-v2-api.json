@@ -10,6 +10,13 @@
             "name": "capacity",
             "unit": "B",
             "quota_distribution_model": "autogrow",
+            "commitment_config": {
+              "durations": [
+                "1 hour",
+                "2 hours"
+              ],
+              "min_confirm_by": 604800
+            },
             "capacity": 185,
             "per_az": {
               "az-one": {
@@ -64,6 +71,13 @@
           {
             "name": "things",
             "quota_distribution_model": "autogrow",
+            "commitment_config": {
+              "durations": [
+                "1 hour",
+                "2 hours"
+              ],
+              "min_confirm_by": 604800
+            },
             "capacity": 615,
             "raw_capacity": 246,
             "per_az": {
