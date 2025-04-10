@@ -43,8 +43,9 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
+	testplugins "github.com/sapcc/limes/internal/test/plugins"
 )
 
 func TestMain(m *testing.M) {
@@ -61,11 +62,10 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
 				params:
-					rate_infos:
-						"service/shared/objects:delete":    { unit: MiB }
-						"service/shared/objects:unlimited": { unit: KiB }
+					area: shared
+					test_mode: true
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -91,10 +91,10 @@ const (
 							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 
 			- service_type: unshared
-				type: --test-generic
+				type: liquid
 				params:
-					rate_infos:
-						"service/unshared/instances:delete": {}
+					area: unshared
+					test_mode: true
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -109,18 +109,26 @@ const (
 
 		resource_behavior:
 			# check that category mapping is reported
-			- resource: '.+/capacity_portion'
-				category: portion
+			- resource: '.+/capacity_az_separated'
+				category: foo_category
 	`
 )
 
-func setupTest(t *testing.T, startData string) test.Setup {
+func setupTest(t *testing.T, startData string) (s test.Setup) {
 	t.Helper()
-	return test.NewSetup(t,
+	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
+	s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/shared/objects:delete":    {Unit: liquid.UnitMebibytes},
+		"service/shared/objects:unlimited": {Unit: liquid.UnitKibibytes},
+	}
+	s.Cluster.QuotaPlugins["unshared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/unshared/instances:delete": {},
+	}
+	return
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
@@ -289,7 +297,7 @@ func Test_ClusterOperations(t *testing.T) {
 
 func Test_DomainOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -367,7 +375,7 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_ProjectOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -897,7 +905,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 3 AND service_id = 2 AND name = 'things';
 		`, value)
 	}
 
@@ -912,7 +920,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 3 AND service_id = 2 AND name = 'things';
 	`)
 
 	// happy case: set value with unit conversion
@@ -923,7 +931,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 	`)
 
 	// happy case: set max quota with project permissions
@@ -935,7 +943,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 3 AND service_id = 2 AND name = 'things';
 	`, 500)
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
 
@@ -969,12 +977,15 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
+	res := s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
+	res.HasQuota = false
+	s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = res
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity_portion", "max_quota": 1000}),
+		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource shared/capacity_portion does not track quota\n"),
+		ExpectBody:   assert.StringData("resource shared/capacity does not track quota\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid unit
@@ -989,7 +1000,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}'  WHERE id=10 AND resource_id=5 AND az='az-one'`)
+	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}'  WHERE id=7 AND resource_id=4 AND az='az-one'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1026,18 +1037,14 @@ func TestResourceRenaming(t *testing.T) {
 			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
 			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
 			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
+			scfg.CommitmentBehaviorPerResource[1].Key = "things"
 			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
-			scfg.CommitmentBehaviorPerResource[2].Key = "things"
-			scfg.CommitmentBehaviorPerResource[2].Value.DurationsPerDomain = makeDurations(4 * time.Second)
 		case "unshared":
 			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
 			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(5 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "capacity_portion"
-			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(6 * time.Second)
-			scfg.CommitmentBehaviorPerResource[2].Key = "things"
-			scfg.CommitmentBehaviorPerResource[2].Value.DurationsPerDomain = makeDurations(7 * time.Second)
+			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
+			scfg.CommitmentBehaviorPerResource[1].Key = "things"
+			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
 		}
 		s.Cluster.Config.Services[idx] = scfg
 	}
@@ -1135,20 +1142,17 @@ func TestResourceRenaming(t *testing.T) {
 	s.Cluster.Config.ResourceBehaviors = nil
 	expect("?",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
-		"4 seconds: shared/things",
-		"5 seconds: unshared/capacity",
-		"6 seconds: unshared/capacity_portion",
-		"7 seconds: unshared/things",
+		"3 seconds: shared/things",
+		"4 seconds: unshared/capacity",
+		"5 seconds: unshared/things",
 	)
 	expect("?service=shared",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
-		"4 seconds: shared/things",
+		"3 seconds: shared/things",
 	)
 	expect("?resource=things",
-		"4 seconds: shared/things",
-		"7 seconds: unshared/things",
+		"3 seconds: shared/things",
+		"5 seconds: unshared/things",
 	)
 
 	// rename resources within a service
@@ -1158,22 +1162,19 @@ func TestResourceRenaming(t *testing.T) {
 	}}
 	expect("?",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
-		"4 seconds: shared/items",
-		"5 seconds: unshared/capacity",
-		"6 seconds: unshared/capacity_portion",
-		"7 seconds: unshared/things",
+		"3 seconds: shared/items",
+		"4 seconds: unshared/capacity",
+		"5 seconds: unshared/things",
 	)
 	expect("?service=shared",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
-		"4 seconds: shared/items",
+		"3 seconds: shared/items",
 	)
 	expect("?resource=items",
-		"4 seconds: shared/items",
+		"3 seconds: shared/items",
 	)
 	expect("?resource=things",
-		"7 seconds: unshared/things",
+		"5 seconds: unshared/things",
 	)
 
 	// move resource to a different, existing service
@@ -1183,60 +1184,49 @@ func TestResourceRenaming(t *testing.T) {
 	}}
 	expect("?",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
-		"4 seconds: unshared/other_things",
-		"5 seconds: unshared/capacity",
-		"6 seconds: unshared/capacity_portion",
-		"7 seconds: unshared/things",
+		"3 seconds: unshared/other_things",
+		"4 seconds: unshared/capacity",
+		"5 seconds: unshared/things",
 	)
 	expect("?service=shared",
 		"2 seconds: shared/capacity",
-		"3 seconds: shared/capacity_portion",
 	)
 	expect("?service=unshared",
-		"4 seconds: unshared/other_things",
-		"5 seconds: unshared/capacity",
-		"6 seconds: unshared/capacity_portion",
-		"7 seconds: unshared/things",
+		"3 seconds: unshared/other_things",
+		"4 seconds: unshared/capacity",
+		"5 seconds: unshared/things",
 	)
 	expect("?resource=other_things",
-		"4 seconds: unshared/other_things",
+		"3 seconds: unshared/other_things",
 	)
 	expect("?resource=things",
-		"7 seconds: unshared/things",
+		"5 seconds: unshared/things",
 	)
 
-	// move resources to a different, new service
+	// move resource to a different, new service
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
 		{
 			FullResourceNameRx: "shared/capacity",
 			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "all"},
 		},
-		{
-			FullResourceNameRx: "shared/capacity_portion",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "part"},
-		},
 	}
 	expect("?",
 		"2 seconds: shared_capacity/all",
-		"3 seconds: shared_capacity/part",
-		"4 seconds: shared/things",
-		"5 seconds: unshared/capacity",
-		"6 seconds: unshared/capacity_portion",
-		"7 seconds: unshared/things",
+		"3 seconds: shared/things",
+		"4 seconds: unshared/capacity",
+		"5 seconds: unshared/things",
 	)
 	expect("?service=shared",
-		"4 seconds: shared/things",
+		"3 seconds: shared/things",
 	)
 	expect("?service=shared_capacity",
 		"2 seconds: shared_capacity/all",
-		"3 seconds: shared_capacity/part",
 	)
 	expect("?resource=all",
 		"2 seconds: shared_capacity/all",
 	)
 	expect("?resource=capacity",
-		"5 seconds: unshared/capacity",
+		"4 seconds: unshared/capacity",
 	)
 }
 
@@ -1269,6 +1259,11 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 func Test_SeparatedTopologyOperations(t *testing.T) {
 	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
 	s := setupTest(t, "fixtures/start-data-az-separated.sql")
+	s.Cluster.QuotaPlugins["shared"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity_az_separated"] = liquid.ResourceInfo{
+		Unit:     liquid.UnitBytes,
+		Topology: liquid.AZSeparatedTopology,
+		HasQuota: true,
+	}
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",

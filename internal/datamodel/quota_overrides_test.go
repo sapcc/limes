@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -41,9 +42,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 			- service_type: second
-				type: --test-generic
+				type: liquid
+				params:
+					area: second
+					test_mode: true
 	`
 
 	testQuotaOverridesWithRenamingConfigYAML = `
@@ -52,9 +59,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: first
-				type: --test-generic
+				type: liquid
+				params:
+					area: first
+					test_mode: true
 			- service_type: second
-				type: --test-generic
+				type: liquid
+				params:
+					area: second
+					test_mode: true
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
@@ -101,6 +114,8 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testQuotaOverridesNoRenamingConfigYAML),
 	)
+	// TODO: This essentially does nothing and is only used to import internal/plugins. Otherwise, the liquid plugin is not registered
+	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 	overrides, errs := LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {
 		t.Error(err.Error())
