@@ -31,3 +31,6 @@ INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator
 -- expiring short-term commitments should not be queued and be marked as notified
 INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (8, 1, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400), 'planned', '{}'::jsonb);
 INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirmed_at, duration, expires_at, state, creation_context_json) VALUES (9, 1, 10, UNIX(0), 'dummy', 'dummy', UNIX(0), '10 days', UNIX(777600), 'active', '{}'::jsonb);
+
+-- superseded commitments should not be queued for notifications
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, creation_context_json) VALUES (10, 4, 1, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(2246400), 'superseded', '{}'::jsonb);

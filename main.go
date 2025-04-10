@@ -238,8 +238,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// start mail processing if requested
 	if mc, ok := mailClient.Unpack(); ok {
 		if !osext.GetenvBool("LIMES_BLOCK_EXPIRY_NOTIFICATIONS") {
-			// ^ This is a hidden flag to block expiry notifications from being sent
-			//   until we have the "Renew" functionality available on the UI.
+			// ^ This is a hidden flag to block expiry notifications from being sent if necessary.
 			go c.ExpiringCommitmentNotificationJob(nil).Run(ctx)
 		}
 		go c.MailDeliveryJob(nil, mc).Run(ctx)
