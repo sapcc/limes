@@ -109,7 +109,7 @@ const (
 	`
 )
 
-func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, plugin *plugins.LiquidQuotaPlugin, serviceInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
+func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, plugin *plugins.LiquidQuotaPlugin, serviceInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
 	s = test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
@@ -126,14 +126,14 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:                liquid.UnitBytes,
-				Topology:            topology,
+				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
 				HasQuota:            true,
 				NeedsResourceDemand: true,
 			},
 			"things": {
 				Unit:        liquid.UnitNone,
-				Topology:    topology,
+				Topology:    liquid.AZAwareTopology,
 				HasCapacity: false,
 				HasQuota:    true,
 			},
@@ -152,12 +152,10 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {
 						Usage:         0,
-						Quota:         pointerTo(int64(50)),
 						PhysicalUsage: new(uint64),
 					},
 					"az-two": {
 						Usage:         0,
-						Quota:         pointerTo(int64(50)),
 						PhysicalUsage: new(uint64),
 					},
 				},
@@ -167,7 +165,6 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {
 						Usage: 2,
-						Quota: pointerTo(int64(21)),
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
@@ -181,7 +178,6 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 					},
 					"az-two": {
 						Usage: 2,
-						Quota: pointerTo(int64(21)),
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
@@ -205,7 +201,7 @@ func commonComplexScrapeTestSetup(t *testing.T, topology liquid.Topology) (s tes
 }
 
 func Test_ScrapeSuccess(t *testing.T) {
-	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareTopology)
+	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t)
 	plugin.LiquidServiceInfo = serviceInfo
 	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(serviceUsageReport)
 
@@ -478,7 +474,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	s, job, withLabel, _, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZAwareTopology)
+	s, job, withLabel, _, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^during resource scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
@@ -654,7 +650,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	plugin.LiquidServiceInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"things": {Unit: limes.UnitNone, HasQuota: true},
+			"things": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
 	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
@@ -666,7 +662,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	// check that Scrape() behaves properly when encountering a quota plugin with
 	// no Resources() (in the wild, this can happen because some quota plugins
 	// only have Rates())
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during resource scrape of project germany/berlin: missing report for resource "things"`))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during resource scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`))
 
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -674,7 +670,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, -1);
-		INSERT INTO project_services (id, project_id, type, scraped_at, rates_stale, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, TRUE, %[1]d, 'missing report for resource "things"', %[2]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, rates_stale, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, TRUE, %[1]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
@@ -682,9 +678,29 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 }
 
 func Test_TopologyScrapes(t *testing.T) {
-	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t, liquid.AZSeparatedTopology)
+	s, job, withLabel, syncJob, plugin, serviceInfo, serviceUsageReport := commonComplexScrapeTestSetup(t)
 	plugin.LiquidServiceInfo = serviceInfo
 	plugin.LiquidClient.(*test.MockLiquidClient).SetUsageReport(serviceUsageReport)
+
+	// use AZSeperated topology and adjust quota reporting accordingly
+	resInfoCap := serviceInfo.Resources["capacity"]
+	resInfoThings := serviceInfo.Resources["things"]
+	resCap := serviceUsageReport.Resources["capacity"]
+	resThings := serviceUsageReport.Resources["things"]
+
+	resInfoCap.Topology = liquid.AZSeparatedTopology
+	resInfoThings.Topology = liquid.AZSeparatedTopology
+	serviceInfo.Resources["capacity"] = resInfoCap
+	serviceInfo.Resources["things"] = resInfoThings
+
+	resCap.Quota = nil
+	resCap.PerAZ["az-one"].Quota = p2i64(50)
+	resCap.PerAZ["az-two"].Quota = p2i64(50)
+	resThings.Quota = nil
+	resThings.PerAZ["az-one"].Quota = p2i64(21)
+	resThings.PerAZ["az-two"].Quota = p2i64(21)
+	serviceUsageReport.Resources["capacity"] = resCap
+	serviceUsageReport.Resources["things"] = resThings
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
@@ -749,9 +765,12 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 
 	// topology of a resource changes. Reset AZ-separated backend_quota
-	resourceEntry := serviceInfo.Resources["things"]
-	resourceEntry.Topology = liquid.AZAwareTopology
-	serviceInfo.Resources["things"] = resourceEntry
+	resInfoThings.Topology = liquid.AZAwareTopology
+	serviceInfo.Resources["things"] = resInfoThings
+	resThings.Quota = pointerTo(int64(42))
+	resThings.PerAZ["az-one"].Quota = nil
+	resThings.PerAZ["az-two"].Quota = nil
+
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -778,99 +797,14 @@ func Test_TopologyScrapes(t *testing.T) {
 	)
 
 	s.Clock.StepBy(scrapeInterval)
-	// positive: missing AZ in resource report will be created by the scraper in order to assign basequota later.
-	// warning: any AZs will be removed, because resource things switches from AZAware to AZSeparated.
-	resourceEntry.Topology = liquid.AZSeparatedTopology
-	serviceInfo.Resources["things"] = resourceEntry
-	delete(serviceUsageReport.Resources["things"].PerAZ, "az-two")
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-	checkedAt1 = s.Clock.Now().Add(-5 * time.Second)
-	checkedAt2 = s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_az_resources WHERE id = 10 AND resource_id = 4 AND az = 'any';
-		UPDATE project_az_resources SET backend_quota = 21 WHERE id = 3 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_az_resources SET usage = 0, subresources = '', historical_usage = '{"t":[%[1]d,%[3]d],"v":[2,0]}' WHERE id = 4 AND resource_id = 2 AND az = 'az-two';
-		UPDATE project_az_resources SET backend_quota = 21 WHERE id = 7 AND resource_id = 4 AND az = 'az-one';
-		UPDATE project_az_resources SET usage = 0, subresources = '', historical_usage = '{"t":[%[2]d,%[5]d],"v":[2,0]}' WHERE id = 8 AND resource_id = 4 AND az = 'az-two';
-		DELETE FROM project_az_resources WHERE id = 9 AND resource_id = 2 AND az = 'any';
-		UPDATE project_resources SET quota = NULL, backend_quota = NULL WHERE id = 2 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = NULL, backend_quota = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[5]d, checked_at = %[5]d, next_scrape_at = %[6]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
-	`,
-		scrapedAt1.Unix(), scrapedAt2.Unix(),
-		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
-		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
-	)
+	// negative: service info validation should fail with invalid AZs
+	resInfoCap.Topology = "invalidAZ1"
+	serviceInfo.Resources["capacity"] = resInfoCap
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 
 	s.Clock.StepBy(scrapeInterval)
-	// negative: scrape with flat topology returns invalid AZs
-	resourceEntry = serviceInfo.Resources["capacity"]
-	resourceEntry.Topology = liquid.FlatTopology
-	serviceInfo.Resources["capacity"] = resourceEntry
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: resource: capacity: scrape with topology type: flat returned AZs: [az-one az-two]"))
-
-	// negative: scrape with az-aware topology returns invalid any AZ
-	resourceEntry.Topology = liquid.AZAwareTopology
-	serviceInfo.Resources["capacity"] = resourceEntry
-	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{
-		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-			"any": {},
-		},
-	}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: resource: capacity: scrape with topology type: az-aware returned AZs: [any]"))
-
-	s.Clock.StepBy(scrapeInterval)
-	// negative: scrape with az-separated topology returns invalid AZs any and unknown
-	resourceEntry.Topology = liquid.AZSeparatedTopology
-	serviceInfo.Resources["capacity"] = resourceEntry
-	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{
-		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-			"unknown": {},
-			"az-one":  {},
-		},
-	}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: resource: capacity: scrape with topology type: az-separated returned AZs: [az-one unknown]"))
-
-	// negative: reject liquid initialization with invalid topologies
-	resourceEntry.Topology = "invalidAZ1"
-	serviceInfo.Resources["capacity"] = resourceEntry
-	resourceEntry = serviceInfo.Resources["things"]
-	resourceEntry.Topology = "invalidAZ2"
-	serviceInfo.Resources["things"] = resourceEntry
-	// CheckResourceTopologies is checked after the MockLiquidClient is returned in Init(), so we just check it manually
-	mustFailT(t, plugins.CheckResourceTopologies(serviceInfo), errors.New("invalid topology: invalidAZ1 on resource: capacity\ninvalid topology: invalidAZ2 on resource: things"))
-
-	// negative: multiple resources with mismatching topology to AZ responses
-	resourceEntry.Topology = liquid.AZSeparatedTopology
-	serviceInfo.Resources["things"] = resourceEntry
-	resourceEntry = serviceInfo.Resources["capacity"]
-	resourceEntry.Topology = liquid.AZSeparatedTopology
-	serviceInfo.Resources["capacity"] = resourceEntry
-
-	serviceUsageReport.Resources["capacity"] = &liquid.ResourceUsageReport{
-		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-			"unknown": {},
-		},
-	}
-	serviceUsageReport.Resources["things"] = &liquid.ResourceUsageReport{
-		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-			"unknown": {},
-		},
-	}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: resource: capacity: scrape with topology type: az-separated returned AZs: [unknown]\nresource: things: scrape with topology type: az-separated returned AZs: [unknown]"))
-
-	s.Clock.StepBy(scrapeInterval)
-	// positive: empty topology is not checked at all
-	resourceEntry = serviceInfo.Resources["things"]
-	resourceEntry.Topology = ""
-	serviceInfo.Resources["capacity"] = resourceEntry
-	serviceUsageReport.Resources["things"] = &liquid.ResourceUsageReport{
-		PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
-			"az-one": {},
-		},
-	}
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	// negative: service usage report validation should fail for mismatched topology and AZ reports
+	resInfoCap.Topology = liquid.FlatTopology
+	serviceInfo.Resources["capacity"] = resInfoCap
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: received ServiceUsageReport is invalid: .Resources[\"capacity\"].PerAZ has entries for []liquid.AvailabilityZone{\"az-one\", \"az-two\"}, which is invalid for topology \"flat\" (expected entries for []liquid.AvailabilityZone{\"any\"}); .Resources[\"capacity\"] has no quota reported on resource level, which is invalid for HasQuota = true and topology \"flat\""))
 }
