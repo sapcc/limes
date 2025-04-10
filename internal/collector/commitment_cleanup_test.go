@@ -63,12 +63,14 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
+				Quota: new(int64),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {},
 					"az-two": {},
 				},
 			},
 			"things": {
+				Quota: new(int64),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"any": {},
 				},

@@ -120,6 +120,10 @@ func (p *LiquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
+	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
+	if err != nil {
+		return nil, nil, err
+	}
 	err = liquid.ValidateUsageReport(resp, req, p.LiquidServiceInfo)
 	if err != nil {
 		return nil, nil, err
