@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -153,9 +154,11 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 
 	// prepare mail notifications (this needs to be done in a separate loop because we collate notifications by project)
 	var mails []db.MailNotification
+	apiIdentity := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
+	mailLoc := core.AZResourceLocation{ServiceType: db.ServiceType(apiIdentity.ServiceType), ResourceName: liquid.ResourceName(apiIdentity.Name), AvailabilityZone: loc.AvailabilityZone}
 	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
 		for projectID := range confirmedCommitmentIDs {
-			mail, err := prepareConfirmationMail(mailConfig.Templates.ConfirmedCommitments, dbi, loc, projectID, confirmedCommitmentIDs[projectID], now)
+			mail, err := prepareConfirmationMail(mailConfig.Templates.ConfirmedCommitments, dbi, mailLoc, projectID, confirmedCommitmentIDs[projectID], now)
 			if err != nil {
 				return nil, err
 			}
