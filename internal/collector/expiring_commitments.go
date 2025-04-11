@@ -27,6 +27,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -122,6 +123,9 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 			return err
 		}
 
+		apiIdentity := c.Cluster.BehaviorForResource(info.Resource.ServiceType, info.Resource.ResourceName).IdentityInV1API
+		info.Resource.ServiceType = db.ServiceType(apiIdentity.ServiceType)
+		info.Resource.ResourceName = liquid.ResourceName(apiIdentity.Name)
 		info.Commitment = longTermCommitmentsByID[cid]
 		info.DateString = info.Commitment.ExpiresAt.Format(time.DateOnly)
 		notifications[pid] = append(notifications[pid], info)
