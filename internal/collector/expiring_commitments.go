@@ -57,7 +57,7 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 var (
-	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments WHERE expires_at <= $1 AND state != 'superseded' AND renew_context_json IS NULL AND NOT notified_for_expiration`
+	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments WHERE expires_at <= $1 AND state = 'active' AND renew_context_json IS NULL AND NOT notified_for_expiration`
 	locateExpiringCommitmentsQuery   = sqlext.SimplifyWhitespace(`
 		SELECT ps.project_id, ps.type, pr.name, par.az, pc.id
 		  FROM project_services ps
