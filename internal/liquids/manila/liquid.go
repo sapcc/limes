@@ -25,7 +25,6 @@ import (
 	"math"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -35,6 +34,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/promquery"
 )
 
@@ -74,12 +74,12 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	}
 
 	// initialize connection to Manila
+	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
 	l.ManilaV2, err = openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
 	}
-	// Workaround for gophercloud 2.7.0 which gets the first found OpenStack URL for Manila.
-	l.ManilaV2.Endpoint = strings.Replace(l.ManilaV2.Endpoint, "v1", "v2", 1)
+
 	microversion, err := l.findMicroversion(ctx, l.ManilaV2)
 	if err != nil {
 		return err
