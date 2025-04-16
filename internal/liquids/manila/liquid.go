@@ -25,6 +25,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
