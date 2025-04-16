@@ -25,7 +25,6 @@ import (
 	"math"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -35,7 +34,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/promquery"
 )
 
