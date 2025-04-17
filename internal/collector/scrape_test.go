@@ -277,30 +277,40 @@ func Test_ScrapeSuccess(t *testing.T) {
 		firstScrapedAt1.Unix(), firstScrapedAt2.Unix(),
 	)
 
-	// TODO: How to handle minQuata/maxQuota with liquid?
+	// check the impact of setting the forbidden flag on a resource
+	s.Clock.StepBy(scrapeInterval)
+	serviceUsageReport.Resources["capacity"].Forbidden = true
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
-	/*
-		// check reporting of MinQuotaFromBackend/MaxQuotaFromBackend
-		s.Clock.StepBy(scrapeInterval)
-		plugin.MinQuota = map[liquid.ResourceName]uint64{"capacity": 10}
-		plugin.MaxQuota = map[liquid.ResourceName]uint64{"things": 1000}
-		mustT(t, job.ProcessOne(s.Ctx, withLabel))
-		mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-		scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
-		scrapedAt2 = s.Clock.Now()
-		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-			UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
-			UPDATE project_resources SET min_quota_from_backend = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-			UPDATE project_resources SET max_quota_from_backend = 1000 WHERE id = 6 AND service_id = 2 AND name = 'things';
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+			UPDATE project_resources SET max_quota_from_backend = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+			UPDATE project_resources SET max_quota_from_backend = 0 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 		`,
-			scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-			scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
-		)
-	*/
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
+	// revert the forbidden flag
+	s.Clock.StepBy(scrapeInterval)
+	serviceUsageReport.Resources["capacity"].Forbidden = false
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+			UPDATE project_resources SET max_quota_from_backend = NULL WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+			UPDATE project_resources SET max_quota_from_backend = NULL WHERE id = 3 AND service_id = 2 AND name = 'capacity';
+			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		`,
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
 
 	// set some new quota values and align the report values with it, so nothing changes when next Scrape happens
 	serviceUsageReport.Resources["capacity"].Quota = p2i64(20)

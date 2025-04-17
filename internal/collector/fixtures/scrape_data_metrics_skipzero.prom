@@ -22,8 +22,8 @@ limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 13
 # HELP limes_project_commitment_min_expires_at Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.
 # TYPE limes_project_commitment_min_expires_at gauge
-limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 3.154326e+07
-limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 3.154326e+07
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 3.154688e+07
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 3.154688e+07
 # HELP limes_project_committed_per_az Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.
 # TYPE limes_project_committed_per_az gauge
 limes_project_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest",state="active"} 15

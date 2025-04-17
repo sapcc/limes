@@ -291,6 +291,9 @@ type LiquidClient interface {
 	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
 }
 
+// NewMockLiquidClient creates a *test.MockLiquidClient instance.
+//
+// This is located here, and implemented as a dependency injection slot, in order to break an import cycle between internal/test/plugins and internal/plugins.
 var NewMockLiquidClient func() LiquidClient
 
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
