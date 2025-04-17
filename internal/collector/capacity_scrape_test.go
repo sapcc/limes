@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -359,8 +360,6 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-10 * time.Second)
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 := s.Clock.Now()
-	// TODO: How should serialized_metric be handled here? Is this still necessary?
-	// See comment in capacity_static.go line93+: // for historical reasons, serialized metrics are tested at the same time as subcapacities
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (5, 5, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]');
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
@@ -374,6 +373,11 @@ func Test_ScanCapacity(t *testing.T) {
 	)
 
 	// check that scraping correctly updates subcapacities on an existing record
+	serviceInfo4.CapacityMetricFamilies = map[liquid.MetricName]liquid.MetricFamilyInfo{
+		"limes_unittest_capacity_smaller_half": {Type: liquid.MetricTypeGauge},
+		"limes_unittest_capacity_larger_half":  {Type: liquid.MetricTypeGauge},
+	}
+	subcapacityPlugin.LiquidServiceInfo = serviceInfo4
 	capacityReport4.Resources["things"].PerAZ["any"].Capacity = 10
 	capacityReport4.Resources["things"].PerAZ["any"].Subcapacities = []liquid.Subcapacity{
 		{
@@ -397,6 +401,11 @@ func Test_ScanCapacity(t *testing.T) {
 			Attributes: json.RawMessage(buf2),
 		},
 	}
+	capacityReport4.Metrics = map[liquid.MetricName][]liquid.Metric{
+		"limes_unittest_capacity_smaller_half": {{Value: 3}},
+		"limes_unittest_capacity_larger_half":  {{Value: 7}},
+	}
+	subcapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport4)
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
@@ -407,7 +416,7 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]' WHERE id = 5 AND resource_id = 5 AND az = 'any';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
+		UPDATE cluster_capacitors SET scraped_at = %d, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE capacitor_id = 'unittest4';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -507,14 +516,13 @@ func Test_ScanCapacity(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	pmc := &CapacityPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	// TODO: How to handle the metrics?
-	/* assert.HTTPRequest{
+	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
-	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{})) */
+	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	assert.HTTPRequest{
