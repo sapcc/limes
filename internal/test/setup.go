@@ -20,6 +20,7 @@ package test
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -216,7 +217,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				for resName, resInfo := range s.Cluster.QuotaPlugins[svcConfig.ServiceType].Resources() {
+				resInfos := s.Cluster.QuotaPlugins[svcConfig.ServiceType].Resources()
+				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
 						ServiceID:    dbProjectService.ID,
@@ -227,7 +229,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 					mustDo(t, s.DB.Insert(dbProjectResource))
 					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
 					var allAZs []liquid.AvailabilityZone
-					if resInfo.Topology == liquid.FlatTopology {
+					if resInfos[resName].Topology == liquid.FlatTopology {
 						allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 					} else {
 						allAZs = s.Cluster.Config.AvailabilityZones
