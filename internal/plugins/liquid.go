@@ -71,14 +71,13 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 
 	if p.TestMode {
 		p.LiquidClient = core.NewMockLiquidClient()
-		p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
-		return err
+	} else {
+		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+		if err != nil {
+			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
+		}
 	}
 
-	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-	if err != nil {
-		return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
-	}
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
 	if err != nil {
 		return err

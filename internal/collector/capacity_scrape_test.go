@@ -574,6 +574,15 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
 	`)
 
+	// adjust the capacity report to not show any resources
+	plugin := s.Cluster.CapacityPlugins["noop"].(*plugins.LiquidCapacityPlugin)
+	res := plugin.LiquidServiceInfo.Resources["capacity"]
+	res.HasCapacity = false
+	plugin.LiquidServiceInfo.Resources["capacity"] = res
+	plugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+	})
+
 	// check that the capacitor runs, but does not touch cluster_resources and cluster_az_resources
 	// since it does not report for anything (this used to fail because we generated a syntactically
 	// invalid WHERE clause when matching zero resources)
