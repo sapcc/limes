@@ -35,21 +35,6 @@
               "physical_usage": 1
             },
             {
-              "name": "capacity_portion",
-              "unit": "B",
-              "category": "portion",
-              "per_az": {
-                "az-one": {
-                  "usage": 1,
-                  "uncommitted_usage": 1
-                },
-                "az-two": {
-                  "usage": 0
-                }
-              },
-              "usage": 1
-            },
-            {
               "name": "things",
               "quota_distribution_model": "autogrow",
               "commitment_config": {
@@ -95,21 +80,6 @@
               "projects_quota": 10,
               "usage": 2,
               "physical_usage": 1
-            },
-            {
-              "name": "capacity_portion",
-              "unit": "B",
-              "category": "portion",
-              "per_az": {
-                "az-one": {
-                  "usage": 1,
-                  "uncommitted_usage": 1
-                },
-                "az-two": {
-                  "usage": 0
-                }
-              },
-              "usage": 1
             },
             {
               "name": "things",
@@ -176,21 +146,6 @@
               "backend_quota": 110
             },
             {
-              "name": "capacity_portion",
-              "unit": "B",
-              "category": "portion",
-              "per_az": {
-                "az-one": {
-                  "usage": 2,
-                  "uncommitted_usage": 2
-                },
-                "az-two": {
-                  "usage": 0
-                }
-              },
-              "usage": 2
-            },
-            {
               "name": "things",
               "quota_distribution_model": "autogrow",
               "commitment_config": {
@@ -254,21 +209,6 @@
               "quota": 20,
               "projects_quota": 20,
               "usage": 4
-            },
-            {
-              "name": "capacity_portion",
-              "unit": "B",
-              "category": "portion",
-              "per_az": {
-                "az-one": {
-                  "usage": 2,
-                  "uncommitted_usage": 2
-                },
-                "az-two": {
-                  "usage": 0
-                }
-              },
-              "usage": 2
             },
             {
               "name": "things",

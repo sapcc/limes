@@ -282,5 +282,19 @@ var (
 	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
 
+// LiquidClient is a wrapper for liquidapi.Client
+// Allows for the implementation of a mock client that is used in unit tests
+type LiquidClient interface {
+	GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error)
+	GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error)
+	GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error)
+	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
+}
+
+// NewMockLiquidClient creates a *test.MockLiquidClient instance.
+//
+// This is located here, and implemented as a dependency injection slot, in order to break an import cycle between internal/test/plugins and internal/plugins.
+var NewMockLiquidClient func() LiquidClient
+
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
 var ErrNotALiquid = errors.New("this plugin is not a liquid")

@@ -38,28 +38,29 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-type liquidQuotaPlugin struct {
+type LiquidQuotaPlugin struct {
 	// configuration
 	Area              string         `yaml:"area"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
 	ServiceType       db.ServiceType `yaml:"-"`
+	TestMode          bool           `yaml:"test_mode"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
-	LiquidClient      *liquidapi.Client  `yaml:"-"`
+	LiquidClient      core.LiquidClient  `yaml:"-"`
 }
 
 func init() {
-	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &liquidQuotaPlugin{} })
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &LiquidQuotaPlugin{} })
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) PluginTypeID() string {
+func (p *LiquidQuotaPlugin) PluginTypeID() string {
 	return "liquid"
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
+func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	if p.Area == "" {
 		return errors.New("missing required value: params.area")
 	}
@@ -68,10 +69,15 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-	if err != nil {
-		return fmt.Errorf("cannot initialize ServiceClient for liquid-%s: %w", serviceType, err)
+	if p.TestMode {
+		p.LiquidClient = core.NewMockLiquidClient()
+	} else {
+		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+		if err != nil {
+			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
+		}
 	}
+
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
 	if err != nil {
 		return err
@@ -81,7 +87,7 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
+func (p *LiquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
 	return core.ServiceInfo{
 		ProductName: strings.TrimPrefix(p.LiquidServiceType, "liquid-"),
 		Area:        p.Area,
@@ -89,12 +95,12 @@ func (p *liquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
+func (p *LiquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return p.LiquidServiceInfo.Resources
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *LiquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// shortcut for liquids that only have rates and no resources
 	if len(p.LiquidServiceInfo.Resources) == 0 && len(p.LiquidServiceInfo.UsageMetricFamilies) == 0 {
 		return nil, nil, nil
@@ -112,6 +118,10 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 	if resp.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+	}
+	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
+	if err != nil {
+		return nil, nil, err
 	}
 	err = liquid.ValidateUsageReport(resp, req, p.LiquidServiceInfo)
 	if err != nil {
@@ -155,7 +165,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 	return result, serializedMetrics, nil
 }
 
-func (p *liquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
+func (p *LiquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
 	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
@@ -175,7 +185,7 @@ func castSliceToAny[T any](input []T) (output []any) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
+func (p *LiquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
 	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
@@ -185,12 +195,12 @@ func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneP
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
+func (p *LiquidQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return p.LiquidServiceInfo.Rates
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+func (p *LiquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// shortcut for liquids that do not have rates
 	if len(p.LiquidServiceInfo.Rates) == 0 {
 		return nil, "", nil
@@ -233,14 +243,14 @@ func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keysto
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+func (p *LiquidQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	liquidDescribeMetrics(ch, p.LiquidServiceInfo.UsageMetricFamilies,
 		[]string{"domain_id", "project_id"},
 	)
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
+func (p *LiquidQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	return liquidCollectMetrics(ch, serializedMetrics, p.LiquidServiceInfo.UsageMetricFamilies,
 		[]string{"domain_id", "project_id"},
 		[]string{project.Domain.UUID, project.UUID},

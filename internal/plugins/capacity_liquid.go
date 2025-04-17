@@ -35,27 +35,28 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-type liquidCapacityPlugin struct {
+type LiquidCapacityPlugin struct {
 	// configuration
 	ServiceType       db.ServiceType `yaml:"service_type"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
+	TestMode          bool           `yaml:"test_mode"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
-	LiquidClient      *liquidapi.Client  `yaml:"-"`
+	LiquidClient      core.LiquidClient  `yaml:"-"`
 }
 
 func init() {
-	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &liquidCapacityPlugin{} })
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &LiquidCapacityPlugin{} })
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) PluginTypeID() string {
+func (p *LiquidCapacityPlugin) PluginTypeID() string {
 	return "liquid"
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if p.ServiceType == "" {
 		return errors.New("missing required value: params.service_type")
 	}
@@ -63,10 +64,15 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-	if err != nil {
-		return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
+	if p.TestMode {
+		p.LiquidClient = core.NewMockLiquidClient()
+	} else {
+		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+		if err != nil {
+			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
+		}
 	}
+
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
 	if err != nil {
 		return err
@@ -76,7 +82,7 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	req, err := p.BuildServiceCapacityRequest(backchannel, allAZs)
 	if err != nil {
 		return nil, nil, err
@@ -89,6 +95,10 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	if resp.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+	}
+	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
+	if err != nil {
+		return nil, nil, err
 	}
 	err = liquid.ValidateCapacityReport(resp, req, p.LiquidServiceInfo)
 	if err != nil {
@@ -127,7 +137,7 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	return result, serializedMetrics, nil
 }
 
-func (p *liquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+func (p *LiquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
 		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(p.LiquidServiceInfo.Resources)),
@@ -150,11 +160,11 @@ func (p *liquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.Capa
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+func (p *LiquidCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	liquidDescribeMetrics(ch, p.LiquidServiceInfo.CapacityMetricFamilies, nil)
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
+func (p *LiquidCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
 	return liquidCollectMetrics(ch, serializedMetrics, p.LiquidServiceInfo.CapacityMetricFamilies, nil, nil)
 }

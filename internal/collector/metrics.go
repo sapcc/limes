@@ -211,7 +211,7 @@ func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT capacitor_id, serialized_metrics
 	  FROM cluster_capacitors
-	 WHERE serialized_metrics != ''
+	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -303,7 +303,7 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
-	 WHERE ps.serialized_metrics != ''
+	 WHERE ps.serialized_metrics != '' AND ps.serialized_metrics != '{}'
 `)
 
 // Collect implements the prometheus.Collector interface.
