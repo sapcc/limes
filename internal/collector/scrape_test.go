@@ -650,7 +650,6 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	// override some defaults we set in the MockQuotaPlugin
 	// override some defaults we set in the MockLiquidClient
 	plugin := s.Cluster.QuotaPlugins["noop"].(*plugins.LiquidQuotaPlugin)
 	plugin.LiquidServiceInfo = liquid.ServiceInfo{
