@@ -139,8 +139,8 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			},
 		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
-			"capacity_usage": {Type: liquid.MetricTypeGauge},
-			"things_usage":   {Type: liquid.MetricTypeGauge},
+			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},
+			"limes_unittest_things_usage":   {Type: liquid.MetricTypeGauge},
 		},
 	}
 
@@ -193,8 +193,8 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			},
 		},
 		Metrics: map[liquid.MetricName][]liquid.Metric{
-			"capacity_usage": {{Value: 0}},
-			"things_usage":   {{Value: 4}},
+			"limes_unittest_capacity_usage": {{Value: 0}},
+			"limes_unittest_things_usage":   {{Value: 4}},
 		},
 	}
 	return
@@ -236,8 +236,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2, 1, 'things', 0, 42);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 2, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 2, 'things', 0, 42);
-		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -255,7 +255,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.Resources["capacity"].Quota = p2i64(110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: p2u64(4)})
-	serviceUsageReport.Metrics["things_usage"] = []liquid.Metric{{Value: 3}}
+	serviceUsageReport.Metrics["limes_unittest_things_usage"] = []liquid.Metric{{Value: 3}}
 	// Scrape should pick up the changed resource data
 	// (no quota sync should be requested since there is one requested already)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -268,8 +268,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_az_resources SET usage = 3, subresources = '[{"name":"index","usage":2},{"name":"index","usage":3},{"name":"index","usage":4}]', historical_usage = '{"t":[%[5]d,%[1]d],"v":[2,3]}' WHERE id = 6 AND resource_id = 2 AND az = 'az-two';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -377,7 +377,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	// note: there is currently no concistency check between the metrics and the actual resources
 	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].Usage = 20
-	serviceUsageReport.Metrics["capacity_usage"] = []liquid.Metric{{Value: 20}}
+	serviceUsageReport.Metrics["limes_unittest_capacity_usage"] = []liquid.Metric{{Value: 20}}
 	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].PhysicalUsage = p2u64(10)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -388,8 +388,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET usage = 20, physical_usage = 10, historical_usage = '{"t":[%[5]d,%[1]d],"v":[0,20]}' WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
 		UPDATE project_az_resources SET usage = 20, physical_usage = 10, historical_usage = '{"t":[%[6]d,%[3]d],"v":[0,20]}' WHERE id = 8 AND resource_id = 3 AND az = 'az-one';
-		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -561,8 +561,8 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 4 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -730,8 +730,8 @@ func Test_TopologyScrapes(t *testing.T) {
 		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'things');
 		INSERT INTO project_resources (id, service_id, name) VALUES (3, 2, 'capacity');
 		INSERT INTO project_resources (id, service_id, name) VALUES (4, 2, 'things');
-		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 		`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),

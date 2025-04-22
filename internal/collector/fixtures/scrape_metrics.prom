@@ -1,7 +1,3 @@
-# HELP capacity_usage 
-# TYPE capacity_usage gauge
-capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20
-capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 20
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
 limes_newest_scraped_at{service="unittest",service_name="generic-unittest"} 10880
@@ -12,7 +8,11 @@ limes_oldest_scraped_at{service="unittest",service_name="generic-unittest"} 1087
 # TYPE limes_plugin_metrics_ok gauge
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",service="unittest",service_name="generic-unittest"} 1
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",service="unittest",service_name="generic-unittest"} 1
-# HELP things_usage 
-# TYPE things_usage gauge
-things_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 3
-things_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 3
+# HELP limes_unittest_capacity_usage 
+# TYPE limes_unittest_capacity_usage gauge
+limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20
+limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 20
+# HELP limes_unittest_things_usage 
+# TYPE limes_unittest_things_usage gauge
+limes_unittest_things_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 3
+limes_unittest_things_usage{domain_id="uuid-for-germany",project_id="uuid-for-dresden"} 3
