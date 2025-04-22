@@ -20,8 +20,10 @@ package test
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,7 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -44,11 +47,13 @@ import (
 )
 
 type setupParams struct {
-	DBSetupOptions []easypg.TestSetupOption
-	DBFixtureFile  string
-	ConfigYAML     string
-	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
-	APIMiddlewares []httpapi.API
+	DBSetupOptions           []easypg.TestSetupOption
+	DBFixtureFile            string
+	ConfigYAML               string
+	APIBuilder               func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
+	APIMiddlewares           []httpapi.API
+	Projects                 []*core.KeystoneProject
+	WithEmptyRecordsAsNeeded bool
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -82,6 +87,20 @@ func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Val
 	}
 }
 
+// WithProjects is a SetupOption that creates a DB entry for the given project.
+// This also creates the corresponding domain object.
+func WithProject(p core.KeystoneProject) SetupOption {
+	return func(params *setupParams) {
+		params.Projects = append(params.Projects, &p)
+	}
+}
+
+// WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
+// records for project_services, project_resources and project_az_resources.
+func WithEmptyRecordsAsNeeded(params *setupParams) {
+	params.WithEmptyRecordsAsNeeded = true
+}
+
 func normalizeInlineYAML(yamlStr string) string {
 	// In the source code, we usually use tabs for YAML indentation because the
 	// code is indented with tabs, and mixed indentation confuses some editors.
@@ -101,6 +120,11 @@ type Setup struct {
 	Auditor        *audittools.MockAuditor
 	// fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
+	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
+	Projects           []*db.Project
+	ProjectServices    []*db.ProjectService
+	ProjectResources   []*db.ProjectResource
+	ProjectAZResources []*db.ProjectAZResource
 }
 
 func GenerateDummyToken() string {
@@ -154,7 +178,88 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		)
 	}
 
+	for idx, project := range params.Projects {
+		dbDomain := &db.Domain{
+			ID:   db.DomainID(idx),
+			Name: "domain-" + strconv.Itoa(idx+1),
+			UUID: "uuid-for-domain-" + strconv.Itoa(idx+1),
+		}
+		mustDo(t, s.DB.Insert(dbDomain))
+		dbProject := &db.Project{
+			ID:         db.ProjectID(idx),
+			DomainID:   dbDomain.ID,
+			Name:       project.Name,
+			UUID:       project.UUID,
+			ParentUUID: dbDomain.UUID,
+		}
+		mustDo(t, s.DB.Insert(dbProject))
+		s.Projects = append(s.Projects, dbProject)
+	}
+
+	// fills all ProjectService entries (for each pair of project and service type),
+	// all ProjectResource entries (for each pair of service and resource name),
+	// all ProjectAZResource entries (for each pair of resource and AZ according to topology)
+	if params.WithEmptyRecordsAsNeeded {
+		if len(params.Projects) == 0 {
+			t.Fatal("can not create empty DB records since there are no projects")
+		}
+		for _, dbProject := range s.Projects {
+			for _, svcConfig := range s.Cluster.Config.Services {
+				t0 := time.Unix(0, 0).UTC()
+				dbProjectService := &db.ProjectService{
+					ID:             db.ProjectServiceID(len(s.ProjectServices) + 1),
+					ProjectID:      dbProject.ID,
+					Type:           svcConfig.ServiceType,
+					ScrapedAt:      &t0,
+					RatesScrapedAt: &t0,
+					CheckedAt:      &t0,
+					RatesCheckedAt: &t0,
+				}
+				mustDo(t, s.DB.Insert(dbProjectService))
+				s.ProjectServices = append(s.ProjectServices, dbProjectService)
+				resInfos := s.Cluster.QuotaPlugins[svcConfig.ServiceType].Resources()
+				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
+					dbProjectResource := &db.ProjectResource{
+						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
+						ServiceID:    dbProjectService.ID,
+						Name:         resName,
+						Quota:        new(uint64),
+						BackendQuota: new(int64),
+					}
+					mustDo(t, s.DB.Insert(dbProjectResource))
+					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
+					var allAZs []liquid.AvailabilityZone
+					if resInfos[resName].Topology == liquid.FlatTopology {
+						allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
+					} else {
+						allAZs = s.Cluster.Config.AvailabilityZones
+					}
+					for _, az := range allAZs {
+						dbProjectAZResource := &db.ProjectAZResource{
+							ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
+							ResourceID:       dbProjectResource.ID,
+							AvailabilityZone: az,
+							Quota:            new(uint64),
+							Usage:            0,
+							PhysicalUsage:    nil,
+							SubresourcesJSON: "{}",
+						}
+						mustDo(t, s.DB.Insert(dbProjectAZResource))
+						s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
+					}
+				}
+			}
+		}
+	}
+
 	return s
+}
+
+func mustDo(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 }
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {

@@ -24,9 +24,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -36,6 +38,26 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
+
+	// the Scrape job needs a report that at least satisfies the topology constraints
+	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
+			"capacity": {
+				Quota: pointerTo(int64(100)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"az-one": {},
+					"az-two": {},
+				},
+			},
+			"things": {
+				Quota: pointerTo(int64(42)),
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
+					"any": {},
+				},
+			},
+		},
+	})
 
 	c := getCollector(t, s)
 	scrapeJob := c.ResourceScrapeJob(s.Registry)
@@ -60,7 +82,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 2 AND service_id = 1 AND name = 'things';
 	`)
 
 	// test changing and removing quota overrides
@@ -74,8 +96,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 15 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 	`)
 
 	// test quota overrides referring to nonexistent domains and projects (should be ignored without error)

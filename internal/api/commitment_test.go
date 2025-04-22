@@ -25,12 +25,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const day = 24 * time.Hour
@@ -41,14 +42,20 @@ const testCommitmentsYAML = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
 						durations_per_domain: [{ key: '.*', value: ["1 hour", "2 hours"] }]
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 			commitment_behavior_per_resource: []
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
@@ -57,10 +64,16 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 			commitment_behavior_per_resource: []
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -73,7 +86,10 @@ const testConvertCommitmentsYAML = `
 		method: --test-static
 	services:
 		- service_type: first
-			type: --test-generic
+			type: liquid
+			params:
+				area: first
+				test_mode: true
 			commitment_behavior_per_resource:
 				- key: capacity
 					value:
@@ -82,7 +98,10 @@ const testConvertCommitmentsYAML = `
 				- key: '.*'
 					value: { durations_per_domain: *durations }
 		- service_type: second
-			type: --test-generic
+			type: liquid
+			params:
+				area: second
+				test_mode: true
 			commitment_behavior_per_resource:
 				- key: capacity
 					value:
@@ -91,10 +110,10 @@ const testConvertCommitmentsYAML = `
 				- key: '.*'
 					value: { durations_per_domain: *durations }
 		- service_type: third
-			type: --test-noop
+			type: liquid
 			params:
-				with_empty_resource: true
-				with_convert_commitments: true
+				area: third
+				test_mode: true
 			commitment_behavior_per_resource:
 				- key: capacity_c32
 					value:
@@ -126,10 +145,6 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin2 := s.Cluster.QuotaPlugins["second"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
-	plugin2.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZAwareTopology}, "things": {Topology: liquid.FlatTopology}}
 
 	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
@@ -507,9 +522,6 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-
-	plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
-	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: liquid.FlatTopology}}
 
 	request := assert.JSONObject{
 		"service_type":      "first",
@@ -1138,6 +1150,14 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	s.Cluster.QuotaPlugins["third"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true},
+		"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true},
+	}
+
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []assert.JSONObject{
 		{
@@ -1187,6 +1207,14 @@ func Test_ConvertCommitments(t *testing.T) {
 		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
+
+	s.Cluster.QuotaPlugins["third"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true},
+		"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true},
+	}
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{
@@ -1513,6 +1541,11 @@ func Test_MergeCommitments(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	s.Cluster.QuotaPlugins["second"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["other"] = liquid.ResourceInfo{
+		Unit:     limes.UnitBytes,
+		Topology: liquid.AZAwareTopology,
+	}
+
 	// Create two confirmed commitments on the same resource
 	req1 := assert.JSONObject{
 		"id":                1,
@@ -1543,7 +1576,7 @@ func Test_MergeCommitments(t *testing.T) {
 	req4 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "other",
 		"availability_zone": "az-one",
 		"amount":            1,
 		"duration":          "2 hours",
@@ -1566,7 +1599,7 @@ func Test_MergeCommitments(t *testing.T) {
 	resp4 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "other",
 		"availability_zone": "az-one",
 		"amount":            1,
 		"unit":              "B",
@@ -1753,7 +1786,7 @@ func Test_RenewCommitments(t *testing.T) {
 	req2 := assert.JSONObject{
 		"id":                2,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            1,
 		"duration":          "2 hours",
@@ -1790,7 +1823,7 @@ func Test_RenewCommitments(t *testing.T) {
 	resp2 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
-		"resource_name":     "capacity_portion",
+		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            1,
 		"unit":              "B",

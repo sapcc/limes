@@ -9,7 +9,7 @@ binaries:
     installTo:   bin/
 
 coverageTest:
-  except: '/plugins|/liquids'
+  except: '/liquids'
 
 dockerfile:
   enabled: true

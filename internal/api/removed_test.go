@@ -37,7 +37,10 @@ func TestForbidClusterIDHeader(t *testing.T) {
 				method: --test-static
 			services:
 				- service_type: foo
-					type: --test-generic
+					type: liquid
+					params:
+						area: testing
+						test_mode: true
 		`),
 		test.WithAPIHandler(NewV1API,
 			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),

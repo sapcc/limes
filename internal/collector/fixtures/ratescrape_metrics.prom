@@ -1,26 +1,22 @@
 # HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
 # TYPE limes_autogrow_growth_multiplier gauge
 limes_autogrow_growth_multiplier{resource="capacity",service="unittest",service_name="generic-unittest"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unittest",service_name="generic-unittest"} 1
 # HELP limes_autogrow_quota_overcommit_threshold_percent For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.
 # TYPE limes_autogrow_quota_overcommit_threshold_percent gauge
 limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unittest",service_name="generic-unittest"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 0
 limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unittest",service_name="generic-unittest"} 0
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{resource="capacity",service="unittest",service_name="generic-unittest"} 0
-limes_cluster_capacity{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 0
 limes_cluster_capacity{resource="things",service="unittest",service_name="generic-unittest"} 0
 # HELP limes_project_rate_usage Usage of a Limes rate for an OpenStack project. These are counters that never reset.
 # TYPE limes_project_rate_usage gauge
-limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest",service_name="generic-unittest"} 5129
-limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="secondrate",service="unittest",service_name="generic-unittest"} 1034
-limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="firstrate",service="unittest",service_name="generic-unittest"} 1033
-limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="secondrate",service="unittest",service_name="generic-unittest"} 1034
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest",service_name="generic-unittest"} 2048
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="secondrate",service="unittest",service_name="generic-unittest"} 4096
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="firstrate",service="unittest",service_name="generic-unittest"} 4096
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="secondrate",service="unittest",service_name="generic-unittest"} 8192
 # HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
 # TYPE limes_unit_multiplier gauge
 limes_unit_multiplier{resource="capacity",service="unittest",service_name="generic-unittest"} 1
-limes_unit_multiplier{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 1
 limes_unit_multiplier{resource="things",service="unittest",service_name="generic-unittest"} 1

@@ -38,13 +38,16 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 		capacitors:
 		- id: noop
-			type: --test-static
+			type: liquid
 			params:
-				capacity: 0
-				resources: []
+				service_type: noop
+				test_mode: true
 `
 )
 

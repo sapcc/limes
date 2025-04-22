@@ -34,9 +34,15 @@ const (
 			method: --test-static
 		services:
 			- service_type: shared
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 			- service_type: unshared
-				type: --test-generic
+				type: liquid
+				params:
+					area: testing
+					test_mode: true
 	`
 )
 
