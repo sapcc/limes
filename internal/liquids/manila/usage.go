@@ -27,10 +27,9 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes/internal/liquids"
 )
 
 // ScanUsage implements the liquidapi.Logic interface.
@@ -206,8 +205,8 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		}
 		if vst.ReplicationEnabled {
 			anyReplicationEnabled = true
-			quotaSet.Replicas = &quotaSet.Shares
-			quotaSet.ReplicaGigabytes = &quotaSet.Gigabytes
+			quotaSet.Replicas = Some(quotaSet.Shares)
+			quotaSet.ReplicaGigabytes = Some(quotaSet.Gigabytes)
 		}
 
 		rst, omit := vst.RealShareTypeIn(projectMetadata)
@@ -222,11 +221,11 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 
 	// compute overall quotas
 	overallQuotas := QuotaSet{
-		ShareNetworks: liquids.PointerTo(req.Resources["share_networks"].Quota),
+		ShareNetworks: Some(req.Resources["share_networks"].Quota),
 	}
 	if anyReplicationEnabled {
-		overallQuotas.Replicas = liquids.PointerTo(uint64(0))
-		overallQuotas.ReplicaGigabytes = liquids.PointerTo(uint64(0))
+		overallQuotas.Replicas = Some[uint64](0)
+		overallQuotas.ReplicaGigabytes = Some[uint64](0)
 	}
 	for _, vst := range l.VirtualShareTypes {
 		rst, omit := vst.RealShareTypeIn(projectMetadata)
@@ -240,8 +239,8 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		overallQuotas.Gigabytes += quotaSet.Gigabytes
 		overallQuotas.SnapshotGigabytes += quotaSet.SnapshotGigabytes
 		if vst.ReplicationEnabled {
-			*overallQuotas.Replicas += *quotaSet.Replicas
-			*overallQuotas.ReplicaGigabytes += *quotaSet.ReplicaGigabytes
+			overallQuotas.Replicas = Some(overallQuotas.Replicas.UnwrapOr(0) + quotaSet.Replicas.UnwrapOr(0))
+			overallQuotas.ReplicaGigabytes = Some(overallQuotas.ReplicaGigabytes.UnwrapOr(0) + quotaSet.ReplicaGigabytes.UnwrapOr(0))
 		}
 	}
 
@@ -323,13 +322,13 @@ func (l *Logic) getQuotaSet(ctx context.Context, projectUUID string, st RealShar
 
 // QuotaSet is used when writing quotas.
 type QuotaSet struct {
-	Shares            uint64  `json:"shares"`
-	Snapshots         uint64  `json:"snapshots"`
-	Gigabytes         uint64  `json:"gigabytes"`
-	SnapshotGigabytes uint64  `json:"snapshot_gigabytes"`
-	ShareNetworks     *uint64 `json:"share_networks,omitempty"`
-	Replicas          *uint64 `json:"share_replicas,omitempty"`
-	ReplicaGigabytes  *uint64 `json:"replica_gigabytes,omitempty"`
+	Shares            uint64         `json:"shares"`
+	Snapshots         uint64         `json:"snapshots"`
+	Gigabytes         uint64         `json:"gigabytes"`
+	SnapshotGigabytes uint64         `json:"snapshot_gigabytes"`
+	ShareNetworks     Option[uint64] `json:"share_networks,omitzero"`
+	Replicas          Option[uint64] `json:"share_replicas,omitzero"`
+	ReplicaGigabytes  Option[uint64] `json:"replica_gigabytes,omitzero"`
 }
 
 // IsEmpty returns whether there is no non-zero value in this QuotaSet.
@@ -338,9 +337,9 @@ func (qs QuotaSet) IsEmpty() bool {
 		qs.Snapshots == 0 &&
 		qs.Gigabytes == 0 &&
 		qs.SnapshotGigabytes == 0 &&
-		(qs.ShareNetworks == nil || *qs.ShareNetworks == 0) &&
-		(qs.Replicas == nil || *qs.Replicas == 0) &&
-		(qs.ReplicaGigabytes == nil || *qs.ReplicaGigabytes == 0)
+		options.IsNoneOrZero(qs.ShareNetworks) &&
+		options.IsNoneOrZero(qs.Replicas) &&
+		options.IsNoneOrZero(qs.ReplicaGigabytes)
 }
 
 // Writes the quota for a specific share type in the given project
