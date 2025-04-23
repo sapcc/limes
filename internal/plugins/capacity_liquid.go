@@ -67,9 +67,9 @@ func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 	if p.TestMode {
 		p.LiquidClient = core.NewMockLiquidClient()
 	} else {
-		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+		p.LiquidClient, err = core.NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
 		if err != nil {
-			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
+			return err
 		}
 	}
 

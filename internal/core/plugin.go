@@ -22,6 +22,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -29,6 +30,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/pluggable"
 
 	"github.com/sapcc/limes/internal/db"
@@ -292,7 +294,21 @@ type LiquidClient interface {
 // NewMockLiquidClient creates a *test.MockLiquidClient instance.
 //
 // This is located here, and implemented as a dependency injection slot, in order to break an import cycle between internal/test/plugins and internal/plugins.
+//
+// TODO: remove this (as well as the TestMode flag on the LIQUID adapter plugins) when all tests were migrated to use NewLiquidClient() instead
 var NewMockLiquidClient func() LiquidClient
+
+// NewLiquidClient is usually a synonym for liquidapi.NewClient().
+//
+// In tests, it serves as a dependency injection slot to allow type Cluster to
+// access mock liquids prepared by the test's specific setup code.
+var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
+	client, err := liquidapi.NewClient(provider, eo, opts)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize ServiceClient for %s: %w", opts.ServiceType, err)
+	}
+	return client, nil
+}
 
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
 var ErrNotALiquid = errors.New("this plugin is not a liquid")
