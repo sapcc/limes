@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -94,13 +95,13 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		InfoVersion: serviceInfo.Version,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"zones": {
-				Quota: &quotas.Zones,
+				Quota: Some(quotas.Zones),
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{
 					Usage: uint64(len(zoneIDs)),
 				}),
 			},
 			"recordsets_per_zone": {
-				Quota: &quotas.RecordsetsPerZone,
+				Quota: Some(quotas.RecordsetsPerZone),
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{
 					Usage: maxRecordsetsPerZone,
 				}),

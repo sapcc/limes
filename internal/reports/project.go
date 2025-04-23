@@ -273,12 +273,11 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 
 			if *azHistoricalUsage != "" {
-				config := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 				var duration limesresources.CommitmentDuration
-				if config.Autogrow != nil {
-					retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
+				autogrowCfg, ok := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
+				if ok {
 					duration = limesresources.CommitmentDuration{
-						Short: retentionPeriod.Into(),
+						Short: autogrowCfg.UsageDataRetentionPeriod.Into(),
 					}
 				} else {
 					duration = limesresources.CommitmentDuration{

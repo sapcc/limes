@@ -33,7 +33,6 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -781,12 +780,12 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
 			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
 
-			qdc := d.Cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
-			if qdc.Model == limesresources.AutogrowQuotaDistribution {
-				metric := dataMetric{Labels: labels, Value: qdc.Autogrow.GrowthMultiplier}
+			autogrowCfg, ok := d.Cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
+			if ok {
+				metric := dataMetric{Labels: labels, Value: autogrowCfg.GrowthMultiplier}
 				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
 
-				metric = dataMetric{Labels: labels, Value: qdc.Autogrow.AllowQuotaOvercommitUntilAllocatedPercent}
+				metric = dataMetric{Labels: labels, Value: autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent}
 				result["limes_autogrow_quota_overcommit_threshold_percent"] = append(result["limes_autogrow_quota_overcommit_threshold_percent"], metric)
 			}
 

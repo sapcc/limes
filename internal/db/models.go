@@ -33,12 +33,12 @@ import (
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
-	CapacitorID        string     `db:"capacitor_id"`
-	ScrapedAt          *time.Time `db:"scraped_at"` // pointer type to allow for NULL value
-	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
-	SerializedMetrics  string     `db:"serialized_metrics"`
-	NextScrapeAt       time.Time  `db:"next_scrape_at"`
-	ScrapeErrorMessage string     `db:"scrape_error_message"`
+	CapacitorID        string            `db:"capacitor_id"`
+	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
+	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
+	SerializedMetrics  string            `db:"serialized_metrics"`
+	NextScrapeAt       time.Time         `db:"next_scrape_at"`
+	ScrapeErrorMessage string            `db:"scrape_error_message"`
 }
 
 // ClusterService contains a record from the `cluster_services` table.
@@ -66,7 +66,7 @@ type ClusterAZResource struct {
 	ResourceID        ClusterResourceID      `db:"resource_id"`
 	AvailabilityZone  limes.AvailabilityZone `db:"az"`
 	RawCapacity       uint64                 `db:"raw_capacity"`
-	Usage             *uint64                `db:"usage"`
+	Usage             Option[uint64]         `db:"usage"`
 	SubcapacitiesJSON string                 `db:"subcapacities"`
 }
 
@@ -88,25 +88,25 @@ type Project struct {
 
 // ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
-	ID                      ProjectServiceID `db:"id"`
-	ProjectID               ProjectID        `db:"project_id"`
-	Type                    ServiceType      `db:"type"`
-	ScrapedAt               *time.Time       `db:"scraped_at"` // pointer type to allow for NULL value
-	CheckedAt               *time.Time       `db:"checked_at"`
-	NextScrapeAt            time.Time        `db:"next_scrape_at"`
-	Stale                   bool             `db:"stale"`
-	ScrapeDurationSecs      float64          `db:"scrape_duration_secs"`
-	ScrapeErrorMessage      string           `db:"scrape_error_message"`
-	RatesScrapedAt          *time.Time       `db:"rates_scraped_at"` // same as above
-	RatesCheckedAt          *time.Time       `db:"rates_checked_at"`
-	RatesNextScrapeAt       time.Time        `db:"rates_next_scrape_at"`
-	RatesStale              bool             `db:"rates_stale"`
-	RatesScrapeDurationSecs float64          `db:"rates_scrape_duration_secs"`
-	RatesScrapeState        string           `db:"rates_scrape_state"`
-	RatesScrapeErrorMessage string           `db:"rates_scrape_error_message"`
-	SerializedMetrics       string           `db:"serialized_metrics"`
-	QuotaDesyncedAt         *time.Time       `db:"quota_desynced_at"`
-	QuotaSyncDurationSecs   float64          `db:"quota_sync_duration_secs"`
+	ID                      ProjectServiceID  `db:"id"`
+	ProjectID               ProjectID         `db:"project_id"`
+	Type                    ServiceType       `db:"type"`
+	ScrapedAt               Option[time.Time] `db:"scraped_at"` // None if never scraped so far
+	CheckedAt               Option[time.Time] `db:"checked_at"`
+	NextScrapeAt            time.Time         `db:"next_scrape_at"`
+	Stale                   bool              `db:"stale"`
+	ScrapeDurationSecs      float64           `db:"scrape_duration_secs"`
+	ScrapeErrorMessage      string            `db:"scrape_error_message"`
+	RatesScrapedAt          Option[time.Time] `db:"rates_scraped_at"` // same as above
+	RatesCheckedAt          Option[time.Time] `db:"rates_checked_at"`
+	RatesNextScrapeAt       time.Time         `db:"rates_next_scrape_at"`
+	RatesStale              bool              `db:"rates_stale"`
+	RatesScrapeDurationSecs float64           `db:"rates_scrape_duration_secs"`
+	RatesScrapeState        string            `db:"rates_scrape_state"`
+	RatesScrapeErrorMessage string            `db:"rates_scrape_error_message"`
+	SerializedMetrics       string            `db:"serialized_metrics"`
+	QuotaDesyncedAt         Option[time.Time] `db:"quota_desynced_at"` // None if all quota = backend quota
+	QuotaSyncDurationSecs   float64           `db:"quota_sync_duration_secs"`
 }
 
 // Ref converts a ProjectService into its ProjectServiceRef.
@@ -120,13 +120,13 @@ type ProjectResource struct {
 	ID                       ProjectResourceID   `db:"id"`
 	ServiceID                ProjectServiceID    `db:"service_id"`
 	Name                     liquid.ResourceName `db:"name"`
-	Quota                    *uint64             `db:"quota"`
-	BackendQuota             *int64              `db:"backend_quota"`
-	MinQuotaFromBackend      *uint64             `db:"min_quota_from_backend"`
-	MaxQuotaFromBackend      *uint64             `db:"max_quota_from_backend"`
-	MaxQuotaFromOutsideAdmin *uint64             `db:"max_quota_from_outside_admin"`
-	MaxQuotaFromLocalAdmin   *uint64             `db:"max_quota_from_local_admin"`
-	OverrideQuotaFromConfig  *uint64             `db:"override_quota_from_config"`
+	Quota                    Option[uint64]      `db:"quota"`
+	BackendQuota             Option[int64]       `db:"backend_quota"`
+	MinQuotaFromBackend      Option[uint64]      `db:"min_quota_from_backend"`
+	MaxQuotaFromBackend      Option[uint64]      `db:"max_quota_from_backend"`
+	MaxQuotaFromOutsideAdmin Option[uint64]      `db:"max_quota_from_outside_admin"`
+	MaxQuotaFromLocalAdmin   Option[uint64]      `db:"max_quota_from_local_admin"`
+	OverrideQuotaFromConfig  Option[uint64]      `db:"override_quota_from_config"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -139,21 +139,21 @@ type ProjectAZResource struct {
 	ID                  ProjectAZResourceID    `db:"id"`
 	ResourceID          ProjectResourceID      `db:"resource_id"`
 	AvailabilityZone    limes.AvailabilityZone `db:"az"`
-	Quota               *uint64                `db:"quota"`
-	BackendQuota        *int64                 `db:"backend_quota"`
+	Quota               Option[uint64]         `db:"quota"`
+	BackendQuota        Option[int64]          `db:"backend_quota"`
 	Usage               uint64                 `db:"usage"`
-	PhysicalUsage       *uint64                `db:"physical_usage"`
+	PhysicalUsage       Option[uint64]         `db:"physical_usage"`
 	SubresourcesJSON    string                 `db:"subresources"`
 	HistoricalUsageJSON string                 `db:"historical_usage"`
 }
 
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
-	ServiceID     ProjectServiceID   `db:"service_id"`
-	Name          liquid.RateName    `db:"name"`
-	Limit         *uint64            `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
-	Window        *limesrates.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
-	UsageAsBigint string             `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
+	ServiceID     ProjectServiceID          `db:"service_id"`
+	Name          liquid.RateName           `db:"name"`
+	Limit         Option[uint64]            `db:"rate_limit"`      // None for rates that don't have a limit (just a usage)
+	Window        Option[limesrates.Window] `db:"window_ns"`       // None for rates that don't have a limit (just a usage)
+	UsageAsBigint string                    `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
 	// ^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
 	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
 	//  use strings throughout and cast into bigints in the scraper only.
@@ -168,15 +168,15 @@ type ProjectCommitment struct {
 	CreatedAt    time.Time                         `db:"created_at"`
 	CreatorUUID  string                            `db:"creator_uuid"` // format: "username@userdomainname"
 	CreatorName  string                            `db:"creator_name"`
-	ConfirmBy    *time.Time                        `db:"confirm_by"`
-	ConfirmedAt  *time.Time                        `db:"confirmed_at"`
+	ConfirmBy    Option[time.Time]                 `db:"confirm_by"`
+	ConfirmedAt  Option[time.Time]                 `db:"confirmed_at"`
 	ExpiresAt    time.Time                         `db:"expires_at"`
 
 	// Commitments can be superseded due to splits, conversions or merges.
 	// The context columns contain information about the reason and related commitments
-	SupersededAt         *time.Time              `db:"superseded_at"`
+	SupersededAt         Option[time.Time]       `db:"superseded_at"`
 	CreationContextJSON  json.RawMessage         `db:"creation_context_json"`
-	SupersedeContextJSON *json.RawMessage        `db:"supersede_context_json"`
+	SupersedeContextJSON Option[json.RawMessage] `db:"supersede_context_json"`
 	RenewContextJSON     Option[json.RawMessage] `db:"renew_context_json"`
 
 	// For a commitment to be transferred between projects, it must first be
@@ -186,7 +186,7 @@ type ProjectCommitment struct {
 	// While a commitment is marked for transfer, it does not count towards quota
 	// calculation, but it still blocks capacity and still counts towards billing.
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
-	TransferToken  *string                                 `db:"transfer_token"`
+	TransferToken  Option[string]                          `db:"transfer_token"`
 
 	// This column is technically redundant, since the state can be derived from
 	// the values of other fields. But having this field simplifies lots of

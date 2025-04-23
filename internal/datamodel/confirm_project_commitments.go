@@ -182,9 +182,10 @@ func prepareConfirmationMail(tpl core.MailTemplate, dbi db.Interface, loc core.A
 		return db.MailNotification{}, err
 	}
 	for _, c := range commitments {
+		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
 			Commitment: c,
-			DateString: c.ConfirmedAt.Format(time.DateOnly),
+			DateString: confirmedAt.Format(time.DateOnly),
 			Resource:   loc,
 		})
 	}

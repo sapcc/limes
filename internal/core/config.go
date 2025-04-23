@@ -45,10 +45,10 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
-	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
-	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
-	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
-	MailNotifications        Option[*MailConfiguration]        `yaml:"mail_notifications"`
+	ResourceBehaviors        []ResourceBehavior               `yaml:"resource_behavior"`
+	RateBehaviors            []RateBehavior                   `yaml:"rate_behavior"`
+	QuotaDistributionConfigs []QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
+	MailNotifications        Option[*MailConfiguration]       `yaml:"mail_notifications"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -110,7 +110,7 @@ type ServiceRateLimitConfiguration struct {
 }
 
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
+func (svcRlConfig ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {
 			return rateCfg, true
@@ -141,7 +141,7 @@ type QuotaDistributionConfiguration struct {
 	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
 	Model              limesresources.QuotaDistributionModel `yaml:"model"`
 	// options for AutogrowQuotaDistribution
-	Autogrow *AutogrowQuotaDistributionConfiguration `yaml:"autogrow"`
+	Autogrow Option[AutogrowQuotaDistributionConfiguration] `yaml:"autogrow"`
 }
 
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
@@ -240,20 +240,21 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 		switch qdCfg.Model {
 		case limesresources.AutogrowQuotaDistribution:
-			if qdCfg.Autogrow == nil {
+			autogrowCfg, ok := qdCfg.Autogrow.Unpack()
+			if !ok {
 				missing(fmt.Sprintf(`distribution_model_configs[%d].autogrow`, idx))
 			}
-			if qdCfg.Autogrow.GrowthMultiplier < 0 {
-				errs.Addf("invalid value for distribution_model_configs[%d].growth_multiplier: %g (must be >= 0)", idx, qdCfg.Autogrow.GrowthMultiplier)
+			if ok && autogrowCfg.GrowthMultiplier < 0 {
+				errs.Addf("invalid value for distribution_model_configs[%d].growth_multiplier: %g (must be >= 0)", idx, autogrowCfg.GrowthMultiplier)
 			}
-			if qdCfg.Autogrow.UsageDataRetentionPeriod.Into() == 0 {
+			if ok && autogrowCfg.UsageDataRetentionPeriod.Into() == 0 {
 				errs.Addf("invalid value for distribution_model_configs[%d].usage_data_retention_period: must not be 0", idx)
 			}
 		default:
 			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
 		}
 
-		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow != nil {
+		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow.IsSome() {
 			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
 	}

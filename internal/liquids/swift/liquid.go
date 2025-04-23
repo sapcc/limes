@@ -21,11 +21,13 @@ package swift
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	. "github.com/majewsky/gg/option"
 	"github.com/majewsky/schwift/v2"
 	"github.com/majewsky/schwift/v2/gopherschwift"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -92,7 +94,7 @@ func (l *Logic) emptyUsageReport(serviceInfo liquid.ServiceInfo, forbidden bool)
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
 				Forbidden: forbidden,
-				Quota:     &quota,
+				Quota:     Some(quota),
 				PerAZ:     liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0}),
 			},
 		},
@@ -150,7 +152,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		InfoVersion: serviceInfo.Version,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
-				Quota: &quota,
+				Quota: Some(quota),
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: usage}),
 			},
 		},
@@ -163,11 +165,16 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
+	projectMetadata, ok := req.ProjectMetadata.Unpack()
+	if !ok {
+		return errors.New("projectMetadata is missing")
+	}
+
 	quota := req.Resources["capacity"].Quota
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quota)
 	// this header brought to you by https://github.com/sapcc/swift-addons
-	headers.Set("X-Account-Project-Domain-Id-Override", req.ProjectMetadata.Domain.UUID)
+	headers.Set("X-Account-Project-Domain-Id-Override", projectMetadata.Domain.UUID)
 
 	account := l.Account(projectUUID)
 	err := account.Update(ctx, headers, nil)

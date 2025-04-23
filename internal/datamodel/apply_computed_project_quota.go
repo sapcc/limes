@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
@@ -66,29 +67,33 @@ var (
 )
 
 type projectLocalQuotaConstraints struct {
-	MinQuota *uint64
-	MaxQuota *uint64
+	MinQuota Option[uint64]
+	MaxQuota Option[uint64]
 }
 
-func (c *projectLocalQuotaConstraints) AddMinQuota(value *uint64) {
-	if value == nil {
+func (c *projectLocalQuotaConstraints) AddMinQuota(value Option[uint64]) {
+	rhs, ok := value.Unpack()
+	if !ok {
 		return
 	}
-	if c.MinQuota == nil {
-		c.MinQuota = value
+	lhs, ok := c.MinQuota.Unpack()
+	if ok {
+		c.MinQuota = Some(max(lhs, rhs))
 	} else {
-		*c.MinQuota = max(*c.MinQuota, *value)
+		c.MinQuota = Some(rhs)
 	}
 }
 
-func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
-	if value == nil {
+func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
+	rhs, ok := value.Unpack()
+	if !ok {
 		return
 	}
-	if c.MaxQuota == nil {
-		c.MaxQuota = value
+	lhs, ok := c.MaxQuota.Unpack()
+	if ok {
+		c.MaxQuota = Some(min(lhs, rhs))
 	} else {
-		*c.MaxQuota = min(*c.MaxQuota, *value)
+		c.MaxQuota = Some(rhs)
 	}
 }
 
@@ -100,11 +105,10 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	if !resInfo.HasQuota {
 		return nil
 	}
-	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
-	if qdCfg.Autogrow == nil {
+	cfg, ok := cluster.QuotaDistributionConfigForResource(serviceType, resourceName).Autogrow.Unpack()
+	if !ok {
 		return nil
 	}
-	cfg := *qdCfg.Autogrow
 
 	// run the quota computation in a transaction (this must be done inside this
 	// function because we want to commit this wide-reaching transaction before
@@ -125,11 +129,11 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
 			resourceID               db.ProjectResourceID
-			minQuotaFromBackend      *uint64
-			maxQuotaFromBackend      *uint64
-			maxQuotaFromOutsideAdmin *uint64
-			maxQuotaFromLocalAdmin   *uint64
-			overrideQuotaFromConfig  *uint64
+			minQuotaFromBackend      Option[uint64]
+			maxQuotaFromBackend      Option[uint64]
+			maxQuotaFromOutsideAdmin Option[uint64]
+			maxQuotaFromLocalAdmin   Option[uint64]
+			overrideQuotaFromConfig  Option[uint64]
 		)
 		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
 		if err != nil {
@@ -419,7 +423,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 	}
 	for resourceID, c := range constraints {
 		// raise Allocated as necessary to fulfil minimum quota
-		if c.MinQuota != nil && *c.MinQuota > 0 {
+		if minQuota, ok := c.MinQuota.Unpack(); ok && minQuota > 0 {
 			// phase 1: distribute quota proportionally to desire in AZs that have capacity
 			// if there is sufficient capacity in each AZ, all quota required additionally will be assigned in this phase
 			totalAllocated := uint64(0)
@@ -437,13 +441,13 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 					if totalDesire > 0 {
 						// Desire is normalized to avoid uint overflows when dealing with large desire values
 						desireProportion := float64(target[az][resourceID].Requested()) / float64(totalDesire)
-						desireScalePerAZ[az] = uint64(math.Ceil(float64(*c.MinQuota) * desireProportion))
+						desireScalePerAZ[az] = uint64(math.Ceil(float64(minQuota) * desireProportion))
 					} else {
-						desireScalePerAZ[az] = *c.MinQuota
+						desireScalePerAZ[az] = minQuota
 					}
 				}
 			}
-			missingQuota := liquidapi.SaturatingSub(*c.MinQuota, totalAllocated)
+			missingQuota := liquidapi.SaturatingSub(minQuota, totalAllocated)
 			extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, desireScalePerAZ)
 			for _, az := range resourceAZs {
 				extraAllocated := min(extraAllocatedPerAZ[az], stats[az].Capacity)
@@ -459,7 +463,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 				for _, az := range resourceAZs {
 					// Capacity is normalized to avoid uint overflows when dealing with large capacities
 					capacityProportion := (float64(stats[az].Capacity) / float64(totalCapacity))
-					capacityScalePerAZ[az] = uint64(math.Ceil(float64(*c.MinQuota) * capacityProportion))
+					capacityScalePerAZ[az] = uint64(math.Ceil(float64(minQuota) * capacityProportion))
 				}
 				extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, capacityScalePerAZ)
 				for _, az := range resourceAZs {
@@ -469,7 +473,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 		}
 
 		// lower Desired as necessary to fulfil maximum quota
-		if c.MaxQuota != nil {
+		if maxQuota, ok := c.MaxQuota.Unpack(); ok {
 			totalAllocated := uint64(0)
 			totalDesired := uint64(0)
 			extraDesiredPerAZ := make(map[limes.AvailabilityZone]uint64)
@@ -479,8 +483,8 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 				totalDesired += max(t.Allocated, t.Desired)
 				extraDesiredPerAZ[az] = t.Requested()
 			}
-			if totalDesired > *c.MaxQuota {
-				extraDesiredPerAZ = liquidapi.DistributeFairly(liquidapi.SaturatingSub(*c.MaxQuota, totalAllocated), extraDesiredPerAZ)
+			if totalDesired > maxQuota {
+				extraDesiredPerAZ = liquidapi.DistributeFairly(liquidapi.SaturatingSub(maxQuota, totalAllocated), extraDesiredPerAZ)
 				for _, az := range allAZs {
 					t := target[az][resourceID]
 					t.Desired = t.Allocated + extraDesiredPerAZ[az]

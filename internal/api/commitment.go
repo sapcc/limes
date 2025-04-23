@@ -31,6 +31,7 @@ import (
 
 	"github.com/gorilla/mux"
 	. "github.com/majewsky/gg/option"
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -46,7 +47,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/reports"
 )
 
@@ -211,11 +211,11 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
 		CanBeDeleted:     p.canDeleteCommitment(token, c),
-		ConfirmBy:        maybeUnixEncodedTime(c.ConfirmBy),
-		ConfirmedAt:      maybeUnixEncodedTime(c.ConfirmedAt),
+		ConfirmBy:        options.Map(c.ConfirmBy, intoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, intoUnixEncodedTime).AsPointer(),
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
-		TransferToken:    c.TransferToken,
+		TransferToken:    c.TransferToken.AsPointer(),
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
@@ -385,7 +385,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// prepare commitment
-	confirmBy := maybeUnpackUnixEncodedTime(req.ConfirmBy)
+	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	if respondwith.ErrorText(w, err) {
@@ -399,8 +399,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		CreatorUUID:         token.UserUUID(),
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:           confirmBy,
-		ConfirmedAt:         nil, // may be set below
-		ExpiresAt:           req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
+		ConfirmedAt:         None[time.Time](), // may be set below
+		ExpiresAt:           req.Duration.AddTo(confirmBy.UnwrapOr(now)),
 		CreationContextJSON: json.RawMessage(buf),
 	}
 	if req.NotifyOnConfirm && req.ConfirmBy == nil {
@@ -419,7 +419,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "not enough capacity available for immediate confirmation", http.StatusConflict)
 			return
 		}
-		dbCommitment.ConfirmedAt = &now
+		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.State = db.CommitmentStateActive
 	} else {
 		dbCommitment.State = db.CommitmentStatePlanned
@@ -446,13 +446,13 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			ProjectID:       dbProject.UUID,
 			ProjectName:     dbProject.Name,
 			Commitments:     []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
-			WorkflowContext: &creationContext,
+			WorkflowContext: Some(creationContext),
 		},
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
-	if dbCommitment.ConfirmedAt != nil {
+	if dbCommitment.ConfirmedAt.IsSome() {
 		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, loc.ServiceType, loc.ResourceName)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -547,7 +547,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		CreatedAt:    now,
 		CreatorUUID:  token.UserUUID(),
 		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmedAt:  &now,
+		ConfirmedAt:  Some(now),
 		ExpiresAt:    time.Time{}, // overwritten below
 		State:        db.CommitmentStateActive,
 	}
@@ -588,8 +588,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	for _, dbCommitment := range dbCommitments {
-		dbCommitment.SupersededAt = &now
-		dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
+		dbCommitment.SupersededAt = Some(now)
+		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.State = db.CommitmentStateSuperseded
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -609,7 +609,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		ProjectID:       dbProject.UUID,
 		ProjectName:     dbProject.Name,
 		Commitments:     []limesresources.Commitment{c},
-		WorkflowContext: &creationContext,
+		WorkflowContext: Some(creationContext),
 	}
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
@@ -705,7 +705,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		CreatedAt:           now,
 		CreatorUUID:         token.UserUUID(),
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmBy:           &dbCommitment.ExpiresAt,
+		ConfirmBy:           Some(dbCommitment.ExpiresAt),
 		ExpiresAt:           dbCommitment.Duration.AddTo(dbCommitment.ExpiresAt),
 		State:               db.CommitmentStatePlanned,
 		CreationContextJSON: json.RawMessage(buf),
@@ -743,7 +743,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		ProjectID:       dbProject.UUID,
 		ProjectName:     dbProject.Name,
 		Commitments:     []limesresources.Commitment{c},
-		WorkflowContext: &creationContext,
+		WorkflowContext: Some(creationContext),
 	}
 
 	p.auditor.Record(audittools.Event{
@@ -905,7 +905,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	if req.Amount == dbCommitment.Amount {
 		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = &transferToken
+		dbCommitment.TransferToken = Some(transferToken)
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -919,7 +919,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = &transferToken
+		transferCommitment.TransferToken = Some(transferToken)
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -941,8 +941,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		dbCommitment.State = db.CommitmentStateSuperseded
-		dbCommitment.SupersededAt = &now
-		dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
+		dbCommitment.SupersededAt = Some(now)
+		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -1142,7 +1142,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = nil
+	dbCommitment.TransferToken = None[string]()
 	dbCommitment.AZResourceID = targetAZResourceID
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
@@ -1370,7 +1370,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// The commitment at the source resource was already confirmed and checked.
 	// Therefore only the addition to the target resource has to be checked against.
-	if dbCommitment.ConfirmedAt != nil {
+	if dbCommitment.ConfirmedAt.IsSome() {
 		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -1426,8 +1426,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dbCommitment.State = db.CommitmentStateSuperseded
-	dbCommitment.SupersededAt = &now
-	dbCommitment.SupersedeContextJSON = liquids.PointerTo(json.RawMessage(buf))
+	dbCommitment.SupersededAt = Some(now)
+	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1440,10 +1440,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
-	auditEvent.WorkflowContext = &db.CommitmentWorkflowContext{
+	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
 		Reason:               db.CommitmentReasonSplit,
 		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
-	}
+	})
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1522,7 +1522,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
+	newExpiresAt := req.Duration.AddTo(dbCommitment.ConfirmBy.UnwrapOr(dbCommitment.CreatedAt))
 	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
 		msg := fmt.Sprintf("duration change from %s to %s forbidden", dbCommitment.Duration, req.Duration)
 		http.Error(w, msg, http.StatusForbidden)

@@ -32,6 +32,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -703,16 +704,6 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string
 	}
 }
 
-// p2u64 makes a "pointer to uint64".
-func p2u64(val uint64) *uint64 {
-	return &val
-}
-
-// p2i64 makes a "pointer to int64".
-func p2i64(val int64) *int64 {
-	return &val
-}
-
 func Test_EmptyProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
@@ -827,10 +818,10 @@ func Test_LargeProjectList(t *testing.T) {
 			service := db.ProjectService{
 				ProjectID:      project.ID,
 				Type:           serviceType,
-				ScrapedAt:      &scrapedAt,
-				CheckedAt:      &scrapedAt,
-				RatesScrapedAt: &scrapedAt,
-				RatesCheckedAt: &scrapedAt,
+				ScrapedAt:      Some(scrapedAt),
+				CheckedAt:      Some(scrapedAt),
+				RatesScrapedAt: Some(scrapedAt),
+				RatesCheckedAt: Some(scrapedAt),
 			}
 			err = s.DB.Insert(&service)
 			if err != nil {
@@ -840,8 +831,8 @@ func Test_LargeProjectList(t *testing.T) {
 				resource := db.ProjectResource{
 					ServiceID:    service.ID,
 					Name:         resourceName,
-					Quota:        p2u64(0),
-					BackendQuota: p2i64(0),
+					Quota:        Some[uint64](0),
+					BackendQuota: Some[int64](0),
 				}
 				azResource := db.ProjectAZResource{
 					// ResourceID is filled in below once we have it
@@ -849,9 +840,9 @@ func Test_LargeProjectList(t *testing.T) {
 					Usage:            0,
 				}
 				if serviceType == "unshared" && resourceName == "things" {
-					resource.Quota = p2u64(uint64(idx))
+					resource.Quota = Some[uint64](uint64(idx))
 					azResource.Usage = uint64(idx / 2) //nolint:gosec // idx is hardcoded in test
-					resource.BackendQuota = p2i64(int64(idx))
+					resource.BackendQuota = Some[int64](int64(idx))
 				}
 				err = s.DB.Insert(&resource)
 				if err != nil {

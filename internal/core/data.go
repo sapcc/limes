@@ -22,6 +22,8 @@ package core
 import (
 	"slices"
 
+	. "github.com/majewsky/gg/option"
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
@@ -145,9 +147,9 @@ type AZAwareData[Self any] interface {
 
 // ResourceData contains quota and usage data for a single project resource.
 type ResourceData struct {
-	Quota     int64   // negative values indicate infinite quota
-	MinQuota  *uint64 // if set, indicates that SetQuota will reject values below this level
-	MaxQuota  *uint64 // if set, indicates that SetQuota will reject values above this level
+	Quota     int64          // negative values indicate infinite quota
+	MinQuota  Option[uint64] // if set, indicates that SetQuota will reject values below this level
+	MaxQuota  Option[uint64] // if set, indicates that SetQuota will reject values above this level
 	UsageData PerAZ[UsageData]
 }
 
@@ -190,23 +192,19 @@ func (r ResourceData) AddLocalizedUsage(az limes.AvailabilityZone, usage uint64)
 // UsageData contains usage data for a single project resource.
 // It appears in type ResourceData.
 type UsageData struct {
-	Quota         *int64
+	Quota         Option[int64]
 	Usage         uint64
-	PhysicalUsage *uint64 // only supported by some plugins
-	Subresources  []any   // only if supported by plugin and enabled in config
+	PhysicalUsage Option[uint64] // only supported by some plugins
+	Subresources  []any          // only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
 func (d UsageData) clone() UsageData {
-	result := UsageData{
-		Usage:        d.Usage,
-		Subresources: slices.Clone(d.Subresources),
+	return UsageData{
+		Usage:         d.Usage,
+		Subresources:  slices.Clone(d.Subresources),
+		PhysicalUsage: d.PhysicalUsage,
 	}
-	if d.PhysicalUsage != nil {
-		val := *d.PhysicalUsage
-		result.PhysicalUsage = &val
-	}
-	return result
 }
 
 // add implements the AZAwareData interface.
@@ -217,9 +215,10 @@ func (d UsageData) add(other UsageData) UsageData {
 	}
 
 	// the sum can only have a PhysicalUsage value if both sides have it
-	if d.PhysicalUsage != nil && other.PhysicalUsage != nil {
-		physUsage := *d.PhysicalUsage + *other.PhysicalUsage
-		result.PhysicalUsage = &physUsage
+	if lhs, ok := d.PhysicalUsage.Unpack(); ok {
+		if rhs, ok := other.PhysicalUsage.Unpack(); ok {
+			result.PhysicalUsage = Some(lhs + rhs)
+		}
 	}
 
 	return result
@@ -227,15 +226,15 @@ func (d UsageData) add(other UsageData) UsageData {
 
 // isEmpty implements the AZAwareData interface.
 func (d UsageData) isEmpty() bool {
-	return d.Usage == 0 && (d.PhysicalUsage == nil || *d.PhysicalUsage == 0) && len(d.Subresources) == 0
+	return d.Usage == 0 && options.IsNoneOrZero(d.PhysicalUsage) && len(d.Subresources) == 0
 }
 
 // CapacityData contains capacity data for a single project resource.
 type CapacityData struct {
 	//NOTE: The json tags are only relevant for the output of `limes test-scan-capacity`.
-	Capacity      uint64  `json:"capacity"`
-	Usage         *uint64 `json:"usage,omitempty"`         //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
-	Subcapacities []any   `json:"subcapacities,omitempty"` // only if supported by plugin and enabled in config
+	Capacity      uint64         `json:"capacity"`
+	Usage         Option[uint64] `json:"usage,omitzero"`          //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
+	Subcapacities []any          `json:"subcapacities,omitempty"` // only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
@@ -254,10 +253,11 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 		Subcapacities: append(slices.Clone(d.Subcapacities), other.Subcapacities...),
 	}
 
-	// the sum can only have a PhysicalUsage value if both sides have it
-	if d.Usage != nil && other.Usage != nil {
-		usage := *d.Usage + *other.Usage
-		result.Usage = &usage
+	// the sum can only have a Usage value if both sides have it
+	if lhs, ok := d.Usage.Unpack(); ok {
+		if rhs, ok := other.Usage.Unpack(); ok {
+			result.Usage = Some(lhs + rhs)
+		}
 	}
 
 	return result
@@ -265,5 +265,5 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 
 // isEmpty implements the AZAwareData interface.
 func (d CapacityData) isEmpty() bool {
-	return d.Capacity == 0 && (d.Usage == nil || *d.Usage == 0) && len(d.Subcapacities) == 0
+	return d.Capacity == 0 && options.IsNoneOrZero(d.Usage) && len(d.Subcapacities) == 0
 }

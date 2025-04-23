@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -233,7 +234,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				requested[dbServiceType] = make(map[liquid.ResourceName]*maxQuotaChange)
 			}
 			if resRequest.MaxQuota == nil {
-				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: nil}
+				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: None[uint64]()}
 			} else {
 				resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
 				if !resInfo.HasQuota {
@@ -256,7 +257,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return
 				}
-				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: &convertedMaxQuota}
+				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: Some(convertedMaxQuota)}
 			}
 		}
 	}

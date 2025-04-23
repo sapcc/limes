@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -84,23 +85,23 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	// initialize `Resources`
 	resources := map[liquid.ResourceName]*liquid.ResourceUsageReport{
 		"cores": {
-			Quota: &absoluteLimits.MaxTotalCores,
+			Quota: Some(absoluteLimits.MaxTotalCores),
 			PerAZ: liquid.AZResourceUsageReport{Usage: absoluteLimits.TotalCoresUsed}.PrepareForBreakdownInto(req.AllAZs),
 		},
 		"instances": {
-			Quota: &absoluteLimits.MaxTotalInstances,
+			Quota: Some(absoluteLimits.MaxTotalInstances),
 			PerAZ: liquid.AZResourceUsageReport{Usage: absoluteLimits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 		},
 		"ram": {
-			Quota: &absoluteLimits.MaxTotalRAMSize,
+			Quota: Some(absoluteLimits.MaxTotalRAMSize),
 			PerAZ: liquid.AZResourceUsageReport{Usage: absoluteLimits.TotalRAMUsed}.PrepareForBreakdownInto(req.AllAZs),
 		},
 		"server_groups": {
-			Quota: &absoluteLimits.MaxServerGroups,
+			Quota: Some(absoluteLimits.MaxServerGroups),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: absoluteLimits.TotalServerGroupsUsed}),
 		},
 		"server_group_members": {
-			Quota: &absoluteLimits.MaxServerGroupMembers,
+			Quota: Some(absoluteLimits.MaxServerGroupMembers),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: totalServerGroupMembersUsed}),
 		},
 	}
@@ -110,26 +111,26 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		}
 		resourceName := ResourceNameForFlavor(flavorName)
 		resources[resourceName] = &liquid.ResourceUsageReport{
-			Quota: &flavorLimits.MaxTotalInstances,
+			Quota: Some(flavorLimits.MaxTotalInstances),
 			PerAZ: liquid.AZResourceUsageReport{Usage: flavorLimits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 		}
 	}
 	for hwVersion, limits := range limitsData.Limits.AbsolutePerHWVersion {
 		if l.hasPooledResource.Get()[hwVersion]["cores"] {
 			resources[l.pooledResourceName(hwVersion, "cores")] = &liquid.ResourceUsageReport{
-				Quota: &limits.MaxTotalCores,
+				Quota: Some(limits.MaxTotalCores),
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalCoresUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
 		if l.hasPooledResource.Get()[hwVersion]["instances"] {
 			resources[l.pooledResourceName(hwVersion, "instances")] = &liquid.ResourceUsageReport{
-				Quota: &limits.MaxTotalInstances,
+				Quota: Some(limits.MaxTotalInstances),
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
 		if l.hasPooledResource.Get()[hwVersion]["ram"] {
 			resources[l.pooledResourceName(hwVersion, "ram")] = &liquid.ResourceUsageReport{
-				Quota: &limits.MaxTotalRAMSize,
+				Quota: Some(limits.MaxTotalRAMSize),
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalRAMUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}

@@ -251,10 +251,10 @@ func validatePerAZAgainstTopology[N ~string, V any](perAZ map[AvailabilityZone]V
 
 func validateQuotaAgainstTopology(report *ResourceUsageReport, hasQuota bool, topology Topology, name ResourceName, allAZs []AvailabilityZone) error {
 	// report.Quota shall be null if and only if the resource is declared with "HasQuota = false" or with AZSeparatedTopology
-	if report.Quota == nil && hasQuota && topology != AZSeparatedTopology {
+	if report.Quota.IsNone() && hasQuota && topology != AZSeparatedTopology {
 		return fmt.Errorf(".Resources[%q] has no quota reported on resource level, which is invalid for HasQuota = true and topology %q", name, topology)
 	}
-	if report.Quota != nil {
+	if report.Quota.IsSome() {
 		if !hasQuota {
 			return fmt.Errorf(".Resources[%q] has quota reported on resource level, which is invalid for HasQuota = false", name)
 		}
@@ -266,12 +266,12 @@ func validateQuotaAgainstTopology(report *ResourceUsageReport, hasQuota bool, to
 	var allAZsWithoutQuota []string
 	for _, az := range allAZs {
 		azReport, exists := report.PerAZ[az]
-		if !exists || azReport.Quota == nil {
+		if !exists || azReport.Quota.IsNone() {
 			allAZsWithoutQuota = append(allAZsWithoutQuota, string(az))
 			continue
 		}
 		// azReport.Quota shall be non-null if and only if the resource is declared with AZSeparatedTopology
-		if azReport.Quota != nil {
+		if azReport.Quota.IsSome() {
 			if !hasQuota {
 				return fmt.Errorf(".Resources[%q] has quota reported on AZ level, which is invalid for HasQuota = false", name)
 			}
@@ -286,7 +286,7 @@ func validateQuotaAgainstTopology(report *ResourceUsageReport, hasQuota bool, to
 			return fmt.Errorf(".Resources[%q] with topology %q is missing quota reports on the following AZs: %s", name, topology, strings.Join(allAZsWithoutQuota, ", "))
 		}
 		azReport, exists := report.PerAZ[AvailabilityZoneUnknown]
-		if exists && azReport.Quota != nil {
+		if exists && azReport.Quota.IsSome() {
 			return fmt.Errorf(".Resources[%q] reports quota in AZ %q, which is invalid for topology %q", name, AvailabilityZoneUnknown, topology)
 		}
 	}

@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -44,14 +45,14 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
-				Quota: pointerTo(int64(100)),
+				Quota: Some[int64](100),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {},
 					"az-two": {},
 				},
 			},
 			"things": {
-				Quota: pointerTo(int64(42)),
+				Quota: Some[int64](42),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"any": {},
 				},

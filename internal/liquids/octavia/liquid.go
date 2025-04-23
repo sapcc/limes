@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/quotas"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gophercloudext"
 )
@@ -123,7 +124,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		for _, octaviaName := range octaviaNames {
 			quota, exists := octaviaQuotas[octaviaName]
 			if exists {
-				report.Quota = &quota
+				report.Quota = Some(quota)
 				break
 			}
 		}

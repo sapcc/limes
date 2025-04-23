@@ -27,9 +27,8 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
-
-	"github.com/sapcc/limes/internal/liquids"
 )
 
 // ScanUsage implements the liquidapi.Logic interface.
@@ -56,7 +55,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		flavorLimits := limitsData.Limits.AbsolutePerFlavor[flavorName]
 
 		resReport := liquid.ResourceUsageReport{
-			Quota: liquids.PointerTo(flavorLimits.MaxTotalInstances),
+			Quota: Some(flavorLimits.MaxTotalInstances),
 			PerAZ: liquid.AZResourceUsageReport{Usage: flavorLimits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 		}
 		if flavorLimits.TotalInstancesUsed > 0 {

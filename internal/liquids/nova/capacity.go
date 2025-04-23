@@ -28,6 +28,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
@@ -81,13 +82,13 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 	case "cores":
 		return liquid.AZResourceCapacityReport{
 			Capacity:      c.VCPUs.Capacity,
-			Usage:         &c.VCPUs.Usage,
+			Usage:         Some(c.VCPUs.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "ram":
 		return liquid.AZResourceCapacityReport{
 			Capacity:      c.MemoryMB.Capacity,
-			Usage:         &c.MemoryMB.Usage,
+			Usage:         Some(c.MemoryMB.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "instances":
@@ -98,7 +99,7 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 		}
 		return liquid.AZResourceCapacityReport{
 			Capacity:      amount,
-			Usage:         &c.RunningVMs,
+			Usage:         Some(c.RunningVMs),
 			Subcapacities: subcapacities,
 		}
 	default:

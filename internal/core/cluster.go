@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -267,20 +268,20 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
 		if dmCfg.FullResourceNameRx.MatchString(fullName) {
-			return *dmCfg
+			return dmCfg
 		}
 	}
 
 	// default behavior: do not give out any quota except for existing usage or with explicit quota override
 	return QuotaDistributionConfiguration{
 		Model: limesresources.AutogrowQuotaDistribution,
-		Autogrow: &AutogrowQuotaDistributionConfiguration{
+		Autogrow: Some(AutogrowQuotaDistributionConfiguration{
 			AllowQuotaOvercommitUntilAllocatedPercent: 0,
 			ProjectBaseQuota:         0,
 			GrowthMultiplier:         1.0,
 			GrowthMinimum:            0,
 			UsageDataRetentionPeriod: util.MarshalableTimeDuration(1 * time.Second),
-		},
+		}),
 	}
 }
 

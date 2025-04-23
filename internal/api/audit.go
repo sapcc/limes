@@ -23,13 +23,14 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sapcc/limes/internal/db"
-
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/must"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 // maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -44,8 +45,8 @@ type maxQuotaEventTarget struct {
 }
 
 type maxQuotaChange struct {
-	OldValue *uint64 `json:"oldMaxQuota"`
-	NewValue *uint64 `json:"newMaxQuota"`
+	OldValue Option[uint64] `json:"oldMaxQuota"`
+	NewValue Option[uint64] `json:"newMaxQuota"`
 }
 
 // Render implements the audittools.Target interface.
@@ -108,7 +109,7 @@ type commitmentEventTarget struct {
 	ProjectID       string
 	ProjectName     string
 	Commitments     []limesresources.Commitment // must have at least one entry
-	WorkflowContext *db.CommitmentWorkflowContext
+	WorkflowContext Option[db.CommitmentWorkflowContext]
 }
 
 // Render implements the audittools.Target interface.
@@ -133,8 +134,9 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		attachment := must.Return(cadf.NewJSONAttachment(name, commitment))
 		res.Attachments = append(res.Attachments, attachment)
 	}
-	if t.WorkflowContext != nil {
-		attachment := must.Return(cadf.NewJSONAttachment("context-payload", *t.WorkflowContext))
+	workflowContext, ok := t.WorkflowContext.Unpack()
+	if ok {
+		attachment := must.Return(cadf.NewJSONAttachment("context-payload", workflowContext))
 		res.Attachments = append(res.Attachments, attachment)
 	}
 	return res

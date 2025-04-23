@@ -30,6 +30,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
@@ -210,10 +211,10 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 					ID:             db.ProjectServiceID(len(s.ProjectServices) + 1),
 					ProjectID:      dbProject.ID,
 					Type:           svcConfig.ServiceType,
-					ScrapedAt:      &t0,
-					RatesScrapedAt: &t0,
-					CheckedAt:      &t0,
-					RatesCheckedAt: &t0,
+					ScrapedAt:      Some(t0),
+					RatesScrapedAt: Some(t0),
+					CheckedAt:      Some(t0),
+					RatesCheckedAt: Some(t0),
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
@@ -223,8 +224,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
 						ServiceID:    dbProjectService.ID,
 						Name:         resName,
-						Quota:        new(uint64),
-						BackendQuota: new(int64),
+						Quota:        Some[uint64](0),
+						BackendQuota: Some[int64](0),
 					}
 					mustDo(t, s.DB.Insert(dbProjectResource))
 					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
@@ -239,9 +240,9 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 							ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
 							ResourceID:       dbProjectResource.ID,
 							AvailabilityZone: az,
-							Quota:            new(uint64),
+							Quota:            Some[uint64](0),
 							Usage:            0,
-							PhysicalUsage:    nil,
+							PhysicalUsage:    None[uint64](),
 							SubresourcesJSON: "{}",
 						}
 						mustDo(t, s.DB.Insert(dbProjectAZResource))

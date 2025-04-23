@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -73,11 +74,11 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		InfoVersion: serviceInfo.Version,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"endpoints": {
-				Quota: &quotaSet.Endpoint,
+				Quota: Some(quotaSet.Endpoint),
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: quotaSet.InUseEndpoint}),
 			},
 			"services": {
-				Quota: &quotaSet.Service,
+				Quota: Some(quotaSet.Service),
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: quotaSet.InUseService}),
 			},
 		},
