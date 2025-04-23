@@ -840,9 +840,9 @@ func Test_LargeProjectList(t *testing.T) {
 					Usage:            0,
 				}
 				if serviceType == "unshared" && resourceName == "things" {
-					resource.Quota = Some[uint64](uint64(idx))
+					resource.Quota = Some(uint64(idx))
 					azResource.Usage = uint64(idx / 2) //nolint:gosec // idx is hardcoded in test
-					resource.BackendQuota = Some[int64](int64(idx))
+					resource.BackendQuota = Some(int64(idx))
 				}
 				err = s.DB.Insert(&resource)
 				if err != nil {
