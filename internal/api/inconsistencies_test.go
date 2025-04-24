@@ -36,13 +36,13 @@ const (
 		services:
 			- service_type: shared
 				type: liquid
+				area: testing
 				params:
-					area: testing
 					liquid_service_type: %[1]s
 			- service_type: unshared
 				type: liquid
+				area: testing
 				params:
-					area: testing
 					liquid_service_type: %[2]s
 	`
 )

@@ -40,8 +40,8 @@ const (
 		services:
 			- service_type: first
 				type: liquid
+				area: first
 				params:
-					area: first
 					liquid_service_type: %[1]s
 	`
 )

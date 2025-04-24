@@ -67,11 +67,12 @@ func ReadFilter(r *http.Request, cluster *core.Cluster) Filter {
 	}
 
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
-		if !apiAreas.Matches(quotaPlugin.ServiceInfo().Area) {
+		srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+		if !apiAreas.Matches(srvCfg.Area) {
 			continue
 		}
 
-		for dbResourceName := range quotaPlugin.Resources() {
+		for dbResourceName := range quotaPlugin.ServiceInfo().Resources {
 			apiIdentity := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 
 			if !apiServiceTypes.Matches(string(apiIdentity.ServiceType)) {

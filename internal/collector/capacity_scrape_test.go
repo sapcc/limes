@@ -49,13 +49,13 @@ const (
 		services:
 			- service_type: shared
 				type: liquid
+				area: shared
 				params:
-					area: shared
 					liquid_service_type: %[1]s
 			- service_type: unshared
 				type: liquid
+				area: unshared
 				params:
-					area: unshared
 					liquid_service_type: %[2]s
 		capacitors:
 		- id: unittest
@@ -77,8 +77,8 @@ const (
 		services:
 			- service_type: shared
 				type: liquid
+				area: shared
 				params:
-					area: shared
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: unittest
@@ -102,8 +102,8 @@ const (
 		services:
 			- service_type: first
 				type: liquid
+				area: first
 				params:
-					area: first
 					liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
@@ -111,8 +111,8 @@ const (
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			- service_type: second
 				type: liquid
+				area: second
 				params:
-					area: second
 					liquid_service_type: %[2]s
 				commitment_behavior_per_resource: *commitment-on-capacity
 		capacitors:

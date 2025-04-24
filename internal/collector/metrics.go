@@ -136,7 +136,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return nil
 		}
 
-		if len(plugin.Resources()) > 0 {
+		if len(plugin.ServiceInfo().Resources) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
@@ -148,7 +148,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				string(serviceType), string(serviceType),
 			)
 		}
-		if len(plugin.Rates()) > 0 {
+		if len(plugin.ServiceInfo().Rates) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
@@ -604,7 +604,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
 	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for resName := range quotaPlugin.Resources() {
+		for resName := range quotaPlugin.ServiceInfo().Resources {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -770,7 +770,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 	// fetch metadata for services/resources
 	for dbServiceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for dbResourceName, resourceInfo := range quotaPlugin.Resources() {
+		for dbResourceName, resourceInfo := range quotaPlugin.ServiceInfo().Resources {
 			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,

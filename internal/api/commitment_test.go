@@ -43,8 +43,8 @@ const testCommitmentsYAML = `
 	services:
 		- service_type: first
 			type: liquid
+			area: first
 			params:
-				area: first
 				liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: '.*'
@@ -53,8 +53,8 @@ const testCommitmentsYAML = `
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		- service_type: second
 			type: liquid
+			area: second
 			params:
-				area: second
 				liquid_service_type: %[2]s
 			commitment_behavior_per_resource: []
 `
@@ -65,14 +65,14 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	services:
 		- service_type: first
 			type: liquid
+			area: first
 			params:
-				area: first
 				liquid_service_type: %[1]s
 			commitment_behavior_per_resource: []
 		- service_type: second
 			type: liquid
+			area: second
 			params:
-				area: second
 				liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: '.*'
@@ -87,8 +87,8 @@ const testConvertCommitmentsYAML = `
 	services:
 		- service_type: first
 			type: liquid
+			area: first
 			params:
-				area: first
 				liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: capacity
@@ -99,8 +99,8 @@ const testConvertCommitmentsYAML = `
 					value: { durations_per_domain: *durations }
 		- service_type: second
 			type: liquid
+			area: second
 			params:
-				area: second
 				liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: capacity
@@ -111,8 +111,8 @@ const testConvertCommitmentsYAML = `
 					value: { durations_per_domain: *durations }
 		- service_type: third
 			type: liquid
+			area: third
 			params:
-				area: third
 				liquid_service_type: %[3]s
 			commitment_behavior_per_resource:
 				- key: capacity_c32

@@ -62,7 +62,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 
 	// collect ResourceInfo instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
-	for resName, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
+	for resName, resInfo := range cluster.QuotaPlugins[srv.Type].ServiceInfo().Resources {
 		allResources[resName] = resourceState{
 			Original: nil, // might be filled in the next loop below
 			Info:     &resInfo,

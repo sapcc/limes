@@ -41,8 +41,8 @@ func TestForbidClusterIDHeader(t *testing.T) {
 			services:
 				- service_type: foo
 					type: liquid
+					area: testing
 					params:
-						area: testing
 						liquid_service_type: %[1]s
 		`, liquidServiceType)),
 		test.WithAPIHandler(NewV1API,

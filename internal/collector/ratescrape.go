@@ -187,7 +187,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	}
 
 	// insert missing project_rates entries
-	for rateName := range plugin.Rates() {
+	for rateName := range plugin.ServiceInfo().Rates {
 		if _, exists := rateExists[rateName]; exists {
 			continue
 		}

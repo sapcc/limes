@@ -1209,7 +1209,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
 		for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
-			for targetResourceName, targetResInfo := range quotaPlugin.Resources() {
+			for targetResourceName, targetResInfo := range quotaPlugin.ServiceInfo().Resources {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}

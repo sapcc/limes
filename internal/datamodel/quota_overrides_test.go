@@ -44,13 +44,13 @@ const (
 		services:
 			- service_type: first
 				type: liquid
+				area: first
 				params:
-					area: first
 					liquid_service_type: %[1]s
 			- service_type: second
 				type: liquid
+				area: second
 				params:
-					area: second
 					liquid_service_type: %[1]s
 	`
 
@@ -61,13 +61,13 @@ const (
 		services:
 			- service_type: first
 				type: liquid
+				area: first
 				params:
-					area: first
 					liquid_service_type: %[1]s
 			- service_type: second
 				type: liquid
+				area: second
 				params:
-					area: second
 					liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/capacity

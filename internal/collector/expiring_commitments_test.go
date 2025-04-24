@@ -37,8 +37,8 @@ const (
 		services:
 			- service_type: shared
 				type: liquid
+				area: testing
 				params:
-					area: testing
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: noop

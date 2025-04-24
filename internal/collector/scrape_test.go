@@ -92,8 +92,8 @@ const (
 		services:
 			- service_type: unittest
 				type: liquid
+				area: testing
 				params:
-					area: testing
 					liquid_service_type: %[1]s
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
@@ -590,8 +590,8 @@ const (
 		services:
 			- service_type: noop
 				type: liquid
+				area: testing
 				params:	
-					area: testing
 					liquid_service_type: %[1]s
 	`
 )

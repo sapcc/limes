@@ -94,6 +94,7 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 type ServiceConfiguration struct {
 	ServiceType db.ServiceType      `yaml:"service_type"`
 	PluginType  string              `yaml:"type"`
+	Area        string              `yaml:"area"`
 	Parameters  util.YamlRawMessage `yaml:"params"` // will be unmarshalled into the QuotaPlugin instance
 
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
