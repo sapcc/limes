@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,19 +29,20 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
-	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
 func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
+	srvInfo := test.DefaultLiquidServiceInfo()
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{
+	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

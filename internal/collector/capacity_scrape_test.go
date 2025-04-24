@@ -37,7 +37,6 @@ import (
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -51,37 +50,26 @@ const (
 				type: liquid
 				params:
 					area: shared
-					test_mode: true
-					liquid_service_type: generic-shared
+					liquid_service_type: %[1]s
 			- service_type: unshared
 				type: liquid
 				params:
 					area: unshared
-					test_mode: true
-					liquid_service_type: generic-unshared
-			- service_type: unshared2
-				type: liquid
-				params:
-					area: unshared2
-					test_mode: true
-					liquid_service_type: generic-unshared2
+					liquid_service_type: %[2]s
 		capacitors:
 		- id: unittest
 			type: liquid
 			params:
 				service_type: shared
-				test_mode: true
+				liquid_service_type: %[1]s
 		- id: unittest2
 			type: liquid
 			params:
 				service_type: unshared
-				test_mode: true
-		resource_behavior:
-			# overcommit should be reflected in capacity metrics
-			- { resource: unshared2/capacity, overcommit_factor: 2.5 }
+				liquid_service_type: %[2]s
 	`
 
-	testScanCapacityNoopConfigYAML = `
+	testScanCapacitySingleLiquidConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
@@ -90,13 +78,13 @@ const (
 				type: liquid
 				params:
 					area: shared
-					test_mode: true
+					liquid_service_type: %[1]s
 		capacitors:
-		- id: noop
+		- id: unittest
 			type: liquid
 			params:
-				service_type: noop
-				test_mode: true
+				service_type: shared
+				liquid_service_type: %[1]s
 	`
 
 	testScanCapacityWithCommitmentsConfigYAML = `
@@ -115,7 +103,7 @@ const (
 				type: liquid
 				params:
 					area: first
-					test_mode: true
+					liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
@@ -124,19 +112,19 @@ const (
 				type: liquid
 				params:
 					area: second
-					test_mode: true
+					liquid_service_type: %[2]s
 				commitment_behavior_per_resource: *commitment-on-capacity
 		capacitors:
 		- id: scans-first
 			type: liquid
 			params:
 				service_type: first
-				test_mode: true
+				liquid_service_type: %[1]s
 		- id: scans-second
 			type: liquid
 			params:
 				service_type: second
-				test_mode: true
+				liquid_service_type: %[2]s
 		resource_behavior:
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
@@ -154,23 +142,7 @@ const (
 )
 
 func Test_ScanCapacity(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacityConfigYAML),
-	)
-
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
-
-	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
-		mustT(t, err)
-	}
-
-	plugin := s.Cluster.CapacityPlugins["unittest"].(*plugins.LiquidCapacityPlugin)
-	plugin2 := s.Cluster.CapacityPlugins["unittest2"].(*plugins.LiquidCapacityPlugin)
-
-	serviceInfo := liquid.ServiceInfo{
+	srvInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"things": {
@@ -181,8 +153,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin.LiquidServiceInfo = serviceInfo
-	serviceInfo2 := liquid.ServiceInfo{
+	srvInfo2 := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -193,7 +164,20 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin2.LiquidServiceInfo = serviceInfo2
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
+	s := test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
+	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
+		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
+		mustT(t, err)
+	}
 
 	capacityReport := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
@@ -208,7 +192,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
+	mockLiquidClient.SetCapacityReport(capacityReport)
 	capacityReport2 := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
@@ -222,14 +206,13 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	plugin2.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
+	mockLiquidClient2.SetCapacityReport(capacityReport2)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
 		INSERT INTO cluster_services (id, type) VALUES (2, 'unshared');
-		INSERT INTO cluster_services (id, type) VALUES (3, 'unshared2');
 	`)
 
 	// check that capacity records are created correctly (and that nonexistent
@@ -293,17 +276,18 @@ func Test_ScanCapacity(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
-	// add a capacity plugin that reports subcapacities, but not usage; check that subcapacities
-	// and NULL usage are correctly written when creating a cluster_resources record
-	pluginConfig := `
-		id: unittest4
-		type: liquid
-		params:
-			service_type: unshared
-			test_mode: true
-	`
-	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.LiquidCapacityPlugin)
-	serviceInfo4 := liquid.ServiceInfo{
+	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
+	}.Check(t, dmr)
+}
+
+func Test_ScanCapacityWithSubcapacities(t *testing.T) {
+	srvInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"things": {
@@ -313,12 +297,35 @@ func Test_ScanCapacity(t *testing.T) {
 				HasQuota:    true,
 			},
 		},
+		CapacityMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
+			"limes_unittest_capacity_smaller_half": {Type: liquid.MetricTypeGauge},
+			"limes_unittest_capacity_larger_half":  {Type: liquid.MetricTypeGauge},
+		},
 	}
-	subcapacityPlugin.LiquidServiceInfo = serviceInfo4
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	s := test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
+	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
+		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
+		mustT(t, err)
+	}
+
+	// check baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualf(`
+		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
+	`)
+
 	// check that scraping correctly updates subcapacities on an existing record
 	buf := must.Return(json.Marshal(map[string]any{"az": "az-one"}))
 	buf2 := must.Return(json.Marshal(map[string]any{"az": "az-two"}))
-	capacityReport4 := liquid.ServiceCapacityReport{
+	capacityReport := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"things": {
@@ -351,35 +358,28 @@ func Test_ScanCapacity(t *testing.T) {
 				},
 			},
 		},
+		Metrics: map[liquid.MetricName][]liquid.Metric{
+			"limes_unittest_capacity_smaller_half": {{Value: 3}},
+			"limes_unittest_capacity_larger_half":  {{Value: 7}},
+		},
 	}
-	subcapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport4)
+	mockLiquidClient.SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
-	scrapedAt1 = s.Clock.Now().Add(-10 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt4 := s.Clock.Now()
+	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (5, 5, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]');
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest4', %d, 5, '{}', %d);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (5, 'unittest4', 2, 'things');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (1, 1, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]');
+		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest', %d, 5, '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', %d);
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'unittest', 1, 'things');
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
-		scrapedAt4.Unix(), scrapedAt4.Add(15*time.Minute).Unix(),
+		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
 	// check that scraping correctly updates subcapacities on an existing record
-	serviceInfo4.CapacityMetricFamilies = map[liquid.MetricName]liquid.MetricFamilyInfo{
-		"limes_unittest_capacity_smaller_half": {Type: liquid.MetricTypeGauge},
-		"limes_unittest_capacity_larger_half":  {Type: liquid.MetricTypeGauge},
-	}
-	subcapacityPlugin.LiquidServiceInfo = serviceInfo4
-	capacityReport4.Resources["things"].PerAZ["any"].Capacity = 10
-	capacityReport4.Resources["things"].PerAZ["any"].Subcapacities = []liquid.Subcapacity{
+	capacityReport.Resources["things"].PerAZ["any"].Capacity = 10
+	capacityReport.Resources["things"].PerAZ["any"].Subcapacities = []liquid.Subcapacity{
 		{
 			Name:       "smaller_half",
 			Capacity:   1,
@@ -401,115 +401,16 @@ func Test_ScanCapacity(t *testing.T) {
 			Attributes: json.RawMessage(buf2),
 		},
 	}
-	capacityReport4.Metrics = map[liquid.MetricName][]liquid.Metric{
-		"limes_unittest_capacity_smaller_half": {{Value: 3}},
-		"limes_unittest_capacity_larger_half":  {{Value: 7}},
-	}
-	subcapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport4)
+	mockLiquidClient.SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
-	scrapedAt1 = s.Clock.Now().Add(-10 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt4 = s.Clock.Now()
+	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]' WHERE id = 5 AND resource_id = 5 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]' WHERE id = 1 AND resource_id = 1 AND az = 'any';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		UPDATE cluster_capacitors SET scraped_at = %d, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE capacitor_id = 'unittest4';
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
-		scrapedAt4.Unix(), scrapedAt4.Add(15*time.Minute).Unix(),
-	)
-
-	// add a capacity plugin that also reports capacity per availability zone; check that
-	// these capacities are correctly written when creating a cluster_resources record
-	pluginConfig = `
-		id: unittest5
-		type: liquid
-		params:
-			service_type: unshared2
-			test_mode: true
-	`
-	azCapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.LiquidCapacityPlugin)
-	serviceInfo5 := liquid.ServiceInfo{
-		Version: 1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"things": {
-				Unit:        liquid.UnitNone,
-				Topology:    liquid.AZAwareTopology,
-				HasCapacity: true,
-				HasQuota:    true,
-			},
-		},
-	}
-	azCapacityPlugin.LiquidServiceInfo = serviceInfo5
-	capacityReport5 := liquid.ServiceCapacityReport{
-		InfoVersion: 1,
-		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
-			"things": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 21,
-						Usage:    p2u64(4),
-					},
-					"az-two": {
-						Capacity: 21,
-						Usage:    p2u64(4),
-					},
-				},
-			},
-		},
-	}
-	azCapacityPlugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport5)
-	setClusterCapacitorsStale(t, s)
-	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
-
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
-	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt5 := s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (6, 6, 'az-one', 21, 4);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (7, 6, 'az-two', 21, 4);
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
-		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest5', %d, 5, '{}', %d);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (6, 'unittest5', 3, 'things');
-	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
-		scrapedAt4.Unix(), scrapedAt4.Add(15*time.Minute).Unix(),
-		scrapedAt5.Unix(), scrapedAt5.Add(15*time.Minute).Unix(),
-	)
-
-	// check that scraping correctly updates the capacities on an existing record
-	capacityReport5.Resources["things"].PerAZ["az-one"].Capacity = 15
-	capacityReport5.Resources["things"].PerAZ["az-one"].Usage = p2u64(3)
-	capacityReport5.Resources["things"].PerAZ["az-two"].Capacity = 15
-	capacityReport5.Resources["things"].PerAZ["az-two"].Usage = p2u64(3)
-	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
-
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
-	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt5 = s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 6 AND resource_id = 6 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 7 AND resource_id = 6 AND az = 'az-two';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest5';
-	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
-		scrapedAt4.Unix(), scrapedAt4.Add(15*time.Minute).Unix(),
-		scrapedAt5.Unix(), scrapedAt5.Add(15*time.Minute).Unix(),
+		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
 	// check data metrics generated for these capacity data
@@ -530,30 +431,110 @@ func Test_ScanCapacity(t *testing.T) {
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_single.prom"),
+	}.Check(t, dmr)
+}
+
+func Test_ScanCapacityAZAware(t *testing.T) {
+	srvInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"things": {
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+		},
+	}
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	s := test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
+	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
+		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
+		mustT(t, err)
+	}
+
+	// check baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualf(`
+		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
+	`)
+
+	capacityReport := liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"things": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one": {
+						Capacity: 21,
+						Usage:    p2u64(4),
+					},
+					"az-two": {
+						Capacity: 21,
+						Usage:    p2u64(4),
+					},
+				},
+			},
+		},
+	}
+	mockLiquidClient.SetCapacityReport(capacityReport)
+	setClusterCapacitorsStale(t, s)
+	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 21, 4);
+	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 21, 4);
+	INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest', %d, 5, '{}', %d);
+	INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'unittest', 1, 'things');
+	`,
+		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
+	)
+
+	// check that scraping correctly updates the capacities on an existing record
+	capacityReport.Resources["things"].PerAZ["az-one"].Capacity = 15
+	capacityReport.Resources["things"].PerAZ["az-one"].Usage = p2u64(3)
+	capacityReport.Resources["things"].PerAZ["az-two"].Capacity = 15
+	capacityReport.Resources["things"].PerAZ["az-two"].Usage = p2u64(3)
+	setClusterCapacitorsStale(t, s)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
+	`,
+		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
+	)
+
+	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
 	}.Check(t, dmr)
 
 	// check that removing a capacitor removes its associated resources
-	delete(s.Cluster.CapacityPlugins, "unittest5")
+	delete(s.Cluster.CapacityPlugins, "unittest")
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)+1)) //+1 to account for the deleted capacitor
-
-	scrapedAt1 = s.Clock.Now().Add(-10 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt4 = s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE id = 6 AND resource_id = 6 AND az = 'az-one';
-		DELETE FROM cluster_az_resources WHERE id = 7 AND resource_id = 6 AND az = 'az-two';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
-		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
-		DELETE FROM cluster_capacitors WHERE capacitor_id = 'unittest5';
-		DELETE FROM cluster_resources WHERE id = 6 AND service_id = 3 AND name = 'things';
-	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
-		scrapedAt4.Unix(), scrapedAt4.Add(15*time.Minute).Unix(),
-	)
+	tr.DBChanges().AssertEqual(`
+		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		DELETE FROM cluster_az_resources WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		DELETE FROM cluster_capacitors WHERE capacitor_id = 'unittest';
+		DELETE FROM cluster_resources WHERE id = 1 AND service_id = 1 AND name = 'things';
+	`)
 }
 
 func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
@@ -563,8 +544,10 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 }
 
 func Test_ScanCapacityButNoResources(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacityNoopConfigYAML),
+		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 	)
 
 	c := getCollector(t, s)
@@ -583,11 +566,10 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	`)
 
 	// adjust the capacity report to not show any resources
-	plugin := s.Cluster.CapacityPlugins["noop"].(*plugins.LiquidCapacityPlugin)
-	res := plugin.LiquidServiceInfo.Resources["capacity"]
+	res := srvInfo.Resources["capacity"]
 	res.HasCapacity = false
-	plugin.LiquidServiceInfo.Resources["capacity"] = res
-	plugin.LiquidClient.(*test.MockLiquidClient).SetCapacityReport(liquid.ServiceCapacityReport{
+	srvInfo.Resources["capacity"] = res
+	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 	})
 
@@ -598,7 +580,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('noop', %[1]d, 5, '{}', %[2]d);
+		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest', %[1]d, 5, '{}', %[2]d);
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
@@ -608,21 +590,14 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_capacitors SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE capacitor_id = 'noop';
+		UPDATE cluster_capacitors SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE capacitor_id = 'unittest';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 }
 
-func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, serviceInfo liquid.ServiceInfo, serviceCapacityReport, serviceCapacityReport2 liquid.ServiceCapacityReport) {
-	s = test.NewSetup(t,
-		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
-		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
-	)
-	c := getCollector(t, s)
-	scrapeJob = c.CapacityScrapeJob(s.Registry)
-
-	serviceInfo = liquid.ServiceInfo{
+func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job) {
+	srvInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -639,8 +614,33 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
+	srvInfo2 := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+		},
+	}
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
+	s = test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+	)
+	c := getCollector(t, s)
+	scrapeJob = c.CapacityScrapeJob(s.Registry)
 
-	serviceCapacityReport = liquid.ServiceCapacityReport{
+	serviceCapacityReport := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -669,7 +669,8 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	serviceCapacityReport2 = liquid.ServiceCapacityReport{
+	mockLiquidClient.SetCapacityReport(serviceCapacityReport)
+	serviceCapacityReport2 := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -698,12 +699,13 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
+	mockLiquidClient2.SetCapacityReport(serviceCapacityReport2)
 
 	return
 }
 
 func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, job, serviceInfo, capacityReport, capacityReport2 := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -729,14 +731,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 		))
 	}
-
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
-	s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
-	s.Cluster.QuotaPlugins["second"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = serviceInfo
-
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
 
 	// first run should create the cluster_resources and cluster_az_resources, but
 	// not confirm any commitments because they all start with `confirm_by > now`
@@ -912,16 +906,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	s, job, serviceInfo, capacityReport, capacityReport2 := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
-
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = serviceInfo
-
-	s.Cluster.CapacityPlugins["scans-first"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport)
-	s.Cluster.CapacityPlugins["scans-second"].(*plugins.LiquidCapacityPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(capacityReport2)
 
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 

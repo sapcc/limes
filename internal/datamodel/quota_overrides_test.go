@@ -20,6 +20,7 @@
 package datamodel
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -45,12 +46,12 @@ const (
 				type: liquid
 				params:
 					area: first
-					test_mode: true
+					liquid_service_type: %[1]s
 			- service_type: second
 				type: liquid
 				params:
 					area: second
-					test_mode: true
+					liquid_service_type: %[1]s
 	`
 
 	testQuotaOverridesWithRenamingConfigYAML = `
@@ -62,12 +63,12 @@ const (
 				type: liquid
 				params:
 					area: first
-					test_mode: true
+					liquid_service_type: %[1]s
 			- service_type: second
 				type: liquid
 				params:
 					area: second
-					test_mode: true
+					liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
@@ -111,8 +112,10 @@ var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid
 
 func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-no-renaming.json")
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testQuotaOverridesNoRenamingConfigYAML),
+		test.WithConfig(fmt.Sprintf(testQuotaOverridesNoRenamingConfigYAML, liquidServiceType)),
 	)
 	overrides, errs := LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {
@@ -123,8 +126,10 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 
 func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-with-renaming.json")
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testQuotaOverridesWithRenamingConfigYAML),
+		test.WithConfig(fmt.Sprintf(testQuotaOverridesWithRenamingConfigYAML, liquidServiceType)),
 	)
 	overrides, errs := LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {

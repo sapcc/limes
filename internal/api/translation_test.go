@@ -21,6 +21,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -42,7 +42,7 @@ const (
 				type: liquid
 				params:
 					area: first
-					test_mode: true
+					liquid_service_type: %[1]s
 	`
 )
 
@@ -50,6 +50,8 @@ const (
 // subcapacity translation
 
 func TestTranslateManilaSubcapacities(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -87,22 +89,22 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", nil, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
-	extraSetup := func(s *test.Setup) {
-		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		attrs := map[string]any{
-			"cores":    5,
-			"ram_mib":  23,
-			"disk_gib": 42,
-		}
-		buf := must.Return(json.Marshal(attrs))
-		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
-		resInfo.Attributes = json.RawMessage(buf)
-		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
+	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
+	attrs := map[string]any{
+		"cores":    5,
+		"ram_mib":  23,
+		"disk_gib": 42,
 	}
+	buf := must.Return(json.Marshal(attrs))
+	srvInfo := test.DefaultLiquidServiceInfo()
+	resInfo := srvInfo.Resources["capacity"]
+	resInfo.Attributes = json.RawMessage(buf)
+	srvInfo.Resources["capacity"] = resInfo
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -152,10 +154,12 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "ironic-flavors", extraSetup, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "ironic-flavors", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
 			"name":     "nova-compute-bb91",
@@ -196,23 +200,19 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", nil, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "nova-flavors", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
+func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(testSmallConfigYAML),
+		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
 		test.WithAPIHandler(NewV1API),
 	)
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
-
-	if extraSetup != nil {
-		extraSetup(&s)
-	}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 2`,
@@ -264,6 +264,8 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *
 // subresource translation
 
 func TestTranslateCinderVolumeSubresources(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "6dfbbce3-078d-4c64-8f88-8145b8d44183",
@@ -300,10 +302,12 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "260da0ee-4816-48af-8784-1717cb76c0cd",
@@ -326,22 +330,22 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
-	extraSetup := func(s *test.Setup) {
-		// this subresource translation depends on ResourceInfo.Attributes on the respective resource
-		attrs := map[string]any{
-			"cores":    5,
-			"ram_mib":  23,
-			"disk_gib": 42,
-		}
-		buf := must.Return(json.Marshal(attrs))
-		resInfo := s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"]
-		resInfo.Attributes = json.RawMessage(buf)
-		s.Cluster.QuotaPlugins["first"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources["capacity"] = resInfo
+	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
+	attrs := map[string]any{
+		"cores":    5,
+		"ram_mib":  23,
+		"disk_gib": 42,
 	}
+	buf := must.Return(json.Marshal(attrs))
+	srvInfo := test.DefaultLiquidServiceInfo()
+	resInfo := srvInfo.Resources["capacity"]
+	resInfo.Attributes = json.RawMessage(buf)
+	srvInfo.Resources["capacity"] = resInfo
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -395,10 +399,12 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "ironic-flavors", extraSetup, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "ironic-flavors", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "c655dfeb-18fa-479d-b0bf-36cd63c2e901",
@@ -495,23 +501,19 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "nova-flavors", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {
+func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(testSmallConfigYAML),
+		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
 		test.WithAPIHandler(NewV1API),
 	)
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
-
-	if extraSetup != nil {
-		extraSetup(&s)
-	}
 
 	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,
 		string(must.Return(json.Marshal(subresourcesInLiquidFormat))),

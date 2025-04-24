@@ -39,7 +39,6 @@ type LiquidCapacityPlugin struct {
 	// configuration
 	ServiceType       db.ServiceType `yaml:"service_type"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
-	TestMode          bool           `yaml:"test_mode"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -64,13 +63,9 @@ func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	if p.TestMode {
-		p.LiquidClient = core.NewMockLiquidClient()
-	} else {
-		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-		if err != nil {
-			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
-		}
+	p.LiquidClient, err = core.NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+	if err != nil {
+		return err
 	}
 
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
