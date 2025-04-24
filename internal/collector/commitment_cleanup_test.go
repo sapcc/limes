@@ -21,6 +21,7 @@ package collector
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -44,7 +44,7 @@ const (
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
+					liquid_service_type: %[1]s
 				commitment_behavior_per_resource:
 					- key: capacity
 						value:
@@ -53,13 +53,15 @@ const (
 )
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testCleanupOldCommitmentsConfigYAML),
+		test.WithConfig(fmt.Sprintf(testCleanupOldCommitmentsConfigYAML, liquidServiceType)),
 	)
 	c := getCollector(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(liquid.ServiceUsageReport{
+	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

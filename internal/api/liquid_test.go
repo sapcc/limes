@@ -28,7 +28,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/plugins"
+	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -141,8 +141,6 @@ func TestServiceUsageRequest(t *testing.T) {
 	srvInfo.UsageReportNeedsProjectMetadata = true
 
 	s := commonLiquidTestSetup(t, srvInfo)
-
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = liquid.ServiceInfo{UsageReportNeedsProjectMetadata: true}
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false

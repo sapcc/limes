@@ -42,7 +42,6 @@ type LiquidQuotaPlugin struct {
 	Area              string         `yaml:"area"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
 	ServiceType       db.ServiceType `yaml:"-"`
-	TestMode          bool           `yaml:"test_mode"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -68,13 +67,9 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	if p.TestMode {
-		p.LiquidClient = core.NewMockLiquidClient()
-	} else {
-		p.LiquidClient, err = core.NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-		if err != nil {
-			return err
-		}
+	p.LiquidClient, err = core.NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+	if err != nil {
+		return err
 	}
 
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)

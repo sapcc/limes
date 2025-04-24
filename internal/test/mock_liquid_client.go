@@ -90,10 +90,6 @@ func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClie
 }
 
 func init() {
-	core.NewMockLiquidClient = func() core.LiquidClient {
-		return &MockLiquidClient{serviceInfo: DefaultLiquidServiceInfo()}
-	}
-
 	core.NewLiquidClient = func(_ *gophercloud.ProviderClient, _ gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (core.LiquidClient, error) {
 		client, ok := mockLiquidClients[opts.ServiceType]
 		if !ok {

@@ -22,6 +22,7 @@ package collector
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -34,7 +35,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/plugins"
+	_ "github.com/sapcc/limes/internal/plugins"
 
 	"github.com/sapcc/limes/internal/db"
 
@@ -60,8 +61,7 @@ const (
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
-					liquid_service_type: generic-unittest
+					liquid_service_type: %[1]s
 	`
 )
 
@@ -86,11 +86,26 @@ var usageReport = liquid.ServiceUsageReport{
 	SerializedState: []byte(`{"firstrate":1024,"secondrate":2048}`),
 }
 
-func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, withLabel jobloop.Option) {
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Rates = map[liquid.RateName]liquid.RateInfo{
-		"firstrate":  {},
-		"secondrate": {Unit: "KiB"},
+func commonRateScrapeTestSetup(t *testing.T) (s test.Setup, job jobloop.Job, withLabel jobloop.Option, mockLiquidClient *test.MockLiquidClient) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity": {
+			Unit:     liquid.UnitNone,
+			Topology: liquid.AZAwareTopology,
+		},
+		"things": {
+			Unit:     liquid.UnitNone,
+			Topology: liquid.AZAwareTopology,
+		},
 	}
+	srvInfo.Rates = map[liquid.RateName]liquid.RateInfo{
+		"firstrate":  {Topology: liquid.FlatTopology, HasUsage: true},
+		"secondrate": {Unit: "KiB", Topology: liquid.FlatTopology, HasUsage: true},
+	}
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	s = test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testRateScrapeBasicConfigYAML, liquidServiceType)),
+	)
 	s.Cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
 		{
 			FullResourceNameRx: "unittest/capacity",
@@ -109,17 +124,8 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 		},
 	}
 
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
-		"capacity": {
-			Unit: liquid.UnitNone,
-		},
-		"things": {
-			Unit: liquid.UnitNone,
-		},
-	}
-
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetCapacityReport(liquid.ServiceCapacityReport{
+	mockLiquidClient.SetUsageReport(usageReport)
+	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -138,19 +144,16 @@ func commonRateScrapeTestSetup(t *testing.T, s *test.Setup) (job jobloop.Job, wi
 			},
 		},
 	})
-	prepareDomainsAndProjectsForScrape(t, *s)
+	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := getCollector(t, *s)
+	c := getCollector(t, s)
 	job = c.RateScrapeJob(s.Registry)
 	withLabel = jobloop.WithLabel("service_type", "unittest")
 	return
 }
 
 func Test_RateScrapeSuccess(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithConfig(testRateScrapeBasicConfigYAML),
-	)
-	job, withLabel := commonRateScrapeTestSetup(t, &s)
+	s, job, withLabel, mockLiquidClient := commonRateScrapeTestSetup(t)
 
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
@@ -226,7 +229,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(2048)
 	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(4096)
 	usageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
+	mockLiquidClient.SetUsageReport(usageReport)
 
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -234,7 +237,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(4096)
 	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(8192)
 	usageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient).SetUsageReport(usageReport)
+	mockLiquidClient.SetUsageReport(usageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -274,10 +277,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 }
 
 func Test_RateScrapeFailure(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithConfig(testRateScrapeBasicConfigYAML),
-	)
-	job, withLabel := commonRateScrapeTestSetup(t, &s)
+	s, job, withLabel, mockLiquidClient := commonRateScrapeTestSetup(t)
 
 	// this is the error that we expect to appear when ScrapeFails is set
 	expectedErrorRx := regexp.MustCompile(`^during rate scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
@@ -287,8 +287,7 @@ func Test_RateScrapeFailure(t *testing.T) {
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// ScrapeRates should not touch the DB when scraping fails
-	client := s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidClient.(*test.MockLiquidClient)
-	client.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 
 	checkedAt := s.Clock.Now()
@@ -304,8 +303,10 @@ func p2window(val limesrates.Window) *limesrates.Window {
 }
 
 func Test_ScrapeRatesButNoRates(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiveType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testNoopConfigYAML),
+		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiveType)),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 

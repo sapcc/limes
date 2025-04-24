@@ -291,13 +291,6 @@ type LiquidClient interface {
 	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
 }
 
-// NewMockLiquidClient creates a *test.MockLiquidClient instance.
-//
-// This is located here, and implemented as a dependency injection slot, in order to break an import cycle between internal/test/plugins and internal/plugins.
-//
-// TODO: remove this (as well as the TestMode flag on the LIQUID adapter plugins) when all tests were migrated to use NewLiquidClient() instead
-var NewMockLiquidClient func() LiquidClient
-
 // NewLiquidClient is usually a synonym for liquidapi.NewClient().
 //
 // In tests, it serves as a dependency injection slot to allow type Cluster to
