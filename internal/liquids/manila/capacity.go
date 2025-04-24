@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
@@ -223,15 +224,15 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 	}
 	result.ShareCapacity = liquid.AZResourceCapacityReport{
 		Capacity: distributedCapacityGiB["shares"],
-		Usage:    liquids.PointerTo(distributedUsageGiB["shares"]),
+		Usage:    Some(distributedUsageGiB["shares"]),
 	}
 	result.SnapshotCapacity = liquid.AZResourceCapacityReport{
 		Capacity: distributedCapacityGiB["snapshots"],
-		Usage:    liquids.PointerTo(distributedUsageGiB["snapshots"]),
+		Usage:    Some(distributedUsageGiB["snapshots"]),
 	}
 	result.SnapmirrorCapacity = liquid.AZResourceCapacityReport{
 		Capacity: distributedCapacityGiB["snapmirrors"],
-		Usage:    liquids.PointerTo(distributedUsageGiB["snapmirrors"]),
+		Usage:    Some(distributedUsageGiB["snapmirrors"]),
 	}
 
 	// render subcapacities (these are not split between share_capacity and
@@ -246,7 +247,7 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 			builder := liquid.SubcapacityBuilder[StoragePoolAttributes]{
 				Name:       pool.Name,
 				Capacity:   uint64(pool.Capabilities.TotalCapacityGB),
-				Usage:      liquids.PointerTo(usage),
+				Usage:      Some(usage),
 				Attributes: StoragePoolAttributes{},
 			}
 

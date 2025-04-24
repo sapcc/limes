@@ -28,11 +28,10 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes/internal/liquids"
 )
 
 // PartialCapacity describes compute capacity at a level below the entire
@@ -76,18 +75,18 @@ func (c PartialCapacity) CappedToUsage() PartialCapacity {
 	}
 }
 
-func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) liquid.AZResourceCapacityReport {
+func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) *liquid.AZResourceCapacityReport {
 	switch resourceName {
 	case "cores":
-		return liquid.AZResourceCapacityReport{
+		return &liquid.AZResourceCapacityReport{
 			Capacity:      c.VCPUs.Capacity,
-			Usage:         &c.VCPUs.Usage,
+			Usage:         Some(c.VCPUs.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "ram":
-		return liquid.AZResourceCapacityReport{
+		return &liquid.AZResourceCapacityReport{
 			Capacity:      c.MemoryMB.Capacity,
-			Usage:         &c.MemoryMB.Usage,
+			Usage:         Some(c.MemoryMB.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "instances":
@@ -96,9 +95,9 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 			maxAmount := uint64(float64(c.LocalGB.Capacity) / maxRootDiskSize)
 			amount = min(amount, maxAmount)
 		}
-		return liquid.AZResourceCapacityReport{
+		return &liquid.AZResourceCapacityReport{
 			Capacity:      amount,
-			Usage:         &c.RunningVMs,
+			Usage:         Some(c.RunningVMs),
 			Subcapacities: subcapacities,
 		}
 	default:
@@ -465,9 +464,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 		}
 
-		capacities["cores"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
-		capacities["instances"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
-		capacities["ram"].PerAZ[az] = liquids.PointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
+		capacities["cores"].PerAZ[az] = azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities)
+		capacities["instances"].PerAZ[az] = azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities)
+		capacities["ram"].PerAZ[az] = azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities)
 		for _, flavor := range splitFlavors {
 			count := matchingHypervisors.PlacementCountForFlavor(flavor.Name)
 			capacities["cores"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["cores"].PerAZ[az].Capacity, coresDemand.OvercommitFactor.ApplyInReverseTo(count*liquidapi.AtLeastZero(flavor.VCPUs)))

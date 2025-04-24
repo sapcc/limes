@@ -25,6 +25,7 @@ import (
 	"slices"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
@@ -187,7 +188,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 			)
 		}
 
-		if srv.ScrapedAt == nil {
+		if srv.ScrapedAt.IsNone() {
 			// see explanation inside the called function's body
 			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
 			if err != nil {
@@ -258,7 +259,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if resInfo.HasQuota {
 			if resInfo.Topology != liquid.AZSeparatedTopology {
-				res.BackendQuota = &backendQuota
+				res.BackendQuota = Some(backendQuota)
 			}
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
@@ -322,7 +323,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				if resInfo.Topology == liquid.AZSeparatedTopology && resInfo.HasQuota {
 					azRes.BackendQuota = data.Quota
 				} else {
-					azRes.BackendQuota = nil
+					azRes.BackendQuota = None[int64]()
 				}
 
 				// warn when the backend is inconsistent with itself
@@ -339,10 +340,8 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				}
 
 				// track historical usage if required (only required for AutogrowQuotaDistribution)
-				qdCfg := c.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
-				if qdCfg.Autogrow == nil {
-					azRes.HistoricalUsageJSON = ""
-				} else {
+				autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name).Autogrow.Unpack()
+				if ok {
 					ts, err := util.ParseTimeSeries[uint64](azRes.HistoricalUsageJSON)
 					if err != nil {
 						return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
@@ -351,11 +350,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 					if err != nil {
 						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
 					}
-					ts.PruneOldValues(task.Timing.FinishedAt, qdCfg.Autogrow.UsageDataRetentionPeriod.Into())
+					ts.PruneOldValues(task.Timing.FinishedAt, autogrowCfg.UsageDataRetentionPeriod.Into())
 					azRes.HistoricalUsageJSON, err = ts.Serialize()
 					if err != nil {
 						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
 					}
+				} else {
+					azRes.HistoricalUsageJSON = ""
 				}
 
 				return nil
@@ -391,7 +392,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 }
 
 func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID]) error {
-	//Rationale: This is called when we first try to scrape a project service,
+	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,
 	// thus resuming scraping of the same project service in the next loop
@@ -401,7 +402,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	//
 	// To avoid this situation, this method creates dummy project_resources for an
 	// unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
-	//00:00:00 UTC) to make the scraper come back to it after dealing with all
+	// 00:00:00 UTC) to make the scraper come back to it after dealing with all
 	// new and stale project_services.
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -414,9 +415,8 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
 			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-			if resInfo.HasQuota && res.BackendQuota == nil {
-				dummyBackendQuota := int64(-1)
-				res.BackendQuota = &dummyBackendQuota
+			if resInfo.HasQuota && res.BackendQuota.IsNone() {
+				res.BackendQuota = Some[int64](-1)
 			}
 			return nil
 		},

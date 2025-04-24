@@ -27,6 +27,7 @@ import (
 	"slices"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
@@ -189,7 +190,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	capacityData, serializedMetrics, err := plugin.Scrape(ctx, datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
-		capacitor.ScrapedAt = &task.Timing.FinishedAt
+		capacitor.ScrapedAt = Some(task.Timing.FinishedAt)
 		capacitor.ScrapeDurationSecs = task.Timing.Duration().Seconds()
 		capacitor.SerializedMetrics = string(serializedMetrics)
 		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))

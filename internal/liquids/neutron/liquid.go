@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/quotas"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gophercloudext"
 )
@@ -124,7 +125,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	for resName := range serviceInfo.Resources {
 		resData := data.Resources[neutronNameForResource[resName]]
 		resourceReports[resName] = &liquid.ResourceUsageReport{
-			Quota: &resData.Quota,
+			Quota: Some(resData.Quota),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: resData.Usage}),
 		}
 	}

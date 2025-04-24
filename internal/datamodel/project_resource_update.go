@@ -25,6 +25,7 @@ import (
 	"slices"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
@@ -142,8 +143,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 
 		// check if we need to arrange for SetQuotaJob to look at this project service
 		if resInfo.HasQuota && resInfo.Topology != liquid.AZSeparatedTopology {
-			backendQuota := unwrapOrDefault(res.BackendQuota, -1)
-			quota := *res.Quota // definitely not nil, it was set above in validateResourceConstraints()
+			backendQuota := res.BackendQuota.UnwrapOr(-1)
+			quota := res.Quota.UnwrapOr(0) // definitely not None, it was set above in validateResourceConstraints()
 			if backendQuota < 0 || uint64(backendQuota) != quota {
 				hasBackendQuotaDrift = true
 			}
@@ -163,22 +164,14 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 	return result, nil
 }
 
-func unwrapOrDefault[T any](value *T, defaultValue T) T {
-	if value == nil {
-		return defaultValue
-	}
-	return *value
-}
-
 // Ensures that `res` conforms to various constraints and validation rules.
 func validateResourceConstraints(res *db.ProjectResource, resInfo liquid.ResourceInfo) {
 	if !resInfo.HasQuota || resInfo.Topology == liquid.AZSeparatedTopology {
 		// ensure that NoQuota resources do not contain any quota values
-		res.Quota = nil
-		res.BackendQuota = nil
-	} else if res.Quota == nil || *res.Quota == 0 {
+		res.Quota = None[uint64]()
+		res.BackendQuota = None[int64]()
+	} else if res.Quota.IsNone() {
 		// apply missing default quota
-		initialQuota := uint64(0)
-		res.Quota = &initialQuota
+		res.Quota = Some[uint64](0)
 	}
 }

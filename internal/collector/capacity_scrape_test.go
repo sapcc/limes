@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -186,7 +187,7 @@ func Test_ScanCapacity(t *testing.T) {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"any": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 				},
 			},
@@ -200,7 +201,7 @@ func Test_ScanCapacity(t *testing.T) {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"any": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 				},
 			},
@@ -242,7 +243,7 @@ func Test_ScanCapacity(t *testing.T) {
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: liquid.AvailabilityZoneAny,
 		RawCapacity:      100,
-		Usage:            p2u64(50),
+		Usage:            Some[uint64](50),
 	})
 	if err != nil {
 		t.Error(err)
@@ -258,7 +259,7 @@ func Test_ScanCapacity(t *testing.T) {
 	// next scan should throw out the crap records and recreate the deleted ones;
 	// also change the reported Capacity to see if updates are getting through
 	capacityReport.Resources["things"].PerAZ["any"].Capacity = 23
-	capacityReport.Resources["things"].PerAZ["any"].Usage = p2u64(4)
+	capacityReport.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
@@ -474,11 +475,11 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 21,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 					"az-two": {
 						Capacity: 21,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 				},
 			},
@@ -501,9 +502,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	// check that scraping correctly updates the capacities on an existing record
 	capacityReport.Resources["things"].PerAZ["az-one"].Capacity = 15
-	capacityReport.Resources["things"].PerAZ["az-one"].Usage = p2u64(3)
+	capacityReport.Resources["things"].PerAZ["az-one"].Usage = Some[uint64](3)
 	capacityReport.Resources["things"].PerAZ["az-two"].Capacity = 15
-	capacityReport.Resources["things"].PerAZ["az-two"].Usage = p2u64(3)
+	capacityReport.Resources["things"].PerAZ["az-two"].Usage = Some[uint64](3)
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
@@ -647,11 +648,11 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 					"az-two": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 				},
 			},
@@ -659,11 +660,11 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 					"az-two": {
 						Capacity: 42,
-						Usage:    p2u64(8),
+						Usage:    Some[uint64](8),
 					},
 				},
 			},
@@ -677,11 +678,11 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 23,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 					"az-two": {
 						Capacity: 23,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 				},
 			},
@@ -689,11 +690,11 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {
 						Capacity: 23,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 					"az-two": {
 						Capacity: 23,
-						Usage:    p2u64(4),
+						Usage:    Some[uint64](4),
 					},
 				},
 			},

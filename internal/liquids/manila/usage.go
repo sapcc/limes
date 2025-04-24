@@ -26,18 +26,14 @@ import (
 	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes/internal/liquids"
 )
 
 // ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
-	if req.ProjectMetadata == nil {
-		return liquid.ServiceUsageReport{}, errors.New("projectMetadata is missing")
-	}
-
 	// the share_networks quota is only shown when querying for no share_type in particular
 	qs, err := l.getQuotaSet(ctx, projectUUID, "")
 	if err != nil {
@@ -45,7 +41,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	}
 	resources := map[liquid.ResourceName]*liquid.ResourceUsageReport{
 		"share_networks": {
-			Quota: &qs.ShareNetworks.Quota,
+			Quota: Some(qs.ShareNetworks.Quota),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: qs.ShareNetworks.Usage}),
 		},
 	}
@@ -80,7 +76,12 @@ type shareTypeUsageReport struct {
 }
 
 func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, vst VirtualShareType, req liquid.ServiceUsageRequest) (shareTypeUsageReport, error) {
-	rst, omit := vst.RealShareTypeIn(*req.ProjectMetadata)
+	projectMetadata, ok := req.ProjectMetadata.Unpack()
+	if !ok {
+		return shareTypeUsageReport{}, errors.New("projectMetadata is missing")
+	}
+
+	rst, omit := vst.RealShareTypeIn(projectMetadata)
 	if omit {
 		return l.reportShareTypeAsForbidden(req), nil
 	}
@@ -103,15 +104,15 @@ func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, v
 		result.ShareCapacity = qs.ReplicaGigabytes.ToResourceReport(req.AllAZs, withAZMetrics)
 
 		// if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
-		if qs.Shares.Quota != *result.Shares.Quota {
+		if qs.Shares.Quota != qs.Replicas.Quota {
 			logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
-				*result.Shares.Quota, qs.Replicas.Quota, rst, projectUUID)
-			result.Shares.Quota = liquids.PointerTo(int64(-1))
+				qs.Shares.Quota, qs.Replicas.Quota, rst, projectUUID)
+			result.Shares.Quota = Some[int64](-1)
 		}
-		if qs.Gigabytes.Quota != *result.ShareCapacity.Quota {
+		if qs.Gigabytes.Quota != qs.ReplicaGigabytes.Quota {
 			logg.Info("found mismatch between share capacity quota (%d) and replica capacity quota (%d) for share type %q in project %s",
-				*result.ShareCapacity.Quota, qs.ReplicaGigabytes.Quota, rst, projectUUID)
-			result.ShareCapacity.Quota = liquids.PointerTo(int64(-1))
+				qs.Gigabytes.Quota, qs.ReplicaGigabytes.Quota, rst, projectUUID)
+			result.ShareCapacity.Quota = Some[int64](-1)
 		}
 	}
 
@@ -141,7 +142,7 @@ func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, v
 	// add data from Netapp metrics, if available
 	if l.NetappMetrics != nil {
 		result.SnapmirrorCapacity = &liquid.ResourceUsageReport{
-			Quota: nil,
+			Quota: None[int64](),
 			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport),
 		}
 
@@ -155,11 +156,11 @@ func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, v
 				return shareTypeUsageReport{}, err
 			}
 
-			result.ShareCapacity.PerAZ[az].PhysicalUsage = &nm.SharePhysicalUsage
-			result.SnapshotCapacity.PerAZ[az].PhysicalUsage = &nm.SnapshotPhysicalUsage
+			result.ShareCapacity.PerAZ[az].PhysicalUsage = Some(nm.SharePhysicalUsage)
+			result.SnapshotCapacity.PerAZ[az].PhysicalUsage = Some(nm.SnapshotPhysicalUsage)
 			result.SnapmirrorCapacity.PerAZ[az] = &liquid.AZResourceUsageReport{
 				Usage:         nm.SnapmirrorUsage,
-				PhysicalUsage: &nm.SnapmirrorPhysicalUsage,
+				PhysicalUsage: Some(nm.SnapmirrorPhysicalUsage),
 			}
 		}
 	}
@@ -174,7 +175,7 @@ func (l *Logic) reportShareTypeAsForbidden(req liquid.ServiceUsageRequest) share
 	forbiddenWithQuota.Forbidden = true
 	forbiddenWithoutQuota := emptyQuotaDetail.ToResourceReport(req.AllAZs, withAZMetrics)
 	forbiddenWithoutQuota.Forbidden = true
-	forbiddenWithoutQuota.Quota = nil
+	forbiddenWithoutQuota.Quota = None[int64]()
 
 	return shareTypeUsageReport{
 		Shares:             forbiddenWithQuota,
@@ -187,7 +188,8 @@ func (l *Logic) reportShareTypeAsForbidden(req liquid.ServiceUsageRequest) share
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	if req.ProjectMetadata == nil {
+	projectMetadata, ok := req.ProjectMetadata.Unpack()
+	if !ok {
 		return errors.New("projectMetadata is missing")
 	}
 
@@ -203,11 +205,11 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		}
 		if vst.ReplicationEnabled {
 			anyReplicationEnabled = true
-			quotaSet.Replicas = &quotaSet.Shares
-			quotaSet.ReplicaGigabytes = &quotaSet.Gigabytes
+			quotaSet.Replicas = Some(quotaSet.Shares)
+			quotaSet.ReplicaGigabytes = Some(quotaSet.Gigabytes)
 		}
 
-		rst, omit := vst.RealShareTypeIn(*req.ProjectMetadata)
+		rst, omit := vst.RealShareTypeIn(projectMetadata)
 		if omit {
 			if !quotaSet.IsEmpty() {
 				return fmt.Errorf("share type %q may not be used in this project", vst.Name)
@@ -219,14 +221,14 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 
 	// compute overall quotas
 	overallQuotas := QuotaSet{
-		ShareNetworks: liquids.PointerTo(req.Resources["share_networks"].Quota),
+		ShareNetworks: Some(req.Resources["share_networks"].Quota),
 	}
 	if anyReplicationEnabled {
-		overallQuotas.Replicas = liquids.PointerTo(uint64(0))
-		overallQuotas.ReplicaGigabytes = liquids.PointerTo(uint64(0))
+		overallQuotas.Replicas = Some[uint64](0)
+		overallQuotas.ReplicaGigabytes = Some[uint64](0)
 	}
 	for _, vst := range l.VirtualShareTypes {
-		rst, omit := vst.RealShareTypeIn(*req.ProjectMetadata)
+		rst, omit := vst.RealShareTypeIn(projectMetadata)
 		if omit {
 			continue
 		}
@@ -237,8 +239,8 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		overallQuotas.Gigabytes += quotaSet.Gigabytes
 		overallQuotas.SnapshotGigabytes += quotaSet.SnapshotGigabytes
 		if vst.ReplicationEnabled {
-			*overallQuotas.Replicas += *quotaSet.Replicas
-			*overallQuotas.ReplicaGigabytes += *quotaSet.ReplicaGigabytes
+			overallQuotas.Replicas = Some(overallQuotas.Replicas.UnwrapOr(0) + quotaSet.Replicas.UnwrapOr(0))
+			overallQuotas.ReplicaGigabytes = Some(overallQuotas.ReplicaGigabytes.UnwrapOr(0) + quotaSet.ReplicaGigabytes.UnwrapOr(0))
 		}
 	}
 
@@ -288,7 +290,7 @@ func (q QuotaDetail) ToResourceReport(allAZs []liquid.AvailabilityZone, withAZMe
 		perAZ = liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: q.Usage})
 	}
 	return &liquid.ResourceUsageReport{
-		Quota: &q.Quota,
+		Quota: Some(q.Quota),
 		PerAZ: perAZ,
 	}
 }
@@ -296,7 +298,7 @@ func (q QuotaDetail) ToResourceReport(allAZs []liquid.AvailabilityZone, withAZMe
 // PrepareForBreakdownInto converts this QuotaDetail into a ResourceUsageReport.
 func (q QuotaDetail) PrepareForBreakdownInto(allAZs []liquid.AvailabilityZone) *liquid.ResourceUsageReport {
 	return &liquid.ResourceUsageReport{
-		Quota: &q.Quota,
+		Quota: Some(q.Quota),
 		PerAZ: liquid.AZResourceUsageReport{Usage: q.Usage}.PrepareForBreakdownInto(allAZs),
 	}
 }
@@ -320,13 +322,13 @@ func (l *Logic) getQuotaSet(ctx context.Context, projectUUID string, st RealShar
 
 // QuotaSet is used when writing quotas.
 type QuotaSet struct {
-	Shares            uint64  `json:"shares"`
-	Snapshots         uint64  `json:"snapshots"`
-	Gigabytes         uint64  `json:"gigabytes"`
-	SnapshotGigabytes uint64  `json:"snapshot_gigabytes"`
-	ShareNetworks     *uint64 `json:"share_networks,omitempty"`
-	Replicas          *uint64 `json:"share_replicas,omitempty"`
-	ReplicaGigabytes  *uint64 `json:"replica_gigabytes,omitempty"`
+	Shares            uint64         `json:"shares"`
+	Snapshots         uint64         `json:"snapshots"`
+	Gigabytes         uint64         `json:"gigabytes"`
+	SnapshotGigabytes uint64         `json:"snapshot_gigabytes"`
+	ShareNetworks     Option[uint64] `json:"share_networks,omitzero"`
+	Replicas          Option[uint64] `json:"share_replicas,omitzero"`
+	ReplicaGigabytes  Option[uint64] `json:"replica_gigabytes,omitzero"`
 }
 
 // IsEmpty returns whether there is no non-zero value in this QuotaSet.
@@ -335,9 +337,9 @@ func (qs QuotaSet) IsEmpty() bool {
 		qs.Snapshots == 0 &&
 		qs.Gigabytes == 0 &&
 		qs.SnapshotGigabytes == 0 &&
-		(qs.ShareNetworks == nil || *qs.ShareNetworks == 0) &&
-		(qs.Replicas == nil || *qs.Replicas == 0) &&
-		(qs.ReplicaGigabytes == nil || *qs.ReplicaGigabytes == 0)
+		options.IsNoneOrZero(qs.ShareNetworks) &&
+		options.IsNoneOrZero(qs.Replicas) &&
+		options.IsNoneOrZero(qs.ReplicaGigabytes)
 }
 
 // Writes the quota for a specific share type in the given project

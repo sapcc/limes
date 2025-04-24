@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"github.com/go-gorp/gorp/v3"
+	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
@@ -222,8 +223,8 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 					}
 				}
 
-				rate.Limit = &req.NewLimit
-				rate.Window = &req.NewWindow
+				rate.Limit = Some(req.NewLimit)
+				rate.Window = Some(req.NewWindow)
 				ratesToUpdate = append(ratesToUpdate, rate)
 			}
 		}

@@ -69,8 +69,8 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 }
 
 // ForLiquid casts this KeystoneProject into the format used in LIQUID requests.
-func (p KeystoneProject) ForLiquid() *liquid.ProjectMetadata {
-	return &liquid.ProjectMetadata{
+func (p KeystoneProject) ForLiquid() liquid.ProjectMetadata {
+	return liquid.ProjectMetadata{
 		UUID: p.UUID,
 		Name: p.Name,
 		Domain: liquid.DomainMetadata{

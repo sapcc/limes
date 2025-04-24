@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 
@@ -447,8 +448,8 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	// we don't block minimum quota early on, we may not be able to fulfil it in
 	// the end if the capacity is tight and not overcommittable.
 	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(200)},
-		402: {MinQuota: p2u64(80)},
+		401: {MinQuota: Some[uint64](200)},
+		402: {MinQuota: Some[uint64](80)},
 	}
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
 		"az-one": {
@@ -467,8 +468,8 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 
 	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MaxQuota: p2u64(50)},
-		402: {MaxQuota: p2u64(70)},
+		401: {MaxQuota: Some[uint64](50)},
+		402: {MaxQuota: Some[uint64](70)},
 	}
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
 		"az-one": {
@@ -487,8 +488,8 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 
 	// test with MaxQuota constraints that constrain the base quota
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MaxQuota: p2u64(90)},
-		402: {MaxQuota: p2u64(90)},
+		401: {MaxQuota: Some[uint64](90)},
+		402: {MaxQuota: Some[uint64](90)},
 	}
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
 		"az-one": {
@@ -632,8 +633,8 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 
 	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
 		// all projects set ResourceUsageReport.Forbidden = true
-		401: {MaxQuota: p2u64(0)},
-		402: {MaxQuota: p2u64(0)},
+		401: {MaxQuota: Some[uint64](0)},
+		402: {MaxQuota: Some[uint64](0)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -692,8 +693,8 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 		ProjectBaseQuota: 0,
 	}
 	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(3)},
-		402: {MinQuota: p2u64(5)},
+		401: {MinQuota: Some[uint64](3)},
+		402: {MinQuota: Some[uint64](5)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -751,8 +752,8 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	}
 
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(3)},
-		402: {MinQuota: p2u64(5)},
+		401: {MinQuota: Some[uint64](3)},
+		402: {MinQuota: Some[uint64](5)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -810,8 +811,8 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	}
 
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(3)},
-		402: {MinQuota: p2u64(6)},
+		401: {MinQuota: Some[uint64](3)},
+		402: {MinQuota: Some[uint64](6)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -875,7 +876,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		ProjectBaseQuota: 0,
 	}
 	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(val)},
+		401: {MinQuota: Some[uint64](val)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -931,7 +932,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 	}
 
 	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
-		401: {MinQuota: p2u64(val)},
+		401: {MinQuota: Some[uint64](val)},
 	}
 
 	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
@@ -1002,8 +1003,4 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 	t.Logf("     input = %s", inputJSON)
 	t.Logf("  expected = %s", expectedJSON)
 	t.Logf("    actual = %s", actualJSON)
-}
-
-func p2u64(x uint64) *uint64 {
-	return &x
 }

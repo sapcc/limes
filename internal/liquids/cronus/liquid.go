@@ -26,6 +26,7 @@ import (
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 )
@@ -134,7 +135,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	buildRateReport := func(previous *big.Int, current uint64) *liquid.RateUsageReport {
 		return &liquid.RateUsageReport{
 			PerAZ: liquid.InAnyAZ(liquid.AZRateUsageReport{
-				Usage: bigintPlusUint64(previous, current),
+				Usage: Some(bigintPlusUint64(previous, current)),
 			}),
 		}
 	}

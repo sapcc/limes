@@ -29,18 +29,16 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
-
-	"github.com/sapcc/limes/internal/core"
-	_ "github.com/sapcc/limes/internal/plugins"
-
-	"github.com/sapcc/limes/internal/db"
-
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
+	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -71,14 +69,14 @@ var usageReport = liquid.ServiceUsageReport{
 		"firstrate": {
 			PerAZ: map[liquid.AvailabilityZone]*liquid.AZRateUsageReport{
 				"az-one": {
-					Usage: big.NewInt(1024),
+					Usage: Some(big.NewInt(1024)),
 				},
 			},
 		},
 		"secondrate": {
 			PerAZ: map[liquid.AvailabilityZone]*liquid.AZRateUsageReport{
 				"az-two": {
-					Usage: big.NewInt(2048),
+					Usage: Some(big.NewInt(2048)),
 				},
 			},
 		},
@@ -106,21 +104,21 @@ func commonRateScrapeTestSetup(t *testing.T) (s test.Setup, job jobloop.Job, wit
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testRateScrapeBasicConfigYAML, liquidServiceType)),
 	)
-	s.Cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
+	s.Cluster.Config.QuotaDistributionConfigs = []core.QuotaDistributionConfiguration{
 		{
 			FullResourceNameRx: "unittest/capacity",
 			Model:              "autogrow",
-			Autogrow: &core.AutogrowQuotaDistributionConfiguration{
+			Autogrow: Some(core.AutogrowQuotaDistributionConfiguration{
 				GrowthMultiplier: 1,
 				AllowQuotaOvercommitUntilAllocatedPercent: 0,
-			},
+			}),
 		}, {
 			FullResourceNameRx: "unittest/things",
 			Model:              "autogrow",
-			Autogrow: &core.AutogrowQuotaDistributionConfiguration{
+			Autogrow: Some(core.AutogrowQuotaDistributionConfiguration{
 				GrowthMultiplier: 1,
 				AllowQuotaOvercommitUntilAllocatedPercent: 0,
-			},
+			}),
 		},
 	}
 
@@ -160,8 +158,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	err := s.DB.Insert(&db.ProjectRate{
 		ServiceID: 1,
 		Name:      "secondrate",
-		Limit:     p2u64(10),
-		Window:    p2window(1 * limesrates.WindowSeconds),
+		Limit:     Some[uint64](10),
+		Window:    Some(1 * limesrates.WindowSeconds),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -169,8 +167,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	err = s.DB.Insert(&db.ProjectRate{
 		ServiceID: 1,
 		Name:      "otherrate",
-		Limit:     p2u64(42),
-		Window:    p2window(2 * limesrates.WindowMinutes),
+		Limit:     Some[uint64](42),
+		Window:    Some(2 * limesrates.WindowMinutes),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -226,16 +224,16 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	`)
 
 	// but the changed state will be taken into account when the next scrape is in order
-	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(2048)
-	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(4096)
+	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = Some(big.NewInt(2048))
+	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = Some(big.NewInt(4096))
 	usageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
 	mockLiquidClient.SetUsageReport(usageReport)
 
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
-	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = big.NewInt(4096)
-	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = big.NewInt(8192)
+	usageReport.Rates["firstrate"].PerAZ["az-one"].Usage = Some(big.NewInt(4096))
+	usageReport.Rates["secondrate"].PerAZ["az-two"].Usage = Some(big.NewInt(8192))
 	usageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
 	mockLiquidClient.SetUsageReport(usageReport)
 
@@ -296,10 +294,6 @@ func Test_RateScrapeFailure(t *testing.T) {
 	`,
 		checkedAt.Unix(), checkedAt.Add(recheckInterval).Unix(),
 	)
-}
-
-func p2window(val limesrates.Window) *limesrates.Window {
-	return &val
 }
 
 func Test_ScrapeRatesButNoRates(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
@@ -65,14 +66,14 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
-				Quota: new(int64),
+				Quota: Some[int64](0),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {},
 					"az-two": {},
 				},
 			},
 			"things": {
-				Quota: new(int64),
+				Quota: Some[int64](0),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"any": {},
 				},
@@ -109,7 +110,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              10,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now(),
-		ConfirmedAt:         pointerTo(s.Clock.Now()),
+		ConfirmedAt:         Some(s.Clock.Now()),
 		ExpiresAt:           commitmentForThreeYears.AddTo(s.Clock.Now()),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: json.RawMessage(buf),
@@ -123,7 +124,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              10,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: json.RawMessage(buf),
@@ -157,12 +158,12 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:               10,
 		Duration:             commitmentForOneDay,
 		CreatedAt:            s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:          pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:          Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:            s.Clock.Now(),
-		SupersededAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		SupersededAt:         Some(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
 		State:                db.CommitmentStateSuperseded,
 		CreationContextJSON:  json.RawMessage(buf),
-		SupersedeContextJSON: pointerTo(json.RawMessage(supersedeBuf)),
+		SupersedeContextJSON: Some(json.RawMessage(supersedeBuf)),
 	}))
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonConvert, RelatedCommitmentIDs: []db.ProjectCommitmentID{3}}
 	buf, err = json.Marshal(creationContext)
@@ -173,7 +174,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              10,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: json.RawMessage(buf),
@@ -203,9 +204,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              10,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
-		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		SupersededAt:        Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		State:               db.CommitmentStateSuperseded,
 		CreationContextJSON: json.RawMessage(buf),
 	}
@@ -216,9 +217,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              5,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
-		SupersededAt:        pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		SupersededAt:        Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		State:               db.CommitmentStateSuperseded,
 		CreationContextJSON: buf,
 	}
@@ -232,7 +233,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:              15,
 		Duration:            commitmentForOneDay,
 		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(10 * time.Minute),
-		ConfirmedAt:         pointerTo(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: json.RawMessage(buf),
@@ -253,8 +254,4 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		DELETE FROM project_commitments WHERE id = 6 AND transfer_token = NULL;
 		DELETE FROM project_commitments WHERE id = 7 AND transfer_token = NULL;
 	`)
-}
-
-func pointerTo[T any](val T) *T {
-	return &val
 }

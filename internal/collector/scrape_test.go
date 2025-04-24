@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -65,14 +66,6 @@ func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
 	} else if !rx.MatchString(err.Error()) {
 		t.Errorf("expected to fail with %q, but failed with %q", rx.String(), err.Error())
 	}
-}
-
-func p2u64(x uint64) *uint64 {
-	return &x
-}
-
-func p2i64(x int64) *int64 {
-	return &x
 }
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
@@ -146,31 +139,31 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
-				Quota: pointerTo(int64(100)),
+				Quota: Some[int64](100),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {
 						Usage:         0,
-						PhysicalUsage: new(uint64),
+						PhysicalUsage: Some[uint64](0),
 					},
 					"az-two": {
 						Usage:         0,
-						PhysicalUsage: new(uint64),
+						PhysicalUsage: Some[uint64](0),
 					},
 				},
 			},
 			"things": {
-				Quota: pointerTo(int64(42)),
+				Quota: Some[int64](42),
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport{
 					"az-one": {
 						Usage: 2,
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: p2u64(0),
+								Usage: Some[uint64](0),
 							},
 							{
 								Name:  "index",
-								Usage: p2u64(1),
+								Usage: Some[uint64](1),
 							},
 						},
 					},
@@ -179,11 +172,11 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 						Subresources: []liquid.Subresource{
 							{
 								Name:  "index",
-								Usage: p2u64(2),
+								Usage: Some[uint64](2),
 							},
 							{
 								Name:  "index",
-								Usage: p2u64(3),
+								Usage: Some[uint64](3),
 							},
 						},
 					},
@@ -249,9 +242,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// change the data that is reported by the plugin
 	s.Clock.StepBy(scrapeInterval)
-	serviceUsageReport.Resources["capacity"].Quota = p2i64(110)
+	serviceUsageReport.Resources["capacity"].Quota = Some[int64](110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
-	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: p2u64(4)})
+	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: Some[uint64](4)})
 	serviceUsageReport.Metrics["limes_unittest_things_usage"] = []liquid.Metric{{Value: 3}}
 	// Scrape should pick up the changed resource data
 	// (no quota sync should be requested since there is one requested already)
@@ -309,8 +302,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// set some new quota values and align the report values with it, so nothing changes when next Scrape happens
-	serviceUsageReport.Resources["capacity"].Quota = p2i64(20)
-	serviceUsageReport.Resources["things"].Quota = p2i64(13)
+	serviceUsageReport.Resources["capacity"].Quota = Some[int64](20)
+	serviceUsageReport.Resources["things"].Quota = Some[int64](13)
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
@@ -375,7 +368,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// note: there is currently no concistency check between the metrics and the actual resources
 	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].Usage = 20
 	serviceUsageReport.Metrics["limes_unittest_capacity_usage"] = []liquid.Metric{{Value: 20}}
-	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].PhysicalUsage = p2u64(10)
+	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].PhysicalUsage = Some[uint64](10)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -410,7 +403,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 			CreatedAt:           now,
 			CreatorUUID:         "dummy",
 			CreatorName:         "dummy",
-			ConfirmedAt:         &now,
+			ConfirmedAt:         Some(now),
 			ExpiresAt:           commitmentForOneYear.AddTo(now),
 			State:               db.CommitmentStateActive,
 			CreationContextJSON: buf,
@@ -424,7 +417,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatedAt:           now,
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
-		ConfirmedAt:         &now,
+		ConfirmedAt:         Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: buf,
@@ -436,7 +429,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatedAt:           now,
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
-		ConfirmBy:           &now,
+		ConfirmBy:           Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
 		State:               db.CommitmentStatePending,
 		CreationContextJSON: buf,
@@ -692,12 +685,12 @@ func Test_TopologyScrapes(t *testing.T) {
 	srvInfo.Resources["capacity"] = resInfoCap
 	srvInfo.Resources["things"] = resInfoThings
 
-	resCap.Quota = nil
-	resCap.PerAZ["az-one"].Quota = p2i64(50)
-	resCap.PerAZ["az-two"].Quota = p2i64(50)
-	resThings.Quota = nil
-	resThings.PerAZ["az-one"].Quota = p2i64(21)
-	resThings.PerAZ["az-two"].Quota = p2i64(21)
+	resCap.Quota = None[int64]()
+	resCap.PerAZ["az-one"].Quota = Some[int64](50)
+	resCap.PerAZ["az-two"].Quota = Some[int64](50)
+	resThings.Quota = None[int64]()
+	resThings.PerAZ["az-one"].Quota = Some[int64](21)
+	resThings.PerAZ["az-two"].Quota = Some[int64](21)
 	serviceUsageReport.Resources["capacity"] = resCap
 	serviceUsageReport.Resources["things"] = resThings
 
@@ -766,9 +759,9 @@ func Test_TopologyScrapes(t *testing.T) {
 	// topology of a resource changes. Reset AZ-separated backend_quota
 	resInfoThings.Topology = liquid.AZAwareTopology
 	srvInfo.Resources["things"] = resInfoThings
-	resThings.Quota = pointerTo(int64(42))
-	resThings.PerAZ["az-one"].Quota = nil
-	resThings.PerAZ["az-two"].Quota = nil
+	resThings.Quota = Some[int64](42)
+	resThings.PerAZ["az-one"].Quota = None[int64]()
+	resThings.PerAZ["az-two"].Quota = None[int64]()
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))

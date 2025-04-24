@@ -1805,7 +1805,7 @@ func Test_MergeCommitments(t *testing.T) {
 	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
 	expectedContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{5}}
 	var supersedeContext db.CommitmentWorkflowContext
-	err = json.Unmarshal(*supersededCommitment.SupersedeContextJSON, &supersedeContext)
+	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1815,7 +1815,7 @@ func Test_MergeCommitments(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
-	err = json.Unmarshal(*supersededCommitment.SupersedeContextJSON, &supersedeContext)
+	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
 	if err != nil {
 		t.Fatal(err)
 	}
