@@ -61,7 +61,7 @@ func BuildResourceNameMapping(cluster *Cluster) ResourceNameMapping {
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
-		for dbResourceName := range quotaPlugin.Resources() {
+		for dbResourceName := range quotaPlugin.ServiceInfo().Resources {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.fromAPIToDB[apiRef] = dbRef
@@ -80,7 +80,7 @@ func BuildRateNameMapping(cluster *Cluster) RateNameMapping {
 	}
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
 		dbRateNames := make(map[liquid.RateName]struct{})
-		for dbRateName := range quotaPlugin.Rates() {
+		for dbRateName := range quotaPlugin.ServiceInfo().Rates {
 			dbRateNames[dbRateName] = struct{}{}
 		}
 		cfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)

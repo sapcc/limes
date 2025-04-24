@@ -117,11 +117,9 @@ type QuotaPlugin interface {
 	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error
 
 	// ServiceInfo returns metadata for this service.
-	ServiceInfo() ServiceInfo
+	// This includes metadata for all the resources and rates that this plugin scrapes.
+	ServiceInfo() liquid.ServiceInfo
 
-	// Resources returns metadata for all the resources that this plugin scrapes
-	// from the backend service.
-	Resources() map[liquid.ResourceName]liquid.ResourceInfo
 	// Scrape queries the backend service for the quota and usage data of all
 	// known resources for the given project in the given domain. The string keys
 	// in the result map must be identical to the resource names
@@ -145,9 +143,6 @@ type QuotaPlugin interface {
 	// values for all resources defined by Resources().
 	SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error
 
-	// Rates returns metadata for all the rates that this plugin scrapes
-	// from the backend service.
-	Rates() map[liquid.RateName]liquid.RateInfo
 	// ScrapeRates queries the backend service for the usage data of all the rates
 	// enumerated by Rates() for the given project in the given domain. The string
 	// keys in the result map must be identical to the rate names from Rates().
@@ -181,21 +176,6 @@ type QuotaPlugin interface {
 	// should be preferred since metrics emitted here won't be lost between
 	// restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
-}
-
-// ServiceInfo is a reduced version of type limes.ServiceInfo, suitable for
-// being returned from func QuotaPlugin.ServiceInfo().
-type ServiceInfo struct {
-	Area string
-}
-
-// ForAPI inflates the given core.ServiceInfo into a limes.ServiceInfo.
-// The given ServiceType should be the one that we want to appear in the API.
-func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type: serviceType,
-		Area: s.Area,
-	}
 }
 
 // BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.

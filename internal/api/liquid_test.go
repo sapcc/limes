@@ -40,8 +40,8 @@ const (
 		services:
 			- service_type: unittest
 				type: liquid
+				area: testing
 				params:
-					area: testing
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: unittest

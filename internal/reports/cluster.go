@@ -420,8 +420,9 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 		srvReport, exists := report.Services[apiServiceType]
 		if !exists {
+			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 			srvReport = &limesrates.ClusterServiceReport{
-				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+				ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 				Rates:       make(limesrates.ClusterRateReports),
 			}
 			report.Services[apiServiceType] = srvReport
@@ -448,8 +449,9 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 			srvReport, exists := report.Services[apiServiceType]
 			if !exists {
+				srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 				srvReport = &limesrates.ClusterServiceReport{
-					ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+					ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 					Rates:       make(limesrates.ClusterRateReports),
 				}
 				report.Services[apiServiceType] = srvReport
@@ -471,8 +473,9 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	service, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
+		srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 		service = &limesresources.ClusterServiceReport{
-			ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiIdentity.ServiceType),
+			ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 			Resources:   make(limesresources.ClusterResourceReports),
 		}
 		report.Services[apiIdentity.ServiceType] = service

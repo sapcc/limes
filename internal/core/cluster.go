@@ -169,7 +169,7 @@ func (c *Cluster) HasResource(serviceType db.ServiceType, resourceName liquid.Re
 	if plugin == nil {
 		return false
 	}
-	_, exists := plugin.Resources()[resourceName]
+	_, exists := plugin.ServiceInfo().Resources[resourceName]
 	return exists
 }
 
@@ -182,22 +182,11 @@ func (c *Cluster) InfoForResource(serviceType db.ServiceType, resourceName liqui
 	if plugin == nil {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
-	resInfo, exists := plugin.Resources()[resourceName]
+	resInfo, exists := plugin.ServiceInfo().Resources[resourceName]
 	if !exists {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
 	return resInfo
-}
-
-// InfoForService finds the plugin for the given serviceType and returns its
-// ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
-// service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType db.ServiceType) ServiceInfo {
-	plugin := c.QuotaPlugins[serviceType]
-	if plugin == nil {
-		return ServiceInfo{}
-	}
-	return plugin.ServiceInfo()
 }
 
 // This is used to reach ConfigSets stored inside type ServiceConfiguration.
@@ -291,7 +280,7 @@ func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.Ra
 	if plugin == nil {
 		return false
 	}
-	_, exists := plugin.Rates()[rateName]
+	_, exists := plugin.ServiceInfo().Rates[rateName]
 	return exists
 }
 
@@ -305,7 +294,7 @@ func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName liquid.RateNa
 	if plugin == nil {
 		return liquid.RateInfo{Unit: limes.UnitNone}
 	}
-	info, exists := plugin.Rates()[rateName]
+	info, exists := plugin.ServiceInfo().Rates[rateName]
 	if exists {
 		return info
 	}

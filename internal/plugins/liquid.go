@@ -22,7 +22,6 @@ package plugins
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -59,9 +58,6 @@ func (p *LiquidQuotaPlugin) PluginTypeID() string {
 
 // Init implements the core.QuotaPlugin interface.
 func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
-	if p.Area == "" {
-		return errors.New("missing required value: params.area")
-	}
 	p.ServiceType = serviceType
 	if p.LiquidServiceType == "" {
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
@@ -81,8 +77,8 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *LiquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{Area: p.Area}
+func (p *LiquidQuotaPlugin) ServiceInfo() liquid.ServiceInfo {
+	return p.LiquidServiceInfo
 }
 
 // Resources implements the core.QuotaPlugin interface.

@@ -189,8 +189,9 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiIdentity.ServiceType]
 		if srvReport == nil {
+			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 			srvReport = &limesresources.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiIdentity.ServiceType),
+				ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 				Resources:   make(limesresources.ProjectResourceReports),
 			}
 			projectReport.Services[apiIdentity.ServiceType] = srvReport
@@ -507,8 +508,9 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiServiceType]
 		if srvReport == nil {
+			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+				ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 				Rates:       make(limesrates.ProjectRateReports),
 			}
 			projectReport.Services[apiServiceType] = srvReport
@@ -597,8 +599,9 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 
 			srvReport := report.Services[apiServiceType]
 			if srvReport == nil {
+				srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
 				srvReport = &limesrates.ProjectServiceReport{
-					ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+					ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 					Rates:       make(limesrates.ProjectRateReports),
 				}
 				report.Services[apiServiceType] = srvReport
