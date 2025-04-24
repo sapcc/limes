@@ -20,6 +20,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -27,22 +28,11 @@ import (
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/plugins"
+	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
 const (
-	liquidQuotaTestConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: --test-static
-		services:
-			- service_type: unittest
-				type: liquid
-				params:
-					area: testing
-					test_mode: true
-	`
 	liquidCapacityTestConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
@@ -52,22 +42,24 @@ const (
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
+					liquid_service_type: %[1]s
 		capacitors:
 		- id: unittest
 			type: liquid
 			params:
 				service_type: unittest
-				test_mode: true
+				liquid_service_type: %[1]s
 		resource_behavior:
-		- { resource: unittest/capacity, overcommit_factor: 1.5}
+		- { resource: unittest/capacity, overcommit_factor: 1.5 }
 	`
 )
 
-func commonLiquidTestSetup(t *testing.T) (s test.Setup) {
+func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Setup) {
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+
 	t.Helper()
 	s = test.NewSetup(t,
-		test.WithConfig(liquidCapacityTestConfigYAML),
+		test.WithConfig(fmt.Sprintf(liquidCapacityTestConfigYAML, liquidServiceType)),
 		test.WithAPIHandler(NewV1API),
 		test.WithProject(core.KeystoneProject{
 			Name: "project-1",
@@ -79,28 +71,17 @@ func commonLiquidTestSetup(t *testing.T) (s test.Setup) {
 }
 
 func TestGetServiceCapacityRequest(t *testing.T) {
-	s := commonLiquidTestSetup(t)
+	srvInfo := test.DefaultLiquidServiceInfo()
+	resInfo := srvInfo.Resources["capacity"]
+	resInfo.NeedsResourceDemand = true // must be set to test rendering of ServiceCapacityRequest.DemandForResource
+	srvInfo.Resources["capacity"] = resInfo
+
+	s := commonLiquidTestSetup(t, srvInfo)
 
 	// modify the first Resource that the Setup creates
 	s.ProjectAZResources[0].Usage = 10
 	_, err := s.DB.Update(s.ProjectAZResources[0])
 	mustT(t, err)
-
-	s.Cluster.CapacityPlugins["unittest"].(*plugins.LiquidCapacityPlugin).LiquidServiceInfo = liquid.ServiceInfo{
-		Version: 1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"capacity": {
-				Unit:                liquid.UnitBytes,
-				Topology:            liquid.AZAwareTopology,
-				HasCapacity:         true,
-				NeedsResourceDemand: true,
-			},
-			"things": {
-				Unit:        liquid.UnitNone,
-				HasCapacity: false,
-			},
-		},
-	}
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
@@ -156,9 +137,10 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 }
 
 func TestServiceUsageRequest(t *testing.T) {
-	s := commonLiquidTestSetup(t)
+	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo.UsageReportNeedsProjectMetadata = true
 
-	s.Cluster.QuotaPlugins["unittest"].(*plugins.LiquidQuotaPlugin).LiquidServiceInfo = liquid.ServiceInfo{UsageReportNeedsProjectMetadata: true}
+	s := commonLiquidTestSetup(t, srvInfo)
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false

@@ -71,11 +71,9 @@ func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus
 	if !c.Cluster.HasService(serviceType) {
 		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
+	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
 	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery, serviceType)
-	if err == nil {
-		labels["service_name"] = c.Cluster.InfoForService(srv.Type).ProductName
-	}
 	return
 }
 

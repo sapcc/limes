@@ -45,6 +45,10 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // scraped_at aggregate metrics
 
+// TODO: When merging these metrics together while merging the resource
+// scraping and rate scraping loops, please also get rid of the duplicate label
+// `service_name` that is currently retained for backwards compatibility (which
+// is to say, I didn't care to assess the impact of removing it yet).
 var minScrapedAtGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_oldest_scraped_at",
@@ -131,30 +135,29 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if plugin == nil {
 			return nil
 		}
-		serviceName := plugin.ServiceInfo().ProductName
 
 		if len(plugin.Resources()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				string(serviceType), serviceName,
+				string(serviceType), string(serviceType),
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				string(serviceType), serviceName,
+				string(serviceType), string(serviceType),
 			)
 		}
 		if len(plugin.Rates()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
-				string(serviceType), serviceName,
+				string(serviceType), string(serviceType),
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxRatesScrapedAt),
-				string(serviceType), serviceName,
+				string(serviceType), string(serviceType),
 			)
 		}
 		return nil
@@ -310,11 +313,10 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	quotaPluginMetricsOkGauge.Describe(descCh)
 	pluginMetricsOkDesc := <-descCh
-	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
 
 	if c.Override != nil {
 		for _, instance := range c.Override {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, serviceNameByType, instance)
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, instance)
 		}
 		return
 	}
@@ -326,7 +328,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
 			&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, serviceNameByType, i)
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
 		}
 		return err
 	})
@@ -335,7 +337,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[db.ServiceType]string, instance QuotaPluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
@@ -353,7 +355,7 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
 		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID,
-		string(instance.ServiceType), serviceNameByType[instance.ServiceType],
+		string(instance.ServiceType), string(instance.ServiceType),
 	)
 }
 
@@ -524,7 +526,6 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
-	serviceNameByType := buildServiceNameByTypeMapping(d.Cluster)
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
 	result := make(map[string][]dataMetric)
 
@@ -568,7 +569,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
 				azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
-					az, apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+					az, apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 				)
 				metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
 				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
@@ -582,7 +583,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		}
 
 		labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 		)
 		metric := dataMetric{Labels: labels, Value: float64(behavior.OvercommitFactor.ApplyTo(totalCapacity))}
 		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -610,7 +611,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			apiIdentity := behaviorCache.Get(serviceType, resName).IdentityInV1API
 
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[serviceType],
+				apiIdentity.Name, apiIdentity.ServiceType, serviceType,
 			)
 			metric := dataMetric{Labels: labels, Value: 0}
 			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -636,7 +637,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			labels := fmt.Sprintf(
 				`domain=%q,domain_id=%q,resource=%q,service=%q,service_name=%q`,
 				domainName, domainUUID,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 			)
 			metric := dataMetric{Labels: labels, Value: float64(*quota)}
 			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
@@ -674,7 +675,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		labels := fmt.Sprintf(
 			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 		)
 
 		if quota != nil {
@@ -736,7 +737,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		labels := fmt.Sprintf(
 			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			az, domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 		)
 
 		if d.ReportZeroes || usage != 0 {
@@ -773,7 +774,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
@@ -791,7 +792,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 			for _, duration := range behaviorCache.GetCommitmentBehavior(dbServiceType, dbResourceName).Durations {
 				labels := fmt.Sprintf(`duration=%q,resource=%q,service=%q,service_name=%q`,
-					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 				)
 				metric := dataMetric{Labels: labels, Value: 1.0}
 				result["limes_available_commitment_duration"] = append(result["limes_available_commitment_duration"], metric)
@@ -826,7 +827,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			labels := fmt.Sprintf(
 				`domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q,service_name=%q`,
 				domainName, domainUUID, projectName, projectUUID,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 			)
 			metric := dataMetric{Labels: labels, Value: usageAsFloat}
 			result["limes_project_rate_usage"] = append(result["limes_project_rate_usage"], metric)
@@ -842,14 +843,6 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // utilities
-
-func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.ServiceType]string) {
-	serviceNameByType = make(map[db.ServiceType]string, len(c.QuotaPlugins))
-	for serviceType, plugin := range c.QuotaPlugins {
-		serviceNameByType[serviceType] = plugin.ServiceInfo().ProductName
-	}
-	return
-}
 
 // Caches the result of repeated cluster.BehaviorForResource() calls.
 //

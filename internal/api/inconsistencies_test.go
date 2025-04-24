@@ -20,6 +20,7 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
@@ -37,20 +38,22 @@ const (
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
+					liquid_service_type: %[1]s
 			- service_type: unshared
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
+					liquid_service_type: %[2]s
 	`
 )
 
 func TestFullInconsistencyReport(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	_, liquidServiceType2 := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-inconsistencies.sql"),
-		test.WithConfig(inconsistenciesTestConfigYAML),
+		test.WithConfig(fmt.Sprintf(inconsistenciesTestConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -63,9 +66,11 @@ func TestFullInconsistencyReport(t *testing.T) {
 }
 
 func TestEmptyInconsistencyReport(t *testing.T) {
+	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	_, liquidServiceType2 := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	t.Helper()
 	s := test.NewSetup(t,
-		test.WithConfig(inconsistenciesTestConfigYAML),
+		test.WithConfig(fmt.Sprintf(inconsistenciesTestConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithAPIHandler(NewV1API),
 	)
 

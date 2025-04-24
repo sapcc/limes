@@ -22,6 +22,7 @@ package collector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -41,13 +42,13 @@ const (
 				type: liquid
 				params:
 					area: testing
-					test_mode: true
+					liquid_service_type: %[1]s
 		capacitors:
 		- id: noop
 			type: liquid
 			params:
 				service_type: noop
-				test_mode: true
+				liquid_service_type: %[1]s
 `
 )
 
@@ -73,8 +74,10 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 }
 
 func Test_MailDelivery(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testMailNoopYAML),
+		test.WithConfig(fmt.Sprintf(testMailNoopYAML, liquidServiceType)),
 		test.WithDBFixtureFile("fixtures/mail_delivery.sql"))
 	c := getCollector(t, s)
 

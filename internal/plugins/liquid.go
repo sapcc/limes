@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
@@ -44,7 +43,6 @@ type LiquidQuotaPlugin struct {
 	Area              string         `yaml:"area"`
 	LiquidServiceType string         `yaml:"liquid_service_type"`
 	ServiceType       db.ServiceType `yaml:"-"`
-	TestMode          bool           `yaml:"test_mode"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -70,13 +68,9 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	if p.TestMode {
-		p.LiquidClient = core.NewMockLiquidClient()
-	} else {
-		p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
-		if err != nil {
-			return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
-		}
+	p.LiquidClient, err = core.NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: p.LiquidServiceType})
+	if err != nil {
+		return err
 	}
 
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
@@ -89,10 +83,7 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 
 // ServiceInfo implements the core.QuotaPlugin interface.
 func (p *LiquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
-		ProductName: strings.TrimPrefix(p.LiquidServiceType, "liquid-"),
-		Area:        p.Area,
-	}
+	return core.ServiceInfo{Area: p.Area}
 }
 
 // Resources implements the core.QuotaPlugin interface.

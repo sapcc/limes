@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -42,18 +43,20 @@ const (
 				type: liquid
 				params:
 					area: shared
-					test_mode: true
+					liquid_service_type: %[1]s
 			- service_type: unshared
 				type: liquid
 				params:
 					area: unshared
-					test_mode: true
+					liquid_service_type: %[1]s
 	`
 )
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(testKeystoneConfigYAML),
+		test.WithConfig(fmt.Sprintf(testKeystoneConfigYAML, liquidServiceType)),
 	)
 	return s, s.Cluster
 }

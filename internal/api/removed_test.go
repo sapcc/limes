@@ -20,6 +20,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -30,8 +31,10 @@ import (
 )
 
 func TestForbidClusterIDHeader(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(`
+		test.WithConfig(fmt.Sprintf(`
 			availability_zones: [ az-one, az-two ]
 			discovery:
 				method: --test-static
@@ -40,8 +43,8 @@ func TestForbidClusterIDHeader(t *testing.T) {
 					type: liquid
 					params:
 						area: testing
-						test_mode: true
-		`),
+						liquid_service_type: %[1]s
+		`, liquidServiceType)),
 		test.WithAPIHandler(NewV1API,
 			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		),

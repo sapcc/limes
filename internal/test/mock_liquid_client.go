@@ -21,11 +21,41 @@ package test
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/gofrs/uuid/v5"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 )
+
+// DefaultLiquidServiceInfo builds the default ServiceInfo that most mock liquids use.
+// It defines two resources:
+//   - "capacity" is measured in bytes, AZ-aware and reports capacity.
+//   - "things" is counted, not AZ-aware and does not report capacity.
+func DefaultLiquidServiceInfo() liquid.ServiceInfo {
+	return liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				Unit:                liquid.UnitBytes,
+				Topology:            liquid.AZAwareTopology,
+				HasCapacity:         true,
+				HasQuota:            true,
+				NeedsResourceDemand: true,
+			},
+			"things": {
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.FlatTopology,
+				HasCapacity: false,
+				HasQuota:    true,
+			},
+		},
+	}
+}
 
 // MockLiquidClient implements the LiquidClient interface
 type MockLiquidClient struct {
@@ -37,31 +67,35 @@ type MockLiquidClient struct {
 	quotaError            error
 }
 
+var mockLiquidClients = make(map[string]core.LiquidClient)
+
+// NewMockLiquidClient creates a new MockLiquidClient instance.
+//
+// As a caller, you receive the actual MockLiquidClient instance that you can
+// manipulate throughout the tests to setup the specific scenarios that you
+// want to test.
+//
+// Additionally, the client is put into an internal registry under the returned
+// service type string. This value shall be put into the cluster configuration
+// to allow the core.Cluster object to find your mock client.
+func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClient, liquidServiceType string) {
+	// We use a randomly-generated service type here, in order to allow for
+	// multiple tests to proceed in parallel without interfering with each other
+	// (once we deem this actually safe to do).
+	liquidServiceType = must.Return(uuid.NewV4()).String()
+
+	client = &MockLiquidClient{serviceInfo: serviceInfo}
+	mockLiquidClients[liquidServiceType] = client
+	return
+}
+
 func init() {
-	core.NewMockLiquidClient = func() core.LiquidClient {
-		return &MockLiquidClient{
-			serviceInfo: liquid.ServiceInfo{
-				Version: 1,
-				Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-					"capacity": {
-						Unit:                liquid.UnitBytes,
-						Topology:            liquid.AZAwareTopology,
-						HasCapacity:         true,
-						HasQuota:            true,
-						NeedsResourceDemand: true,
-					},
-					"things": {
-						Unit:        liquid.UnitNone,
-						Topology:    liquid.FlatTopology,
-						HasCapacity: false,
-						HasQuota:    true,
-					},
-				},
-			},
-			usageReportError:    nil,
-			capacityReportError: nil,
-			quotaError:          nil,
+	core.NewLiquidClient = func(_ *gophercloud.ProviderClient, _ gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (core.LiquidClient, error) {
+		client, ok := mockLiquidClients[opts.ServiceType]
+		if !ok {
+			return nil, fmt.Errorf("no MockLiquidClient registered for service type %q", opts.ServiceType)
 		}
+		return client, nil
 	}
 }
 

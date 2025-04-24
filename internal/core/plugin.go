@@ -22,6 +22,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -29,6 +30,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/pluggable"
 
 	"github.com/sapcc/limes/internal/db"
@@ -184,17 +186,15 @@ type QuotaPlugin interface {
 // ServiceInfo is a reduced version of type limes.ServiceInfo, suitable for
 // being returned from func QuotaPlugin.ServiceInfo().
 type ServiceInfo struct {
-	ProductName string
-	Area        string
+	Area string
 }
 
 // ForAPI inflates the given core.ServiceInfo into a limes.ServiceInfo.
 // The given ServiceType should be the one that we want to appear in the API.
 func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        serviceType,
-		ProductName: s.ProductName,
-		Area:        s.Area,
+		Type: serviceType,
+		Area: s.Area,
 	}
 }
 
@@ -291,10 +291,17 @@ type LiquidClient interface {
 	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
 }
 
-// NewMockLiquidClient creates a *test.MockLiquidClient instance.
+// NewLiquidClient is usually a synonym for liquidapi.NewClient().
 //
-// This is located here, and implemented as a dependency injection slot, in order to break an import cycle between internal/test/plugins and internal/plugins.
-var NewMockLiquidClient func() LiquidClient
+// In tests, it serves as a dependency injection slot to allow type Cluster to
+// access mock liquids prepared by the test's specific setup code.
+var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
+	client, err := liquidapi.NewClient(provider, eo, opts)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize ServiceClient for %s: %w", opts.ServiceType, err)
+	}
+	return client, nil
+}
 
 // ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
 var ErrNotALiquid = errors.New("this plugin is not a liquid")
