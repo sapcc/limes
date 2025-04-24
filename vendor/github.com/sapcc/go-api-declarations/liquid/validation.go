@@ -46,17 +46,17 @@ func ValidateServiceInfo(srv ServiceInfo) error {
 }
 
 func validateServiceInfoImpl(srv ServiceInfo) (errs errorset.ErrorSet) {
-	for resName, resInfo := range srv.Resources {
-		if !resInfo.Topology.IsValid() {
-			errs.Addf(".Resources[%q] has invalid topology %q", resName, resInfo.Topology)
+	for _, resName := range slices.Sorted(maps.Keys(srv.Resources)) {
+		if !srv.Resources[resName].Topology.IsValid() {
+			errs.Addf(".Resources[%q] has invalid topology %q", resName, srv.Resources[resName].Topology)
 		}
 	}
 
-	for rateName, rateInfo := range srv.Rates {
-		if !rateInfo.Topology.IsValid() {
-			errs.Addf(".Rates[%q] has invalid topology %q", rateName, rateInfo.Topology)
+	for _, rateName := range slices.Sorted(maps.Keys(srv.Rates)) {
+		if !srv.Rates[rateName].Topology.IsValid() {
+			errs.Addf(".Rates[%q] has invalid topology %q", rateName, srv.Rates[rateName].Topology)
 		}
-		if !rateInfo.HasUsage {
+		if !srv.Rates[rateName].HasUsage {
 			errs.Addf(".Rates[%q] declared with HasUsage = false, but must be true", rateName)
 		}
 	}
@@ -136,6 +136,7 @@ func validateCapacityReportImpl(report ServiceCapacityReport, req ServiceCapacit
 //   - Each rate must report usage exactly for those AZs that its declared topology requires:
 //     For FlatRateTopology, only AvailabilityZoneAny is allowed.
 //     For other topologies, all AZs in req.AllAZs must be present (and possibly AvailabilityZoneUnknown, but no others).
+//   - For rate usage values, the value Some(nil) is forbidden.
 //   - All metrics families declared in info.UsageMetricFamilies must be present (and no others).
 //   - The number of labels on each metric must match the declared label set.
 //
@@ -189,6 +190,14 @@ func validateUsageReportImpl(report ServiceUsageReport, req ServiceUsageRequest,
 			continue
 		}
 		errs.Add(validatePerAZAgainstTopology(rate.PerAZ, rateInfo.Topology, ".Rates", rateName, req.AllAZs))
+		for az, azRate := range rate.PerAZ {
+			usage, ok := azRate.Usage.Unpack()
+			if !ok {
+				errs.Addf("missing value for .Rates[%q].PerAZ[%q].Usage (rate was declared with HasUsage = true)", rateName, az)
+			} else if usage == nil {
+				errs.Addf("unexpected nil value in payload of .Rates[%q].PerAZ[%q].Usage", rateName, az)
+			}
+		}
 	}
 
 	return errs

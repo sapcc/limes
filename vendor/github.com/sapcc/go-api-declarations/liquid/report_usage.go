@@ -79,7 +79,7 @@ type ResourceUsageReport struct {
 	//   - If the project has no usage in this resource, Limes will hide this resource from project reports.
 	Forbidden bool `json:"forbidden"`
 
-	// This shall be null if and only if the resource is declared with "HasQuota = false" or with AZSeparatedTopology.
+	// This shall be None if and only if the resource is declared with "HasQuota = false" or with AZSeparatedTopology.
 	// A negative value, usually -1, indicates "infinite quota" (i.e., the absence of a quota).
 	Quota Option[int64] `json:"quota,omitzero"`
 
@@ -161,6 +161,7 @@ type RateUsageReport struct {
 // It appears in type RateUsageReport.
 type AZRateUsageReport struct {
 	// The amount of usage for this rate. Must be Some() and non-nil if the rate is declared with HasUsage = true.
+	// The value Some(nil) is forbidden.
 	//
 	// For a given rate, project and AZ, this value must only ever increase monotonically over time.
 	// If there is the possibility of counter resets or limited retention in the underlying data source, the liquid must add its own logic to guarantee monotonicity.
