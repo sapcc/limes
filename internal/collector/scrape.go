@@ -127,7 +127,7 @@ func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (
 	if !c.Cluster.HasService(serviceType) {
 		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
-	labels["service_name"] = c.Cluster.InfoForService(serviceType).ProductName
+	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
 	task.Timing.StartedAt = c.MeasureTime()
 	err = c.DB.SelectOne(&task.Service, query, serviceType, task.Timing.StartedAt)

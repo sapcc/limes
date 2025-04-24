@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -88,10 +87,7 @@ func (p *LiquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 
 // ServiceInfo implements the core.QuotaPlugin interface.
 func (p *LiquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
-		ProductName: strings.TrimPrefix(p.LiquidServiceType, "liquid-"),
-		Area:        p.Area,
-	}
+	return core.ServiceInfo{Area: p.Area}
 }
 
 // Resources implements the core.QuotaPlugin interface.
