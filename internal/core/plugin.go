@@ -184,17 +184,15 @@ type QuotaPlugin interface {
 // ServiceInfo is a reduced version of type limes.ServiceInfo, suitable for
 // being returned from func QuotaPlugin.ServiceInfo().
 type ServiceInfo struct {
-	ProductName string
-	Area        string
+	Area string
 }
 
 // ForAPI inflates the given core.ServiceInfo into a limes.ServiceInfo.
 // The given ServiceType should be the one that we want to appear in the API.
 func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        serviceType,
-		ProductName: s.ProductName,
-		Area:        s.Area,
+		Type: serviceType,
+		Area: s.Area,
 	}
 }
 
