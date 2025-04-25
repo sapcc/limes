@@ -8,7 +8,11 @@
 // that cannot be expressed as methods on the Option type itself.
 package options
 
-import . "github.com/majewsky/gg/option"
+import (
+	"cmp"
+
+	. "github.com/majewsky/gg/option"
+)
 
 // NOTE: Keep functions sorted by name.
 
@@ -35,5 +39,47 @@ func Map[T, U any](o Option[T], mapping func(T) U) Option[U] {
 		return Some(mapping(t))
 	} else {
 		return None[U]()
+	}
+}
+
+// Max returns the largest of its input values, while disregarding None values.
+// If there are no Some values, None is returned.
+func Max[T cmp.Ordered](inputs ...Option[T]) Option[T] {
+	var (
+		result T
+		isSome = false
+	)
+	for _, i := range inputs {
+		value, ok := i.Unpack()
+		if ok && (!isSome || result < value) {
+			result = value
+			isSome = true
+		}
+	}
+	if isSome {
+		return Some(result)
+	} else {
+		return None[T]()
+	}
+}
+
+// Min returns the smallest of its input values, while disregarding None values.
+// If there are no Some values, None is returned.
+func Min[T cmp.Ordered](inputs ...Option[T]) Option[T] {
+	var (
+		result T
+		isSome = false
+	)
+	for _, i := range inputs {
+		value, ok := i.Unpack()
+		if ok && (!isSome || result > value) {
+			result = value
+			isSome = true
+		}
+	}
+	if isSome {
+		return Some(result)
+	} else {
+		return None[T]()
 	}
 }
