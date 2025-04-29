@@ -59,12 +59,10 @@ const (
 					liquid_service_type: %[2]s
 		capacitors:
 		- id: unittest
-			type: liquid
 			params:
 				service_type: shared
 				liquid_service_type: %[1]s
 		- id: unittest2
-			type: liquid
 			params:
 				service_type: unshared
 				liquid_service_type: %[2]s
@@ -82,7 +80,6 @@ const (
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: unittest
-			type: liquid
 			params:
 				service_type: shared
 				liquid_service_type: %[1]s
@@ -117,12 +114,10 @@ const (
 				commitment_behavior_per_resource: *commitment-on-capacity
 		capacitors:
 		- id: scans-first
-			type: liquid
 			params:
 				service_type: first
 				liquid_service_type: %[1]s
 		- id: scans-second
-			type: liquid
 			params:
 				service_type: second
 				liquid_service_type: %[2]s
@@ -592,6 +587,53 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE capacitor_id = 'unittest';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+}
+
+func Test_ScanManualCapacity(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	testScanCapacityManualConfigYAML := testScanCapacitySingleLiquidConfigYAML + `
+				fixed_capacity_values:
+					values:
+        		things: 1000000`
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	s := test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
+	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
+		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
+		mustT(t, err)
+	}
+
+	// check baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualf(`
+		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
+	`)
+
+	// adjust the capacity report to not show any capacity
+	res := srvInfo.Resources["capacity"]
+	res.HasCapacity = false
+	srvInfo.Resources["capacity"] = res
+	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+	})
+
+	// normal resource are not written, but the manual resource is
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 1000000);
+		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest', %[1]d, 5, '{}', %[2]d);
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'unittest', 1, 'things');
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)

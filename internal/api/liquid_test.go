@@ -45,7 +45,6 @@ const (
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: unittest
-			type: liquid
 			params:
 				service_type: unittest
 				liquid_service_type: %[1]s

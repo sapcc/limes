@@ -105,7 +105,9 @@ services:
   - type: network
 capacitors:
   - id: nova
-    type: nova
+    params:
+      service_type: compute
+      liquid_service_type: liquid-nova
 ```
 
 The following fields and sections are supported:
@@ -416,21 +418,21 @@ For information on liquids provided by Limes itself, please refer to the [liquid
 
 ## Available capacity plugins
 
-Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
-`services` list as well.
+Capacity Plugins (`capacitors[]`) are currently in deprecation and will be merged with the `services[]` configuration (responsible for the 
+quota plugins) into a `liquids[]` configuration eventually. In future, Limes will assume that each `service` has a corresponding liquid.
+Respectively, the capacity collection for a service is only possible when the corresponding liquid exists for the service, although a liquid
+does not have to report capacity. That means, for now the only allowed type of capacity plugin is implicitly of type `liquid`. Besides values
+from the liquid, the `capacitors` accept two additional means of providing capacity values: `manual` and `prometheus`. In case additional paths
+are configured (all 3 can be combined) the whole collection for a service will error if at least one path (liquid, manual, prometheus) fails.
 
-Capacity plugins have a `type` (as specified in the subheadings for this section) and an `id`. For most capacity
-plugins, having more than one does not make sense because they refer to other service's APIs (which only exist once per
-cluster anyway). In these cases, `id` is conventionally set to the same as `type`. For capacity plugins like
-`prometheus` or `manual`, it's possible to have multiple plugins of the same type at once. In that case, the `id` must
-be unique for each plugin.
+Note that _currently_ capacity for a resource only becomes visible when the corresponding service is enabled in the
+`services[]` list as well.
 
-### `liquid`
+### `basic configuration of a capacity plugin (liquid)`
 
 ```yaml
 capacitors:
-  - id: liquid-nova
-    type: liquid
+  - id: nova
     params:
       service_type: compute
       liquid_service_type: liquid-nova
@@ -445,68 +447,69 @@ This is something that we plan on changing into a graceful reload in the future.
 
 For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
 
-### `manual`
+### `additional data: manual`
 
 ```yaml
 capacitors:
-  - id: manual
-    type: manual-network
+  - id: neutron
     params:
-      values:
-        network:
+      service_type: network
+      fixed_capacity_values:
+        values:
           floating_ips: 8192
           networks: 4096
 ```
 
-The `manual` capacity plugin does not query any backend service for capacity data. It just reports the capacity data
-that is provided in the configuration file in the `params.values` key. Values are grouped by service, then by resource.
+The `fixed_capacity_values` path does not query any backend service for capacity data. It just reports the capacity data
+that is provided in the configuration file in the `params.fixed_capacity_values.values` key. Values are grouped by resource.
 
 This is useful for capacities that cannot be queried automatically, but can be inferred from domain knowledge. Limes
 also allows to configure such capacities via the API, but operators might prefer the `manual` capacity plugin because it
 allows to track capacity values along with other configuration in a Git repository or similar.
 
-### `prometheus`
+### `additional data: prometheus`
 
 ```yaml
 capacitors:
-  - id: prometheus
-    type: prometheus-compute
+  - id: nova
     params:
-      api:
-        url: https://prometheus.example.com
-        cert:    /path/to/client.pem
-        key:     /path/to/client-key.pem
-        ca_cert: /path/to/server-ca.pem
-      queries:
-        compute:
+      service_type: compute
+      capacity_values_from_prometheus:
+        api:
+          url: https://prometheus.example.com
+          cert:    /path/to/client.pem
+          key:     /path/to/client-key.pem
+          ca_cert: /path/to/server-ca.pem
+        queries:
           cores:     sum by (az) (hypervisor_cores)
           ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
 ```
 
-Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
-instance must be running at the URL given in `params.api.url`. Each of the queries in `params.queries` is
-executed on this Prometheus instance. Queries are grouped by service, then by resource.
+Like the `fixed_capacity_values` path, this path can provide capacity values for arbitrary resources. A [Prometheus][prom]
+instance must be running at the URL given in `params.capacity_values_from_prometheus.api.url`. Each of the queries in 
+`params.capacity_values_from_prometheus.queries` is executed on this Prometheus instance. Queries are grouped by resource.
 
 Each query must result in one or more metrics with a unique `az` label. The values will be reported as capacity for that
 AZ, if the AZ is one of the known AZs or the pseudo-AZ `any`. All other capacity will be grouped under the pseudo-AZ
 `unknown` as a safe fallback. For non-AZ-aware resources, you can wrap the query expression in
 `label_replace($QUERY, "az", "any", "", "")` to add the required label.
 
-In `params.api`, only the `url` field is required. You can pin the server's CA
-certificate (`params.api.ca_cert`) and/or specify a TLS client certificate
-(`params.api.cert`) and private key (`params.api.key`) combination that
+In `params.capacity_values_from_prometheus.api`, only the `url` field is required. You can pin the server's CA
+certificate (`params.capacity_values_from_prometheus.api.ca_cert`) and/or specify a TLS client certificate
+(`params.capacity_values_from_prometheus.api.cert`) and private key (`params.capacity_values_from_prometheus.api.key`) combination that
 will be used by the HTTP client to make requests to the Prometheus API.
 
 For example, the following configuration can be used with [swift-health-exporter][she] to find the net capacity of a Swift cluster with 3 replicas:
 
 ```yaml
 capacitors:
-  - id: prometheus
-    type: prometheus-swift
+  - id: swift
     params:
-      api_url: https://prometheus.example.com
-      queries:
-        object-store:
+      service_type: compute
+      capacity_values_from_prometheus:
+        api: 
+          url: https://prometheus.example.com
+        queries:
           capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
 ```
 
