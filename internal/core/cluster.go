@@ -73,7 +73,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 
 	// instantiate capacity plugins
 	for _, capa := range config.Capacitors {
-		plugin := CapacityPluginRegistry.Instantiate(capa.PluginType)
+		plugin := CapacityPluginRegistry.Instantiate("liquid") // will be removed soon, when capacity and quota plugins are merged
 		if plugin == nil {
 			errs.Addf("setup for capacitor %s failed: no suitable capacity plugin found", capa.ID)
 		}

@@ -23,22 +23,38 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
+type prometheusCapacityConfiguration struct {
+	APIConfig         promquery.Config               `yaml:"api"`
+	Queries           map[liquid.ResourceName]string `yaml:"queries"`
+	AllowZeroCapacity bool                           `yaml:"allow_zero_capacity"`
+}
+
+type fixedCapacityConfiguration struct {
+	Values map[liquid.ResourceName]uint64 `yaml:"values"`
+}
+
 type LiquidCapacityPlugin struct {
 	// configuration
-	ServiceType       db.ServiceType `yaml:"service_type"`
-	LiquidServiceType string         `yaml:"liquid_service_type"`
+	ServiceType                     db.ServiceType                          `yaml:"service_type"`
+	LiquidServiceType               string                                  `yaml:"liquid_service_type"`
+	FixedCapacityConfiguration      Option[fixedCapacityConfiguration]      `yaml:"fixed_capacity_values"`
+	PrometheusCapacityConfiguration Option[prometheusCapacityConfiguration] `yaml:"capacity_values_from_prometheus"`
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -77,6 +93,8 @@ func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 }
 
 // Scrape implements the core.QuotaPlugin interface.
+// we assume that each resource only has one source of info (else, the last source wins and overwrites the previous data)
+// we fail the whole collection explicitly in case any of the sources fails
 func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	req, err := p.BuildServiceCapacityRequest(backchannel, allAZs)
 	if err != nil {
@@ -107,7 +125,7 @@ func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		}
 		resReport := resp.Resources[resName]
 		if resReport == nil {
-			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
+			return nil, nil, fmt.Errorf("missing liquid report for resource %q/%q", p.ServiceType, resName)
 		}
 
 		resData := make(core.PerAZ[core.CapacityData], len(resReport.PerAZ))
@@ -119,6 +137,29 @@ func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 			}
 		}
 		resultInService[resName] = resData
+	}
+
+	// manual capacity collection
+	fixedCapaConfig, exists := p.FixedCapacityConfiguration.Unpack()
+	if exists {
+		for resName, capacity := range fixedCapaConfig.Values {
+			resultInService[resName] = core.InAnyAZ(core.CapacityData{Capacity: capacity})
+		}
+	}
+
+	// prometheus capacity collection
+	prometheusCapaConfig, exists := p.PrometheusCapacityConfiguration.Unpack()
+	if exists {
+		client, err := prometheusCapaConfig.APIConfig.Connect()
+		if err != nil {
+			return nil, nil, err
+		}
+		for resName, query := range prometheusCapaConfig.Queries {
+			resultInService[resName], err = prometheusCapaConfig.prometheusScrapeOneResource(ctx, client, query, allAZs)
+			if err != nil {
+				return nil, nil, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", p.ServiceType, resName, err)
+			}
+		}
 	}
 
 	result = map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{
@@ -162,4 +203,61 @@ func (p *LiquidCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *LiquidCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
 	return liquidCollectMetrics(ch, serializedMetrics, p.LiquidServiceInfo.CapacityMetricFamilies, nil, nil)
+}
+
+func (p prometheusCapacityConfiguration) prometheusScrapeOneResource(ctx context.Context, client promquery.Client, query string, allAZs []limes.AvailabilityZone) (core.PerAZ[core.CapacityData], error) {
+	vector, err := client.GetVector(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	// for known AZs, we expect exactly one result;
+	// all unknown AZs get lumped into AvailabilityZoneUnknown
+	matchedSamples := make(map[limes.AvailabilityZone]*model.Sample)
+	var unmatchedSamples []*model.Sample
+	for _, sample := range vector {
+		az := limes.AvailabilityZone(sample.Metric["az"])
+		switch {
+		case az == "":
+			return nil, fmt.Errorf(`missing label "az" on metric %v = %g`, sample.Metric, sample.Value)
+		case slices.Contains(allAZs, az) || az == limes.AvailabilityZoneAny:
+			if matchedSamples[az] != nil {
+				other := matchedSamples[az]
+				return nil, fmt.Errorf(`multiple samples for az=%q: found %v = %g and %v = %g`, az, sample.Metric, sample.Value, other.Metric, other.Value)
+			}
+			matchedSamples[az] = sample
+		default:
+			unmatchedSamples = append(unmatchedSamples, sample)
+		}
+	}
+
+	// build result
+	result := core.PerAZ[core.CapacityData]{}
+	for az, sample := range matchedSamples {
+		result[az] = &core.CapacityData{
+			Capacity: uint64(sample.Value),
+		}
+	}
+	if len(result) == 0 || len(unmatchedSamples) > 0 {
+		unmatchedCapacity := float64(0.0)
+		for _, sample := range unmatchedSamples {
+			unmatchedCapacity += float64(sample.Value)
+		}
+		result[limes.AvailabilityZoneUnknown] = &core.CapacityData{
+			Capacity: uint64(unmatchedCapacity),
+		}
+	}
+
+	// validate result
+	if !p.AllowZeroCapacity {
+		totalCapacity := uint64(0)
+		for _, azData := range result {
+			totalCapacity += azData.Capacity
+		}
+		if totalCapacity == 0 {
+			return nil, errors.New("got 0 total capacity, but allow_zero_capacity = false")
+		}
+	}
+
+	return result, nil
 }

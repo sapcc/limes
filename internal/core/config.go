@@ -132,7 +132,6 @@ type RateLimitConfiguration struct {
 // certain cluster.
 type CapacitorConfiguration struct {
 	ID         string              `yaml:"id"`
-	PluginType string              `yaml:"type"`
 	Parameters util.YamlRawMessage `yaml:"params"`
 }
 
@@ -221,9 +220,6 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	for idx, capa := range cluster.Capacitors {
 		if capa.ID == "" {
 			missing(fmt.Sprintf("capacitors[%d].id", idx))
-		}
-		if capa.PluginType == "" {
-			missing(fmt.Sprintf("capacitors[%d].type", idx))
 		}
 	}
 

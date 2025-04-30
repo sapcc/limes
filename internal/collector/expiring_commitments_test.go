@@ -42,7 +42,6 @@ const (
 					liquid_service_type: %[1]s
 		capacitors:
 		- id: noop
-			type: liquid
 			params:
 				service_type: noop
 				liquid_service_type: %[1]s
