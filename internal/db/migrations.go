@@ -228,7 +228,7 @@ var sqlMigrations = map[string]string{
 		-- Step 2: Populate creation context
 		WITH creation_context_data AS (
 			SELECT pc.id as commitment_id, pc.predecessor_id,
-				CASE 
+				CASE
 					WHEN pc.predecessor_id IS NULL THEN 'create'
 					WHEN EXISTS (
 						SELECT 1
@@ -253,7 +253,7 @@ var sqlMigrations = map[string]string{
 		SET creation_context_json = jsonb_build_object(
 			'reason', creation_context_data.creation_reason,
 			'related_ids',
-			CASE 
+			CASE
 				WHEN creation_context_data.predecessor_id IS NULL THEN '[]'::jsonb
 				ELSE jsonb_build_array(creation_context_data.predecessor_id)
 			END
@@ -268,7 +268,7 @@ var sqlMigrations = map[string]string{
 		-- Step 4: Populate supersede context
 		WITH supersede_context_data AS (
 			SELECT pc.id AS superseded_id, pc2.id AS successor_id, pc2.az_resource_id AS successor_az_resource_id,
-				CASE 
+				CASE
 					WHEN EXISTS (
 						SELECT 1
 						FROM project_az_resources pc2_az_res
@@ -317,4 +317,33 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments
 			ADD COLUMN renew_context_json JSONB;
 	`,
+	"052_capacitors_removal.down.sql": `
+    ALTER TABLE cluster_services
+      DROP COLUMN scraped_at,
+			DROP COLUMN scrape_duration_secs,
+			DROP COLUMN serialized_metrics,
+			DROP COLUMN next_scrape_at,
+			DROP COLUMN scrape_error_message;
+    CREATE TABLE cluster_capacitors (
+			capacitor_id text NOT NULL,
+			scraped_at timestamp without time zone,
+			scrape_duration_secs real DEFAULT 0 NOT NULL,
+			serialized_metrics text DEFAULT ''::text NOT NULL,
+			next_scrape_at timestamp without time zone DEFAULT now() NOT NULL,
+			scrape_error_message text DEFAULT ''::text NOT NULL
+		);
+    ALTER TABLE cluster_resources
+		  ADD COLUMN capacitor_id TEXT NOT NULL;
+  `,
+	"052_capacitors_removal.up.sql": `
+    ALTER TABLE cluster_resources
+      DROP COLUMN capacitor_id;
+    DROP TABLE cluster_capacitors;
+    ALTER TABLE cluster_services
+      ADD COLUMN scraped_at timestamp without time zone,
+			ADD COLUMN scrape_duration_secs real DEFAULT 0 NOT NULL,
+			ADD COLUMN serialized_metrics text DEFAULT ''::text NOT NULL,
+			ADD COLUMN next_scrape_at timestamp without time zone DEFAULT now() NOT NULL,
+			ADD COLUMN scrape_error_message text DEFAULT ''::text NOT NULL;
+  `,
 }

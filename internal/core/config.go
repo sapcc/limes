@@ -131,8 +131,8 @@ type RateLimitConfiguration struct {
 // CapacitorConfiguration describes a capacity plugin that is enabled for a
 // certain cluster.
 type CapacitorConfiguration struct {
-	ID         string              `yaml:"id"`
-	Parameters util.YamlRawMessage `yaml:"params"`
+	ServiceType db.ServiceType      `yaml:"service_type"`
+	Parameters  util.YamlRawMessage `yaml:"params"`
 }
 
 // QuotaDistributionConfiguration contains configuration options for specifying
@@ -218,8 +218,8 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		}
 	}
 	for idx, capa := range cluster.Capacitors {
-		if capa.ID == "" {
-			missing(fmt.Sprintf("capacitors[%d].id", idx))
+		if capa.ServiceType == "" {
+			missing(fmt.Sprintf("capacitors[%d].service_type", idx))
 		}
 	}
 

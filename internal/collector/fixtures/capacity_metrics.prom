@@ -1,6 +1,6 @@
 # HELP limes_capacity_plugin_metrics_ok Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.
 # TYPE limes_capacity_plugin_metrics_ok gauge
-limes_capacity_plugin_metrics_ok{capacitor="unittest"} 1
+limes_capacity_plugin_metrics_ok{capacitor="shared"} 1
 # HELP limes_unittest_capacity_larger_half 
 # TYPE limes_unittest_capacity_larger_half gauge
 limes_unittest_capacity_larger_half 7

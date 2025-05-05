@@ -77,7 +77,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 		}
 
 		logg.Info("creating missing %s cluster service entry", serviceType)
-		err := c.DB.Insert(&db.ClusterService{Type: serviceType})
+		err := c.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: c.MeasureTime()})
 		if err != nil {
 			c.LogError(err.Error())
 		}

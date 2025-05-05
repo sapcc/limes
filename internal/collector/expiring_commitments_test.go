@@ -41,9 +41,8 @@ const (
 				params:
 					liquid_service_type: %[1]s
 		capacitors:
-		- id: noop
+		- service_type: noop
 			params:
-				service_type: noop
 				liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/things

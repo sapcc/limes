@@ -186,7 +186,7 @@ type CapacityPlugin interface {
 	//
 	// Before Init is called, the `capacitors[].params` provided in the config
 	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error
 	// ServiceInfo returns metadata for this service.
 	// This includes metadata for all the resources and rates that this plugin scrapes.
 	ServiceInfo() liquid.ServiceInfo

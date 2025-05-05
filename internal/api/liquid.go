@@ -39,7 +39,7 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	serviceType := r.URL.Query().Get("service_type")
+	serviceType := db.ServiceType(r.URL.Query().Get("service_type"))
 	if serviceType == "" {
 		http.Error(w, "missing required parameter: service_type", http.StatusBadRequest)
 		return

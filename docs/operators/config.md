@@ -104,9 +104,8 @@ services:
   - type: compute
   - type: network
 capacitors:
-  - id: nova
+  - service_type: nova
     params:
-      service_type: compute
       liquid_service_type: liquid-nova
 ```
 
@@ -426,21 +425,20 @@ from the liquid, the `capacitors` accept two additional means of providing capac
 are configured (all 3 can be combined) the whole collection for a service will error if at least one path (liquid, manual, prometheus) fails.
 
 Note that _currently_ capacity for a resource only becomes visible when the corresponding service is enabled in the
-`services[]` list as well.
+`services[]` list as well. Also, the `service_type` of a capacitor must match the `service_type` of the service.
 
 ### `basic configuration of a capacity plugin (liquid)`
 
 ```yaml
 capacitors:
-  - id: nova
+  - service_type: nova
     params:
-      service_type: compute
       liquid_service_type: liquid-nova
 ```
 
 This is a generic integration method for any service that supports [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid);
 see documentation over there. The LIQUID endpoint will by located in the Keystone service catalog at service type `liquid-$SERVICE_TYPE`,
-using the value from `params.service_type`, unless this default logic is overridden by `params.liquid_service_type`.
+using the value from `service_type`, unless this default logic is overridden by `params.liquid_service_type`.
 
 Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
 This is something that we plan on changing into a graceful reload in the future.
@@ -451,9 +449,8 @@ For information on liquids provided by Limes itself, please refer to the [liquid
 
 ```yaml
 capacitors:
-  - id: neutron
+  - service_type: neutron
     params:
-      service_type: network
       fixed_capacity_values:
         values:
           floating_ips: 8192
@@ -471,9 +468,8 @@ allows to track capacity values along with other configuration in a Git reposito
 
 ```yaml
 capacitors:
-  - id: nova
+  - service_type: nova
     params:
-      service_type: compute
       capacity_values_from_prometheus:
         api:
           url: https://prometheus.example.com

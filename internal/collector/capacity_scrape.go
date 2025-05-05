@@ -21,11 +21,11 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 
 	. "github.com/majewsky/gg/option"
@@ -43,63 +43,47 @@ import (
 )
 
 const (
-	// how long to wait before scraping the same capacitor again
+	// how long to wait before scraping the same service again
 	capacityScrapeInterval = 15 * time.Minute
-	// how long to wait after error before retrying the same capacitor
+	// how long to wait after error before retrying the same service
 	capacityScrapeErrorInterval = 3 * time.Minute
 )
 
-// CapacityScrapeJob is a jobloop.Job. Each task scrapes one capacitor.
-// Cluster resources managed by this capacitor are added, updated and deleted as necessary.
+// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Capacitor, equal to one Services entry.
+// Cluster resources are managed by the respective QuotaPlugin (Added, Updated, Deleted).
+// Therefore, names of Capacitors and Services must match.
 func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.Job {
-	// used by discoverCapacityScrapeTask() to trigger a consistency check every
-	// once in a while; starts out very far in the past to force a consistency
-	// check on first run
-	lastConsistencyCheckAt := time.Unix(-1000000, 0).UTC()
-
 	return (&jobloop.ProducerConsumerJob[capacityScrapeTask]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "scrape capacity",
 			CounterOpts: prometheus.CounterOpts{
 				Name: "limes_capacity_scrapes",
-				Help: "Counter for capacity scrape operations per capacitor.",
+				Help: "Counter for capacity scrape operations per service_type.",
 			},
-			CounterLabels: []string{"capacitor_id"},
+			CounterLabels: []string{"service_type"},
 		},
 		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (capacityScrapeTask, error) {
-			return c.discoverCapacityScrapeTask(ctx, labels, &lastConsistencyCheckAt)
+			return c.discoverCapacityScrapeTask(ctx, labels)
 		},
 		ProcessTask: c.processCapacityScrapeTask,
 	}).Setup(registerer)
 }
 
 type capacityScrapeTask struct {
-	Capacitor db.ClusterCapacitor
-	Timing    TaskTiming
+	Service db.ClusterService
+	Timing  TaskTiming
 }
 
 var (
-	// upsert a cluster_capacitors entry
-	initCapacitorQuery = sqlext.SimplifyWhitespace(`
-		INSERT INTO cluster_capacitors (capacitor_id, next_scrape_at)
-		VALUES ($1, $2)
-		ON CONFLICT DO NOTHING
-	`)
-
-	// find the next capacitor that needs to have capacity scraped
-	findCapacitorForScrapeQuery = sqlext.SimplifyWhitespace(`
-		SELECT * FROM cluster_capacitors
+	// find the next cluster_service that needs to have capacity scraped
+	findServiceForScrapeQuery = sqlext.SimplifyWhitespace(`
+		SELECT * FROM cluster_services
 		-- filter by need to be updated
 		WHERE next_scrape_at <= $1
 		-- order by update priority (first schedule, then ID for deterministic test behavior)
-		ORDER BY next_scrape_at ASC, capacitor_id ASC
-		-- find only one capacitor to scrape per iteration
+		ORDER BY next_scrape_at ASC, id ASC
+		-- find only one service to scrape per iteration
 		LIMIT 1
-	`)
-
-	// queries to collect context data within processCapacityScrapeTask()
-	getClusterServicesQuery = sqlext.SimplifyWhitespace(`
-		SELECT id, type FROM cluster_services
 	`)
 
 	// This query updates `project_commitments.state` on all rows that have not
@@ -125,86 +109,56 @@ var (
 	`)
 )
 
-func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels, lastConsistencyCheckAt *time.Time) (task capacityScrapeTask, err error) {
+func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
 	task.Timing.StartedAt = c.MeasureTime()
+	// Consistency check is done by checkConsistencyCluster. We assume that ServiceType of capacitor and quota plugin
+	// are the same, so cluster_services without capacitor may exist right now but will be skipped when picked up.
 
-	// consistency check: every once in a while (and also immediately on startup),
-	// check that all required `cluster_capacitors` entries exist
-	// (this is important because the query below will only find capacitors that have such an entry)
-	if lastConsistencyCheckAt.Before(task.Timing.StartedAt.Add(-5 * time.Minute)) {
-		err = sqlext.WithPreparedStatement(c.DB, initCapacitorQuery, func(stmt *sql.Stmt) error {
-			for capacitorID := range c.Cluster.CapacityPlugins {
-				_, err := stmt.Exec(capacitorID, task.Timing.StartedAt)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return task, fmt.Errorf("while creating cluster_capacitors entries: %w", err)
-		}
-		*lastConsistencyCheckAt = task.Timing.StartedAt
-	}
-
-	err = c.DB.SelectOne(&task.Capacitor, findCapacitorForScrapeQuery, task.Timing.StartedAt)
+	err = c.DB.SelectOne(&task.Service, findServiceForScrapeQuery, task.Timing.StartedAt)
 	return task, err
 }
 
 func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacityScrapeTask, labels prometheus.Labels) (returnedErr error) {
-	capacitor := task.Capacitor
-	labels["capacitor_id"] = capacitor.CapacitorID
+	service := task.Service
+	labels["service_type"] = string(service.Type)
 
 	defer func() {
 		if returnedErr != nil {
-			returnedErr = fmt.Errorf("while scraping capacitor %s: %w", capacitor.CapacitorID, returnedErr)
+			returnedErr = fmt.Errorf("while scraping clusterService %s: %w", strconv.FormatInt(int64(service.ID), 10), returnedErr)
 		}
 	}()
 
-	// if capacitor was removed from the configuration, clean up its DB entry
-	plugin := c.Cluster.CapacityPlugins[capacitor.CapacitorID]
+	// if cluster_service is not in the configuration, do nothing (probably it exists because the quota plugin exists)
+	// TODO: this will change/ vanish when the capacitors and services configurations are merged
+	plugin := c.Cluster.CapacityPlugins[service.Type]
 	if plugin == nil {
-		_, err := c.DB.Delete(&capacitor)
-		return err
-	}
-
-	// collect mapping of cluster_services type names to IDs
-	// (these DB entries are maintained for us by checkConsistencyCluster)
-	serviceIDForType := make(map[db.ServiceType]db.ClusterServiceID)
-	serviceTypeForID := make(map[db.ClusterServiceID]db.ServiceType)
-	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
-		var (
-			serviceID   db.ClusterServiceID
-			serviceType db.ServiceType
-		)
-		err := rows.Scan(&serviceID, &serviceType)
-		if err == nil {
-			serviceTypeForID[serviceID] = serviceType
-			serviceIDForType[serviceType] = serviceID
+		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
+		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
+		_, err := c.DB.Update(&service)
+		if err != nil {
+			err = fmt.Errorf("error while skipping scrape for %s: %w", service.Type, err)
+			return err
 		}
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("cannot collect cluster service mapping: %w", err)
+		return nil
 	}
 
 	// scrape capacity data
 	capacityData, serializedMetrics, err := c.scrapeCapacityPlugin(ctx, plugin)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
-		capacitor.ScrapedAt = Some(task.Timing.FinishedAt)
-		capacitor.ScrapeDurationSecs = task.Timing.Duration().Seconds()
-		capacitor.SerializedMetrics = string(serializedMetrics)
-		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
-		capacitor.ScrapeErrorMessage = ""
+		service.ScrapedAt = Some(task.Timing.FinishedAt)
+		service.ScrapeDurationSecs = task.Timing.Duration().Seconds()
+		service.SerializedMetrics = string(serializedMetrics)
+		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
+		service.ScrapeErrorMessage = ""
 		//NOTE: in this case, we continue below, with the cluster_resources update
-		// the cluster_capacitors row will be updated at the end of the tx
+		// the cluster_services row will be updated at the end of the tx
 	} else {
 		err = util.UnpackError(err)
-		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
-		capacitor.ScrapeErrorMessage = err.Error()
+		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
+		service.ScrapeErrorMessage = err.Error()
 
-		_, updateErr := c.DB.Update(&capacitor)
+		_, updateErr := c.DB.Update(&service)
 		if updateErr != nil {
 			err = fmt.Errorf("%w (additional error while updating DB: %s", err, updateErr.Error())
 		}
@@ -228,44 +182,39 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// define the scope of the update
 	var dbOwnedResources []db.ClusterResource
 	for _, res := range dbResources {
-		if res.CapacitorID == capacitor.CapacitorID {
+		if res.ServiceID == service.ID {
 			dbOwnedResources = append(dbOwnedResources, res)
 		}
 	}
 
 	var wantedResources []db.ResourceRef[db.ClusterServiceID]
-	serviceType := plugin.(*plugins.LiquidCapacityPlugin).ServiceType
-	if c.Cluster.HasService(serviceType) {
-		serviceID, ok := serviceIDForType[serviceType]
-		if !ok {
-			return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", serviceType)
-		}
+	pluginServiceType := plugin.(*plugins.LiquidCapacityPlugin).ServiceType
+	// TODO: This consistency check can possibly go, when the c.Cluster-configurations are merged
+	if !c.Cluster.HasService(pluginServiceType) {
+		return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", pluginServiceType)
+	}
 
-		for resourceName := range capacityData.Resources {
-			if !c.Cluster.HasResource(serviceType, resourceName) {
-				logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", capacitor.CapacitorID, serviceType, resourceName)
-				continue
-			}
-			wantedResources = append(wantedResources, db.ResourceRef[db.ClusterServiceID]{
-				ServiceID: serviceID,
-				Name:      resourceName,
-			})
+	for resourceName := range capacityData.Resources {
+		if !c.Cluster.HasResource(pluginServiceType, resourceName) {
+			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, pluginServiceType, resourceName)
+			continue
 		}
-	} else {
-		logg.Info("discarding capacities reported by %s for unknown service type: %s", capacitor.CapacitorID, serviceType)
+		wantedResources = append(wantedResources, db.ResourceRef[db.ClusterServiceID]{
+			ServiceID: service.ID,
+			Name:      resourceName,
+		})
 	}
 	slices.SortFunc(wantedResources, db.CompareResourceRefs) // for deterministic test behavior
 
-	// create and delete cluster_resources for this capacitor as needed
+	// create and delete cluster_resources for this cluster_service as needed
 	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef[db.ClusterServiceID]]{
 		ExistingRecords: dbOwnedResources,
 		WantedKeys:      wantedResources,
 		KeyForRecord:    db.ClusterResource.Ref,
 		Create: func(ref db.ResourceRef[db.ClusterServiceID]) (db.ClusterResource, error) {
 			return db.ClusterResource{
-				ServiceID:   ref.ServiceID,
-				Name:        ref.Name,
-				CapacitorID: capacitor.CapacitorID,
+				ServiceID: ref.ServiceID,
+				Name:      ref.Name,
 			}, nil
 		},
 		Update: func(res *db.ClusterResource) (err error) { return nil },
@@ -321,7 +270,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}
 
-	_, err = tx.Update(&capacitor)
+	_, err = tx.Update(&service)
 	if err != nil {
 		return err
 	}
@@ -332,17 +281,16 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// for all cluster resources thus updated, sync commitment states with reality
 	for _, res := range dbOwnedResources {
-		serviceType := serviceTypeForID[res.ServiceID]
 		now := c.MeasureTime()
-		_, err := c.DB.Exec(updateProjectCommitmentStatesForResourceQuery, serviceType, res.Name, now)
+		_, err := c.DB.Exec(updateProjectCommitmentStatesForResourceQuery, service.Type, res.Name, now)
 		if err != nil {
-			return fmt.Errorf("while updating project_commitments.state for %s/%s: %w", serviceType, res.Name, err)
+			return fmt.Errorf("while updating project_commitments.state for %s/%s: %w", service.Type, res.Name, err)
 		}
 	}
 
 	// for all cluster resources thus updated, try to confirm pending commitments
 	for _, res := range dbOwnedResources {
-		err := c.confirmPendingCommitmentsIfNecessary(serviceTypeForID[res.ServiceID], res.Name)
+		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name)
 		if err != nil {
 			return err
 		}
@@ -350,9 +298,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
-		serviceType := serviceTypeForID[res.ServiceID]
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(serviceType, res.Name, c.DB, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.DB, c.Cluster, now)
 		if err != nil {
 			return err
 		}

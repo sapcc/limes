@@ -1,5 +1,5 @@
-INSERT INTO cluster_services (id, type) VALUES (2, 'unshared');
-INSERT INTO cluster_services (id, type) VALUES (3, 'whatever');
+INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (2, 'unshared', 3600);
+INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (3, 'whatever', 3600);
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
