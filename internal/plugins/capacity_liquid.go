@@ -27,7 +27,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -65,12 +64,12 @@ func init() {
 	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &LiquidCapacityPlugin{} })
 }
 
-// PluginTypeID implements the core.QuotaPlugin interface.
+// PluginTypeID implements the core.CapacityPlugin interface.
 func (p *LiquidCapacityPlugin) PluginTypeID() string {
 	return "liquid"
 }
 
-// Init implements the core.QuotaPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if p.ServiceType == "" {
 		return errors.New("missing required value: params.service_type")
@@ -92,85 +91,72 @@ func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 	return err
 }
 
-// Scrape implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.CapacityPlugin interface.
+func (p *LiquidCapacityPlugin) ServiceInfo() liquid.ServiceInfo {
+	return p.LiquidServiceInfo
+}
+
+// Scrape implements the core.CapacityPlugin interface.
 // we assume that each resource only has one source of info (else, the last source wins and overwrites the previous data)
 // we fail the whole collection explicitly in case any of the sources fails
-func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *LiquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
 	req, err := p.BuildServiceCapacityRequest(backchannel, allAZs)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceCapacityReport{}, err
 	}
 
-	resp, err := p.LiquidClient.GetCapacityReport(ctx, req)
+	result, err = p.LiquidClient.GetCapacityReport(ctx, req)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceCapacityReport{}, err
 	}
-	if resp.InfoVersion != p.LiquidServiceInfo.Version {
+	if result.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
-			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+			p.LiquidServiceType, p.LiquidServiceInfo.Version, result.InfoVersion)
 	}
 	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceCapacityReport{}, err
 	}
-	err = liquid.ValidateCapacityReport(resp, req, p.LiquidServiceInfo)
+	err = liquid.ValidateCapacityReport(result, req, p.LiquidServiceInfo)
 	if err != nil {
-		return nil, nil, err
-	}
-
-	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
-	for resName, resInfo := range p.LiquidServiceInfo.Resources {
-		if !resInfo.HasCapacity {
-			continue
-		}
-		resReport := resp.Resources[resName]
-		if resReport == nil {
-			return nil, nil, fmt.Errorf("missing liquid report for resource %q/%q", p.ServiceType, resName)
-		}
-
-		resData := make(core.PerAZ[core.CapacityData], len(resReport.PerAZ))
-		for az, azReport := range resReport.PerAZ {
-			resData[az] = &core.CapacityData{
-				Capacity:      azReport.Capacity,
-				Usage:         azReport.Usage,
-				Subcapacities: castSliceToAny(azReport.Subcapacities),
-			}
-		}
-		resultInService[resName] = resData
+		return liquid.ServiceCapacityReport{}, err
 	}
 
 	// manual capacity collection
 	fixedCapaConfig, exists := p.FixedCapacityConfiguration.Unpack()
 	if exists {
+		if result.Resources == nil {
+			result.Resources = make(map[liquid.ResourceName]*liquid.ResourceCapacityReport)
+		}
 		for resName, capacity := range fixedCapaConfig.Values {
-			resultInService[resName] = core.InAnyAZ(core.CapacityData{Capacity: capacity})
+			result.Resources[resName] = &liquid.ResourceCapacityReport{
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: capacity}),
+			}
 		}
 	}
 
 	// prometheus capacity collection
 	prometheusCapaConfig, exists := p.PrometheusCapacityConfiguration.Unpack()
 	if exists {
+		if result.Resources == nil {
+			result.Resources = make(map[liquid.ResourceName]*liquid.ResourceCapacityReport)
+		}
 		client, err := prometheusCapaConfig.APIConfig.Connect()
 		if err != nil {
-			return nil, nil, err
+			return liquid.ServiceCapacityReport{}, err
 		}
 		for resName, query := range prometheusCapaConfig.Queries {
-			resultInService[resName], err = prometheusCapaConfig.prometheusScrapeOneResource(ctx, client, query, allAZs)
+			azReports, err := prometheusCapaConfig.prometheusScrapeOneResource(ctx, client, query, allAZs)
 			if err != nil {
-				return nil, nil, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", p.ServiceType, resName, err)
+				return liquid.ServiceCapacityReport{}, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", p.ServiceType, resName, err)
+			}
+			result.Resources[resName] = &liquid.ResourceCapacityReport{
+				PerAZ: azReports,
 			}
 		}
 	}
 
-	result = map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{
-		p.ServiceType: resultInService,
-	}
-
-	serializedMetrics, err = liquidSerializeMetrics(p.LiquidServiceInfo.CapacityMetricFamilies, resp.Metrics)
-	if err != nil {
-		return nil, nil, fmt.Errorf("while serializing metrics: %w", err)
-	}
-	return result, serializedMetrics, nil
+	return result, nil
 }
 
 func (p *LiquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
@@ -195,17 +181,7 @@ func (p *LiquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.Capa
 	return req, nil
 }
 
-// DescribeMetrics implements the core.QuotaPlugin interface.
-func (p *LiquidCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	liquidDescribeMetrics(ch, p.LiquidServiceInfo.CapacityMetricFamilies, nil)
-}
-
-// CollectMetrics implements the core.QuotaPlugin interface.
-func (p *LiquidCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
-	return liquidCollectMetrics(ch, serializedMetrics, p.LiquidServiceInfo.CapacityMetricFamilies, nil, nil)
-}
-
-func (p prometheusCapacityConfiguration) prometheusScrapeOneResource(ctx context.Context, client promquery.Client, query string, allAZs []limes.AvailabilityZone) (core.PerAZ[core.CapacityData], error) {
+func (p prometheusCapacityConfiguration) prometheusScrapeOneResource(ctx context.Context, client promquery.Client, query string, allAZs []limes.AvailabilityZone) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
 	vector, err := client.GetVector(ctx, query)
 	if err != nil {
 		return nil, err
@@ -232,9 +208,9 @@ func (p prometheusCapacityConfiguration) prometheusScrapeOneResource(ctx context
 	}
 
 	// build result
-	result := core.PerAZ[core.CapacityData]{}
+	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
 	for az, sample := range matchedSamples {
-		result[az] = &core.CapacityData{
+		result[az] = &liquid.AZResourceCapacityReport{
 			Capacity: uint64(sample.Value),
 		}
 	}
@@ -243,7 +219,7 @@ func (p prometheusCapacityConfiguration) prometheusScrapeOneResource(ctx context
 		for _, sample := range unmatchedSamples {
 			unmatchedCapacity += float64(sample.Value)
 		}
-		result[limes.AvailabilityZoneUnknown] = &core.CapacityData{
+		result[limes.AvailabilityZoneUnknown] = &liquid.AZResourceCapacityReport{
 			Capacity: uint64(unmatchedCapacity),
 		}
 	}

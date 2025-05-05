@@ -27,7 +27,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
@@ -88,68 +87,35 @@ func (p *LiquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceI
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *LiquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *LiquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error) {
 	// shortcut for liquids that only have rates and no resources
 	if len(p.LiquidServiceInfo.Resources) == 0 && len(p.LiquidServiceInfo.UsageMetricFamilies) == 0 {
-		return nil, nil, nil
+		return liquid.ServiceUsageReport{}, nil
 	}
 
 	req, err := p.BuildServiceUsageRequest(project, allAZs)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceUsageReport{}, err
 	}
 
-	resp, err := p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
+	result, err = p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceUsageReport{}, err
 	}
-	if resp.InfoVersion != p.LiquidServiceInfo.Version {
+	if result.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
-			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+			p.LiquidServiceType, p.LiquidServiceInfo.Version, result.InfoVersion)
 	}
 	err = liquid.ValidateServiceInfo(p.LiquidServiceInfo)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceUsageReport{}, err
 	}
-	err = liquid.ValidateUsageReport(resp, req, p.LiquidServiceInfo)
+	err = liquid.ValidateUsageReport(result, req, p.LiquidServiceInfo)
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceUsageReport{}, err
 	}
 
-	result = make(map[liquid.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
-	for resName, resInfo := range p.LiquidServiceInfo.Resources {
-		resReport := resp.Resources[resName]
-		if resReport == nil {
-			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
-		}
-
-		resData := core.ResourceData{
-			Quota: resReport.Quota.UnwrapOr(0),
-		}
-		if resReport.Forbidden {
-			resData.MaxQuota = Some[uint64](0) // this is a temporary approximation; TODO: make Forbidden a first-class citizen in Limes core
-		}
-
-		resData.UsageData = make(core.PerAZ[core.UsageData], len(resReport.PerAZ))
-		for az, azReport := range resReport.PerAZ {
-			resData.UsageData[az] = &core.UsageData{
-				Usage:         azReport.Usage,
-				PhysicalUsage: azReport.PhysicalUsage,
-				Subresources:  castSliceToAny(azReport.Subresources),
-			}
-			if resInfo.Topology == liquid.AZSeparatedTopology {
-				resData.UsageData[az].Quota = azReport.Quota
-			}
-		}
-
-		result[resName] = resData
-	}
-
-	serializedMetrics, err = liquidSerializeMetrics(p.LiquidServiceInfo.UsageMetricFamilies, resp.Metrics)
-	if err != nil {
-		return nil, nil, fmt.Errorf("while serializing metrics: %w", err)
-	}
-	return result, serializedMetrics, nil
+	return result, nil
 }
 
 func (p *LiquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
@@ -158,17 +124,6 @@ func (p *LiquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProjec
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 	return req, nil
-}
-
-func castSliceToAny[T any](input []T) (output []any) {
-	if input == nil {
-		return nil
-	}
-	output = make([]any, len(input))
-	for idx, val := range input {
-		output[idx] = val
-	}
-	return output
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
@@ -229,19 +184,4 @@ func (p *LiquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keysto
 	}
 
 	return result, string(resp.SerializedState), nil
-}
-
-// DescribeMetrics implements the core.QuotaPlugin interface.
-func (p *LiquidQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	liquidDescribeMetrics(ch, p.LiquidServiceInfo.UsageMetricFamilies,
-		[]string{"domain_id", "project_id"},
-	)
-}
-
-// CollectMetrics implements the core.QuotaPlugin interface.
-func (p *LiquidQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	return liquidCollectMetrics(ch, serializedMetrics, p.LiquidServiceInfo.UsageMetricFamilies,
-		[]string{"domain_id", "project_id"},
-		[]string{project.Domain.UUID, project.UUID},
-	)
 }

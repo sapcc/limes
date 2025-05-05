@@ -22,6 +22,8 @@ package test
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/gophercloud/gophercloud/v2"
@@ -115,7 +117,7 @@ func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.Ser
 	if l.capacityReportError != nil {
 		return liquid.ServiceCapacityReport{}, l.capacityReportError
 	}
-	return l.serviceCapacityReport, nil
+	return cloneServiceCapacityReport(l.serviceCapacityReport), nil
 }
 
 func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
@@ -130,7 +132,7 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 	if l.usageReportError != nil {
 		return liquid.ServiceUsageReport{}, l.usageReportError
 	}
-	return l.serviceUsageReport, nil
+	return cloneServiceUsageReport(l.serviceUsageReport), nil
 }
 
 func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
@@ -143,4 +145,74 @@ func (l *MockLiquidClient) SetQuotaError(err error) {
 
 func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
 	return l.quotaError
+}
+
+func cloneServiceUsageReport(report liquid.ServiceUsageReport) liquid.ServiceUsageReport {
+	result := report
+	resources := maps.Clone(report.Resources)
+	for resName, resReport := range report.Resources {
+		resReportClone := liquid.ResourceUsageReport{Forbidden: resReport.Forbidden, Quota: resReport.Quota}
+		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
+		for az, azReport := range resReport.PerAZ {
+			azReportClone := liquid.AZResourceUsageReport{Usage: azReport.Usage, PhysicalUsage: azReport.PhysicalUsage, Quota: azReport.Quota}
+			azReportClone.Subresources = slices.Clone(azReport.Subresources)
+			for i, subres := range azReport.Subresources {
+				subres.Attributes = slices.Clone(subres.Attributes)
+				azReport.Subresources[i] = subres
+			}
+			resReportClone.PerAZ[az] = &azReportClone
+		}
+		resources[resName] = &resReportClone
+	}
+	result.Resources = resources
+
+	rates := maps.Clone(report.Rates)
+	for rateName, rateReport := range rates {
+		rateReportClone := liquid.RateUsageReport{}
+		rateReportClone.PerAZ = maps.Clone(rateReport.PerAZ)
+		rates[rateName] = &rateReportClone
+	}
+	result.Rates = rates
+
+	result.Metrics = cloneMetrics(report.Metrics)
+
+	result.SerializedState = slices.Clone(report.SerializedState)
+	return result
+}
+
+func cloneServiceCapacityReport(report liquid.ServiceCapacityReport) liquid.ServiceCapacityReport {
+	result := report
+
+	resources := maps.Clone(report.Resources)
+	for resName, resReport := range report.Resources {
+		resReportClone := liquid.ResourceCapacityReport{}
+		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
+		for az, azReport := range resReport.PerAZ {
+			azReportClone := liquid.AZResourceCapacityReport{Capacity: azReport.Capacity, Usage: azReport.Usage}
+			azReportClone.Subcapacities = slices.Clone(azReport.Subcapacities)
+			for i, subcap := range azReport.Subcapacities {
+				subcap.Attributes = slices.Clone(subcap.Attributes)
+				azReport.Subcapacities[i] = subcap
+			}
+			resReportClone.PerAZ[az] = &azReportClone
+		}
+		resources[resName] = &resReportClone
+	}
+	result.Resources = resources
+
+	result.Metrics = cloneMetrics(report.Metrics)
+	return result
+}
+
+func cloneMetrics(metrics map[liquid.MetricName][]liquid.Metric) map[liquid.MetricName][]liquid.Metric {
+	metricsClone := maps.Clone(metrics)
+	for familyName, familyMetrics := range metricsClone {
+		familyMetrics = slices.Clone(familyMetrics)
+		for i, familyMetric := range familyMetrics {
+			familyMetric.LabelValues = slices.Clone(familyMetric.LabelValues)
+			familyMetrics[i] = familyMetric
+		}
+		metricsClone[familyName] = familyMetrics
+	}
+	return metricsClone
 }

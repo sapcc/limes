@@ -22,6 +22,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -163,7 +164,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
 	// perform resource scrape
-	resourceData, serializedMetrics, err := plugin.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
+	resourceData, serializedMetrics, err := c.scrapeQuotaPlugin(ctx, plugin, project)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
@@ -205,32 +206,44 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	return fmt.Errorf("during resource scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte) error {
+func (c *Collector) scrapeQuotaPlugin(ctx context.Context, plugin core.QuotaPlugin, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
+	resourceData, err := plugin.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
+	if err != nil {
+		return liquid.ServiceUsageReport{}, nil, err
+	}
+	serializedMetrics, err := liquidSerializeMetrics(plugin.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
+	if err != nil {
+		return liquid.ServiceUsageReport{}, nil, err
+	}
+	return resourceData, serializedMetrics, nil
+}
+
+func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serializedMetrics []byte) error {
 	srv := task.Service
 
-	for resName, resData := range resourceData {
+	for resName, resData := range resourceData.Resources {
 		resInfo := c.Cluster.InfoForResource(task.Service.Type, resName)
-		if len(resData.UsageData) == 0 {
+		if len(resData.PerAZ) == 0 {
 			// ensure that there is at least one ProjectAZResource for each ProjectResource
-			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
-			resourceData[resName] = resData
+			resData.PerAZ = liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0})
+			resourceData.Resources[resName] = resData
 		} else {
 			// AZ separated resources will not include "any" AZ. The basequota will be distributed towards the existing AZs.
 			// If an AZ is not available within the scrape response, it will be created to store the basequota.
 			if resInfo.Topology == liquid.AZSeparatedTopology {
 				for _, availabilityZone := range c.Cluster.Config.AvailabilityZones {
-					_, exists := resData.UsageData[availabilityZone]
+					_, exists := resData.PerAZ[availabilityZone]
 					if !exists {
-						resData.UsageData[availabilityZone] = &core.UsageData{Usage: 0}
+						resData.PerAZ[availabilityZone] = &liquid.AZResourceUsageReport{Usage: 0}
 					}
 				}
 			} else {
 				// for AZ-aware resources, ensure that we also have a ProjectAZResource in
 				// "any", because ApplyComputedProjectQuota needs somewhere to write base
 				// quotas into if enabled
-				_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
+				_, exists := resData.PerAZ[liquid.AvailabilityZoneAny]
 				if !exists {
-					resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+					resData.PerAZ[liquid.AvailabilityZoneAny] = &liquid.AZResourceUsageReport{Usage: 0}
 				}
 			}
 		}
@@ -254,15 +267,20 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 	// this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
 	updateResource := func(res *db.ProjectResource) error {
-		backendQuota := resourceData[res.Name].Quota
+		backendQuota := resourceData.Resources[res.Name].Quota
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if resInfo.HasQuota {
 			if resInfo.Topology != liquid.AZSeparatedTopology {
-				res.BackendQuota = Some(backendQuota)
+				res.BackendQuota = backendQuota
 			}
-			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
-			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
+
+			if resourceData.Resources[res.Name].Forbidden {
+				res.MaxQuotaFromBackend = Some(uint64(0))
+			} else {
+				res.MaxQuotaFromBackend = None[uint64]()
+			}
+			res.MinQuotaFromBackend = None[uint64]()
 		}
 
 		return nil
@@ -298,11 +316,11 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	// update project_az_resources for each resource
 	for _, resourceName := range allResourceNames {
 		res := dbResourcesByName[resourceName]
-		usageData := resourceData[resourceName].UsageData.Normalize(c.Cluster.Config.AvailabilityZones)
+		usageData := resourceData.Resources[resourceName].PerAZ
 
 		setUpdate := db.SetUpdate[db.ProjectAZResource, liquid.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
-			WantedKeys:      usageData.Keys(),
+			WantedKeys:      slices.Sorted(maps.Keys(usageData)),
 			KeyForRecord: func(azRes db.ProjectAZResource) liquid.AvailabilityZone {
 				return azRes.AvailabilityZone
 			},
