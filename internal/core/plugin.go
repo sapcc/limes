@@ -26,7 +26,6 @@ import (
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -129,10 +128,7 @@ type QuotaPlugin interface {
 	// building AZ-aware usage data, to ensure that each AZ-aware resource reports
 	// usage in all available AZs, even when the project in question does not have
 	// usage in every AZ.
-	//
-	// The `serializedMetrics` return value is persisted in the Limes DB and
-	// supplied to all subsequent RenderMetrics calls.
-	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]ResourceData, serializedMetrics []byte, err error)
+	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error)
 
 	// BuildServiceUsageRequest generates the request body payload for querying
 	// the LIQUID API endpoint /v1/projects/:uuid/report-usage
@@ -159,23 +155,6 @@ type QuotaPlugin interface {
 	// field to carry state between ScrapeRates() calls, esp. to detect and handle
 	// counter resets in the backend.
 	ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error)
-
-	// DescribeMetrics is called when Prometheus is scraping metrics from
-	// limes-collect, to provide an opportunity to the plugin to emit its own
-	// metrics.
-	//
-	// Together with CollectMetrics, this interface is roughly analogous to the
-	// prometheus.Collector interface; cf. documentation over there.
-	DescribeMetrics(ch chan<- *prometheus.Desc)
-	// CollectMetrics is called when Prometheus is scraping metrics from
-	// limes-collect, to provide an opportunity to the plugin to emit its own
-	// metrics. The serializedMetrics argument contains the respective value
-	// returned from the last Scrape call on the same project.
-	//
-	// Some plugins also emit metrics directly within Scrape. This newer interface
-	// should be preferred since metrics emitted here won't be lost between
-	// restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
 }
 
 // BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.
@@ -208,37 +187,20 @@ type CapacityPlugin interface {
 	// Before Init is called, the `capacitors[].params` provided in the config
 	// file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	// ServiceInfo returns metadata for this service.
+	// This includes metadata for all the resources and rates that this plugin scrapes.
+	ServiceInfo() liquid.ServiceInfo
 	// Scrape queries the backend service(s) for the capacities of the resources
 	// that this plugin is concerned with. The result is a two-dimensional map,
 	// with the first key being the service type, and the second key being the
 	// resource name. The capacity collector will ignore service types for which
 	// there is no QuotaPlugin, and resources which are not advertised by that
 	// QuotaPlugin.
-	//
-	// The serializedMetrics return value is persisted in the Limes DB and
-	// supplied to all subsequent RenderMetrics calls.
-	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]PerAZ[CapacityData], serializedMetrics []byte, err error)
+	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error)
 
 	// BuildServiceCapacityRequest generates the request body payload for querying
 	// the LIQUID API endpoint /v1/report-capacity
 	BuildServiceCapacityRequest(backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error)
-
-	// DescribeMetrics is called when Prometheus is scraping metrics from
-	// limes-collect, to provide an opportunity to the plugin to emit its own
-	// metrics.
-	//
-	// Together with CollectMetrics, this interface is roughly analogous to the
-	// prometheus.Collector interface; cf. documentation over there.
-	DescribeMetrics(ch chan<- *prometheus.Desc)
-	// CollectMetrics is called when Prometheus is scraping metrics from
-	// limes-collect, to provide an opportunity to the plugin to emit its own
-	// metrics. The serializedMetrics argument contains the respective value
-	// returned from the last Scrape call on the same project.
-	//
-	// Some plugins also emit metrics directly within Scrape. This newer interface
-	// should be preferred since metrics emitted here won't be lost between
-	// restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error
 }
 
 // CapacityPluginBackchannel is a callback interface that is provided to

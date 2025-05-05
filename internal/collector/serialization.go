@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package plugins
+package collector
 
 import (
 	"encoding/json"

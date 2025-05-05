@@ -24,6 +24,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/util"
 )
 
@@ -187,7 +189,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// scrape capacity data
-	capacityData, serializedMetrics, err := plugin.Scrape(ctx, datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+	capacityData, serializedMetrics, err := c.scrapeCapacityPlugin(ctx, plugin)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		capacitor.ScrapedAt = Some(task.Timing.FinishedAt)
@@ -232,17 +234,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	var wantedResources []db.ResourceRef[db.ClusterServiceID]
-	for serviceType, serviceData := range capacityData {
-		if !c.Cluster.HasService(serviceType) {
-			logg.Info("discarding capacities reported by %s for unknown service type: %s", capacitor.CapacitorID, serviceType)
-			continue
-		}
+	serviceType := plugin.(*plugins.LiquidCapacityPlugin).ServiceType
+	if c.Cluster.HasService(serviceType) {
 		serviceID, ok := serviceIDForType[serviceType]
 		if !ok {
 			return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", serviceType)
 		}
 
-		for resourceName := range serviceData {
+		for resourceName := range capacityData.Resources {
 			if !c.Cluster.HasResource(serviceType, resourceName) {
 				logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", capacitor.CapacitorID, serviceType, resourceName)
 				continue
@@ -252,6 +251,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 				Name:      resourceName,
 			})
 		}
+	} else {
+		logg.Info("discarding capacities reported by %s for unknown service type: %s", capacitor.CapacitorID, serviceType)
 	}
 	slices.SortFunc(wantedResources, db.CompareResourceRefs) // for deterministic test behavior
 
@@ -292,12 +293,11 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
 	for _, res := range dbOwnedResources {
-		serviceType := serviceTypeForID[res.ServiceID]
-		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
+		resourceData := capacityData.Resources[res.Name]
 
 		setUpdate := db.SetUpdate[db.ClusterAZResource, liquid.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
-			WantedKeys:      resourceDataPerAZ.Keys(),
+			WantedKeys:      slices.Sorted(maps.Keys(resourceData.PerAZ)),
 			KeyForRecord: func(azRes db.ClusterAZResource) liquid.AvailabilityZone {
 				return azRes.AvailabilityZone
 			},
@@ -308,7 +308,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 				}, nil
 			},
 			Update: func(azRes *db.ClusterAZResource) (err error) {
-				data := resourceDataPerAZ[azRes.AvailabilityZone]
+				data := resourceData.PerAZ[azRes.AvailabilityZone]
 				azRes.RawCapacity = data.Capacity
 				azRes.Usage = data.Usage
 				azRes.SubcapacitiesJSON, err = renderListToJSON("subcapacities", data.Subcapacities)
@@ -361,6 +361,18 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
+func (c *Collector) scrapeCapacityPlugin(ctx context.Context, plugin core.CapacityPlugin) (liquid.ServiceCapacityReport, []byte, error) {
+	capacityData, err := plugin.Scrape(ctx, datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+	if err != nil {
+		return liquid.ServiceCapacityReport{}, nil, err
+	}
+	serializedMetrics, err := liquidSerializeMetrics(plugin.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
+	if err != nil {
+		return liquid.ServiceCapacityReport{}, nil, err
+	}
+	return capacityData, serializedMetrics, nil
+}
+
 func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
 	behavior := c.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
 	resInfo := c.Cluster.InfoForResource(serviceType, resourceName)
@@ -402,7 +414,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	return tx.Commit()
 }
 
-func renderListToJSON(attribute string, entries []any) (string, error) {
+func renderListToJSON[T any](attribute string, entries []T) (string, error) {
 	if len(entries) == 0 {
 		return "", nil
 	}

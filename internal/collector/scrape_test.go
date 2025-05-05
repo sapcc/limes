@@ -623,7 +623,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, TRUE, %[1]d, %[2]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, serialized_metrics, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, TRUE, '{}', %[1]d, %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),

@@ -206,7 +206,7 @@ type CapacityPluginMetricsInstance struct {
 func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.CapacityPlugins {
-		plugin.DescribeMetrics(ch)
+		liquidDescribeMetrics(ch, plugin.ServiceInfo().CapacityMetricFamilies, nil)
 	}
 }
 
@@ -247,11 +247,11 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, []byte(instance.SerializedMetrics), instance.CapacitorID)
+	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), plugin.ServiceInfo().CapacityMetricFamilies, nil, nil)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		// errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
 		logg.Error("while collecting capacity metrics for capacitor %s: %s",
 			instance.CapacitorID, err.Error())
@@ -296,7 +296,7 @@ type QuotaPluginMetricsInstance struct {
 func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	quotaPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.QuotaPlugins {
-		plugin.DescribeMetrics(ch)
+		liquidDescribeMetrics(ch, plugin.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
 	}
 }
 
@@ -342,11 +342,15 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, instance.Project, []byte(instance.SerializedMetrics))
+
+	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), plugin.ServiceInfo().UsageMetricFamilies,
+		[]string{"domain_id", "project_id"},
+		[]string{instance.Project.Domain.UUID, instance.Project.UUID},
+	)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		// errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
 		logg.Error("while collecting plugin metrics for service %s in project %s: %s",
 			instance.ServiceType, instance.Project.UUID, err.Error())

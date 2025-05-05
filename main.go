@@ -21,14 +21,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -38,10 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
-	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
-	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
@@ -52,7 +45,6 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	"go.uber.org/automaxprocs/maxprocs"
-	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/collector"
@@ -69,8 +61,6 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
-
-	_ "github.com/sapcc/limes/internal/plugins"
 )
 
 func main() {
@@ -164,14 +154,6 @@ func main() {
 		taskServe(ctx, cluster, remainingArgs, provider, eo)
 	case "serve-data-metrics":
 		taskServeDataMetrics(ctx, cluster, remainingArgs)
-	case "test-get-quota":
-		taskTestGetQuota(ctx, cluster, remainingArgs)
-	case "test-get-rates":
-		taskTestGetRates(ctx, cluster, remainingArgs)
-	case "test-set-quota":
-		taskTestSetQuota(ctx, cluster, remainingArgs)
-	case "test-scan-capacity":
-		taskTestScanCapacity(ctx, cluster, remainingArgs)
 	default:
 		printUsageAndExit(1)
 	}
@@ -181,10 +163,6 @@ var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve|serve-data-metrics) <config-file>
 \t%s liquid <service-type>
-\t%s test-get-quota <config-file> <project-id> <service-type>
-\t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
-\t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...
-\t%s test-scan-capacity <config-file> <capacitor>
 `), `\t`, "\t") + "\n"
 
 func printUsageAndExit(exitCode int) {
@@ -342,236 +320,4 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// tasks: test quota plugin
-
-func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string) {
-	if len(args) != 2 {
-		printUsageAndExit(1)
-	}
-
-	serviceType := db.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
-
-	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
-		logg.Fatal("unknown service type: %s", serviceType)
-	}
-
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(ctx, project, cluster.Config.AvailabilityZones)
-	must.Succeed(err)
-
-	for resourceName := range result {
-		if !cluster.HasResource(serviceType, resourceName) {
-			logg.Fatal("scrape returned data for unknown resource: %s/%s", serviceType, resourceName)
-		}
-	}
-
-	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{
-		Cluster: cluster,
-		Override: []collector.QuotaPluginMetricsInstance{{
-			Project:           project,
-			ServiceType:       serviceType,
-			SerializedMetrics: string(serializedMetrics),
-		}},
-	})
-	dumpGeneratedPrometheusMetrics()
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	must.Succeed(enc.Encode(result))
-}
-
-func taskTestGetRates(ctx context.Context, cluster *core.Cluster, args []string) {
-	var prevSerializedState string
-	switch len(args) {
-	case 2:
-		prevSerializedState = ""
-	case 3:
-		prevSerializedState = args[2]
-	default:
-		printUsageAndExit(1)
-	}
-
-	serviceType := db.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
-
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, cluster.Config.AvailabilityZones, prevSerializedState)
-	must.Succeed(err)
-	if serializedState != "" {
-		logg.Info("scrape returned new serialized state: %s", serializedState)
-	}
-
-	for rateName := range result {
-		if !cluster.HasUsageForRate(serviceType, rateName) {
-			logg.Fatal("scrape returned data for unknown rate: %s/%s", serviceType, rateName)
-		}
-	}
-
-	dumpGeneratedPrometheusMetrics()
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	must.Succeed(enc.Encode(result))
-}
-
-func findProjectForTesting(ctx context.Context, cluster *core.Cluster, projectUUID string) (core.KeystoneProject, error) {
-	domains, err := cluster.DiscoveryPlugin.ListDomains(ctx)
-	if err != nil {
-		return core.KeystoneProject{}, util.UnpackError(err)
-	}
-	for _, d := range domains {
-		projects, err := cluster.DiscoveryPlugin.ListProjects(ctx, d)
-		if err != nil {
-			return core.KeystoneProject{}, util.UnpackError(err)
-		}
-		for _, p := range projects {
-			if projectUUID == p.UUID {
-				return p, nil
-			}
-		}
-	}
-	return core.KeystoneProject{}, errors.New("no such project in this cluster")
-}
-
-func dumpGeneratedPrometheusMetrics() {
-	metricFamilies, err := prometheus.DefaultGatherer.Gather()
-	if err != nil {
-		if merr, ok := errext.As[prometheus.MultiError](err); ok {
-			for _, err := range merr {
-				logg.Error("error while gathering Prometheus metrics: " + err.Error())
-			}
-		} else {
-			logg.Error("error while gathering Prometheus metrics: " + err.Error())
-		}
-	}
-
-	for _, metricFamily := range metricFamilies {
-		// skip metrics generated by prometheus/client-golang
-		if strings.HasPrefix(*metricFamily.Name, "go_") || strings.HasPrefix(*metricFamily.Name, "process_") {
-			continue
-		}
-
-		for _, metric := range metricFamily.Metric {
-			labels := make(map[string]string)
-			for _, label := range metric.Label {
-				labels[*label.Name] = *label.Value
-			}
-			switch {
-			case metric.Gauge != nil:
-				logg.Info("generated gauge   %s %v %g", *metricFamily.Name, labels, *metric.Gauge.Value)
-			case metric.Counter != nil:
-				logg.Info("generated counter %s %v %g", *metricFamily.Name, labels, *metric.Counter.Value)
-			default:
-				logg.Info("generated metric  %s (do not know how to print type %d)", *metricFamily.Name, *metricFamily.Type)
-			}
-		}
-	}
-}
-
-func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string) {
-	if len(args) < 3 {
-		printUsageAndExit(1)
-	}
-
-	serviceType := db.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
-
-	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
-	quotaValues := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
-	for _, arg := range args[2:] {
-		match := quotaValueRx.FindStringSubmatch(arg)
-		if match == nil {
-			printUsageAndExit(1)
-		}
-		val, err := strconv.ParseUint(match[2], 10, 64)
-		if err != nil {
-			logg.Fatal(err.Error())
-		}
-		quotaValues[liquid.ResourceName(match[1])] = liquid.ResourceQuotaRequest{Quota: val}
-	}
-
-	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(ctx, project, quotaValues))
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// task: test-scan-capacity
-
-func taskTestScanCapacity(ctx context.Context, cluster *core.Cluster, args []string) {
-	if len(args) != 1 {
-		printUsageAndExit(1)
-	}
-
-	capacitorID := args[0]
-	plugin := cluster.CapacityPlugins[capacitorID]
-	if plugin == nil {
-		logg.Fatal("unknown capacitor: %s", capacitorID)
-	}
-
-	capacities, serializedMetrics, err := plugin.Scrape(ctx, mockCapacityPluginBackchannel{cluster}, cluster.Config.AvailabilityZones)
-	if err != nil {
-		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
-		capacities = nil
-	}
-
-	if serializedMetrics != nil {
-		logg.Info("serializedMetrics: %s", string(serializedMetrics))
-	}
-	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{
-		Cluster: cluster,
-		Override: []collector.CapacityPluginMetricsInstance{{
-			CapacitorID:       capacitorID,
-			SerializedMetrics: string(serializedMetrics),
-		}},
-	})
-	dumpGeneratedPrometheusMetrics()
-
-	for srvType, srvCapacities := range capacities {
-		for resName := range srvCapacities {
-			if !cluster.HasResource(srvType, resName) {
-				logg.Error("Scrape reported capacity for unknown resource: %s/%s", srvType, resName)
-			}
-		}
-	}
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	must.Succeed(enc.Encode(capacities))
-}
-
-type mockCapacityPluginBackchannel struct {
-	Cluster *core.Cluster
-}
-
-// GetResourceDemand implements the core.CapacityPluginBackchannel interface.
-func (b mockCapacityPluginBackchannel) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (result liquid.ResourceDemand, err error) {
-	filePath := "mock-global-resource-demand.json"
-	buf, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logg.Info("capacity plugin asked for GetResourceDemand(%q, %q), but no mock data found at %s, so an empty result will be returned",
-				serviceType, resourceName, filePath)
-			return liquid.ResourceDemand{}, nil
-		} else {
-			return liquid.ResourceDemand{}, err
-		}
-	}
-
-	var mockData map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ
-	err = yaml.Unmarshal(buf, &mockData)
-	if err != nil {
-		return liquid.ResourceDemand{}, fmt.Errorf("while parsing %s: %w", filePath, err)
-	}
-
-	resultPerAZ := mockData[serviceType][resourceName]
-	if resultPerAZ == nil {
-		logg.Info("capacity plugin asked for GetResourceDemand(%q, %q), but no mock data found for this resource in %s, so an empty result will be returned",
-			serviceType, resourceName, filePath)
-		return liquid.ResourceDemand{}, nil
-	}
-	return liquid.ResourceDemand{
-		OvercommitFactor: b.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
-		PerAZ:            resultPerAZ,
-	}, nil
 }
