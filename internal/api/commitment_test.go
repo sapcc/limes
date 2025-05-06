@@ -606,7 +606,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
-	_, err := s.DB.Exec(`UPDATE project_resources SET max_quota_from_backend = 1`)
+	_, err := s.DB.Exec(`UPDATE project_resources SET forbidden = TRUE`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +617,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
 	}.Check(t, s.Handler)
-	_, err = s.DB.Exec(`UPDATE project_resources SET max_quota_from_backend = NULL`)
+	_, err = s.DB.Exec(`UPDATE project_resources SET forbidden = FALSE`)
 	if err != nil {
 		t.Fatal(err)
 	}

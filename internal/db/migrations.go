@@ -346,4 +346,29 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN next_scrape_at timestamp without time zone DEFAULT now() NOT NULL,
 			ADD COLUMN scrape_error_message text DEFAULT ''::text NOT NULL;
   `,
+	"053_project_resources_forbidden.down.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN min_quota_from_backend BIGINT DEFAULT NULL,
+			ADD COLUMN max_quota_from_backend BIGINT DEFAULT NULL;
+			
+		UPDATE project_resources
+			SET max_quota_from_backend = 0
+			WHERE forbidden = TRUE;
+		
+		ALTER TABLE project_resources
+			DROP COLUMN forbidden;
+	`,
+	"053_project_resources_forbidden.up.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN forbidden BOOLEAN NOT NULL DEFAULT FALSE;
+
+		UPDATE project_resources
+			SET forbidden = TRUE
+			WHERE max_quota_from_backend = 0;
+
+		ALTER TABLE project_resources
+			DROP COLUMN min_quota_from_backend,
+			DROP COLUMN max_quota_from_backend;
+
+	`,
 }

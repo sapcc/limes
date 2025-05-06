@@ -275,8 +275,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_backend = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-			UPDATE project_resources SET max_quota_from_backend = 0 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
+			UPDATE project_resources SET forbidden = TRUE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+			UPDATE project_resources SET forbidden = TRUE WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 		`,
@@ -292,8 +292,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_backend = NULL WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-			UPDATE project_resources SET max_quota_from_backend = NULL WHERE id = 3 AND service_id = 2 AND name = 'capacity';
+			UPDATE project_resources SET forbidden = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+			UPDATE project_resources SET forbidden = FALSE WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 		`,

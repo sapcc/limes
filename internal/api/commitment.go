@@ -79,11 +79,8 @@ var (
 	`)
 
 	// NOTE: The third output column is `resourceAllowsCommitments`.
-	// We should be checking for `ResourceUsageReport.Forbidden == true`, but
-	// since the `Forbidden` field is not persisted in the DB, we need to use
-	// `max_quota_from_backend` as a proxy.
 	findProjectAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, par.id, pr.max_quota_from_backend IS NULL
+		SELECT pr.id, par.id, pr.forbidden IS NOT TRUE
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id

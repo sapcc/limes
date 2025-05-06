@@ -43,11 +43,10 @@ import (
 
 var (
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.override_quota_from_config
+		SELECT pr.id, pr.forbidden, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.override_quota_from_config
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
-		                                       OR pr.max_quota_from_backend IS NOT NULL
+		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.forbidden IS NOT NULL
 		                                       OR pr.max_quota_from_outside_admin IS NOT NULL
 		                                       OR pr.max_quota_from_local_admin IS NOT NULL
 		                                       OR pr.override_quota_from_config IS NOT NULL)
@@ -129,20 +128,20 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
 			resourceID               db.ProjectResourceID
-			minQuotaFromBackend      Option[uint64]
-			maxQuotaFromBackend      Option[uint64]
+			forbidden                bool
 			maxQuotaFromOutsideAdmin Option[uint64]
 			maxQuotaFromLocalAdmin   Option[uint64]
 			overrideQuotaFromConfig  Option[uint64]
 		)
-		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
+		err := rows.Scan(&resourceID, &forbidden, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
 
 		var c projectLocalQuotaConstraints
-		c.AddMinQuota(minQuotaFromBackend)
-		c.AddMaxQuota(maxQuotaFromBackend)
+		if forbidden {
+			c.AddMaxQuota(Some(uint64(0)))
+		}
 		c.AddMaxQuota(maxQuotaFromOutsideAdmin)
 		c.AddMaxQuota(maxQuotaFromLocalAdmin)
 		c.AddMinQuota(overrideQuotaFromConfig)
