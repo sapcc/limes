@@ -216,7 +216,7 @@ func Test_ScanCapacity(t *testing.T) {
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 2, 'any', 42, 8);
 		INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
 		INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 2, 'capacity');
-    UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared';
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
 
@@ -301,7 +301,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
-	// cluster_services are be created as a baseline (this is usually done by the CheckConsistencyJob)
+	// cluster_services are created as a baseline (this is usually done by the CheckConsistencyJob)
 	insertTime := s.Clock.Now()
 	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
 		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})

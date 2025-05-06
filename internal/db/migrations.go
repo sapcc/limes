@@ -318,13 +318,13 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN renew_context_json JSONB;
 	`,
 	"052_capacitors_removal.down.sql": `
-    ALTER TABLE cluster_services
-      DROP COLUMN scraped_at,
+		ALTER TABLE cluster_services
+			DROP COLUMN scraped_at,
 			DROP COLUMN scrape_duration_secs,
 			DROP COLUMN serialized_metrics,
 			DROP COLUMN next_scrape_at,
 			DROP COLUMN scrape_error_message;
-    CREATE TABLE cluster_capacitors (
+		CREATE TABLE cluster_capacitors (
 			capacitor_id text NOT NULL,
 			scraped_at timestamp without time zone,
 			scrape_duration_secs real DEFAULT 0 NOT NULL,
@@ -332,15 +332,15 @@ var sqlMigrations = map[string]string{
 			next_scrape_at timestamp without time zone DEFAULT now() NOT NULL,
 			scrape_error_message text DEFAULT ''::text NOT NULL
 		);
-    ALTER TABLE cluster_resources
-		  ADD COLUMN capacitor_id TEXT NOT NULL;
+		ALTER TABLE cluster_resources
+			ADD COLUMN capacitor_id TEXT NOT NULL;
   `,
 	"052_capacitors_removal.up.sql": `
-    ALTER TABLE cluster_resources
-      DROP COLUMN capacitor_id;
-    DROP TABLE cluster_capacitors;
-    ALTER TABLE cluster_services
-      ADD COLUMN scraped_at timestamp without time zone,
+		ALTER TABLE cluster_resources
+			DROP COLUMN capacitor_id;
+		DROP TABLE cluster_capacitors;
+		ALTER TABLE cluster_services
+			ADD COLUMN scraped_at timestamp without time zone,
 			ADD COLUMN scrape_duration_secs real DEFAULT 0 NOT NULL,
 			ADD COLUMN serialized_metrics text DEFAULT ''::text NOT NULL,
 			ADD COLUMN next_scrape_at timestamp without time zone DEFAULT now() NOT NULL,
