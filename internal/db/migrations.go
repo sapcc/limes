@@ -210,10 +210,10 @@ var sqlMigrations = map[string]string{
 		CREATE TABLE project_mail_notifications (
 			id BIGSERIAL NOT NULL PRIMARY KEY,
 			project_id BIGINT NOT NULL REFERENCES projects ON DELETE CASCADE,
-  			subject TEXT NOT NULL,
-  			body TEXT NOT NULL,
-  			next_submission_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  			failed_submissions BIGINT NOT NULL DEFAULT 0
+			subject TEXT NOT NULL,
+			body TEXT NOT NULL,
+			next_submission_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			failed_submissions BIGINT NOT NULL DEFAULT 0
 		);
 	`,
 	"050_commitment_workflow_context.down.sql": `
