@@ -116,8 +116,7 @@ type ProjectResource struct {
 	Name                     liquid.ResourceName `db:"name"`
 	Quota                    Option[uint64]      `db:"quota"`
 	BackendQuota             Option[int64]       `db:"backend_quota"`
-	MinQuotaFromBackend      Option[uint64]      `db:"min_quota_from_backend"`
-	MaxQuotaFromBackend      Option[uint64]      `db:"max_quota_from_backend"`
+	Forbidden                bool                `db:"forbidden"`
 	MaxQuotaFromOutsideAdmin Option[uint64]      `db:"max_quota_from_outside_admin"`
 	MaxQuotaFromLocalAdmin   Option[uint64]      `db:"max_quota_from_local_admin"`
 	OverrideQuotaFromConfig  Option[uint64]      `db:"override_quota_from_config"`

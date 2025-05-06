@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
@@ -94,7 +95,7 @@ var (
 	// NOTE: This query does not use `AND quota IS NOT NULL` to filter out NoQuota resources
 	// because it would also filter out resources with AZSeparatedTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
-		SELECT id, name, backend_quota, quota
+		SELECT id, name, backend_quota, quota, forbidden
 		  FROM project_resources
 		 WHERE service_id = $1
 	`)
@@ -140,18 +141,23 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	var azSeparatedResourceIDs []db.ProjectResourceID
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
-			resourceID     db.ProjectResourceID
-			resourceName   liquid.ResourceName
-			currentQuota   *int64
-			targetQuotaPtr *uint64
+			resourceID      db.ProjectResourceID
+			resourceName    liquid.ResourceName
+			currentQuotaPtr Option[int64]
+			targetQuotaPtr  Option[uint64]
+			forbidden       bool
 		)
-		err := rows.Scan(&resourceID, &resourceName, &currentQuota, &targetQuotaPtr)
+		err := rows.Scan(&resourceID, &resourceName, &currentQuotaPtr, &targetQuotaPtr, &forbidden)
 		if err != nil {
 			return err
 		}
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, resourceName)
 		if !resInfo.HasQuota {
+			return nil
+		}
+
+		if forbidden && currentQuotaPtr.UnwrapOr(0) != 0 {
 			return nil
 		}
 
@@ -190,14 +196,15 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			}
 		} else {
 			// for anything except AZSeparatedTopology, the total target quota is just what we have in project_resources.quota
-			if targetQuotaPtr == nil {
+			var ok bool
+			targetQuota, ok = targetQuotaPtr.Unpack()
+			if !ok {
 				return fmt.Errorf("found unexpected NULL value in project_resources.quota for id = %d", resourceID)
 			}
-			targetQuota = *targetQuotaPtr
 		}
 
 		targetQuotasInDB[resourceName] = targetQuota
-		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
+		if val, isSome := currentQuotaPtr.Unpack(); !isSome || val < 0 || uint64(val) != targetQuota {
 			needsApply = true
 		}
 		return nil

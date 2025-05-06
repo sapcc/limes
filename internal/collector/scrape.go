@@ -274,13 +274,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			if resInfo.Topology != liquid.AZSeparatedTopology {
 				res.BackendQuota = backendQuota
 			}
-
-			if resourceData.Resources[res.Name].Forbidden {
-				res.MaxQuotaFromBackend = Some(uint64(0))
-			} else {
-				res.MaxQuotaFromBackend = None[uint64]()
-			}
-			res.MinQuotaFromBackend = None[uint64]()
+			res.Forbidden = resourceData.Resources[res.Name].Forbidden
 		}
 
 		return nil
