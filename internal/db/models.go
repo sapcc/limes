@@ -31,9 +31,10 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// ClusterCapacitor contains a record from the `cluster_capacitors` table.
-type ClusterCapacitor struct {
-	CapacitorID        string            `db:"capacitor_id"`
+// ClusterService contains a record from the `cluster_services` table.
+type ClusterService struct {
+	ID                 ClusterServiceID  `db:"id"`
+	Type               ServiceType       `db:"type"`
 	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
 	SerializedMetrics  string            `db:"serialized_metrics"`
@@ -41,18 +42,11 @@ type ClusterCapacitor struct {
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
 }
 
-// ClusterService contains a record from the `cluster_services` table.
-type ClusterService struct {
-	ID   ClusterServiceID `db:"id"`
-	Type ServiceType      `db:"type"`
-}
-
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ID          ClusterResourceID   `db:"id"`
-	CapacitorID string              `db:"capacitor_id"`
-	ServiceID   ClusterServiceID    `db:"service_id"`
-	Name        liquid.ResourceName `db:"name"`
+	ID        ClusterResourceID   `db:"id"`
+	ServiceID ClusterServiceID    `db:"service_id"`
+	Name      liquid.ResourceName `db:"name"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -247,7 +241,6 @@ type MailNotification struct {
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
-	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
 	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")

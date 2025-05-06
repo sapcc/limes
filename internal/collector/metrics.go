@@ -180,9 +180,9 @@ func timeAsUnixOrZero(t *time.Time) float64 {
 var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_capacity_plugin_metrics_ok",
-		Help: "Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.",
+		Help: "Whether capacity plugin metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.",
 	},
-	[]string{"capacitor"},
+	[]string{"service_type"},
 )
 
 // CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
@@ -198,7 +198,7 @@ type CapacityPluginMetricsCollector struct {
 // CapacityPluginMetricsInstance describes a single project service for which plugin
 // metrics are submitted. It appears in type CapacityPluginMetricsCollector.
 type CapacityPluginMetricsInstance struct {
-	CapacitorID       string
+	ServiceType       db.ServiceType
 	SerializedMetrics string
 }
 
@@ -211,8 +211,8 @@ func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
-	SELECT capacitor_id, serialized_metrics
-	  FROM cluster_capacitors
+	SELECT type, serialized_metrics
+	  FROM cluster_services
 	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
 
@@ -231,7 +231,7 @@ func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
 		var i CapacityPluginMetricsInstance
-		err := rows.Scan(&i.CapacitorID, &i.SerializedMetrics)
+		err := rows.Scan(&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
 			c.collectOneCapacitor(ch, pluginMetricsOkDesc, i)
 		}
@@ -243,7 +243,7 @@ func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance CapacityPluginMetricsInstance) {
-	plugin := c.Cluster.CapacityPlugins[instance.CapacitorID]
+	plugin := c.Cluster.CapacityPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
 	}
@@ -253,13 +253,13 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 		successAsFloat = 0.0
 		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
-		logg.Error("while collecting capacity metrics for capacitor %s: %s",
-			instance.CapacitorID, err.Error())
+		logg.Error("while collecting capacity metrics for service_type %s: %s",
+			instance.ServiceType, err.Error())
 	}
 	ch <- prometheus.MustNewConstMetric(
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		instance.CapacitorID,
+		string(instance.ServiceType),
 	)
 }
 
@@ -486,7 +486,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 		JOIN project_resources pr ON pr.service_id = ps.id
 		JOIN project_az_resources par ON par.resource_id = pr.id
 		JOIN project_commitments pc ON pc.az_resource_id = par.id AND pc.state = 'active'
-		GROUP BY p.domain_id, p.id, ps.type, pr.name 
+		GROUP BY p.domain_id, p.id, ps.type, pr.name
 	)
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name,
 	       pr.quota, pr.backend_quota, pr.override_quota_from_config,

@@ -61,7 +61,7 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	// add some useless *_services entries
-	err = s.DB.Insert(&db.ClusterService{Type: "whatever"})
+	err = s.DB.Insert(&db.ClusterService{Type: "whatever", NextScrapeAt: s.Clock.Now()})
 	if err != nil {
 		t.Error(err)
 	}

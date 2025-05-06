@@ -26,8 +26,8 @@ The collector service exposes the following metrics by default:
 | Counter | `limes_failed_domain_discoveries` | none |
 | Counter | `limes_successful_project_discoveries` | `domain`, `domain_id` |
 | Counter | `limes_failed_project_discoveries` | `domain`, `domain_id` |
-| Counter | `limes_successful_capacity_scrapes` | `capacitor` |
-| Counter | `limes_failed_capacity_scrapes` | `capacitor` |
+| Counter | `limes_successful_capacity_scrapes` | `service_type` |
+| Counter | `limes_failed_capacity_scrapes` | `service_type` |
 | Counter | `limes_successful_auditevent_publish` | none |
 | Counter | `limes_failed_auditevent_publish` | none |
 

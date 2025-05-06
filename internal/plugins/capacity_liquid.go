@@ -50,12 +50,12 @@ type fixedCapacityConfiguration struct {
 
 type LiquidCapacityPlugin struct {
 	// configuration
-	ServiceType                     db.ServiceType                          `yaml:"service_type"`
 	LiquidServiceType               string                                  `yaml:"liquid_service_type"`
 	FixedCapacityConfiguration      Option[fixedCapacityConfiguration]      `yaml:"fixed_capacity_values"`
 	PrometheusCapacityConfiguration Option[prometheusCapacityConfiguration] `yaml:"capacity_values_from_prometheus"`
 
 	// state
+	ServiceType       db.ServiceType     `yaml:"-"`
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
 	LiquidClient      core.LiquidClient  `yaml:"-"`
 }
@@ -70,10 +70,8 @@ func (p *LiquidCapacityPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	if p.ServiceType == "" {
-		return errors.New("missing required value: params.service_type")
-	}
+func (p *LiquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
+	p.ServiceType = serviceType
 	if p.LiquidServiceType == "" {
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}

@@ -131,7 +131,7 @@ func GenerateDummyToken() string {
 	return "dummyToken"
 }
 
-// NewSetup prepares most or all pieces of Keppel for a test.
+// NewSetup prepares most or all pieces of Limes for a test.
 func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
 	var params setupParams
@@ -264,7 +264,7 @@ func mustDo(t *testing.T, err error) {
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments", "cluster_capacitors", "cluster_services", "domains"),
+		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
 			"cluster_services", "cluster_resources", "cluster_az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",

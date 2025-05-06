@@ -1,17 +1,12 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
--- two capacitors matching the two services that have capacity values
-INSERT INTO cluster_capacitors (capacitor_id, scraped_at, next_scrape_at) VALUES ('scans-unshared', UNIX(1000), UNIX(2000));
-INSERT INTO cluster_capacitors (capacitor_id, scraped_at, next_scrape_at) VALUES ('scans-shared',   UNIX(1100), UNIX(2100));
-
--- three services
-INSERT INTO cluster_services (id, type) VALUES (1, 'unshared');
-INSERT INTO cluster_services (id, type) VALUES (2, 'shared');
+INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at) VALUES (1, 'unshared', UNIX(1000), UNIX(2000));
+INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at) VALUES (2, 'shared',   UNIX(1100), UNIX(2100));
 
 -- all services have the resources "things" and "capacity"
-INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (1, 1, 'things', 'scans-unshared');
-INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (2, 2, 'things', 'scans-shared');
-INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (3, 2, 'capacity', 'scans-shared');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 2, 'things');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (3, 2, 'capacity');
 
 -- "capacity" is modeled as AZ-aware, "things" is not
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]');
@@ -121,7 +116,7 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 -- insert some bullshit data that should be filtered out by the internal/reports/ logic
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
 INSERT INTO cluster_services (id, type) VALUES (101, 'weird');
-INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (101, 101, 'things', 'scans-shared');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (101, 101, 'things');
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 101, 'any', 2, 1, '');
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (101, 101, 'things', 2, 2);

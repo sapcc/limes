@@ -125,12 +125,6 @@ var (
 		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE ps.project_id = $1 AND ps.type = $2 AND pr.name = $3 AND par.az = $4
 	`)
-	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
-		UPDATE cluster_capacitors SET next_scrape_at = $1 WHERE capacitor_id = (
-			SELECT capacitor_id FROM cluster_services cs JOIN cluster_resources cr ON cs.id = cr.service_id
-			WHERE cs.type = $2 AND cr.name = $3
-		)
-	`)
 )
 
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
@@ -453,7 +447,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt.IsSome() {
-		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, loc.ServiceType, loc.ResourceName)
+		_, err := p.DB.Exec(`UPDATE cluster_services SET next_scrape_at = $1 WHERE type = $2`, now, loc.ServiceType)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

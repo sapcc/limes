@@ -65,11 +65,10 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 `)
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
-	SELECT cs.type, cr.name, car.az, car.raw_capacity, car.usage, car.subcapacities, cc.scraped_at
+	SELECT cs.type, cr.name, car.az, car.raw_capacity, car.usage, car.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  LEFT OUTER JOIN cluster_az_resources car ON car.resource_id = cr.id
-	  LEFT OUTER JOIN cluster_capacitors cc ON cc.capacitor_id = cr.capacitor_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 ORDER BY car.az
 `)

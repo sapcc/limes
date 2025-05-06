@@ -44,9 +44,8 @@ const (
 				params:
 					liquid_service_type: %[1]s
 		capacitors:
-		- id: unittest
+		- service_type: unittest
 			params:
-				service_type: unittest
 				liquid_service_type: %[1]s
 		resource_behavior:
 		- { resource: unittest/capacity, overcommit_factor: 1.5 }

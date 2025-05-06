@@ -3,18 +3,15 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
 -- capacity scrape needs these as a baseline (these are usually created by the CheckConsistencyJob)
-INSERT INTO cluster_services (id, type) VALUES (1, 'first');
-INSERT INTO cluster_services (id, type) VALUES (2, 'second');
+INSERT INTO cluster_services (id, type, next_scrape_at, scrape_duration_secs) VALUES (1, 'first',  UNIX(0), 5);
+INSERT INTO cluster_services (id, type, next_scrape_at, scrape_duration_secs) VALUES (2, 'second', UNIX(0), 5);
 
--- capacity scrape would fill cluster_capacitors, cluster_resources and cluster_az_resources
+-- capacity scrape would fill cluster_resources and cluster_az_resources
 -- on its own, but we do it here to minimize the inline diffs in the test code
-INSERT INTO cluster_capacitors (capacitor_id, next_scrape_at, scrape_duration_secs) VALUES ('scans-first',  UNIX(0), 5);
-INSERT INTO cluster_capacitors (capacitor_id, next_scrape_at, scrape_duration_secs) VALUES ('scans-second', UNIX(0), 5);
-
-INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'scans-first',  1, 'things');
-INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (2, 'scans-first',  1, 'capacity');
-INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (3, 'scans-second', 2, 'things');
-INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (4, 'scans-second', 2, 'capacity');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 1, 'capacity');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (3, 2, 'things');
+INSERT INTO cluster_resources (id, service_id, name) VALUES (4, 2, 'capacity');
 
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 42, 8);
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 42, 8);

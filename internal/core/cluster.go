@@ -43,7 +43,7 @@ type Cluster struct {
 	Config          ClusterConfiguration
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[db.ServiceType]QuotaPlugin
-	CapacityPlugins map[string]CapacityPlugin
+	CapacityPlugins map[db.ServiceType]CapacityPlugin
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -53,7 +53,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	c = &Cluster{
 		Config:          config,
 		QuotaPlugins:    make(map[db.ServiceType]QuotaPlugin),
-		CapacityPlugins: make(map[string]CapacityPlugin),
+		CapacityPlugins: make(map[db.ServiceType]CapacityPlugin),
 	}
 
 	// instantiate discovery plugin
@@ -75,9 +75,9 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate("liquid") // will be removed soon, when capacity and quota plugins are merged
 		if plugin == nil {
-			errs.Addf("setup for capacitor %s failed: no suitable capacity plugin found", capa.ID)
+			errs.Addf("setup for capacitor %s failed: no suitable capacity plugin found", capa.ServiceType)
 		}
-		c.CapacityPlugins[capa.ID] = plugin
+		c.CapacityPlugins[capa.ServiceType] = plugin
 	}
 
 	// Create mail templates
@@ -130,15 +130,15 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 
 	// initialize capacity plugins
 	for _, capa := range c.Config.Capacitors {
-		plugin := c.CapacityPlugins[capa.ID]
+		plugin := c.CapacityPlugins[capa.ServiceType]
 		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
 		if err != nil {
-			errs.Addf("failed to supply params to capacitor %s: %w", capa.ID, err)
+			errs.Addf("failed to supply params to capacitor %s: %w", capa.ServiceType, err)
 			continue
 		}
-		err := plugin.Init(ctx, provider, eo)
+		err := plugin.Init(ctx, provider, eo, capa.ServiceType)
 		if err != nil {
-			errs.Addf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
+			errs.Addf("failed to initialize capacitor %s: %w", capa.ServiceType, util.UnpackError(err))
 		}
 	}
 
