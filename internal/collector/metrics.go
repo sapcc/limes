@@ -180,9 +180,9 @@ func timeAsUnixOrZero(t *time.Time) float64 {
 var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_capacity_plugin_metrics_ok",
-		Help: "Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.",
+		Help: "Whether capacity plugin metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.",
 	},
-	[]string{"capacitor"},
+	[]string{"service_type"},
 )
 
 // CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
@@ -253,7 +253,7 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 		successAsFloat = 0.0
 		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
-		logg.Error("while collecting capacity metrics for capacitor %s: %s",
+		logg.Error("while collecting capacity metrics for service_type %s: %s",
 			instance.ServiceType, err.Error())
 	}
 	ch <- prometheus.MustNewConstMetric(

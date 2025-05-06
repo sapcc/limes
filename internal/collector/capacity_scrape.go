@@ -187,7 +187,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}
 
-	var wantedResources []db.ResourceRef[db.ClusterServiceID]
+	var wantedResources []liquid.ResourceName
 	pluginServiceType := plugin.(*plugins.LiquidCapacityPlugin).ServiceType
 	// TODO: This consistency check can possibly go, when the c.Cluster-configurations are merged
 	if !c.Cluster.HasService(pluginServiceType) {
@@ -199,22 +199,21 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, pluginServiceType, resourceName)
 			continue
 		}
-		wantedResources = append(wantedResources, db.ResourceRef[db.ClusterServiceID]{
-			ServiceID: service.ID,
-			Name:      resourceName,
-		})
+		wantedResources = append(wantedResources, resourceName)
 	}
-	slices.SortFunc(wantedResources, db.CompareResourceRefs) // for deterministic test behavior
+	slices.Sort(wantedResources)
 
 	// create and delete cluster_resources for this cluster_service as needed
-	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef[db.ClusterServiceID]]{
+	setUpdate := db.SetUpdate[db.ClusterResource, liquid.ResourceName]{
 		ExistingRecords: dbOwnedResources,
 		WantedKeys:      wantedResources,
-		KeyForRecord:    db.ClusterResource.Ref,
-		Create: func(ref db.ResourceRef[db.ClusterServiceID]) (db.ClusterResource, error) {
+		KeyForRecord: func(resource db.ClusterResource) liquid.ResourceName {
+			return resource.Name
+		},
+		Create: func(resourceName liquid.ResourceName) (db.ClusterResource, error) {
 			return db.ClusterResource{
-				ServiceID: ref.ServiceID,
-				Name:      ref.Name,
+				ServiceID: service.ID,
+				Name:      resourceName,
 			}, nil
 		},
 		Update: func(res *db.ClusterResource) (err error) { return nil },
