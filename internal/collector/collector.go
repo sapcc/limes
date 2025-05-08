@@ -30,8 +30,9 @@ import (
 )
 
 // Collector provides methods that implement the collection jobs performed by
-// limes-collect. The struct contains references to the driver used, the plugin
-// (which defines the service type to be targeted), and a few other things;
+// limes-collect. The struct contains a reference to the Cluster configuration,
+// which holds references to the keystone DiscoveryPlugin and LiquidConnections
+// (which define the service type to be targeted), and a few other things;
 // basically everything that needs to be replaced by a mock implementation for
 // the collector's unit tests.
 type Collector struct {

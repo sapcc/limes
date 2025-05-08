@@ -204,7 +204,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			t.Fatal("can not create empty DB records since there are no projects")
 		}
 		for _, dbProject := range s.Projects {
-			for _, svcConfig := range s.Cluster.Config.Services {
+			for _, svcConfig := range s.Cluster.Config.Liquids {
 				t0 := time.Unix(0, 0).UTC()
 				dbProjectService := &db.ProjectService{
 					ID:             db.ProjectServiceID(len(s.ProjectServices) + 1),
@@ -217,7 +217,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				resInfos := s.Cluster.QuotaPlugins[svcConfig.ServiceType].ServiceInfo().Resources
+				resInfos := s.Cluster.LiquidConnections[svcConfig.ServiceType].ServiceInfo().Resources
 				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),

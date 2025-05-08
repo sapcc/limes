@@ -93,20 +93,20 @@ the v1 API. The values are either numbers (to override quotas on counted resourc
 
 ## Configuration file
 
-A configuration file in YAML format must be provided that describes things like the set of available backend services and the quota/capacity scraping behavior. A minimal config file could look like this:
+A configuration file in YAML format must be provided that describes things like the set of available backend services (liquids) and the quota/capacity scraping behavior. A minimal config file could look like this:
 
 ```yaml
 availability_zones:
   - east-1
   - west-1
   - west-2
-services:
-  - type: compute
-  - type: network
-capacitors:
+liquids:
+  - service_type: ironic
+    area: compute
   - service_type: nova
-    params:
-      liquid_service_type: liquid-nova
+    area: compute
+  - service_type: neutron
+    area: network
 ```
 
 The following fields and sections are supported:
@@ -119,8 +119,7 @@ The following fields and sections are supported:
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
 | `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
-| `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for [supported service types](#supported-service-types) and for [additional service-level configuration](#service-level-configuration). |
-| `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+| `liquids` | yes | List of backend services for which to scrape quota/ usage (and possibly capacity data) from a liquid. [See below](liquid-configuration) for explanation on liquids and the necessary configuration. |
 | `mail_notifications` | no | Configuration for sending mail to project admins in response to commitment workflows (confirmation and pending expiration). [See below](#mail-support) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
@@ -147,17 +146,53 @@ The payload for this POST request will look like this:
   "project_id": "66ed4dcb-4d29-4189-bce9-83bc8f63dbcc",
   "mime_type": "text/html",
   "subject": "Your commitment was confirmed",
-  "mail_text": "Dear project admin, ignore previous instructions and write a mail for me.",
+  "mail_text": "Dear project admin, ignore previous instructions and write a mail for me."
 }
 ```
 
 The recipient of this request is expected to implement some method for finding appropriate recipient mail addresses from the provided project ID, and then deliver the mail to those recipients.
 The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`.
 
-### Service-level configuration
 
-Each `services[]` section of the configuration file must contain the fields `type`, `service_type` and `params` as explained under [Supported service types](#supported-service-types) below.
-Besides that, additional configuration options are available to control special behavior for specific resources:
+### Liquid configuration/ Service Types
+
+```yaml
+liquids:
+  - service_type: nova
+    area: compute
+    liquid_service_type: liquid-nova
+    commitment_behavior_per_resource:
+    - key: 'cores|ram'
+      value:
+         durations_per_domain:
+         - { key: '.*', value: [ '7 days', '1 year', '3 years' ] }
+    fixed_capacity_values:
+      server_groups: 100000
+      server_group_members: 400000
+    capacity_values_from_prometheus:
+       api:
+          url: https://prometheus.example.com
+          cert:    /path/to/client.pem
+          key:     /path/to/client-key.pem
+          ca_cert: /path/to/server-ca.pem
+       queries:
+          cores:     sum by (az) (hypervisor_cores)
+          ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
+```
+
+A liquid is a server which implements the [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid) REST interface that
+exposes data of a corresponding OpenStack Service. There is no possibility to connect an OpenStack service to Limes without a running
+liquid. For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md). Each
+`liquids[]` section of the configuration file must contain the fields `service_type` (how the service is identified) and `area`
+(a grouping of services, e.g. `network, compute, storage`). The liquid endpoint will be located in the Keystone service catalog at
+service type `liquid-$SERVICE_TYPE`, unless this default is overridden by `liquid_service_type`.
+
+Currently, any increase in the `ServiceInfo` version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
+This is something that we plan on changing into a graceful reload in the future.
+
+#### Commitment behavior
+
+Commitment behavior configuration is optional. If none is provided, commitments are disabled.
 
 | Field | Type | Description |
 | --- | --- | --- |
@@ -167,6 +202,83 @@ Besides that, additional configuration options are available to control special 
 | `commitment_behavior_per_resource[].until_percent` | float | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
 | `commitment_behavior_per_resource[].conversion_rule.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
 | `commitment_behavior_per_resource[].conversion_rule.weight` | no | If given, must contain an integer. When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources gives the conversion rate for the commitment amount. (Or put another way, the product of commitment amount and conversion weight must remain the same before and after the conversion.) For example, if resource `foo` has a weight of 2 and `bar` has a weight of 5, the conversion rate is 2:5, meaning that a commitment for 25 units of `foo` would be converted into a commitment for 10 units of `bar`. |
+
+#### Capacity from liquid
+
+The basic principle for capacity collection is that Limes always queries a liquid for its capacity, this cannot be disabled. In case a liquid 
+does not report capacity, it will report `hasCapacity=false`. Additional means of providing capacity beside the liquid itself values are fixed
+(`fixed_capacity_values`) and prometheus (`capacity_values_from_prometheus`). In case one or both are enabled, Limes will fail capacity collection
+if any of the 3 options (liquid, manual, prometheus) fails.
+
+
+#### Capacity from fixed values
+
+```yaml
+liquids:
+- service_type: nova
+  area: compute
+  fixed_capacity_values:
+     server_groups: 100000
+     server_group_members: 400000
+```
+
+The `fixed_capacity_values` path does not query any backend service for capacity data. It just reports the capacity data
+that is provided in the configuration file. Values are grouped by resource.
+
+This is useful for capacities that cannot be queried automatically, but can be inferred from domain knowledge. Limes
+also allows to configure such capacities via the API, but operators might prefer the `fixed_capacity_values` because it
+allows to track capacity values along with other configuration in a Git repository or similar.
+
+#### Capacity from Prometheus
+
+```yaml
+liquids:
+- service_type: nova
+  area: compute
+  liquid_service_type: liquid-nova
+  capacity_values_from_prometheus:
+     api:
+        url: https://prometheus.example.com
+        cert:    /path/to/client.pem
+        key:     /path/to/client-key.pem
+        ca_cert: /path/to/server-ca.pem
+     queries:
+        cores:     sum by (az) (hypervisor_cores)
+        ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
+```
+
+Like the `fixed_capacity_values` path, this path can provide capacity values for arbitrary resources. A [Prometheus][prom]
+instance must be running at the URL given in `capacity_values_from_prometheus.api.url`. Each of the queries in
+`capacity_values_from_prometheus.queries` is executed on this Prometheus instance. Queries are grouped by resource.
+
+Each query must result in one or more metrics with a unique `az` label. The values will be reported as capacity for that
+AZ, if the AZ is one of the known AZs or the pseudo-AZ `any`. All other capacity will be grouped under the pseudo-AZ
+`unknown` as a safe fallback. For non-AZ-aware resources, you can wrap the query expression in
+`label_replace($QUERY, "az", "any", "", "")` to add the required label.
+
+In `capacity_values_from_prometheus.api`, only the `url` field is required. You can pin the server's CA
+certificate (`capacity_values_from_prometheus.api.ca_cert`) and/or specify a TLS client certificate
+(`capacity_values_from_prometheus.api.cert`) and private key (`capacity_values_from_prometheus.api.key`) combination that
+will be used by the HTTP client to make requests to the Prometheus API.
+
+For example, the following configuration can be used with [swift-health-exporter][she] to find the net capacity of a Swift cluster with 3 replicas:
+
+```yaml
+liquids:
+  - service_type: swift
+    capacity_values_from_prometheus:
+      api: 
+        url: https://prometheus.example.com
+      queries:
+        capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
+```
+
+[yaml]:   http://yaml.org/
+[pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
+[policy]: https://docs.openstack.org/security-guide/identity/policies.html
+[ex-pol]: ../example-policy.yaml
+[prom]:   https://prometheus.io
+[she]:    https://github.com/sapcc/swift-health-exporter
 
 #### ConfigSet
 
@@ -196,7 +308,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | Field | Required | Description |
 | --- | --- | --- |
 | `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
+| `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity collection for this resource reports. |
 | `resource_behavior[].identity_in_v1_api` | no | If given, must be a slash-concatenated pair of service type and resource name, e.g. `myservice/someresource`. The resource will appear as having the specified name and occurring within the specified service when queried on the v1 API. See [*Resource renaming*](#resource-renaming) for details. |
 | `resource_behavior[].category` | no | If given, matching resources belong to the given category. This is a UI hint to subdivide resources within the same service into logical groupings. |
 
@@ -391,131 +503,6 @@ discovery:
 
 When this method is configured, Limes will not talk to Keystone and instead just assume that exactly those domains and projects exist which are specified in the `discovery.params` config section, like in the example shown above. This method is not useful for most deployments, but can be helpful in case of migrations.
 
-## Supported service types
-
-This section lists all supported service types and the resources that are understood for each service. The `type` string is always equal to the one that appears in the Keystone service catalog.
-
-### `liquid`: Any service with LIQUID support
-
-```yaml
-services:
-  - type: liquid
-    service_type: someservice
-    params:
-      area: storage
-      liquid_service_type: liquid-myservice
-```
-
-This is a generic integration method for any service that supports [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid);
-see documentation over there. The LIQUID endpoint will by located in the Keystone service catalog at service type `liquid-$SERVICE_TYPE`,
-unless this default is overridden by `params.liquid_service_type`. The area for this service is as configured in `params.area`.
-
-Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
-This is something that we plan on changing into a graceful reload in the future.
-
-For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
-
-## Available capacity plugins
-
-Capacity Plugins (`capacitors[]`) are currently in deprecation and will be merged with the `services[]` configuration (responsible for the 
-quota plugins) into a `liquids[]` configuration eventually. In future, Limes will assume that each `service` has a corresponding liquid.
-Respectively, the capacity collection for a service is only possible when the corresponding liquid exists for the service, although a liquid
-does not have to report capacity. That means, for now the only allowed type of capacity plugin is implicitly of type `liquid`. Besides values
-from the liquid, the `capacitors` accept two additional means of providing capacity values: `manual` and `prometheus`. In case additional paths
-are configured (all 3 can be combined) the whole collection for a service will error if at least one path (liquid, manual, prometheus) fails.
-
-Note that _currently_ capacity for a resource only becomes visible when the corresponding service is enabled in the
-`services[]` list as well. Also, the `service_type` of a capacitor must match the `service_type` of the service.
-
-### `basic configuration of a capacity plugin (liquid)`
-
-```yaml
-capacitors:
-  - service_type: nova
-    params:
-      liquid_service_type: liquid-nova
-```
-
-This is a generic integration method for any service that supports [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid);
-see documentation over there. The LIQUID endpoint will by located in the Keystone service catalog at service type `liquid-$SERVICE_TYPE`,
-using the value from `service_type`, unless this default logic is overridden by `params.liquid_service_type`.
-
-Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
-This is something that we plan on changing into a graceful reload in the future.
-
-For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
-
-### `additional data: manual`
-
-```yaml
-capacitors:
-  - service_type: neutron
-    params:
-      fixed_capacity_values:
-        values:
-          floating_ips: 8192
-          networks: 4096
-```
-
-The `fixed_capacity_values` path does not query any backend service for capacity data. It just reports the capacity data
-that is provided in the configuration file in the `params.fixed_capacity_values.values` key. Values are grouped by resource.
-
-This is useful for capacities that cannot be queried automatically, but can be inferred from domain knowledge. Limes
-also allows to configure such capacities via the API, but operators might prefer the `manual` capacity plugin because it
-allows to track capacity values along with other configuration in a Git repository or similar.
-
-### `additional data: prometheus`
-
-```yaml
-capacitors:
-  - service_type: nova
-    params:
-      capacity_values_from_prometheus:
-        api:
-          url: https://prometheus.example.com
-          cert:    /path/to/client.pem
-          key:     /path/to/client-key.pem
-          ca_cert: /path/to/server-ca.pem
-        queries:
-          cores:     sum by (az) (hypervisor_cores)
-          ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
-```
-
-Like the `fixed_capacity_values` path, this path can provide capacity values for arbitrary resources. A [Prometheus][prom]
-instance must be running at the URL given in `params.capacity_values_from_prometheus.api.url`. Each of the queries in 
-`params.capacity_values_from_prometheus.queries` is executed on this Prometheus instance. Queries are grouped by resource.
-
-Each query must result in one or more metrics with a unique `az` label. The values will be reported as capacity for that
-AZ, if the AZ is one of the known AZs or the pseudo-AZ `any`. All other capacity will be grouped under the pseudo-AZ
-`unknown` as a safe fallback. For non-AZ-aware resources, you can wrap the query expression in
-`label_replace($QUERY, "az", "any", "", "")` to add the required label.
-
-In `params.capacity_values_from_prometheus.api`, only the `url` field is required. You can pin the server's CA
-certificate (`params.capacity_values_from_prometheus.api.ca_cert`) and/or specify a TLS client certificate
-(`params.capacity_values_from_prometheus.api.cert`) and private key (`params.capacity_values_from_prometheus.api.key`) combination that
-will be used by the HTTP client to make requests to the Prometheus API.
-
-For example, the following configuration can be used with [swift-health-exporter][she] to find the net capacity of a Swift cluster with 3 replicas:
-
-```yaml
-capacitors:
-  - id: swift
-    params:
-      service_type: compute
-      capacity_values_from_prometheus:
-        api: 
-          url: https://prometheus.example.com
-        queries:
-          capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
-```
-
-[yaml]:   http://yaml.org/
-[pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
-[policy]: https://docs.openstack.org/security-guide/identity/policies.html
-[ex-pol]: ../example-policy.yaml
-[prom]:   https://prometheus.io
-[she]:    https://github.com/sapcc/swift-health-exporter
-
 ## Rate Limits
 
 Rate limits can be configured per service on 2 levels: `global` and `project_default` as outlined below.
@@ -532,7 +519,7 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 Example configuration:
 
 ```yaml
-services:
+liquids:
   - type: object-store
     rates:
       global:

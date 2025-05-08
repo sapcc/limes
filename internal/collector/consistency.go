@@ -34,7 +34,7 @@ import (
 func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.CronJob{
 		Metadata: jobloop.JobMetadata{
-			ReadableName: "ensure that all active domains and projects in this cluster have a service entry for this plugin's service type",
+			ReadableName: "ensure that all active domains and projects in this cluster have a service entry for this liquid's service type",
 			CounterOpts: prometheus.CounterOpts{
 				Name: "limes_cron_consistency_runs",
 				Help: "Counter for consistency checks runs",

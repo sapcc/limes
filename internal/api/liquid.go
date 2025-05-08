@@ -45,18 +45,14 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	plugin, ok := p.Cluster.CapacityPlugins[serviceType]
+	connection, ok := p.Cluster.LiquidConnections[serviceType]
 	if !ok {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
-	backchannel := datamodel.NewCapacityPluginBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := plugin.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones)
-	if errors.Is(err, core.ErrNotALiquid) {
-		http.Error(w, "capacity plugin does not support LIQUID requests", http.StatusNotImplemented)
-		return
-	}
+	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
+	serviceCapacityRequest, err := connection.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -78,7 +74,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	plugin, ok := p.Cluster.QuotaPlugins[db.ServiceType(serviceType)]
+	connection, ok := p.Cluster.LiquidConnections[db.ServiceType(serviceType)]
 	if !ok {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
@@ -108,11 +104,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	domain := core.KeystoneDomainFromDB(dbDomain)
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
-	serviceUsageRequest, err := plugin.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones)
-	if errors.Is(err, core.ErrNotALiquid) {
-		http.Error(w, "quota plugin does not support LIQUID requests", http.StatusNotImplemented)
-		return
-	}
+	serviceUsageRequest, err := connection.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

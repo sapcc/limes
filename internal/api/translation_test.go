@@ -37,12 +37,10 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
+		liquids:
 			- service_type: first
-				type: liquid
 				area: first
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 	`
 )
 

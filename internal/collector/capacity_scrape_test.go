@@ -46,23 +46,12 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
+		liquids:
 			- service_type: shared
-				type: liquid
 				area: shared
-				params:
-					liquid_service_type: %[1]s
-			- service_type: unshared
-				type: liquid
-				area: unshared
-				params:
-					liquid_service_type: %[2]s
-		capacitors:
-		- service_type: shared
-			params:
 				liquid_service_type: %[1]s
-		- service_type: unshared
-			params:
+			- service_type: unshared
+				area: unshared
 				liquid_service_type: %[2]s
 	`
 
@@ -70,15 +59,9 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
+		liquids:
 			- service_type: shared
-				type: liquid
 				area: shared
-				params:
-					liquid_service_type: %[1]s
-		capacitors:
-		- service_type: shared
-			params:
 				liquid_service_type: %[1]s
 	`
 
@@ -93,29 +76,18 @@ const (
 					germany:
 						- { id: uuid-for-berlin,  name: berlin }
 						- { id: uuid-for-dresden, name: dresden }
-		services:
+		liquids:
 			- service_type: first
-				type: liquid
 				area: first
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			- service_type: second
-				type: liquid
 				area: second
-				params:
-					liquid_service_type: %[2]s
-				commitment_behavior_per_resource: *commitment-on-capacity
-		capacitors:
-		- service_type: first
-			params:
-				liquid_service_type: %[1]s
-		- service_type: second
-			params:
 				liquid_service_type: %[2]s
+				commitment_behavior_per_resource: *commitment-on-capacity
 		resource_behavior:
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
@@ -210,7 +182,7 @@ func Test_ScanCapacity(t *testing.T) {
 	// check that capacity records are created correctly (and that nonexistent
 	// resources are ignored by the scraper)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'any', 42, 8);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 2, 'any', 42, 8);
@@ -251,7 +223,7 @@ func Test_ScanCapacity(t *testing.T) {
 	capacityReport.Resources["things"].PerAZ["any"].Capacity = 23
 	capacityReport.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -358,7 +330,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	mockLiquidClient.SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -395,7 +367,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	}
 	mockLiquidClient.SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -407,7 +379,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 	// check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
-	pmc := &CapacityPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
+	pmc := &CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -480,7 +452,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	mockLiquidClient.SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -498,7 +470,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	capacityReport.Resources["things"].PerAZ["az-two"].Capacity = 15
 	capacityReport.Resources["things"].PerAZ["az-two"].Usage = Some[uint64](3)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -518,11 +490,10 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
 	}.Check(t, dmr)
 
-	// check that removing a capacitor does nothing special (will be auto-removed when the quota plugin is also removed)
-	// TODO: this will change when the c.Cluster-Configs are merged
-	delete(s.Cluster.CapacityPlugins, "unittest")
+	// check that removing a LiquidConnection does nothing special (will be auto-removed later)
+	delete(s.Cluster.LiquidConnections, "unittest")
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
@@ -593,8 +564,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	testScanCapacityManualConfigYAML := testScanCapacitySingleLiquidConfigYAML + `
 				fixed_capacity_values:
-					values:
-        		things: 1000000`
+					things: 1000000`
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
@@ -782,7 +752,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// Note that the "things" resources are not explicitly set up in the
 	// quota_distribution_configs test section. The automatic behavior amounts to
 	// pretty much just setting `quota = usage`, i.e. `quota = 0` in this case.
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	desyncedAt2 := s.Clock.Now()
@@ -821,7 +791,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	//
 	// The confirmed commitment is for first/capacity in berlin az-one (amount = 10).
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
@@ -835,7 +805,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The confirmed commitment (ID=2) is for first/capacity in berlin az-one (amount = 100).
 	// A similar commitment (ID=3) for second/capacity is not confirmed because of missing capacity.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
@@ -852,7 +822,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The two commitments that are confirmed (ID=4 and ID=5) have a lower created_at than the unconfirmed one (ID=6).
 	// This is because we want to ensure the "first come, first serve" rule.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
@@ -869,7 +839,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// Both dresden (ID=7) and berlin (ID=8) are asking for an amount of 300 to be committed, on a total capacity of 420.
 	// But because berlin has an existing usage of 250, dresden is denied (even though it asked first) and berlin is confirmed.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
@@ -885,7 +855,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The second commitment (ID=10 in dresden) is much smaller (only 1 larger than project usage),
 	// but cannot be confirmed because ID=9 grabbed any and all unused capacity.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
@@ -898,7 +868,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	// ...Once ID=9 expires an hour later, ID=10 can be confirmed.
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
@@ -911,9 +881,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_resources SET quota = 22 WHERE id = 8 AND service_id = 4 AND name = 'capacity';
 	`, timestampUpdates(false), scrapedAt2.Unix())
 
-	// test GetGlobalResourceDemand (this is not used by any of our test plugins,
+	// test GetGlobalResourceDemand (this is not used by any of our mock liquids,
 	// but we can just call it directly to see that it works)
-	bc := datamodel.NewCapacityPluginBackchannel(s.Cluster, s.DB)
+	bc := datamodel.NewCapacityScrapeBackchannel(s.Cluster, s.DB)
 	expectedDemandsByService := map[db.ServiceType]map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ{
 		"first": {
 			"capacity": {
@@ -952,7 +922,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// in each of the test steps below, the timestamp updates on cluster_services will always be the same
 	timestampUpdates := func() string {
@@ -985,7 +955,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	}
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -1015,7 +985,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 7 WHERE id = 14 AND resource_id = 8 AND az = 'any';

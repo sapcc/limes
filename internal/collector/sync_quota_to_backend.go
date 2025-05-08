@@ -127,9 +127,9 @@ var (
 )
 
 func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService, project db.Project, domain core.KeystoneDomain) error {
-	plugin := c.Cluster.QuotaPlugins[srv.Type]
-	if plugin == nil {
-		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
+	connection := c.Cluster.LiquidConnections[srv.Type]
+	if connection == nil {
+		return fmt.Errorf("no quota connection registered for service type %s", srv.Type)
 	}
 	startedAt := c.MeasureTime()
 
@@ -216,7 +216,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	if needsApply || azSeparatedNeedsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
 		targetQuotasForBackend := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
-		for resName, resInfo := range plugin.ServiceInfo().Resources {
+		for resName, resInfo := range connection.ServiceInfo().Resources {
 			if !resInfo.HasQuota {
 				continue
 			}
@@ -225,7 +225,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		}
 
 		// apply quotas in backend
-		err = plugin.SetQuota(ctx, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
+		err = connection.SetQuota(ctx, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 		if err != nil {
 			// if SetQuota fails, do not retry immediately;
 			// try to sync other projects first, then retry in 30 seconds from now at the earliest

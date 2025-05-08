@@ -32,7 +32,7 @@ type RealShareType string
 // VirtualShareType is the configuration for a virtual share type.
 type VirtualShareType struct {
 	Name               RealShareType `json:"name"`
-	ReplicationEnabled bool          `json:"replication_enabled"` // only used by QuotaPlugin
+	ReplicationEnabled bool          `json:"replication_enabled"` // only used by Usage Collection
 	MappingRules       []struct {
 		FullProjectNamePattern regexpext.BoundedRegexp `json:"match_project_name"`
 		Name                   RealShareType           `json:"name"`

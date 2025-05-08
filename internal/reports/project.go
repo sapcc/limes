@@ -189,7 +189,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiIdentity.ServiceType]
 		if srvReport == nil {
-			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			srvReport = &limesresources.ProjectServiceReport{
 				ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 				Resources:   make(limesresources.ProjectResourceReports),
@@ -507,7 +507,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiServiceType]
 		if srvReport == nil {
-			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			srvReport = &limesrates.ProjectServiceReport{
 				ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 				Rates:       make(limesrates.ProjectRateReports),
@@ -588,7 +588,7 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 		Services:    make(limesrates.ProjectServiceReports),
 	}
 
-	for _, srvConfig := range cluster.Config.Services {
+	for _, srvConfig := range cluster.Config.Liquids {
 		dbServiceType := srvConfig.ServiceType
 		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
 			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, rateLimitConfig.Name)
@@ -598,7 +598,7 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 
 			srvReport := report.Services[apiServiceType]
 			if srvReport == nil {
-				srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+				srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 				srvReport = &limesrates.ProjectServiceReport{
 					ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 					Rates:       make(limesrates.ProjectRateReports),

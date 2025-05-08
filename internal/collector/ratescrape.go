@@ -52,7 +52,7 @@ var (
 		UPDATE project_services SET
 			-- timing information
 			rates_checked_at = $1, rates_scraped_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3,
-			-- serialized state returned by QuotaPlugin
+			-- serialized state returned by liquid
 			rates_scrape_state = $4,
 			-- other
 			rates_stale = FALSE, rates_scrape_error_message = ''
@@ -96,7 +96,7 @@ func (c *Collector) RateScrapeJob(registerer prometheus.Registerer) jobloop.Job 
 
 func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
-	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+	connection := c.Cluster.LiquidConnections[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
 	// collect additional DB records
 	_, _, project, err := c.identifyProjectBeingScraped(srv)
@@ -106,7 +106,7 @@ func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrap
 	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
 
 	// perform rate scrape
-	rateData, ratesScrapeState, err := plugin.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState)
+	rateData, ratesScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
@@ -140,7 +140,7 @@ func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrap
 
 func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[liquid.RateName]*big.Int, ratesScrapeState string) error {
 	srv := task.Service
-	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+	connection := c.Cluster.LiquidConnections[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -170,7 +170,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 			if !exists {
 				if rate.UsageAsBigint != "" {
 					c.LogError(
-						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin for %s?)",
+						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper connection for %s?)",
 						rate.Name, srv.ID, srv.Type,
 					)
 				}
@@ -187,7 +187,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	}
 
 	// insert missing project_rates entries
-	for rateName := range plugin.ServiceInfo().Rates {
+	for rateName := range connection.ServiceInfo().Rates {
 		if _, exists := rateExists[rateName]; exists {
 			continue
 		}

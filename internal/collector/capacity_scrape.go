@@ -38,7 +38,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/util"
 )
 
@@ -49,9 +48,8 @@ const (
 	capacityScrapeErrorInterval = 3 * time.Minute
 )
 
-// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Capacitor, equal to one Services entry.
-// Cluster resources are managed by the respective QuotaPlugin (Added, Updated, Deleted).
-// Therefore, names of Capacitors and Services must match.
+// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one ClusterService entry.
+// ClusterResources and ClusterAZResources are managed by this job. ClusterServices are managed by the CheckConsistencyJob.
 func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[capacityScrapeTask]{
 		Metadata: jobloop.JobMetadata{
@@ -111,8 +109,8 @@ var (
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
 	task.Timing.StartedAt = c.MeasureTime()
-	// Consistency check is done by checkConsistencyCluster. We assume that ServiceType of capacitor and quota plugin
-	// are the same, so cluster_services without capacitor may exist right now but will be skipped when picked up.
+	// CheckConsistencyJob will ensure that all cluster_services are present in the DB. Before it runs,
+	// we might have a cluster_service entry without a corresponding LiquidConnection or vise versa.
 
 	err = c.DB.SelectOne(&task.Service, findServiceForScrapeQuery, task.Timing.StartedAt)
 	return task, err
@@ -128,10 +126,9 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}()
 
-	// if cluster_service is not in the configuration, do nothing (probably it exists because the quota plugin exists)
-	// TODO: this will change/ vanish when the capacitors and services configurations are merged
-	plugin := c.Cluster.CapacityPlugins[service.Type]
-	if plugin == nil {
+	// if cluster_service is not in the LiquidConnections, do nothing
+	connection := c.Cluster.LiquidConnections[service.Type]
+	if connection == nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		_, err := c.DB.Update(&service)
@@ -143,7 +140,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// scrape capacity data
-	capacityData, serializedMetrics, err := c.scrapeCapacityPlugin(ctx, plugin)
+	capacityData, serializedMetrics, err := c.scrapeLiquidCapacity(ctx, connection)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		service.ScrapedAt = Some(task.Timing.FinishedAt)
@@ -188,15 +185,10 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	var wantedResources []liquid.ResourceName
-	pluginServiceType := plugin.(*plugins.LiquidCapacityPlugin).ServiceType
-	// TODO: This consistency check can possibly go, when the c.Cluster-configurations are merged
-	if !c.Cluster.HasService(pluginServiceType) {
-		return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", pluginServiceType)
-	}
 
 	for resourceName := range capacityData.Resources {
-		if !c.Cluster.HasResource(pluginServiceType, resourceName) {
-			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, pluginServiceType, resourceName)
+		if !c.Cluster.HasResource(connection.ServiceType, resourceName) {
+			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, connection.ServiceType, resourceName)
 			continue
 		}
 		wantedResources = append(wantedResources, resourceName)
@@ -307,12 +299,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) scrapeCapacityPlugin(ctx context.Context, plugin core.CapacityPlugin) (liquid.ServiceCapacityReport, []byte, error) {
-	capacityData, err := plugin.Scrape(ctx, datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (liquid.ServiceCapacityReport, []byte, error) {
+	capacityData, err := connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, err
 	}
-	serializedMetrics, err := liquidSerializeMetrics(plugin.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
+	serializedMetrics, err := core.LiquidSerializeMetrics(connection.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, err
 	}

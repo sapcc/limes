@@ -40,40 +40,32 @@ const testCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
 		method: --test-static
-	services:
+	liquids:
 		- service_type: first
-			type: liquid
 			area: first
-			params:
-				liquid_service_type: %[1]s
+			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
 						durations_per_domain: [{ key: '.*', value: ["1 hour", "2 hours"] }]
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		- service_type: second
-			type: liquid
 			area: second
-			params:
-				liquid_service_type: %[2]s
+			liquid_service_type: %[2]s
 			commitment_behavior_per_resource: []
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
 		method: --test-static
-	services:
+	liquids:
 		- service_type: first
-			type: liquid
 			area: first
-			params:
-				liquid_service_type: %[1]s
+			liquid_service_type: %[1]s
 			commitment_behavior_per_resource: []
 		- service_type: second
-			type: liquid
 			area: second
-			params:
-				liquid_service_type: %[2]s
+			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -84,12 +76,10 @@ const testConvertCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
 		method: --test-static
-	services:
+	liquids:
 		- service_type: first
-			type: liquid
 			area: first
-			params:
-				liquid_service_type: %[1]s
+			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: capacity
 					value:
@@ -98,10 +88,8 @@ const testConvertCommitmentsYAML = `
 				- key: '.*'
 					value: { durations_per_domain: *durations }
 		- service_type: second
-			type: liquid
 			area: second
-			params:
-				liquid_service_type: %[2]s
+			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: capacity
 					value:
@@ -110,10 +98,8 @@ const testConvertCommitmentsYAML = `
 				- key: '.*'
 					value: { durations_per_domain: *durations }
 		- service_type: third
-			type: liquid
 			area: third
-			params:
-				liquid_service_type: %[3]s
+			liquid_service_type: %[3]s
 			commitment_behavior_per_resource:
 				- key: capacity_c32
 					value:

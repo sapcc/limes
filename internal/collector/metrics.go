@@ -131,12 +131,12 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		plugin := c.Cluster.QuotaPlugins[serviceType]
-		if plugin == nil {
+		connection := c.Cluster.LiquidConnections[serviceType]
+		if connection == nil {
 			return nil
 		}
 
-		if len(plugin.ServiceInfo().Resources) > 0 {
+		if len(connection.ServiceInfo().Resources) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
@@ -148,7 +148,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				string(serviceType), string(serviceType),
 			)
 		}
-		if len(plugin.ServiceInfo().Rates) > 0 {
+		if len(connection.ServiceInfo().Rates) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
@@ -175,38 +175,37 @@ func timeAsUnixOrZero(t *time.Time) float64 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// capacity plugin metrics
+// capacity collection metrics
 
-var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
+var capacityCollectionMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "limes_capacity_plugin_metrics_ok",
-		Help: "Whether capacity plugin metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.",
+		Name: "limes_capacity_collection_metrics_ok",
+		Help: "Whether capacity collection metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.",
 	},
 	[]string{"service_type"},
 )
 
-// CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
-// which are specific to the selected capacity plugins.
-type CapacityPluginMetricsCollector struct {
+// CapacityCollectionMetricsCollector is a prometheus.Collector that submits metrics
+type CapacityCollectionMetricsCollector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
 	// When .Override is set, the DB is bypassed and only the given
-	// CapacityPluginMetricsInstances are considered. This is used for testing only.
-	Override []CapacityPluginMetricsInstance
+	// CapacityCollectionMetricsInstances are considered. This is used for testing only.
+	Override []CapacityCollectionMetricsInstance
 }
 
-// CapacityPluginMetricsInstance describes a single project service for which plugin
-// metrics are submitted. It appears in type CapacityPluginMetricsCollector.
-type CapacityPluginMetricsInstance struct {
+// CapacityCollectionMetricsInstance describes a single project service for which collection
+// metrics are submitted. It appears in type CapacityCollectionMetricsCollector.
+type CapacityCollectionMetricsInstance struct {
 	ServiceType       db.ServiceType
 	SerializedMetrics string
 }
 
 // Describe implements the prometheus.Collector interface.
-func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	capacityPluginMetricsOkGauge.Describe(ch)
-	for _, plugin := range c.Cluster.CapacityPlugins {
-		liquidDescribeMetrics(ch, plugin.ServiceInfo().CapacityMetricFamilies, nil)
+func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	capacityCollectionMetricsOkGauge.Describe(ch)
+	for _, connection := range c.Cluster.LiquidConnections {
+		core.LiquidDescribeMetrics(ch, connection.ServiceInfo().CapacityMetricFamilies, nil)
 	}
 }
 
@@ -217,86 +216,85 @@ var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // Collect implements the prometheus.Collector interface.
-func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
-	capacityPluginMetricsOkGauge.Describe(descCh)
-	pluginMetricsOkDesc := <-descCh
+	capacityCollectionMetricsOkGauge.Describe(descCh)
+	collectionMetricsOkDesc := <-descCh
 
 	if c.Override != nil {
 		for _, instance := range c.Override {
-			c.collectOneCapacitor(ch, pluginMetricsOkDesc, instance)
+			c.collectOneCapacitor(ch, collectionMetricsOkDesc, instance)
 		}
 		return
 	}
 
 	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
-		var i CapacityPluginMetricsInstance
+		var i CapacityCollectionMetricsInstance
 		err := rows.Scan(&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
-			c.collectOneCapacitor(ch, pluginMetricsOkDesc, i)
+			c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
 		}
 		return err
 	})
 	if err != nil {
-		logg.Error("collect capacity plugin metrics failed: " + err.Error())
+		logg.Error("collect capacity collection metrics failed: " + err.Error())
 	}
 }
 
-func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance CapacityPluginMetricsInstance) {
-	plugin := c.Cluster.CapacityPlugins[instance.ServiceType]
-	if plugin == nil {
+func (c *CapacityCollectionMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance CapacityCollectionMetricsInstance) {
+	connection := c.Cluster.LiquidConnections[instance.ServiceType]
+	if connection == nil {
 		return
 	}
-	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), plugin.ServiceInfo().CapacityMetricFamilies, nil, nil)
+	err := core.LiquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().CapacityMetricFamilies, nil, nil)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
+		// errors in connection.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
 		logg.Error("while collecting capacity metrics for service_type %s: %s",
 			instance.ServiceType, err.Error())
 	}
 	ch <- prometheus.MustNewConstMetric(
-		pluginMetricsOkDesc,
+		collectionMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
 		string(instance.ServiceType),
 	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// quota plugin metrics
+// quota collection metrics
 
-var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
+var quotaCollectionMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "limes_plugin_metrics_ok",
-		Help: "Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
+		Name: "limes_collection_metrics_ok",
+		Help: "Whether quota collection metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
 	},
 	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name"},
 )
 
-// QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
-// which are specific to the selected quota plugins.
-type QuotaPluginMetricsCollector struct {
+// QuotaCollectionMetricsCollector is a prometheus.Collector that submits metrics
+type QuotaCollectionMetricsCollector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
 	// When .Override is set, the DB is bypassed and only the given
-	// QuotaPluginMetricsInstances are considered. This is used for testing only.
-	Override []QuotaPluginMetricsInstance
+	// QuotaCollectionMetricsInstances are considered. This is used for testing only.
+	Override []QuotaCollectionMetricsInstance
 }
 
-// QuotaPluginMetricsInstance describes a single project service for which plugin
-// metrics are submitted. It appears in type QuotaPluginMetricsCollector.
-type QuotaPluginMetricsInstance struct {
+// QuotaCollectionMetricsInstance describes a single project service for which collection
+// metrics are submitted. It appears in type QuotaCollectionMetricsCollector.
+type QuotaCollectionMetricsInstance struct {
 	Project           core.KeystoneProject
 	ServiceType       db.ServiceType
 	SerializedMetrics string
 }
 
 // Describe implements the prometheus.Collector interface.
-func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	quotaPluginMetricsOkGauge.Describe(ch)
-	for _, plugin := range c.Cluster.QuotaPlugins {
-		liquidDescribeMetrics(ch, plugin.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
+func (c *QuotaCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	quotaCollectionMetricsOkGauge.Describe(ch)
+	for _, connection := range c.Cluster.LiquidConnections {
+		core.LiquidDescribeMetrics(ch, connection.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
 	}
 }
 
@@ -309,54 +307,54 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // Collect implements the prometheus.Collector interface.
-func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *QuotaCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
-	quotaPluginMetricsOkGauge.Describe(descCh)
-	pluginMetricsOkDesc := <-descCh
+	quotaCollectionMetricsOkGauge.Describe(descCh)
+	collectionMetricsOkDesc := <-descCh
 
 	if c.Override != nil {
 		for _, instance := range c.Override {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, instance)
+			c.collectOneProjectService(ch, collectionMetricsOkDesc, instance)
 		}
 		return
 	}
 
 	err := sqlext.ForeachRow(c.DB, quotaSerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
-		var i QuotaPluginMetricsInstance
+		var i QuotaCollectionMetricsInstance
 		err := rows.Scan(
 			&i.Project.Domain.Name, &i.Project.Domain.UUID,
 			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
 			&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
+			c.collectOneProjectService(ch, collectionMetricsOkDesc, i)
 		}
 		return err
 	})
 	if err != nil {
-		logg.Error("collect quota plugin metrics failed: " + err.Error())
+		logg.Error("collect quota collection metrics failed: " + err.Error())
 	}
 }
 
-func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance QuotaPluginMetricsInstance) {
-	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
-	if plugin == nil {
+func (c *QuotaCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
+	connection := c.Cluster.LiquidConnections[instance.ServiceType]
+	if connection == nil {
 		return
 	}
 
-	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), plugin.ServiceInfo().UsageMetricFamilies,
+	err := core.LiquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().UsageMetricFamilies,
 		[]string{"domain_id", "project_id"},
 		[]string{instance.Project.Domain.UUID, instance.Project.UUID},
 	)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		// errors in plugin.LiquidCollectMetrics() are not fatal: we record a failure in
+		// errors in connection.LiquidCollectMetrics() are not fatal: we record a failure in
 		// the metrics and keep going with the other project services
-		logg.Error("while collecting plugin metrics for service %s in project %s: %s",
+		logg.Error("while collecting connection metrics for service %s in project %s: %s",
 			instance.ServiceType, instance.Project.UUID, err.Error())
 	}
 	ch <- prometheus.MustNewConstMetric(
-		pluginMetricsOkDesc,
+		collectionMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
 		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID,
 		string(instance.ServiceType), string(instance.ServiceType),
@@ -607,8 +605,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for resName := range quotaPlugin.ServiceInfo().Resources {
+	for serviceType, connection := range d.Cluster.LiquidConnections {
+		for resName := range connection.ServiceInfo().Resources {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -773,8 +771,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	}
 
 	// fetch metadata for services/resources
-	for dbServiceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for dbResourceName, resourceInfo := range quotaPlugin.ServiceInfo().Resources {
+	for dbServiceType, connection := range d.Cluster.LiquidConnections {
+		for dbResourceName, resourceInfo := range connection.ServiceInfo().Resources {
 			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,

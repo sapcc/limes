@@ -38,7 +38,6 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -54,12 +53,10 @@ const (
 					uuid-for-germany:
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-		services:
+		liquids:
 			- service_type: unittest
-				type: liquid
 				area: testing
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 	`
 )
 
@@ -308,8 +305,8 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	job := c.RateScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
-	// check that ScrapeRates() behaves properly when encountering a quota plugin
-	// with no Rates() (in the wild, this can happen because some quota plugins
+	// check that ScrapeRates() behaves properly when encountering a LiquidConnection
+	// with no Rates() (in the wild, this can happen because some liquids
 	// only have Resources())
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 

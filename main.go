@@ -61,6 +61,9 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
+
+	// discovery plugins are handled via init() - no other imports exist
+	_ "github.com/sapcc/limes/internal/plugins"
 )
 
 func main() {
@@ -197,7 +200,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	resourceScrapeJob := c.ResourceScrapeJob(nil)
 	rateScrapeJob := c.RateScrapeJob(nil)
 	syncQuotaToBackendJob := c.SyncQuotaToBackendJob(nil)
-	for serviceType := range cluster.QuotaPlugins {
+	for serviceType := range cluster.LiquidConnections {
 		opt := jobloop.WithLabel("service_type", string(serviceType))
 		go resourceScrapeJob.Run(ctx, opt)
 		go rateScrapeJob.Run(ctx, opt)
@@ -224,8 +227,8 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})
-	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster, DB: dbm})
-	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.QuotaCollectionMetricsCollector{Cluster: cluster, DB: dbm})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
