@@ -61,7 +61,7 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: shared
+			shared:
 				area: shared
 				liquid_service_type: %[1]s
 				rate_limits:
@@ -88,7 +88,7 @@ const (
 							durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
 							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 
-			- service_type: unshared
+			unshared:
 				area: unshared
 				liquid_service_type: %[2]s
 				rate_limits:
@@ -1044,22 +1044,22 @@ func TestResourceRenaming(t *testing.T) {
 	// throughout, making a compact match; as a proxy, we set a different
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
-	for idx, scfg := range s.Cluster.Config.Liquids {
-		switch scfg.ServiceType {
+	for serviceType, l := range s.Cluster.Config.Liquids {
+		switch serviceType {
 		case "shared":
-			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "things"
-			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
+			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			l.CommitmentBehaviorPerResource[0].Key = "capacity"
+			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
+			l.CommitmentBehaviorPerResource[1].Key = "things"
+			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
 		case "unshared":
-			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "things"
-			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
+			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			l.CommitmentBehaviorPerResource[0].Key = "capacity"
+			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
+			l.CommitmentBehaviorPerResource[1].Key = "things"
+			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
 		}
-		s.Cluster.Config.Liquids[idx] = scfg
+		s.Cluster.Config.Liquids[serviceType] = l
 	}
 
 	// helper function that makes one GET query per structural level and checks

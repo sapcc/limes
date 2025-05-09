@@ -29,7 +29,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -46,26 +45,24 @@ import (
 // reloading in case of configuration changes.
 type LiquidConnection struct {
 	// configuration
-	Area                            string
 	LiquidServiceType               string
 	ServiceType                     db.ServiceType
-	FixedCapacityConfiguration      Option[FixedCapacityConfiguration]      `yaml:"fixed_capacity_values"`
-	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration] `yaml:"capacity_values_from_prometheus"`
+	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]
+	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration]
 
 	// state
-	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
-	LiquidClient      LiquidClient       `yaml:"-"`
+	LiquidServiceInfo liquid.ServiceInfo
+	LiquidClient      LiquidClient
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType) LiquidConnection {
 	if lc.LiquidServiceType == "" {
-		lc.LiquidServiceType = "liquid-" + string(lc.ServiceType)
+		lc.LiquidServiceType = "liquid-" + string(serviceType)
 	}
 	return LiquidConnection{
-		Area:                            lc.Area,
 		LiquidServiceType:               lc.LiquidServiceType,
-		ServiceType:                     lc.ServiceType,
+		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
 	}
@@ -73,7 +70,7 @@ func MakeLiquidConnection(lc LiquidConfiguration) LiquidConnection {
 
 // Init is called before any other interface methods, and allows the LiquidConnection to
 // perform first-time initialization.
-func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
+func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	l.LiquidClient, err = NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: l.LiquidServiceType})
 	if err != nil {
 		return err
@@ -93,15 +90,8 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 	return l.LiquidServiceInfo
 }
 
-// Resources returns the resources that this connections liquid is concerned with.
-func (l *LiquidConnection) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
-	return l.LiquidServiceInfo.Resources
-}
-
 // Scrape queries the backend service for the quota and usage data of all
-// known resources for the given project in the given domain. The string keys
-// in the result map must be identical to the resource names
-// from Resources().
+// the resources for the given project in the given domain.
 //
 // The `allAZs` list comes from the Limes config and should be used when
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
@@ -295,8 +285,7 @@ func (l *LiquidConnection) BuildServiceUsageRequest(project KeystoneProject, all
 }
 
 // SetQuota updates the backend service's quotas for the given project in the
-// given domain to the values specified here. The map is guaranteed to contain
-// values for all resources defined by Resources().
+// given domain to the values specified here.
 func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
 	if l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
@@ -306,14 +295,7 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 	return l.LiquidClient.PutQuota(ctx, project.UUID, req)
 }
 
-// Rates returns the rates that this connections' liquid is concerned with.
-func (l *LiquidConnection) Rates() map[liquid.RateName]liquid.RateInfo {
-	return l.LiquidServiceInfo.Rates
-}
-
-// ScrapeRates queries the backend service for the usage data of all the rates
-// enumerated by Rates() for the given project in the given domain. The string
-// keys in the result map must be identical to the rate names from Rates().
+// ScrapeRates queries the backend service for the usage data of all rates.
 //
 // The `allAZs` list comes from the Limes config and should be used when
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
@@ -388,84 +370,4 @@ func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) li
 		Name: rateName,
 		Unit: rateInfo.Unit,
 	}
-}
-
-// liquid-internal serialization format for metrics (see Scrape() and CollectMetrics()).
-//
-// When storing metrics from LIQUID in the Limes DB, we must also store parts of the
-// MetricFamilyInfo alongside it, since the ServiceInfo might be updated between the serialization
-// in Scrape() and the respective deserialization in CollectMetrics().
-type LiquidSerializedMetricFamily struct {
-	LabelKeys []string        `json:"lk"`
-	Metrics   []liquid.Metric `json:"m"`
-}
-
-func LiquidSerializeMetrics(families map[liquid.MetricName]liquid.MetricFamilyInfo, metrics map[liquid.MetricName][]liquid.Metric) ([]byte, error) {
-	serializableMetrics := make(map[liquid.MetricName]LiquidSerializedMetricFamily, len(families))
-	for metricName, metricFamilyInfo := range families {
-		for _, metric := range metrics[metricName] {
-			if len(metric.LabelValues) != len(metricFamilyInfo.LabelKeys) {
-				return nil, fmt.Errorf("found unexpected number of label values on a %s metric: got %d values for %d keys",
-					metricName, len(metric.LabelValues), len(metricFamilyInfo.LabelKeys))
-			}
-		}
-
-		serializableMetrics[metricName] = LiquidSerializedMetricFamily{
-			LabelKeys: metricFamilyInfo.LabelKeys,
-			Metrics:   metrics[metricName],
-		}
-	}
-	return json.Marshal(serializableMetrics)
-}
-
-func LiquidDescribeMetrics(ch chan<- *prometheus.Desc, families map[liquid.MetricName]liquid.MetricFamilyInfo, extraLabelKeys []string) {
-	for metricName, info := range families {
-		ch <- prometheus.NewDesc(string(metricName), info.Help, append(extraLabelKeys, info.LabelKeys...), nil)
-	}
-}
-
-func LiquidCollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, families map[liquid.MetricName]liquid.MetricFamilyInfo, extraLabelKeys, extraLabelValues []string) error {
-	var metricFamilies map[liquid.MetricName]LiquidSerializedMetricFamily
-	err := json.Unmarshal(serializedMetrics, &metricFamilies)
-	if err != nil {
-		return err
-	}
-
-	for metricName, info := range families {
-		metricFamily := metricFamilies[metricName]
-
-		desc := prometheus.NewDesc(string(metricName), info.Help, append(slices.Clone(extraLabelKeys), info.LabelKeys...), nil)
-		valueType := prometheus.GaugeValue
-		if info.Type == liquid.MetricTypeCounter {
-			valueType = prometheus.CounterValue
-		}
-
-		// build a mapping from the label placements in the serialization to the currently valid one
-		labelMapping := make([]int, len(info.LabelKeys))
-		for idx, key := range info.LabelKeys {
-			labelMapping[idx] = slices.Index(metricFamily.LabelKeys, key)
-		}
-
-		// some labels are reused for all metrics
-		reorderedLabels := make([]string, len(extraLabelValues)+len(info.LabelKeys))
-		copy(reorderedLabels[0:len(extraLabelValues)], extraLabelValues)
-		for _, metric := range metricFamily.Metrics {
-			// fill the remaining slots with the metrics' specific label values
-			offset := len(extraLabelValues)
-			for targetIdx, sourceIdx := range labelMapping {
-				if sourceIdx == -1 {
-					reorderedLabels[offset+targetIdx] = ""
-				} else {
-					reorderedLabels[offset+targetIdx] = metric.LabelValues[sourceIdx]
-				}
-			}
-			m, err := prometheus.NewConstMetric(desc, valueType, metric.Value, reorderedLabels...)
-			if err != nil {
-				return err
-			}
-			ch <- m
-		}
-	}
-
-	return nil
 }

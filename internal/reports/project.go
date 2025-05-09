@@ -588,9 +588,8 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 		Services:    make(limesrates.ProjectServiceReports),
 	}
 
-	for _, srvConfig := range cluster.Config.Liquids {
-		dbServiceType := srvConfig.ServiceType
-		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
+	for dbServiceType, l := range cluster.Config.Liquids {
+		for _, rateLimitConfig := range l.RateLimits.ProjectDefault {
 			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, rateLimitConfig.Name)
 			if !exists {
 				continue // defense in depth: should not happen because NameMapping iterated through the same structure

@@ -38,7 +38,7 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: first
+			first:
 				area: first
 				liquid_service_type: %[1]s
 	`

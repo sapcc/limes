@@ -54,7 +54,7 @@ const (
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
 		liquids:
-			- service_type: unittest
+			unittest:
 				area: testing
 				liquid_service_type: %[1]s
 	`

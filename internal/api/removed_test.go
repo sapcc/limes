@@ -39,7 +39,7 @@ func TestForbidClusterIDHeader(t *testing.T) {
 			discovery:
 				method: --test-static
 			liquids:
-				- service_type: foo
+				foo:
 					area: testing
 					liquid_service_type: %[1]s
 		`, liquidServiceType)),

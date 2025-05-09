@@ -39,10 +39,10 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: shared
+			shared:
 				area: shared
 				liquid_service_type: %[1]s
-			- service_type: unshared
+			unshared:
 				area: unshared
 				liquid_service_type: %[1]s
 	`

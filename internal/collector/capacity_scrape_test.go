@@ -47,10 +47,10 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: shared
+			shared:
 				area: shared
 				liquid_service_type: %[1]s
-			- service_type: unshared
+			unshared:
 				area: unshared
 				liquid_service_type: %[2]s
 	`
@@ -60,7 +60,7 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: shared
+			shared:
 				area: shared
 				liquid_service_type: %[1]s
 	`
@@ -77,14 +77,14 @@ const (
 						- { id: uuid-for-berlin,  name: berlin }
 						- { id: uuid-for-dresden, name: dresden }
 		liquids:
-			- service_type: first
+			first:
 				area: first
 				liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
-			- service_type: second
+			second:
 				area: second
 				liquid_service_type: %[2]s
 				commitment_behavior_per_resource: *commitment-on-capacity

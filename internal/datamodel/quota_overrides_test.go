@@ -41,10 +41,10 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: first
+			first:
 				area: first
 				liquid_service_type: %[1]s
-			- service_type: second
+			second:
 				area: second
 				liquid_service_type: %[1]s
 	`
@@ -54,10 +54,10 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: first
+			first:
 				area: first
 				liquid_service_type: %[1]s
-			- service_type: second
+			second:
 				area: second
 				liquid_service_type: %[1]s
 		resource_behavior:

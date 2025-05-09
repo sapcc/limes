@@ -101,11 +101,11 @@ availability_zones:
   - west-1
   - west-2
 liquids:
-  - service_type: ironic
+  ironic:
     area: compute
-  - service_type: nova
+  nova:
     area: compute
-  - service_type: neutron
+  neutron:
     area: network
 ```
 
@@ -158,7 +158,7 @@ The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`
 
 ```yaml
 liquids:
-  - service_type: nova
+  nova:
     area: compute
     liquid_service_type: liquid-nova
     commitment_behavior_per_resource:
@@ -215,7 +215,7 @@ if any of the 3 options (liquid, manual, prometheus) fails.
 
 ```yaml
 liquids:
-- service_type: nova
+nova:
   area: compute
   fixed_capacity_values:
      server_groups: 100000
@@ -233,7 +233,7 @@ allows to track capacity values along with other configuration in a Git reposito
 
 ```yaml
 liquids:
-- service_type: nova
+nova:
   area: compute
   liquid_service_type: liquid-nova
   capacity_values_from_prometheus:
@@ -265,7 +265,7 @@ For example, the following configuration can be used with [swift-health-exporter
 
 ```yaml
 liquids:
-  - service_type: swift
+  swift:
     capacity_values_from_prometheus:
       api: 
         url: https://prometheus.example.com

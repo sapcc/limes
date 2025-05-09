@@ -211,7 +211,7 @@ func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidCon
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
-	serializedMetrics, err := core.LiquidSerializeMetrics(connection.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
+	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}

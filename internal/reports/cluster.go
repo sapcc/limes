@@ -437,9 +437,8 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	}
 
 	// include global rate limits from configuration
-	for _, serviceConfig := range cluster.Config.Liquids {
-		dbServiceType := serviceConfig.ServiceType
-		for _, rateConfig := range serviceConfig.RateLimits.Global {
+	for dbServiceType, l := range cluster.Config.Liquids {
+		for _, rateConfig := range l.RateLimits.Global {
 			dbRateName := rateConfig.Name
 			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
 			if !exists {

@@ -41,7 +41,7 @@ const (
 		discovery:
 			method: --test-static
 		liquids:
-			- service_type: unittest
+			unittest:
 				area: testing
 				liquid_service_type: %[1]s
 				commitment_behavior_per_resource:

@@ -41,7 +41,7 @@ const testCommitmentsYAML = `
 	discovery:
 		method: --test-static
 	liquids:
-		- service_type: first
+		first:
 			area: first
 			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
@@ -49,7 +49,7 @@ const testCommitmentsYAML = `
 					value:
 						durations_per_domain: [{ key: '.*', value: ["1 hour", "2 hours"] }]
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
-		- service_type: second
+		second:
 			area: second
 			liquid_service_type: %[2]s
 			commitment_behavior_per_resource: []
@@ -59,11 +59,11 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	discovery:
 		method: --test-static
 	liquids:
-		- service_type: first
+		first:
 			area: first
 			liquid_service_type: %[1]s
 			commitment_behavior_per_resource: []
-		- service_type: second
+		second:
 			area: second
 			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
@@ -77,7 +77,7 @@ const testConvertCommitmentsYAML = `
 	discovery:
 		method: --test-static
 	liquids:
-		- service_type: first
+		first:
 			area: first
 			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
@@ -87,7 +87,7 @@ const testConvertCommitmentsYAML = `
 						conversion_rule: { identifier: flavor1, weight: 48 }
 				- key: '.*'
 					value: { durations_per_domain: *durations }
-		- service_type: second
+		second:
 			area: second
 			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
@@ -97,7 +97,7 @@ const testConvertCommitmentsYAML = `
 						conversion_rule: { identifier: flavor1, weight: 32 }
 				- key: '.*'
 					value: { durations_per_domain: *durations }
-		- service_type: third
+		third:
 			area: third
 			liquid_service_type: %[3]s
 			commitment_behavior_per_resource:

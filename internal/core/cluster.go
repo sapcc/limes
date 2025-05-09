@@ -60,9 +60,9 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	}
 
 	// fill LiquidConnection map
-	for _, srv := range config.Liquids {
-		connection := MakeLiquidConnection(srv)
-		c.LiquidConnections[srv.ServiceType] = &connection
+	for serviceType, l := range config.Liquids {
+		connection := MakeLiquidConnection(l, serviceType)
+		c.LiquidConnections[serviceType] = &connection
 	}
 
 	// Create mail templates
@@ -100,11 +100,11 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// initialize liquid connections
-	for _, srv := range c.Config.Liquids {
-		conn := c.LiquidConnections[srv.ServiceType]
-		err := conn.Init(ctx, provider, eo, srv.ServiceType)
+	for serviceType := range c.Config.Liquids {
+		conn := c.LiquidConnections[serviceType]
+		err := conn.Init(ctx, provider, eo)
 		if err != nil {
-			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
+			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
 		}
 	}
 
@@ -158,9 +158,9 @@ func (c *Cluster) InfoForResource(serviceType db.ServiceType, resourceName liqui
 
 // This is used to reach ConfigSets stored inside type ServiceConfiguration.
 func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfiguration {
-	for _, cfg := range c.Config.Liquids {
-		if cfg.ServiceType == serviceType {
-			return cfg
+	for st, l := range c.Config.Liquids {
+		if st == serviceType {
+			return l
 		}
 	}
 	return LiquidConfiguration{}

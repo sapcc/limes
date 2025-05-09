@@ -187,8 +187,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	var wantedResources []liquid.ResourceName
 
 	for resourceName := range capacityData.Resources {
-		if !c.Cluster.HasResource(connection.ServiceType, resourceName) {
-			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, connection.ServiceType, resourceName)
+		if !c.Cluster.HasResource(service.Type, resourceName) {
+			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, service.Type, resourceName)
 			continue
 		}
 		wantedResources = append(wantedResources, resourceName)
@@ -304,7 +304,7 @@ func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.L
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, err
 	}
-	serializedMetrics, err := core.LiquidSerializeMetrics(connection.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
+	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, err
 	}

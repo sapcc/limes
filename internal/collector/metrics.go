@@ -205,7 +205,7 @@ type CapacityCollectionMetricsInstance struct {
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityCollectionMetricsOkGauge.Describe(ch)
 	for _, connection := range c.Cluster.LiquidConnections {
-		core.LiquidDescribeMetrics(ch, connection.ServiceInfo().CapacityMetricFamilies, nil)
+		liquidDescribeMetrics(ch, connection.ServiceInfo().CapacityMetricFamilies, nil)
 	}
 }
 
@@ -246,7 +246,7 @@ func (c *CapacityCollectionMetricsCollector) collectOneCapacitor(ch chan<- prome
 	if connection == nil {
 		return
 	}
-	err := core.LiquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().CapacityMetricFamilies, nil, nil)
+	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().CapacityMetricFamilies, nil, nil)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
@@ -294,7 +294,7 @@ type QuotaCollectionMetricsInstance struct {
 func (c *QuotaCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	quotaCollectionMetricsOkGauge.Describe(ch)
 	for _, connection := range c.Cluster.LiquidConnections {
-		core.LiquidDescribeMetrics(ch, connection.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
+		liquidDescribeMetrics(ch, connection.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
 	}
 }
 
@@ -341,7 +341,7 @@ func (c *QuotaCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 		return
 	}
 
-	err := core.LiquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().UsageMetricFamilies,
+	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().UsageMetricFamilies,
 		[]string{"domain_id", "project_id"},
 		[]string{instance.Project.Domain.UUID, instance.Project.UUID},
 	)
