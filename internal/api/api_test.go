@@ -45,7 +45,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
-	testplugins "github.com/sapcc/limes/internal/test/plugins"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func TestMain(m *testing.M) {
@@ -60,12 +60,10 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
-			- service_type: shared
-				type: liquid
+		liquids:
+			shared:
 				area: shared
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -90,11 +88,9 @@ const (
 							durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
 							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 
-			- service_type: unshared
-				type: liquid
+			unshared:
 				area: unshared
-				params:
-					liquid_service_type: %[2]s
+				liquid_service_type: %[2]s
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -312,7 +308,7 @@ func Test_DomainOperations(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
 	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
-	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -392,7 +388,7 @@ func Test_ProjectOperations(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
 	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
-	discovery := s.Cluster.DiscoveryPlugin.(*testplugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -751,9 +747,9 @@ func Test_LargeProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data-minimal.sql", srvInfoShared, srvInfoUnshared)
 	// we don't care about the various ResourceBehaviors in this test
 	s.Cluster.Config.ResourceBehaviors = nil
-	for idx, scfg := range s.Cluster.Config.Services {
+	for idx, scfg := range s.Cluster.Config.Liquids {
 		scfg.CommitmentBehaviorPerResource = nil
-		s.Cluster.Config.Services[idx] = scfg
+		s.Cluster.Config.Liquids[idx] = scfg
 	}
 
 	// template for how a single project will look in the output JSON
@@ -1048,22 +1044,22 @@ func TestResourceRenaming(t *testing.T) {
 	// throughout, making a compact match; as a proxy, we set a different
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
-	for idx, scfg := range s.Cluster.Config.Services {
-		switch scfg.ServiceType {
+	for serviceType, l := range s.Cluster.Config.Liquids {
+		switch serviceType {
 		case "shared":
-			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "things"
-			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
+			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			l.CommitmentBehaviorPerResource[0].Key = "capacity"
+			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
+			l.CommitmentBehaviorPerResource[1].Key = "things"
+			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
 		case "unshared":
-			scfg.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			scfg.CommitmentBehaviorPerResource[0].Key = "capacity"
-			scfg.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
-			scfg.CommitmentBehaviorPerResource[1].Key = "things"
-			scfg.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
+			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
+			l.CommitmentBehaviorPerResource[0].Key = "capacity"
+			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
+			l.CommitmentBehaviorPerResource[1].Key = "things"
+			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
 		}
-		s.Cluster.Config.Services[idx] = scfg
+		s.Cluster.Config.Liquids[serviceType] = l
 	}
 
 	// helper function that makes one GET query per structural level and checks

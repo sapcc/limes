@@ -1,6 +1,6 @@
-# HELP limes_capacity_plugin_metrics_ok Whether capacity plugin metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.
-# TYPE limes_capacity_plugin_metrics_ok gauge
-limes_capacity_plugin_metrics_ok{service_type="shared"} 1
+# HELP limes_capacity_collection_metrics_ok Whether capacity collection metrics were rendered successfully for a particular service_type. Only present when the service_type emits metrics.
+# TYPE limes_capacity_collection_metrics_ok gauge
+limes_capacity_collection_metrics_ok{service_type="shared"} 1
 # HELP limes_unittest_capacity_larger_half 
 # TYPE limes_unittest_capacity_larger_half gauge
 limes_unittest_capacity_larger_half 7

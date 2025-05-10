@@ -62,7 +62,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 
 	// collect ResourceInfo instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
-	for resName, resInfo := range cluster.QuotaPlugins[srv.Type].ServiceInfo().Resources {
+	for resName, resInfo := range cluster.LiquidConnections[srv.Type].ServiceInfo().Resources {
 		allResources[resName] = resourceState{
 			Original: nil, // might be filled in the next loop below
 			Info:     &resInfo,
@@ -101,7 +101,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 		// resource's quota values)
 		if state.Info == nil {
 			u.LogError(
-				"project service %d (%s of %s/%s) has unknown resource %q (was this resource type removed from the quota plugin?)",
+				"project service %d (%s of %s/%s) has unknown resource %q (was this resource type removed from the liquid?)",
 				srv.ID, srv.Type, domain.Name, project.Name, resName,
 			)
 			continue

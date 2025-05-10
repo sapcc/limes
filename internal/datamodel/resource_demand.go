@@ -31,12 +31,12 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// NewCapacityPluginBackchannel builds a CapacityPluginBackchannel.
-func NewCapacityPluginBackchannel(cluster *core.Cluster, dbi db.Interface) core.CapacityPluginBackchannel {
-	return capacityPluginBackchannelImpl{cluster, dbi}
+// NewCapacityScrapeBackchannel builds a CapacityScrapeBackchannel.
+func NewCapacityScrapeBackchannel(cluster *core.Cluster, dbi db.Interface) core.CapacityScrapeBackchannel {
+	return capacityScrapeBackchannelImpl{cluster, dbi}
 }
 
-type capacityPluginBackchannelImpl struct {
+type capacityScrapeBackchannelImpl struct {
 	Cluster *core.Cluster
 	DB      db.Interface
 }
@@ -58,8 +58,8 @@ var (
 	`)
 )
 
-// GetResourceDemand implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error) {
+// GetResourceDemand implements the CapacityScrapeBackchannel interface.
+func (i capacityScrapeBackchannelImpl) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error) {
 	result := liquid.ResourceDemand{
 		OvercommitFactor: i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
 		PerAZ:            make(map[limes.AvailabilityZone]liquid.ResourceDemandInAZ),

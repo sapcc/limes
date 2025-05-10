@@ -348,7 +348,7 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 
 	service, exists := domain.Services[apiIdentity.ServiceType]
 	if !exists {
-		srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 		service = &limesresources.DomainServiceReport{
 			ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 			Resources:   make(limesresources.DomainResourceReports),

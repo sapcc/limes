@@ -1199,8 +1199,8 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
-			for targetResourceName, targetResInfo := range quotaPlugin.ServiceInfo().Resources {
+		for targetServiceType, connection := range p.Cluster.LiquidConnections {
+			for targetResourceName, targetResInfo := range connection.ServiceInfo().Resources {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}

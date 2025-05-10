@@ -21,13 +21,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/pluggable"
@@ -97,131 +93,9 @@ type DiscoveryPlugin interface {
 	ListProjects(ctx context.Context, domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
-// QuotaPlugin is the interface that the quota/usage collector plugins for all
-// backend services must implement. There can only be one QuotaPlugin for each
-// backend service.
-type QuotaPlugin interface {
-	pluggable.Plugin
-	// Init is called before any other interface methods, and allows the plugin to
-	// perform first-time initialization. If the plugin needs to access OpenStack
-	// APIs, it needs to spawn the respective ServiceClients in this method and
-	// retain them.
-	//
-	// Implementations can use it f.i. to discover the available Resources(). For
-	// plugins that support subresource scraping, the final argument indicates
-	// which resources to scrape (the keys are resource names).
-	//
-	// Before Init is called, the `services[].params` provided in the config
-	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error
-
-	// ServiceInfo returns metadata for this service.
-	// This includes metadata for all the resources and rates that this plugin scrapes.
-	ServiceInfo() liquid.ServiceInfo
-
-	// Scrape queries the backend service for the quota and usage data of all
-	// known resources for the given project in the given domain. The string keys
-	// in the result map must be identical to the resource names
-	// from Resources().
-	//
-	// The `allAZs` list comes from the Limes config and should be used when
-	// building AZ-aware usage data, to ensure that each AZ-aware resource reports
-	// usage in all available AZs, even when the project in question does not have
-	// usage in every AZ.
-	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error)
-
-	// BuildServiceUsageRequest generates the request body payload for querying
-	// the LIQUID API endpoint /v1/projects/:uuid/report-usage
-	BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error)
-
-	// SetQuota updates the backend service's quotas for the given project in the
-	// given domain to the values specified here. The map is guaranteed to contain
-	// values for all resources defined by Resources().
-	SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error
-
-	// ScrapeRates queries the backend service for the usage data of all the rates
-	// enumerated by Rates() for the given project in the given domain. The string
-	// keys in the result map must be identical to the rate names from Rates().
-	//
-	// The `allAZs` list comes from the Limes config and should be used when
-	// building AZ-aware usage data, to ensure that each AZ-aware resource reports
-	// usage in all available AZs, even when the project in question does not have
-	// usage in every AZ.
-	//
-	// The serializedState return value is persisted in the Limes DB and returned
-	// back to the next ScrapeRates() call for the same project in the
-	// prevSerializedState argument. Besides that, this field is not interpreted
-	// by the core application in any way. The plugin implementation can use this
-	// field to carry state between ScrapeRates() calls, esp. to detect and handle
-	// counter resets in the backend.
-	ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error)
-}
-
-// BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.
-func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) limesrates.RateInfo {
-	return limesrates.RateInfo{
-		Name: rateName,
-		Unit: rateInfo.Unit,
-	}
-}
-
-// CapacityPlugin is the interface that all capacity collector plugins must
-// implement.
-//
-// While there can only be one QuotaPlugin for each backend service, there may
-// be different CapacityPlugin instances for each backend service, and a single
-// CapacityPlugin can even report capacities for multiple service types. The
-// reason is that quotas are handled in the concrete backend service, thus their
-// handling is independent from the underlying infrastructure. Capacity
-// calculations, however, may be highly dependent on the infrastructure. For
-// example, for the Compute service, there could be different capacity plugins
-// for each type of hypervisor (KVM, VMware, etc.) which use the concrete APIs
-// of these hypervisors instead of the OpenStack Compute API.
-type CapacityPlugin interface {
-	pluggable.Plugin
-	// Init is called before any other interface methods, and allows the plugin to
-	// perform first-time initialization. If the plugin needs to access OpenStack
-	// APIs, it needs to spawn the respective ServiceClients in this method and
-	// retain them.
-	//
-	// Before Init is called, the `capacitors[].params` provided in the config
-	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error
-	// ServiceInfo returns metadata for this service.
-	// This includes metadata for all the resources and rates that this plugin scrapes.
-	ServiceInfo() liquid.ServiceInfo
-	// Scrape queries the backend service(s) for the capacities of the resources
-	// that this plugin is concerned with. The result is a two-dimensional map,
-	// with the first key being the service type, and the second key being the
-	// resource name. The capacity collector will ignore service types for which
-	// there is no QuotaPlugin, and resources which are not advertised by that
-	// QuotaPlugin.
-	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error)
-
-	// BuildServiceCapacityRequest generates the request body payload for querying
-	// the LIQUID API endpoint /v1/report-capacity
-	BuildServiceCapacityRequest(backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error)
-}
-
-// CapacityPluginBackchannel is a callback interface that is provided to
-// CapacityPlugin.Scrape(). Most capacity scrape implementations will not need
-// this, but some esoteric usecases use this information to distribute
-// available capacity among resources in accordance with customer demand.
-//
-// Note that ResourceDemand is measured against effective capacity, which
-// differs from the raw capacity seen by the CapacityPlugin by this
-// OvercommitFactor.
-type CapacityPluginBackchannel interface {
-	GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error)
-}
-
 var (
 	// DiscoveryPluginRegistry is a pluggable.Registry for DiscoveryPlugin implementations.
 	DiscoveryPluginRegistry pluggable.Registry[DiscoveryPlugin]
-	// QuotaPluginRegistry is a pluggable.Registry for QuotaPlugin implementations.
-	QuotaPluginRegistry pluggable.Registry[QuotaPlugin]
-	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
-	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
 
 // LiquidClient is a wrapper for liquidapi.Client
@@ -234,7 +108,6 @@ type LiquidClient interface {
 }
 
 // NewLiquidClient is usually a synonym for liquidapi.NewClient().
-//
 // In tests, it serves as a dependency injection slot to allow type Cluster to
 // access mock liquids prepared by the test's specific setup code.
 var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
@@ -244,6 +117,3 @@ var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.
 	}
 	return client, nil
 }
-
-// ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
-var ErrNotALiquid = errors.New("this plugin is not a liquid")

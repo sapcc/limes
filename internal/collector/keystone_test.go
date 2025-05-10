@@ -38,17 +38,13 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
-			- service_type: shared
-				type: liquid
+		liquids:
+			shared:
 				area: shared
-				params:
-					liquid_service_type: %[1]s
-			- service_type: unshared
-				type: liquid
+				liquid_service_type: %[1]s
+			unshared:
 				area: unshared
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 	`
 )
 

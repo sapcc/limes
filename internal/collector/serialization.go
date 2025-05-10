@@ -34,7 +34,7 @@ import (
 // MetricFamilyInfo alongside it, since the ServiceInfo might be updated between the serialization
 // in Scrape() and the respective deserialization in CollectMetrics().
 //
-// This logic lives here because it is shared between liquidCapacityPlugin and liquidQuotaPlugin.
+// This logic lives here because it is only used in the collector package.
 type liquidSerializedMetricFamily struct {
 	LabelKeys []string        `json:"lk"`
 	Metrics   []liquid.Metric `json:"m"`

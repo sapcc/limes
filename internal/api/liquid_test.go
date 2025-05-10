@@ -28,7 +28,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/core"
-	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -37,15 +36,9 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
-			- service_type: unittest
-				type: liquid
+		liquids:
+			unittest:
 				area: testing
-				params:
-					liquid_service_type: %[1]s
-		capacitors:
-		- service_type: unittest
-			params:
 				liquid_service_type: %[1]s
 		resource_behavior:
 		- { resource: unittest/capacity, overcommit_factor: 1.5 }

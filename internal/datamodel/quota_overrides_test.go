@@ -28,7 +28,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/db"
-	_ "github.com/sapcc/limes/internal/plugins"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -41,34 +40,26 @@ const (
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
-			- service_type: first
-				type: liquid
+		liquids:
+			first:
 				area: first
-				params:
-					liquid_service_type: %[1]s
-			- service_type: second
-				type: liquid
+				liquid_service_type: %[1]s
+			second:
 				area: second
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 	`
 
 	testQuotaOverridesWithRenamingConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
-		services:
-			- service_type: first
-				type: liquid
+		liquids:
+			first:
 				area: first
-				params:
-					liquid_service_type: %[1]s
-			- service_type: second
-				type: liquid
+				liquid_service_type: %[1]s
+			second:
 				area: second
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
