@@ -263,18 +263,18 @@ func (c *CapacityCollectionMetricsCollector) collectOneCapacitor(ch chan<- prome
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// quota collection metrics
+// usage collection metrics
 
-var quotaCollectionMetricsOkGauge = prometheus.NewGaugeVec(
+var usageCollectionMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "limes_collection_metrics_ok",
-		Help: "Whether quota collection metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
+		Name: "limes_usage_collection_metrics_ok",
+		Help: "Whether usage collection metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
 	},
 	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name"},
 )
 
-// QuotaCollectionMetricsCollector is a prometheus.Collector that submits metrics
-type QuotaCollectionMetricsCollector struct {
+// UsageCollectionMetricsCollector is a prometheus.Collector that submits metrics
+type UsageCollectionMetricsCollector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
 	// When .Override is set, the DB is bypassed and only the given
@@ -283,7 +283,7 @@ type QuotaCollectionMetricsCollector struct {
 }
 
 // QuotaCollectionMetricsInstance describes a single project service for which collection
-// metrics are submitted. It appears in type QuotaCollectionMetricsCollector.
+// metrics are submitted. It appears in type UsageCollectionMetricsCollector.
 type QuotaCollectionMetricsInstance struct {
 	Project           core.KeystoneProject
 	ServiceType       db.ServiceType
@@ -291,8 +291,8 @@ type QuotaCollectionMetricsInstance struct {
 }
 
 // Describe implements the prometheus.Collector interface.
-func (c *QuotaCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	quotaCollectionMetricsOkGauge.Describe(ch)
+func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	usageCollectionMetricsOkGauge.Describe(ch)
 	for _, connection := range c.Cluster.LiquidConnections {
 		liquidDescribeMetrics(ch, connection.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
 	}
@@ -307,9 +307,9 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // Collect implements the prometheus.Collector interface.
-func (c *QuotaCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
-	quotaCollectionMetricsOkGauge.Describe(descCh)
+	usageCollectionMetricsOkGauge.Describe(descCh)
 	collectionMetricsOkDesc := <-descCh
 
 	if c.Override != nil {
@@ -331,11 +331,11 @@ func (c *QuotaCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return err
 	})
 	if err != nil {
-		logg.Error("collect quota collection metrics failed: " + err.Error())
+		logg.Error("collect usage collection metrics failed: " + err.Error())
 	}
 }
 
-func (c *QuotaCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
+func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
 	connection := c.Cluster.LiquidConnections[instance.ServiceType]
 	if connection == nil {
 		return

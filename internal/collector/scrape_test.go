@@ -437,8 +437,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	amc := &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc := &QuotaCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(pmc)
+	umc := &UsageCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
+	registry.MustRegister(umc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",

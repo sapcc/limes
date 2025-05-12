@@ -72,4 +72,4 @@ Quota and capacity querying is done by liquids. The collection processes for the
 | Type | Metric | Labels |
 | --- | --- | --- |
 | Gauge | `limes_capacity_collection_metrics_ok` | `service_type` |
-| Gauge | `limes_collection_metrics_ok` | `domain`, `domain_id`, `project`, `project_id`, `service`, `service_name` |
+| Gauge | `limes_usage_collection_metrics_ok` | `domain`, `domain_id`, `project`, `project_id`, `service`, `service_name` |

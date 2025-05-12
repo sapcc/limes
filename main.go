@@ -228,7 +228,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})
 	prometheus.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: cluster, DB: dbm})
-	prometheus.MustRegister(&collector.QuotaCollectionMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.UsageCollectionMetricsCollector{Cluster: cluster, DB: dbm})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
