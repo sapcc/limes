@@ -29,6 +29,10 @@ type ClusterResourceID int64
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ClusterAZResourceID int64
 
+// ClusterRateID is an ID into the cluster_rates table. This typedef is
+// used to distinguish these IDs from IDs of other tables or raw int64 values.
+type ClusterRateID int64
+
 // DomainID is an ID into the domains table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type DomainID int64

@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"slices"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/common/model"
@@ -20,13 +21,15 @@ import (
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/promquery"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
-// LiquidConnection holds all the necessary information which is necessary to interact with the LiquidClient.
-// In future, the state information of the LiquidConnection should be persisted in the database to avoid
-// reloading in case of configuration changes.
+// LiquidConnection holds all the information which is necessary to interact with the LiquidClient.
+// The state information of the LiquidConnection is persisted in the database to avoid reloading
+// in case of configuration changes.
 type LiquidConnection struct {
 	// configuration
 	LiquidServiceType               string
@@ -60,12 +63,190 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 		return err
 	}
 
+	return l.updateServiceInfo(ctx)
+}
+
+// compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
+// and triggers the update and persisting if necessary.
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64, dbm *gorp.DbMap) (err error) {
+	if infoVersion != l.LiquidServiceInfo.Version {
+		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, l.LiquidServiceInfo.Version, infoVersion)
+		err = l.updateServiceInfo(ctx)
+		if err != nil {
+			return err
+		}
+		err = l.ReconcileLiquidConnection(dbm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
+func (l *LiquidConnection) updateServiceInfo(ctx context.Context) (err error) {
 	l.LiquidServiceInfo, err = l.LiquidClient.GetInfo(ctx)
 	if err != nil {
 		return err
 	}
 	err = liquid.ValidateServiceInfo(l.LiquidServiceInfo)
 	return err
+}
+
+// ReconcileLiquidConnection ensures consistency of tables cluster_services, cluster_resources and cluster_rates
+// with the latest ServiceInfo of this LiquidConnection. It is called whenever the LiquidVersion changes
+// during Scrape or ScrapeCapacity. On startup of the collect task, this function is called from the Cluster
+// where additionally, orphaned entries are removed.
+func (l *LiquidConnection) ReconcileLiquidConnection(dbm *gorp.DbMap) (err error) {
+	// do the whole consistency check for one connection in a transaction to avoid inconsistent dbm state
+	tx, err := dbm.Begin()
+	if err != nil {
+		return err
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	// collect existing cluster_service and the wanted cluster_service
+	var dbServices []db.ClusterService
+	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE type = $1`, l.ServiceType)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster_service %s: %w", l.ServiceType, err)
+	}
+	var wantedServices = []db.ServiceType{l.ServiceType}
+
+	// do update for cluster_service (as set update, for convenience)
+	cmf, err := util.RenderMapToJSON("capacity_metric_families", l.LiquidServiceInfo.CapacityMetricFamilies)
+	if err != nil {
+		return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", l.ServiceType, err)
+	}
+	umf, err := util.RenderMapToJSON("usage_metric_families", l.LiquidServiceInfo.UsageMetricFamilies)
+	if err != nil {
+		return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", l.ServiceType, err)
+	}
+	serviceUpdate := db.SetUpdate[db.ClusterService, db.ServiceType]{
+		ExistingRecords: dbServices,
+		WantedKeys:      wantedServices,
+		KeyForRecord: func(service db.ClusterService) db.ServiceType {
+			return service.Type
+		},
+		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
+			return db.ClusterService{
+				Type:                       l.ServiceType,
+				LiquidVersion:              l.LiquidServiceInfo.Version,
+				CapacityMetricFamiliesJSON: cmf,
+				UsageMetricFamiliesJSON:    umf,
+			}, nil
+		},
+		Update: func(service *db.ClusterService) (err error) {
+			service.LiquidVersion = l.LiquidServiceInfo.Version
+			service.CapacityMetricFamiliesJSON = cmf
+			service.UsageMetricFamiliesJSON = umf
+			return nil
+		},
+	}
+	dbServices, err = serviceUpdate.Execute(tx)
+	if err != nil {
+		return fmt.Errorf("update cluster_services failed for %s: %w", l.ServiceType, err)
+	}
+
+	// collect existing cluster_resources and the wanted cluster_resources
+	var dbResources []db.ClusterResource
+	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, dbServices[0].ID)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster resources for %s: %w", l.ServiceType, err)
+	}
+	wantedResources := make([]liquid.ResourceName, len(l.LiquidServiceInfo.Resources))
+	i := 0
+	for resourceName := range l.LiquidServiceInfo.Resources {
+		wantedResources[i] = resourceName
+		i++
+	}
+	// sort for testing purposes
+	slices.Sort(wantedResources)
+
+	// do update for cluster_resources
+	resourceUpdate := db.SetUpdate[db.ClusterResource, liquid.ResourceName]{
+		ExistingRecords: dbResources,
+		WantedKeys:      wantedResources,
+		KeyForRecord: func(resource db.ClusterResource) liquid.ResourceName {
+			return resource.Name
+		},
+		Create: func(resourceName liquid.ResourceName) (db.ClusterResource, error) {
+			return db.ClusterResource{
+				ServiceID:           dbServices[0].ID,
+				Name:                resourceName,
+				LiquidVersion:       l.LiquidServiceInfo.Version,
+				Unit:                l.LiquidServiceInfo.Resources[resourceName].Unit,
+				Topology:            l.LiquidServiceInfo.Resources[resourceName].Topology,
+				HasCapacity:         l.LiquidServiceInfo.Resources[resourceName].HasCapacity,
+				NeedsResourceDemand: l.LiquidServiceInfo.Resources[resourceName].NeedsResourceDemand,
+				HasQuota:            l.LiquidServiceInfo.Resources[resourceName].HasQuota,
+				AttributesJSON:      string(l.LiquidServiceInfo.Resources[resourceName].Attributes),
+			}, nil
+		},
+		Update: func(res *db.ClusterResource) (err error) {
+			res.LiquidVersion = l.LiquidServiceInfo.Version
+			res.Unit = l.LiquidServiceInfo.Resources[res.Name].Unit
+			res.Topology = l.LiquidServiceInfo.Resources[res.Name].Topology
+			res.HasCapacity = l.LiquidServiceInfo.Resources[res.Name].HasCapacity
+			res.NeedsResourceDemand = l.LiquidServiceInfo.Resources[res.Name].NeedsResourceDemand
+			res.HasQuota = l.LiquidServiceInfo.Resources[res.Name].HasQuota
+			res.AttributesJSON = string(l.LiquidServiceInfo.Resources[res.Name].Attributes)
+			return nil
+		},
+	}
+	_, err = resourceUpdate.Execute(tx)
+	if err != nil {
+		return err
+	}
+
+	// collect existing cluster_rates and the wanted cluster_rates
+	var dbRates []db.ClusterRate
+	_, err = tx.Select(&dbRates, `SELECT * FROM cluster_rates WHERE service_id = $1`, dbServices[0].ID)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster rates for %s: %w", l.ServiceType, err)
+	}
+	wantedRates := make([]liquid.RateName, len(l.LiquidServiceInfo.Rates))
+	i = 0
+	for rateName := range l.LiquidServiceInfo.Rates {
+		wantedRates[i] = rateName
+		i++
+	}
+	// sort for testing purposes
+	slices.Sort(wantedRates)
+
+	// do update for cluster_resources
+	rateUpdate := db.SetUpdate[db.ClusterRate, liquid.RateName]{
+		ExistingRecords: dbRates,
+		WantedKeys:      wantedRates,
+		KeyForRecord: func(rate db.ClusterRate) liquid.RateName {
+			return rate.Name
+		},
+		Create: func(rateName liquid.RateName) (db.ClusterRate, error) {
+			return db.ClusterRate{
+				ServiceID:     dbServices[0].ID,
+				Name:          rateName,
+				LiquidVersion: l.LiquidServiceInfo.Version,
+				Unit:          l.LiquidServiceInfo.Rates[rateName].Unit,
+				HasUsage:      l.LiquidServiceInfo.Rates[rateName].HasUsage,
+			}, nil
+		},
+		Update: func(rate *db.ClusterRate) (err error) {
+			rate.LiquidVersion = l.LiquidServiceInfo.Version
+			rate.Unit = l.LiquidServiceInfo.Rates[rate.Name].Unit
+			rate.HasUsage = l.LiquidServiceInfo.Rates[rate.Name].HasUsage
+			return nil
+		},
+	}
+	_, err = rateUpdate.Execute(tx)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ServiceInfo returns metadata for this liquid.
@@ -81,7 +262,7 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
 // usage in all available AZs, even when the project in question does not have
 // usage in every AZ.
-func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error) {
+func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, dbm *gorp.DbMap) (result liquid.ServiceUsageReport, err error) {
 	// shortcut for liquids that only have rates and no resources
 	if len(l.LiquidServiceInfo.Resources) == 0 && len(l.LiquidServiceInfo.UsageMetricFamilies) == 0 {
 		return liquid.ServiceUsageReport{}, nil
@@ -96,14 +277,12 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
-	if result.InfoVersion != l.LiquidServiceInfo.Version {
-		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
-			l.LiquidServiceType, l.LiquidServiceInfo.Version, result.InfoVersion)
-	}
-	err = liquid.ValidateServiceInfo(l.LiquidServiceInfo)
+
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion, dbm)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
+
 	err = liquid.ValidateUsageReport(result, req, l.LiquidServiceInfo)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
@@ -116,7 +295,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, dbm *gorp.DbMap) (result liquid.ServiceCapacityReport, err error) {
 	req, err := l.BuildServiceCapacityRequest(backchannel, allAZs)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
@@ -126,14 +305,12 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
-	if result.InfoVersion != l.LiquidServiceInfo.Version {
-		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
-			l.LiquidServiceType, l.LiquidServiceInfo.Version, result.InfoVersion)
-	}
-	err = liquid.ValidateServiceInfo(l.LiquidServiceInfo)
+
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion, dbm)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
+
 	err = liquid.ValidateCapacityReport(result, req, l.LiquidServiceInfo)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
@@ -292,7 +469,7 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 // by the core application in any way. The LiquidConnection can use this
 // field to carry state between ScrapeRates() calls, esp. to detect and handle
 // counter resets in the backend.
-func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string, dbm *gorp.DbMap) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// shortcut for liquids that do not have rates
 	if len(l.LiquidServiceInfo.Rates) == 0 {
 		return nil, "", nil
@@ -310,9 +487,10 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 	if err != nil {
 		return nil, "", err
 	}
-	if resp.InfoVersion != l.LiquidServiceInfo.Version {
-		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
-			l.LiquidServiceType, l.LiquidServiceInfo.Version, resp.InfoVersion)
+
+	err = l.compareServiceInfoVersions(ctx, resp.InfoVersion, dbm)
+	if err != nil {
+		return nil, "", err
 	}
 
 	result = make(map[liquid.RateName]*big.Int)

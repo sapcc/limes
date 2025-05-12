@@ -9,6 +9,7 @@ import (
 
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -61,12 +62,22 @@ func Test_Consistency(t *testing.T) {
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency1.sql")
 
 	// check that CheckConsistency() brings everything back into a nice state
-	//
-	// Also, for all domain services that are created here, all domain resources are added.
+	// the "whatever" service will remain but is ignored by the consistency service,
+	// as that one is using the c.Cluster configuration.
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
 		t.Error(err)
 	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency2.sql")
+
+	// now we add the "whatever" service to the configuration, which will change the state of
+	// the DB after running the job again
+	s.Cluster.LiquidConnections["whatever"] = &core.LiquidConnection{}
+	s.Clock.StepBy(time.Hour)
+	err = consistencyJob.ProcessOne(s.Ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency3.sql")
 }

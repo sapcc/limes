@@ -90,7 +90,7 @@ func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrap
 	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
 
 	// perform rate scrape
-	rateData, ratesScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState)
+	rateData, ratesScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState, c.DB)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}

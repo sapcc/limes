@@ -193,8 +193,10 @@ liquid. For information on liquids provided by Limes itself, please refer to the
 (a grouping of services, e.g. `network, compute, storage`). The liquid endpoint will be located in the Keystone service catalog at
 service type `liquid-$SERVICE_TYPE`, unless this default is overridden by `liquid_service_type`.
 
-Currently, any increase in the `ServiceInfo` version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
-This is something that we plan on changing into a graceful reload in the future.
+Currently, any increase in the `ServiceInfo` version of the liquid will result in an update of the `LiquidConnection.LiquidServiceInfo`
+during a scrape (capacity, project-usage, project-rates). This change is also replicated to the database, but the data is never read
+from there yet. Soon, we want to use `ServiceInfo` from the database to allow startup of Limes with a temporarily unavailable liquid
+connection.
 
 #### Commitment behavior
 

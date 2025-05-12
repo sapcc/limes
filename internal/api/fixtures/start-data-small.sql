@@ -3,10 +3,10 @@
 
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
-INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at) VALUES (1, 'first', UNIX(1000), UNIX(2000));
+INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'first', UNIX(1000), UNIX(2000), 1);
 
-INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
-INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 1, 'capacity');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (1, 1, 'things', 1);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (2, 1, 'capacity', 1);
 
 -- "capacity" is modeled as AZ-aware, "things" is not
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'any', 0, 0, '');

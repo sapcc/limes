@@ -24,6 +24,10 @@ type ClusterService struct {
 	SerializedMetrics  string            `db:"serialized_metrics"`
 	NextScrapeAt       time.Time         `db:"next_scrape_at"`
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
+	// following fields get filled from liquid.ServiceInfo
+	LiquidVersion              int64  `db:"liquid_version"`
+	CapacityMetricFamiliesJSON string `db:"capacity_metric_families_json"`
+	UsageMetricFamiliesJSON    string `db:"usage_metric_families_json"`
 }
 
 // ClusterResource contains a record from the `cluster_resources` table.
@@ -31,6 +35,14 @@ type ClusterResource struct {
 	ID        ClusterResourceID   `db:"id"`
 	ServiceID ClusterServiceID    `db:"service_id"`
 	Name      liquid.ResourceName `db:"name"`
+	// following fields get filled from liquid.ServiceInfo
+	LiquidVersion       int64           `db:"liquid_version"`
+	Unit                liquid.Unit     `db:"unit"`
+	Topology            liquid.Topology `db:"topology"`
+	HasCapacity         bool            `db:"has_capacity"`
+	NeedsResourceDemand bool            `db:"needs_resource_demand"`
+	HasQuota            bool            `db:"has_quota"`
+	AttributesJSON      string          `db:"attributes_json"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -46,6 +58,17 @@ type ClusterAZResource struct {
 	RawCapacity       uint64                 `db:"raw_capacity"`
 	Usage             Option[uint64]         `db:"usage"`
 	SubcapacitiesJSON string                 `db:"subcapacities"`
+}
+
+// ClusterRate contains a record from the `cluster_rates` table.
+type ClusterRate struct {
+	ID        ClusterRateID    `db:"id"`
+	ServiceID ClusterServiceID `db:"service_id"`
+	Name      liquid.RateName  `db:"name"`
+	// following fields get filled from liquid.ServiceInfo
+	LiquidVersion int64       `db:"liquid_version"`
+	Unit          liquid.Unit `db:"unit"`
+	HasUsage      bool        `db:"has_usage"`
 }
 
 // Domain contains a record from the `domains` table.
@@ -226,6 +249,7 @@ type MailNotification struct {
 func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
+	db.AddTableWithName(ClusterRate{}, "cluster_rates").SetKeys(true, "id")
 	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
