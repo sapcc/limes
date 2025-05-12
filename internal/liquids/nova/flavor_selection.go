@@ -81,7 +81,7 @@ func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.
 }
 
 // IsIronicFlavor returns whether the given flavor belongs to Ironic and should
-// be ignored by the Nova plugins.
+// be ignored by the Nova liquid.
 func IsIronicFlavor(f flavors.Flavor) bool {
 	return f.ExtraSpecs["capabilities:hypervisor_type"] == "ironic"
 }

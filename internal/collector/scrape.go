@@ -70,7 +70,7 @@ var (
 		UPDATE project_services SET
 			-- timing information
 			checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3,
-			-- serialized state returned by QuotaPlugin
+			-- serialized state returned by LiquidConnection
 			serialized_metrics = $4,
 			-- other
 			stale = FALSE, scrape_error_message = ''
@@ -154,7 +154,7 @@ func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProjec
 
 func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
-	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+	connection := c.Cluster.LiquidConnections[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
 	// collect additional DB records
 	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
@@ -164,7 +164,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
 	// perform resource scrape
-	resourceData, serializedMetrics, err := c.scrapeQuotaPlugin(ctx, plugin, project)
+	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
@@ -206,12 +206,12 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	return fmt.Errorf("during resource scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) scrapeQuotaPlugin(ctx context.Context, plugin core.QuotaPlugin, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
-	resourceData, err := plugin.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
+func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
+	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
-	serializedMetrics, err := liquidSerializeMetrics(plugin.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
+	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}

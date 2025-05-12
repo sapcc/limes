@@ -65,8 +65,11 @@ additional metrics:
 | Gauge | `limes_project_used_and_or_committed_per_az` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id`, `availabilityZone` |
 | Gauge | `limes_unit_multiplier` | `service`, `resource` |
 
-### Quota/capacity plugins
+### Quota/capacity collection metrics
 
-Plugins may emit their own metrics when enabled. Refer to the documentation of [the quota
-plugins](config.md#supported-service-types) and [the capacity plugins](config.md#available-capacity-plugins) for
-details.
+Quota and capacity querying is done by liquids. The collection processes for them can emit metrics.
+
+| Type | Metric | Labels |
+| --- | --- | --- |
+| Gauge | `limes_capacity_collection_metrics_ok` | `service_type` |
+| Gauge | `limes_usage_collection_metrics_ok` | `domain`, `domain_id`, `project`, `project_id`, `service`, `service_name` |

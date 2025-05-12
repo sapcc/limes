@@ -94,7 +94,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 				// our usual structure
 				return fmt.Errorf("no such rate: %s/%s", apiServiceType, apiRateName)
 			}
-			serviceConfig, ok := u.Cluster.Config.GetServiceConfigurationForType(dbServiceType)
+			serviceConfig, ok := u.Cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			if !ok {
 				// defense in depth: should not occur because then we should have had `!exists` above
 				continue

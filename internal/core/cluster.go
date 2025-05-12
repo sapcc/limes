@@ -40,20 +40,17 @@ import (
 // Cluster contains all configuration and runtime information for the target
 // cluster.
 type Cluster struct {
-	Config          ClusterConfiguration
-	DiscoveryPlugin DiscoveryPlugin
-	QuotaPlugins    map[db.ServiceType]QuotaPlugin
-	CapacityPlugins map[db.ServiceType]CapacityPlugin
+	Config            ClusterConfiguration
+	DiscoveryPlugin   DiscoveryPlugin
+	LiquidConnections map[db.ServiceType]*LiquidConnection
 }
 
-// NewCluster creates a new Cluster instance with the given ID and
-// configuration, and also initializes all quota and capacity plugins. Errors
-// will be logged when some of the requested plugins cannot be found.
+// NewCluster creates a new Cluster instance also initializes the LiquidConnections. Errors
+// will be logged when the requested DiscoveryPlugin cannot be found.
 func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
-		Config:          config,
-		QuotaPlugins:    make(map[db.ServiceType]QuotaPlugin),
-		CapacityPlugins: make(map[db.ServiceType]CapacityPlugin),
+		Config:            config,
+		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
 	}
 
 	// instantiate discovery plugin
@@ -62,22 +59,10 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		errs.Addf("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
 	}
 
-	// instantiate quota plugins
-	for _, srv := range config.Services {
-		plugin := QuotaPluginRegistry.Instantiate(srv.PluginType)
-		if plugin == nil {
-			errs.Addf("setup for service %s failed: no suitable quota plugin found", srv.ServiceType)
-		}
-		c.QuotaPlugins[srv.ServiceType] = plugin
-	}
-
-	// instantiate capacity plugins
-	for _, capa := range config.Capacitors {
-		plugin := CapacityPluginRegistry.Instantiate("liquid") // will be removed soon, when capacity and quota plugins are merged
-		if plugin == nil {
-			errs.Addf("setup for capacitor %s failed: no suitable capacity plugin found", capa.ServiceType)
-		}
-		c.CapacityPlugins[capa.ServiceType] = plugin
+	// fill LiquidConnection map
+	for serviceType, l := range config.Liquids {
+		connection := MakeLiquidConnection(l, serviceType)
+		c.LiquidConnections[serviceType] = &connection
 	}
 
 	// Create mail templates
@@ -95,13 +80,13 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	return c, errs
 }
 
-// Connect calls Init() on all plugins.
+// Connect calls Init() on the DiscoveryPlugin and LiquidConnections.
 //
 // It also loads the QuotaOverrides for this cluster, if configured.
 // We also validate if Config.ResourceBehavior[].ScalesWith refers to existing resources.
 //
 // We cannot do any of this earlier because we only know all resources after
-// calling Init() on all quota plugins.
+// calling Init() on all LiquidConnections.
 func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
 	// initialize discovery plugin
 	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
@@ -114,31 +99,12 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 		}
 	}
 
-	// initialize quota plugins
-	for _, srv := range c.Config.Services {
-		plugin := c.QuotaPlugins[srv.ServiceType]
-		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
+	// initialize liquid connections
+	for serviceType := range c.Config.Liquids {
+		conn := c.LiquidConnections[serviceType]
+		err := conn.Init(ctx, provider, eo)
 		if err != nil {
-			errs.Addf("failed to supply params to service %s: %w", srv.ServiceType, err)
-			continue
-		}
-		err := plugin.Init(ctx, provider, eo, srv.ServiceType)
-		if err != nil {
-			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
-		}
-	}
-
-	// initialize capacity plugins
-	for _, capa := range c.Config.Capacitors {
-		plugin := c.CapacityPlugins[capa.ServiceType]
-		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
-		if err != nil {
-			errs.Addf("failed to supply params to capacitor %s: %w", capa.ServiceType, err)
-			continue
-		}
-		err := plugin.Init(ctx, provider, eo, capa.ServiceType)
-		if err != nil {
-			errs.Addf("failed to initialize capacitor %s: %w", capa.ServiceType, util.UnpackError(err))
+			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
 		}
 	}
 
@@ -148,9 +114,9 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
 // iterated over in a stable order (mostly to ensure deterministic behavior in unit tests).
 func (c *Cluster) ServiceTypesInAlphabeticalOrder() []db.ServiceType {
-	result := make([]db.ServiceType, 0, len(c.QuotaPlugins))
-	for serviceType, quotaPlugin := range c.QuotaPlugins {
-		if quotaPlugin != nil { // defense in depth (nil values should never be stored in the map anyway)
+	result := make([]db.ServiceType, 0, len(c.LiquidConnections))
+	for serviceType, connection := range c.LiquidConnections {
+		if connection != nil { // defense in depth (nil values should never be stored in the map anyway)
 			result = append(result, serviceType)
 		}
 	}
@@ -160,30 +126,30 @@ func (c *Cluster) ServiceTypesInAlphabeticalOrder() []db.ServiceType {
 
 // HasService checks whether the given service is enabled in this cluster.
 func (c *Cluster) HasService(serviceType db.ServiceType) bool {
-	return c.QuotaPlugins[serviceType] != nil
+	return c.LiquidConnections[serviceType] != nil
 }
 
 // HasResource checks whether the given service is enabled in this cluster and
 // whether it advertises the given resource.
 func (c *Cluster) HasResource(serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
-	plugin := c.QuotaPlugins[serviceType]
-	if plugin == nil {
+	connection := c.LiquidConnections[serviceType]
+	if connection == nil {
 		return false
 	}
-	_, exists := plugin.ServiceInfo().Resources[resourceName]
+	_, exists := connection.ServiceInfo().Resources[resourceName]
 	return exists
 }
 
-// InfoForResource finds the plugin for the given serviceType and finds within that
-// plugin the ResourceInfo for the given resourceName. If the service or
+// InfoForResource finds the connection for the given serviceType and finds within that
+// connection the ResourceInfo for the given resourceName. If the service or
 // resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 // .Category == "") is returned.
 func (c *Cluster) InfoForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) liquid.ResourceInfo {
-	plugin := c.QuotaPlugins[serviceType]
-	if plugin == nil {
+	connection := c.LiquidConnections[serviceType]
+	if connection == nil {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
-	resInfo, exists := plugin.ServiceInfo().Resources[resourceName]
+	resInfo, exists := connection.ServiceInfo().Resources[resourceName]
 	if !exists {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
@@ -191,13 +157,13 @@ func (c *Cluster) InfoForResource(serviceType db.ServiceType, resourceName liqui
 }
 
 // This is used to reach ConfigSets stored inside type ServiceConfiguration.
-func (c *Cluster) configForService(serviceType db.ServiceType) ServiceConfiguration {
-	for _, cfg := range c.Config.Services {
-		if cfg.ServiceType == serviceType {
-			return cfg
+func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfiguration {
+	for st, l := range c.Config.Liquids {
+		if st == serviceType {
+			return l
 		}
 	}
-	return ServiceConfiguration{}
+	return LiquidConfiguration{}
 }
 
 // CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
@@ -277,25 +243,25 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
 func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.RateName) bool {
-	plugin := c.QuotaPlugins[serviceType]
-	if plugin == nil {
+	connection := c.LiquidConnections[serviceType]
+	if connection == nil {
 		return false
 	}
-	_, exists := plugin.ServiceInfo().Rates[rateName]
+	_, exists := connection.ServiceInfo().Rates[rateName]
 	return exists
 }
 
-// InfoForRate finds the plugin for the given serviceType and finds within that
-// plugin the RateInfo for the given rateName. If the service or rate does not
+// InfoForRate finds the connection for the given serviceType and finds within that
+// connection the RateInfo for the given rateName. If the service or rate does not
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
 func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName liquid.RateName) liquid.RateInfo {
-	plugin := c.QuotaPlugins[serviceType]
-	if plugin == nil {
+	connection := c.LiquidConnections[serviceType]
+	if connection == nil {
 		return liquid.RateInfo{Unit: limes.UnitNone}
 	}
-	info, exists := plugin.ServiceInfo().Rates[rateName]
+	info, exists := connection.ServiceInfo().Rates[rateName]
 	if exists {
 		return info
 	}

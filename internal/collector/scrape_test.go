@@ -89,12 +89,10 @@ const (
 					uuid-for-germany:
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-		services:
-			- service_type: unittest
-				type: liquid
+		liquids:
+			unittest:
 				area: testing
-				params:
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
@@ -240,7 +238,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
-	// change the data that is reported by the plugin
+	// change the data that is reported by the liquid
 	s.Clock.StepBy(scrapeInterval)
 	serviceUsageReport.Resources["capacity"].Quota = Some[int64](110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
@@ -439,8 +437,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	amc := &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc := &QuotaPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(pmc)
+	umc := &UsageCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
+	registry.MustRegister(umc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
@@ -587,12 +585,10 @@ const (
 				projects:
 					uuid-for-germany:
 						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-		services:
-			- service_type: noop
-				type: liquid
+		liquids:
+			noop:
 				area: testing
-				params:	
-					liquid_service_type: %[1]s
+				liquid_service_type: %[1]s
 	`
 )
 
@@ -614,8 +610,8 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
-	// check that Scrape() behaves properly when encountering a quota plugin with
-	// no Resources() (in the wild, this can happen because some quota plugins
+	// check that Scrape() behaves properly when encountering a liquid with
+	// no Resources() (in the wild, this can happen because some liquids
 	// only have Rates())
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -653,8 +649,8 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
-	// check that Scrape() behaves properly when encountering a quota plugin with
-	// no Resources() (in the wild, this can happen because some quota plugins
+	// check that Scrape() behaves properly when encountering a liquid with
+	// no Resources() (in the wild, this can happen because some liquids
 	// only have Rates())
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during resource scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`))
 

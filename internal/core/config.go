@@ -28,6 +28,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/promquery"
 	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
 
@@ -39,26 +40,24 @@ import (
 // cluster. It is instantiated from YAML and then transformed into type
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
-	AvailabilityZones []limes.AvailabilityZone `yaml:"availability_zones"`
-	CatalogURL        string                   `yaml:"catalog_url"`
-	Discovery         DiscoveryConfiguration   `yaml:"discovery"`
-	Services          []ServiceConfiguration   `yaml:"services"`
-	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
-	// ^ Sorry for the stupid pun. Not.
-	ResourceBehaviors        []ResourceBehavior               `yaml:"resource_behavior"`
-	RateBehaviors            []RateBehavior                   `yaml:"rate_behavior"`
-	QuotaDistributionConfigs []QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
-	MailNotifications        Option[*MailConfiguration]       `yaml:"mail_notifications"`
+	AvailabilityZones        []limes.AvailabilityZone               `yaml:"availability_zones"`
+	CatalogURL               string                                 `yaml:"catalog_url"`
+	Discovery                DiscoveryConfiguration                 `yaml:"discovery"`
+	Liquids                  map[db.ServiceType]LiquidConfiguration `yaml:"liquids"`
+	ResourceBehaviors        []ResourceBehavior                     `yaml:"resource_behavior"`
+	RateBehaviors            []RateBehavior                         `yaml:"rate_behavior"`
+	QuotaDistributionConfigs []QuotaDistributionConfiguration       `yaml:"quota_distribution_configs"`
+	MailNotifications        Option[*MailConfiguration]             `yaml:"mail_notifications"`
 }
 
-// GetServiceConfigurationForType returns the ServiceConfiguration or false.
-func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType db.ServiceType) (ServiceConfiguration, bool) {
-	for _, svc := range cluster.Services {
-		if serviceType == svc.ServiceType {
-			return svc, true
+// GetLiquidConfigurationForType returns the LiquidConfiguration or false.
+func (cluster *ClusterConfiguration) GetLiquidConfigurationForType(serviceType db.ServiceType) (LiquidConfiguration, bool) {
+	for st, l := range cluster.Liquids {
+		if serviceType == st {
+			return l, true
 		}
 	}
-	return ServiceConfiguration{}, false
+	return LiquidConfiguration{}, false
 }
 
 // DiscoveryConfiguration describes the method of discovering Keystone domains
@@ -90,18 +89,31 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 	return result
 }
 
-// ServiceConfiguration describes a service that is enabled for a certain cluster.
-type ServiceConfiguration struct {
-	ServiceType db.ServiceType      `yaml:"service_type"`
-	PluginType  string              `yaml:"type"`
-	Area        string              `yaml:"area"`
-	Parameters  util.YamlRawMessage `yaml:"params"` // will be unmarshalled into the QuotaPlugin instance
+// LiquidConfiguration describes a service that is enabled for a certain cluster by means of a corresponding running liquid.
+// It holds configurations for how to deal with the service on project level (quota, usage, commitment) as well as cluster level (capacity).
+type LiquidConfiguration struct {
+	Area string `yaml:"area"`
+	// LiquidServiceType is the service type under which the liquid is registered in the Keystone catalog.
+	LiquidServiceType string `yaml:"liquid_service_type"`
+
+	// FixedCapacityConfiguration and PrometheusCapacityConfiguration are additional means of providing capacity for this
+	// service_type besides the liquid.ServiceCapacityReport. All means are not exclusive and can be combined, as long as
+	// they don't write capacity to the same liquid.ResourceName.
+	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]  `yaml:"fixed_capacity_values"`
+	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration] `yaml:"capacity_values_from_prometheus"`
 
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 
 	// Use Cluster.CommitmentBehaviorForResource() to access this.
 	CommitmentBehaviorPerResource regexpext.ConfigSet[liquid.ResourceName, CommitmentBehavior] `yaml:"commitment_behavior_per_resource"`
+}
+
+// PrometheusCapacityConfiguration appears in type LiquidConfiguration.
+type PrometheusCapacityConfiguration struct {
+	APIConfig         promquery.Config               `yaml:"api"`
+	Queries           map[liquid.ResourceName]string `yaml:"queries"`
+	AllowZeroCapacity bool                           `yaml:"allow_zero_capacity"`
 }
 
 // ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
@@ -126,13 +138,6 @@ type RateLimitConfiguration struct {
 	Unit   limes.Unit        `yaml:"unit"`
 	Limit  uint64            `yaml:"limit"`
 	Window limesrates.Window `yaml:"window"`
-}
-
-// CapacitorConfiguration describes a capacity plugin that is enabled for a
-// certain cluster.
-type CapacitorConfiguration struct {
-	ServiceType db.ServiceType      `yaml:"service_type"`
-	Parameters  util.YamlRawMessage `yaml:"params"`
 }
 
 // QuotaDistributionConfiguration contains configuration options for specifying
@@ -184,8 +189,7 @@ func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.Error
 	}
 
 	// inflate the ClusterConfiguration instances into Cluster, thereby validating
-	// the existence of the requested quota and capacity plugins and initializing
-	// some handy lookup tables
+	// the existence of the requested liquids and initializing some handy lookup tables
 	if config.Discovery.Method == "" {
 		// choose default discovery method
 		config.Discovery.Method = "list"
@@ -201,25 +205,17 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	if len(cluster.AvailabilityZones) == 0 {
 		missing("availability_zones[]")
 	}
-	if len(cluster.Services) == 0 {
-		missing("services[]")
+	if len(cluster.Liquids) == 0 {
+		missing("liquids[]")
 	}
-	//NOTE: cluster.Capacitors is optional
 
-	for idx, srv := range cluster.Services {
-		if srv.ServiceType == "" {
-			missing(fmt.Sprintf("services[%d].id", idx))
+	//NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
+	for serviceType, l := range cluster.Liquids {
+		if l.Area == "" {
+			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))
 		}
-		if srv.PluginType == "" {
-			missing(fmt.Sprintf("services[%d].type", idx))
-		}
-		for idx2, behavior := range srv.CommitmentBehaviorPerResource {
-			errs.Append(behavior.Value.Validate(fmt.Sprintf("services[%d].commitment_behavior_per_resource[%d]", idx, idx2)))
-		}
-	}
-	for idx, capa := range cluster.Capacitors {
-		if capa.ServiceType == "" {
-			missing(fmt.Sprintf("capacitors[%d].service_type", idx))
+		for idx2, behavior := range l.CommitmentBehaviorPerResource {
+			errs.Append(behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2)))
 		}
 	}
 

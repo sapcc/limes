@@ -32,7 +32,8 @@ configuration file must be passed in this variable. |
 
 In order for Limes to be able to find the liquid's API, it must be registered in the Keystone service catalog.
 The documentation for each liquid provides a suggestion for what to put as the service type.
-Finally, the `services` list in the Limes configuration must be extended with a `type: liquid` service referring to that liquid.
+Finally, the `liquids` list in the Limes configuration must be extended with a entry referring to that liquid
+(set `liquid_service_type` if not using the standard naming).
 
 ## Policy
 

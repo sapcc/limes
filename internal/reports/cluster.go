@@ -419,7 +419,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 		srvReport, exists := report.Services[apiServiceType]
 		if !exists {
-			srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			srvReport = &limesrates.ClusterServiceReport{
 				ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 				Rates:       make(limesrates.ClusterRateReports),
@@ -437,9 +437,8 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	}
 
 	// include global rate limits from configuration
-	for _, serviceConfig := range cluster.Config.Services {
-		dbServiceType := serviceConfig.ServiceType
-		for _, rateConfig := range serviceConfig.RateLimits.Global {
+	for dbServiceType, l := range cluster.Config.Liquids {
+		for _, rateConfig := range l.RateLimits.Global {
 			dbRateName := rateConfig.Name
 			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
 			if !exists {
@@ -448,7 +447,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 			srvReport, exists := report.Services[apiServiceType]
 			if !exists {
-				srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+				srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 				srvReport = &limesrates.ClusterServiceReport{
 					ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
 					Rates:       make(limesrates.ClusterRateReports),
@@ -472,7 +471,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	service, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
-		srvCfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 		service = &limesresources.ClusterServiceReport{
 			ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 			Resources:   make(limesresources.ClusterResourceReports),

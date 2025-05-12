@@ -45,9 +45,9 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 	}
 
 	nameMapping := core.BuildResourceNameMapping(c)
-	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.QuotaPlugins))
-	for dbServiceType, quotaPlugin := range c.QuotaPlugins {
-		allResInfos[dbServiceType] = quotaPlugin.ServiceInfo().Resources
+	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.LiquidConnections))
+	for dbServiceType, connection := range c.LiquidConnections {
+		allResInfos[dbServiceType] = connection.ServiceInfo().Resources
 	}
 
 	// the quota-overrides.json file refers to services and resources using IdentityInV1API, so we:
