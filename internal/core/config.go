@@ -91,7 +91,6 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 
 // LiquidConfiguration describes a service that is enabled for a certain cluster by means of a corresponding running liquid.
 // It holds configurations for how to deal with the service on project level (quota, usage, commitment) as well as cluster level (capacity).
-
 type LiquidConfiguration struct {
 	Area string `yaml:"area"`
 	// LiquidServiceType is the service type under which the liquid is registered in the Keystone catalog.
