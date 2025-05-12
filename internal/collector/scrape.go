@@ -191,7 +191,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 }
 
 func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
-	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
+	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, c.DB)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
@@ -330,7 +330,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 					)
 				}
 
-				azRes.SubresourcesJSON, err = renderListToJSON("subresources", data.Subresources)
+				azRes.SubresourcesJSON, err = util.RenderListToJSON("subresources", data.Subresources)
 				if err != nil {
 					return err
 				}

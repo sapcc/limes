@@ -109,6 +109,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithCollectorSetup,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -584,6 +585,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithCollectorSetup,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -602,6 +604,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+        INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', -62135596800, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, serialized_metrics, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, TRUE, '{}', %[1]d, %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
@@ -623,6 +626,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithCollectorSetup,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -641,6 +645,8 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', -62135596800, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, -1);
@@ -652,7 +658,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 }
 
 func Test_TopologyScrapes(t *testing.T) {
-	s, job, withLabel, syncJob, srvInfo, serviceUsageReport, _ := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, syncJob, srvInfo, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
 
 	// use AZSeperated topology and adjust quota reporting accordingly
 	resInfoCap := srvInfo.Resources["capacity"]
@@ -742,6 +748,9 @@ func Test_TopologyScrapes(t *testing.T) {
 	resThings.Quota = Some[int64](42)
 	resThings.PerAZ["az-one"].Quota = None[int64]()
 	resThings.PerAZ["az-two"].Quota = None[int64]()
+	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report return
+	mockLiquidClient.IncrementServiceInfoVersion()
+	mockLiquidClient.IncrementUsageReportInfoVersion()
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -749,6 +758,9 @@ func Test_TopologyScrapes(t *testing.T) {
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE cluster_services SET liquid_version = 2 WHERE id = 1 AND type = 'unittest';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (10, 4, 'any', 0, '{"t":[1830],"v":[0]}');
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
@@ -772,6 +784,10 @@ func Test_TopologyScrapes(t *testing.T) {
 	// negative: service info validation should fail with invalid AZs
 	resInfoCap.Topology = "invalidAZ1"
 	srvInfo.Resources["capacity"] = resInfoCap
+	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report returns
+	mockLiquidClient.IncrementServiceInfoVersion()
+	mockLiquidClient.IncrementUsageReportInfoVersion()
+
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 
 	s.Clock.StepBy(scrapeInterval)

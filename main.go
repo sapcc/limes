@@ -172,6 +172,12 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 		mailClient = Some(must.Return(collector.NewMailClient(provider, mailConfig.Endpoint)))
 	}
 
+	// bring liquidConnections into sync with the database
+	err := cluster.ReconcileLiquidConnections(dbm)
+	if err != nil {
+		logg.Fatal("reconciling liquid connections on startup failed: %w", err)
+	}
+
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	// stop channel to shutdown threads in a controlled manner. I decided against
 	// that for now, and instead construct worker threads in such a way that they

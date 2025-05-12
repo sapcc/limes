@@ -18,59 +18,27 @@ import (
 func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.CronJob{
 		Metadata: jobloop.JobMetadata{
-			ReadableName: "ensure that all active domains and projects in this cluster have a service entry for this liquid's service type",
+			ReadableName: "ensure that all active domains and projects in this cluster have a service entry for the liquid's service types",
 			CounterOpts: prometheus.CounterOpts{
 				Name: "limes_cron_consistency_runs",
 				Help: "Counter for consistency checks runs",
 			},
 		},
 		Interval: 1 * time.Hour,
-		// When new services or resources are added, we need this job to create the respective DB entries immediately upon deployment.
+		// When new services or resources are added, we need this job to populate the project level services densely.
+		// It does not take care of cluster level services, resources, or rates - they are added on demand from
+		// LiquidConnection.ReconcileLiquidConnection() or whenever the collect job is started. Project level resources
+		// and az_resources are created by the scraping job, which picks up the created project_services.
 		InitialDelay: 10 * time.Second,
-		Task:         c.checkConsistencyCluster,
+		Task:         c.CheckConsistencyAllDomains,
 	}).Setup(registerer)
 }
 
-func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labels) error {
-	// check cluster_services entries
-	var services []db.ClusterService
-	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services`)
-	if err != nil {
-		return err
-	}
-	logg.Info("checking consistency for %d cluster services...", len(services))
-
-	// cleanup entries for services that have been disabled
-	seen := make(map[db.ServiceType]bool)
-	for _, service := range services {
-		seen[service.Type] = true
-
-		if !c.Cluster.HasService(service.Type) {
-			logg.Info("cleaning up %s cluster service entry", service.Type)
-			_, err := c.DB.Delete(&service)
-			if err != nil {
-				c.LogError(err.Error())
-			}
-		}
-	}
-
-	// create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypesInAlphabeticalOrder() {
-		if seen[serviceType] {
-			continue
-		}
-
-		logg.Info("creating missing %s cluster service entry", serviceType)
-		err := c.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: c.MeasureTime()})
-		if err != nil {
-			c.LogError(err.Error())
-		}
-	}
-
+func (c *Collector) CheckConsistencyAllDomains(_ context.Context, _ prometheus.Labels) error {
 	// recurse into domains (with deterministic ordering for the unit test's sake;
 	// the DESC ordering is because I was too lazy to change the fixtures)
 	var domains []db.Domain
-	_, err = c.DB.Select(&domains, `SELECT * FROM domains ORDER BY name DESC`)
+	_, err := c.DB.Select(&domains, `SELECT * FROM domains ORDER BY name DESC`)
 	if err != nil {
 		return err
 	}
