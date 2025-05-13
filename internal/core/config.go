@@ -47,10 +47,15 @@ func (cluster *ClusterConfiguration) GetLiquidConfigurationForType(serviceType d
 // DiscoveryConfiguration describes the method of discovering Keystone domains
 // and projects.
 type DiscoveryConfiguration struct {
-	Method          string                `yaml:"method"`
-	ExcludeDomainRx regexpext.PlainRegexp `yaml:"except_domains"`
-	IncludeDomainRx regexpext.PlainRegexp `yaml:"only_domains"`
-	Parameters      util.YamlRawMessage   `yaml:"params"`
+	Method                       string                               `yaml:"method"`
+	ExcludeDomainRx              regexpext.PlainRegexp                `yaml:"except_domains"`
+	IncludeDomainRx              regexpext.PlainRegexp                `yaml:"only_domains"`
+	StaticDiscoveryConfiguration Option[StaticDiscoveryConfiguration] `yaml:"static_config"`
+}
+
+type StaticDiscoveryConfiguration struct {
+	Domains  []KeystoneDomain             `yaml:"domains"`
+	Projects map[string][]KeystoneProject `yaml:"projects"`
 }
 
 // FilterDomains applies the configured ExcludeDomainRx and IncludeDomainRx to

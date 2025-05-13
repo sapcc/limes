@@ -14,14 +14,23 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const (
 	testKeystoneConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
-			method: --test-static
+			method: static
+			static_config:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+					- { name: france,id: uuid-for-france }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+					uuid-for-france:
+						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 		liquids:
 			shared:
 				area: shared
@@ -44,11 +53,11 @@ func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 func Test_ScanDomains(t *testing.T) {
 	s, cluster := keystoneTestCluster(t)
 	c := getCollector(t, s)
-	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// construct expectation for return value
 	var expectedNewDomains []string
-	for _, domain := range discovery.Domains {
+	for _, domain := range discovery.Config.Domains {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
@@ -76,7 +85,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// add another project
 	domainUUID := "uuid-for-france"
-	discovery.Projects[domainUUID] = append(discovery.Projects[domainUUID],
+	discovery.Config.Projects[domainUUID] = append(discovery.Config.Projects[domainUUID],
 		core.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
 	)
 
@@ -106,7 +115,7 @@ func Test_ScanDomains(t *testing.T) {
 	)
 
 	// remove the project again
-	discovery.Projects[domainUUID] = discovery.Projects[domainUUID][0:1]
+	discovery.Config.Projects[domainUUID] = discovery.Config.Projects[domainUUID][0:1]
 
 	// ScanDomains without ScanAllProjects should not notice anything
 	s.Clock.StepBy(10 * time.Minute)
@@ -131,7 +140,7 @@ func Test_ScanDomains(t *testing.T) {
 	`)
 
 	// remove a whole domain
-	discovery.Domains = discovery.Domains[0:1]
+	discovery.Config.Domains = discovery.Config.Domains[0:1]
 
 	// ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	s.Clock.StepBy(10 * time.Minute)
@@ -148,8 +157,8 @@ func Test_ScanDomains(t *testing.T) {
 	`)
 
 	// rename a domain and a project
-	discovery.Domains[0].Name = "germany-changed"
-	discovery.Projects["uuid-for-germany"][0].Name = "berlin-changed"
+	discovery.Config.Domains[0].Name = "germany-changed"
+	discovery.Config.Projects["uuid-for-germany"][0].Name = "berlin-changed"
 
 	// ScanDomains should notice the changed names and update the domain/project records accordingly
 	s.Clock.StepBy(10 * time.Minute)

@@ -24,7 +24,17 @@ const day = 24 * time.Hour
 const testCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
-		method: --test-static
+		method: static
+		static_config:
+			domains:
+				- { name: germany, id: uuid-for-germany }
+				- { name: france,id: uuid-for-france }
+			projects:
+				uuid-for-germany:
+					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+				uuid-for-france:
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 	liquids:
 		first:
 			area: first
@@ -42,7 +52,17 @@ const testCommitmentsYAML = `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
-		method: --test-static
+		method: static
+		static_config:
+			domains:
+				- { name: germany, id: uuid-for-germany }
+				- { name: france,id: uuid-for-france }
+			projects:
+				uuid-for-germany:
+					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+				uuid-for-france:
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 	liquids:
 		first:
 			area: first
@@ -60,7 +80,17 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 const testConvertCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
-		method: --test-static
+		method: static
+		static_config:
+			domains:
+				- { name: germany, id: uuid-for-germany }
+				- { name: france,id: uuid-for-france }
+			projects:
+				uuid-for-germany:
+					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+				uuid-for-france:
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 	liquids:
 		first:
 			area: first

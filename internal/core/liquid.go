@@ -355,3 +355,23 @@ func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) li
 		Unit: rateInfo.Unit,
 	}
 }
+
+// LiquidClient is a wrapper for liquidapi.Client
+// Allows for the implementation of a mock client that is used in unit tests
+type LiquidClient interface {
+	GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error)
+	GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error)
+	GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error)
+	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
+}
+
+// NewLiquidClient is usually a synonym for liquidapi.NewClient().
+// In tests, it serves as a dependency injection slot to allow type Cluster to
+// access mock liquids prepared by the test's specific setup code.
+var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
+	client, err := liquidapi.NewClient(provider, eo, opts)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize ServiceClient for %s: %w", opts.ServiceType, err)
+	}
+	return client, nil
+}

@@ -19,7 +19,17 @@ const (
 	liquidCapacityTestConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
-			method: --test-static
+			method: static
+			static_config:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+					- { name: france,id: uuid-for-france }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+					uuid-for-france:
+						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 		liquids:
 			unittest:
 				area: testing
