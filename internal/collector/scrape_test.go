@@ -81,8 +81,8 @@ const (
 	testScrapeBasicConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
-			method: --test-static
-			params:
+			method: static
+			static_config:
 				domains:
 					- { name: germany, id: uuid-for-germany }
 				projects:
@@ -578,8 +578,8 @@ const (
 	testNoopConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
-			method: --test-static
-			params:
+			method: static
+			static_config:
 				domains:
 					- { name: germany, id: uuid-for-germany }
 				projects:
