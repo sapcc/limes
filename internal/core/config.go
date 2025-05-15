@@ -69,6 +69,8 @@ type DiscoveryConfiguration struct {
 	StaticDiscoveryConfiguration Option[StaticDiscoveryConfiguration] `yaml:"static_config"`
 }
 
+// StaticDiscoveryConfiguration appears in type DiscoveryConfiguration.
+// It contains configuration for the discovery method "static".
 type StaticDiscoveryConfiguration struct {
 	Domains  []KeystoneDomain             `yaml:"domains"`
 	Projects map[string][]KeystoneProject `yaml:"projects"`
