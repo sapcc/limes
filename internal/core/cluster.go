@@ -50,7 +50,7 @@ type Cluster struct {
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections. Errors
 // will be logged when the requested DiscoveryPlugin cannot be found.
-func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, timeNow func() time.Time) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:            config,
 		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
@@ -64,7 +64,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType)
+		connection := MakeLiquidConnection(l, serviceType, timeNow)
 		c.LiquidConnections[serviceType] = &connection
 	}
 

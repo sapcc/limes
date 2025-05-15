@@ -144,7 +144,7 @@ func main() {
 	must.Succeed(err)
 
 	// load configuration and connect to cluster
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now)
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()

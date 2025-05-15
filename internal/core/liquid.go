@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
+	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
@@ -56,10 +57,13 @@ type LiquidConnection struct {
 	// state
 	LiquidServiceInfo liquid.ServiceInfo
 	LiquidClient      LiquidClient
+
+	// slots for test doubles
+	timeNow func() time.Time
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, timeNow func() time.Time) LiquidConnection {
 	if lc.LiquidServiceType == "" {
 		lc.LiquidServiceType = "liquid-" + string(serviceType)
 	}
@@ -68,6 +72,7 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType) Li
 		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
+		timeNow:                         timeNow,
 	}
 }
 
@@ -146,6 +151,7 @@ func (l *LiquidConnection) ReconcileLiquidConnection(dbm *gorp.DbMap) (err error
 		},
 		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
 			return db.ClusterService{
+				NextScrapeAt:               l.timeNow(),
 				Type:                       l.ServiceType,
 				LiquidVersion:              l.LiquidServiceInfo.Version,
 				CapacityMetricFamiliesJSON: cmf,

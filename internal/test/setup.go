@@ -150,8 +150,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
+	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now)
 	if params.WithCollectorSetup {
 		err := s.Cluster.ReconcileLiquidConnections(s.DB)
 		if err != nil {
@@ -288,8 +288,8 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
+func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time) *core.Cluster {
+	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow)
 	if errs.IsEmpty() {
 		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
 	}
