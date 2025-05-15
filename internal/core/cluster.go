@@ -29,14 +29,17 @@ type Cluster struct {
 	Config            ClusterConfiguration
 	DiscoveryPlugin   DiscoveryPlugin
 	LiquidConnections map[db.ServiceType]*LiquidConnection
+	// reference of the DB is necessary to delete leftover LiquidConnections
+	DB *gorp.DbMap
 }
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections. Errors
 // will be logged when the requested DiscoveryPlugin cannot be found.
-func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp.DbMap) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:            config,
 		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
+		DB:                dbm,
 	}
 
 	// instantiate discovery plugin
@@ -48,7 +51,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType)
+		connection := MakeLiquidConnection(l, serviceType, timeNow, dbm)
 		c.LiquidConnections[serviceType] = &connection
 	}
 
@@ -98,7 +101,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 // each individual LiquidConnection is reconciled and leftover entries are deleted. This means resources
 // and rates can change without restarting the limes-collect task, but a change in of LiquidConnections
 // needs restart.
-func (c *Cluster) ReconcileLiquidConnections(dbm *gorp.DbMap) (err error) {
+func (c *Cluster) ReconcileLiquidConnections() (err error) {
 	// sort for testing purposes
 	serviceTypes := make([]db.ServiceType, len(c.LiquidConnections))
 	i := 0
@@ -109,7 +112,7 @@ func (c *Cluster) ReconcileLiquidConnections(dbm *gorp.DbMap) (err error) {
 	slices.Sort(serviceTypes)
 
 	for _, serviceType := range serviceTypes {
-		err := c.LiquidConnections[serviceType].ReconcileLiquidConnection(dbm)
+		err := c.LiquidConnections[serviceType].ReconcileLiquidConnection()
 		if err != nil {
 			return err
 		}
@@ -118,7 +121,7 @@ func (c *Cluster) ReconcileLiquidConnections(dbm *gorp.DbMap) (err error) {
 	// delete all orphaned cluster_services
 	// respective cluster_resources, cluster_az_resources and cluster_rates are handled by delete-cascade
 	var dbServices []db.ClusterService
-	_, err = dbm.Select(&dbServices, `SELECT * FROM cluster_services`)
+	_, err = c.DB.Select(&dbServices, `SELECT * FROM cluster_services`)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster_service: %w", err)
 	}
@@ -128,7 +131,7 @@ func (c *Cluster) ReconcileLiquidConnections(dbm *gorp.DbMap) (err error) {
 	})
 	for _, dbService := range dbServices {
 		if c.LiquidConnections[dbService.Type] == nil {
-			_, err = dbm.Exec(`DELETE FROM cluster_services WHERE type = $1`, dbService.Type)
+			_, err = c.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, dbService.Type)
 			if err != nil {
 				return err
 			}

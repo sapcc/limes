@@ -5,7 +5,9 @@ package core
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -165,7 +167,7 @@ type MailTemplateConfiguration struct {
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
 // Errors are logged and will result in program termination, causing the function to not return.
-func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.ErrorSet) {
+func NewClusterFromYAML(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
@@ -185,7 +187,7 @@ func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.Error
 		// choose default discovery method
 		config.Discovery.Method = "list"
 	}
-	return NewCluster(config)
+	return NewCluster(config, timeNow, dbm)
 }
 
 func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {

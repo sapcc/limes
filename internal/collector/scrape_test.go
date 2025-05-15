@@ -588,6 +588,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		test.WithCollectorSetup,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
+	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
 	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
@@ -604,12 +605,12 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-        INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', -62135596800, 1);
+        INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, serialized_metrics, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, TRUE, '{}', %[1]d, %[2]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, serialized_metrics, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[2]d, 5, TRUE, '{}', %[2]d, %[3]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
-		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
+		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
 }
 
@@ -629,6 +630,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		test.WithCollectorSetup,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
+	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
 	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
@@ -646,14 +648,14 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE);
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', -62135596800, 1);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, -1);
-		INSERT INTO project_services (id, project_id, type, scraped_at, rates_stale, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, TRUE, %[1]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[2]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, rates_stale, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, TRUE, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
-		scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
+		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
 	)
 }
 
