@@ -21,9 +21,12 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"sort"
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -47,7 +50,7 @@ type Cluster struct {
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections. Errors
 // will be logged when the requested DiscoveryPlugin cannot be found.
-func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, timeNow func() time.Time) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:            config,
 		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
@@ -61,7 +64,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType)
+		connection := MakeLiquidConnection(l, serviceType, timeNow)
 		c.LiquidConnections[serviceType] = &connection
 	}
 
@@ -109,6 +112,50 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	return errs
+}
+
+// ReconcileLiquidConnections should be called once on startup of the limes-collect task, so that
+// the database tables are in a consistent state with the configured LiquidConnections. For this,
+// each individual LiquidConnection is reconciled and leftover entries are deleted. This means resources
+// and rates can change without restarting the limes-collect task, but a change in of LiquidConnections
+// needs restart.
+func (c *Cluster) ReconcileLiquidConnections(dbm *gorp.DbMap) (err error) {
+	// sort for testing purposes
+	serviceTypes := make([]db.ServiceType, len(c.LiquidConnections))
+	i := 0
+	for serviceType := range c.LiquidConnections {
+		serviceTypes[i] = serviceType
+		i++
+	}
+	slices.Sort(serviceTypes)
+
+	for _, serviceType := range serviceTypes {
+		err := c.LiquidConnections[serviceType].ReconcileLiquidConnection(dbm)
+		if err != nil {
+			return err
+		}
+	}
+
+	// delete all orphaned cluster_services
+	// respective cluster_resources, cluster_az_resources and cluster_rates are handled by delete-cascade
+	var dbServices []db.ClusterService
+	_, err = dbm.Select(&dbServices, `SELECT * FROM cluster_services`)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster_service: %w", err)
+	}
+	// sort for testing purposes
+	sort.SliceStable(dbServices, func(i, j int) bool {
+		return dbServices[i].Type < dbServices[j].Type || dbServices[i].Type > dbServices[j].Type
+	})
+	for _, dbService := range dbServices {
+		if c.LiquidConnections[dbService.Type] == nil {
+			_, err = dbm.Exec(`DELETE FROM cluster_services WHERE type = $1`, dbService.Type)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be

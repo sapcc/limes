@@ -109,6 +109,10 @@ func (l *MockLiquidClient) SetServiceInfo(info liquid.ServiceInfo) {
 	l.serviceInfo = info
 }
 
+func (l *MockLiquidClient) IncrementServiceInfoVersion() {
+	l.serviceInfo.Version++
+}
+
 func (l *MockLiquidClient) SetCapacityReportError(err error) {
 	l.capacityReportError = err
 }
@@ -124,6 +128,10 @@ func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapaci
 	l.serviceCapacityReport = capacityReport
 }
 
+func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
+	l.serviceCapacityReport.InfoVersion++
+}
+
 func (l *MockLiquidClient) SetUsageReportError(err error) {
 	l.usageReportError = err
 }
@@ -137,6 +145,10 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 
 func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
 	l.serviceUsageReport = usageReport
+}
+
+func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
+	l.serviceUsageReport.InfoVersion++
 }
 
 func (l *MockLiquidClient) SetQuotaError(err error) {

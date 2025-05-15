@@ -54,6 +54,7 @@ type setupParams struct {
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
+	WithCollectorSetup       bool
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -93,6 +94,13 @@ func WithProject(p core.KeystoneProject) SetupOption {
 	return func(params *setupParams) {
 		params.Projects = append(params.Projects, &p)
 	}
+}
+
+// WithCollectorSetup is a SetupOption that sets up the Cluster the same ways
+// as the limes-collect would do. Namely, this reconciles the LiquidConnections
+// on startup.
+func WithCollectorSetup(params *setupParams) {
+	params.WithCollectorSetup = true
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
@@ -142,8 +150,14 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
+	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now)
+	if params.WithCollectorSetup {
+		err := s.Cluster.ReconcileLiquidConnections(s.DB)
+		if err != nil {
+			logg.Fatal("failed to reconcile liquid connections: %w", err)
+		}
+	}
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -266,7 +280,7 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	opts := append(slices.Clone(extraOpts),
 		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
-			"cluster_services", "cluster_resources", "cluster_az_resources",
+			"cluster_services", "cluster_resources", "cluster_rates", "cluster_az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",
 			"project_services", "project_resources", "project_az_resources",
 		),
@@ -274,8 +288,8 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
+func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time) *core.Cluster {
+	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow)
 	if errs.IsEmpty() {
 		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
 	}
