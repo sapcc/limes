@@ -75,6 +75,8 @@ type DiscoveryPlugin interface {
 	ListProjects(ctx context.Context, domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
+// NewDiscoveryPlugin instantiates a DiscoveryPlugin implementation based on
+// the provided method and parameters.
 func NewDiscoveryPlugin(cfg DiscoveryConfiguration) (DiscoveryPlugin, error) {
 	if cfg.Method == "list" {
 		return &listDiscoveryPlugin{}, nil
@@ -86,8 +88,7 @@ func NewDiscoveryPlugin(cfg DiscoveryConfiguration) (DiscoveryPlugin, error) {
 }
 
 type listDiscoveryPlugin struct {
-	// connections
-	KeystoneV3 *gophercloud.ServiceClient `yaml:"-"`
+	KeystoneV3 *gophercloud.ServiceClient
 }
 
 // Init implements the DiscoveryPlugin interface.
@@ -140,6 +141,9 @@ func (p *listDiscoveryPlugin) ListProjects(ctx context.Context, domain KeystoneD
 	return result, nil
 }
 
+// StaticDiscoveryPlugin is an implementation of DiscoveryPlugin.
+//
+// This type should not be instantiated directly. It is only exported because tests need to be able to cast into it.
 type StaticDiscoveryPlugin struct {
 	Config StaticDiscoveryConfiguration
 }
