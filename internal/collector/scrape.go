@@ -191,7 +191,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 }
 
 func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
-	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, c.DB)
+	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}

@@ -34,10 +34,10 @@ type Collector struct {
 }
 
 // NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap) *Collector {
+func NewCollector(cluster *core.Cluster) *Collector {
 	return &Collector{
 		Cluster:          cluster,
-		DB:               dbm,
+		DB:               cluster.DB,
 		LogError:         logg.Error,
 		MeasureTime:      time.Now,
 		MeasureTimeAtEnd: time.Now,

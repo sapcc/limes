@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
+	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
@@ -40,10 +41,14 @@ type LiquidConnection struct {
 	// state
 	LiquidServiceInfo liquid.ServiceInfo
 	LiquidClient      LiquidClient
+	DB                *gorp.DbMap
+
+	// slots for test doubles
+	timeNow func() time.Time
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
 	if lc.LiquidServiceType == "" {
 		lc.LiquidServiceType = "liquid-" + string(serviceType)
 	}
@@ -52,6 +57,8 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType) Li
 		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
+		timeNow:                         timeNow,
+		DB:                              dbm,
 	}
 }
 
@@ -68,14 +75,14 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64, dbm *gorp.DbMap) (err error) {
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
 	if infoVersion != l.LiquidServiceInfo.Version {
 		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, l.LiquidServiceInfo.Version, infoVersion)
 		err = l.updateServiceInfo(ctx)
 		if err != nil {
 			return err
 		}
-		err = l.ReconcileLiquidConnection(dbm)
+		err = l.ReconcileLiquidConnection()
 		if err != nil {
 			return err
 		}
@@ -97,9 +104,9 @@ func (l *LiquidConnection) updateServiceInfo(ctx context.Context) (err error) {
 // with the latest ServiceInfo of this LiquidConnection. It is called whenever the LiquidVersion changes
 // during Scrape or ScrapeCapacity. On startup of the collect task, this function is called from the Cluster
 // where additionally, orphaned entries are removed.
-func (l *LiquidConnection) ReconcileLiquidConnection(dbm *gorp.DbMap) (err error) {
-	// do the whole consistency check for one connection in a transaction to avoid inconsistent dbm state
-	tx, err := dbm.Begin()
+func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
+	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
+	tx, err := l.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -130,6 +137,7 @@ func (l *LiquidConnection) ReconcileLiquidConnection(dbm *gorp.DbMap) (err error
 		},
 		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
 			return db.ClusterService{
+				NextScrapeAt:               l.timeNow(),
 				Type:                       l.ServiceType,
 				LiquidVersion:              l.LiquidServiceInfo.Version,
 				CapacityMetricFamiliesJSON: cmf,
@@ -262,7 +270,7 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
 // usage in all available AZs, even when the project in question does not have
 // usage in every AZ.
-func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, dbm *gorp.DbMap) (result liquid.ServiceUsageReport, err error) {
+func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error) {
 	// shortcut for liquids that only have rates and no resources
 	if len(l.LiquidServiceInfo.Resources) == 0 && len(l.LiquidServiceInfo.UsageMetricFamilies) == 0 {
 		return liquid.ServiceUsageReport{}, nil
@@ -278,7 +286,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return liquid.ServiceUsageReport{}, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion, dbm)
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
@@ -295,7 +303,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, dbm *gorp.DbMap) (result liquid.ServiceCapacityReport, err error) {
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
 	req, err := l.BuildServiceCapacityRequest(backchannel, allAZs)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
@@ -306,7 +314,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		return liquid.ServiceCapacityReport{}, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion, dbm)
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
@@ -469,7 +477,7 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 // by the core application in any way. The LiquidConnection can use this
 // field to carry state between ScrapeRates() calls, esp. to detect and handle
 // counter resets in the backend.
-func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string, dbm *gorp.DbMap) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// shortcut for liquids that do not have rates
 	if len(l.LiquidServiceInfo.Rates) == 0 {
 		return nil, "", nil
@@ -488,7 +496,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 		return nil, "", err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, resp.InfoVersion, dbm)
+	err = l.compareServiceInfoVersions(ctx, resp.InfoVersion)
 	if err != nil {
 		return nil, "", err
 	}

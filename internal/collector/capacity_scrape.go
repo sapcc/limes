@@ -239,7 +239,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.DB, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.Cluster, now)
 		if err != nil {
 			return err
 		}
@@ -249,7 +249,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 }
 
 func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (liquid.ServiceCapacityReport, []byte, error) {
-	capacityData, err := connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones, c.DB)
+	capacityData, err := connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, err
 	}
