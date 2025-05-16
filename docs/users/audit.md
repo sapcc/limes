@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Audit trail
 
 Limes records all events (read: quota changes) at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). The log can be used by information auditors or cloud based audit APIs to track events for a resource in a domain or project.

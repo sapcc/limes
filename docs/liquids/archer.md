@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Liquid: `archer`
 
 This liquid provides support for the endpoint injection service [Archer](https://github.com/sapcc/archer).

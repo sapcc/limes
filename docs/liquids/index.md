@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Builtin liquids
 
 To integrate with other OpenStack services and manage their resources, Limes uses an API called [LIQUID (Limes Interface

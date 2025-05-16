@@ -21,6 +21,15 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
+  "internal/*/fixtures/*.json",
+  "internal/*/fixtures/*.prom",
+  "internal/*/fixtures/*.sql",
+]
+SPDX-FileCopyrightText = "SAP SE"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
   "vendor/github.com/databus23/goslo.policy/**",
 ]
 precedence = "aggregate"

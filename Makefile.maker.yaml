@@ -33,6 +33,15 @@ renovate:
     - majewsky
     - SuperSandro2000
 
+reuse:
+  annotations:
+    - paths:
+      - internal/*/fixtures/*.json
+      - internal/*/fixtures/*.prom
+      - internal/*/fixtures/*.sql
+      SPDX-FileCopyrightText: SAP SE
+      SPDX-License-Identifier: Apache-2.0
+
 verbatim: |
   copy-fixtures:
     find -name '*.actual' | xargs -I{} bash -c 'mv {} $$(echo {} | sed "s/.actual//g")'

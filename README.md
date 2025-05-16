@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Limes
 
 [![CI](https://github.com/sapcc/limes/actions/workflows/ci.yaml/badge.svg)](https://github.com/sapcc/limes/actions/workflows/ci.yaml)

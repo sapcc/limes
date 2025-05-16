@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Public API specification
 
 Limes deals with two separate types of entities: **Resources** are strictly those things whose usage value refers to a

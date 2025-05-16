@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Overview for developers/contributors
 
 This guide describes Limes' code structure and contains everything that you need to get a local installation of Limes up and running for development purposes.
