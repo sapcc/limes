@@ -165,7 +165,6 @@ github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/mock
 github.com/sapcc/go-bits/must
 github.com/sapcc/go-bits/osext
-github.com/sapcc/go-bits/pluggable
 github.com/sapcc/go-bits/promquery
 github.com/sapcc/go-bits/regexpext
 github.com/sapcc/go-bits/respondwith

@@ -29,7 +29,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func TestMain(m *testing.M) {
@@ -43,7 +42,17 @@ const (
 	testConfigYAML = `
 		availability_zones: [ az-one, az-two ]
 		discovery:
-			method: --test-static
+			method: static
+			static_config:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+					- { name: france,id: uuid-for-france }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+					uuid-for-france:
+						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
 		liquids:
 			shared:
 				area: shared
@@ -292,7 +301,7 @@ func Test_DomainOperations(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
 	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -350,8 +359,11 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check DiscoverDomains
-	discovery.Domains = append(discovery.Domains,
+	discovery.Config.Domains = append(discovery.Config.Domains,
 		core.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
+	)
+	discovery.Config.Projects["uuid-for-spain"] = append(discovery.Config.Projects["uuid-for-spain"],
+		core.KeystoneProject{UUID: "uuid-for-madrid", Name: "madrid", ParentUUID: "uuid-for-spain"},
 	)
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -372,7 +384,7 @@ func Test_ProjectOperations(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
 	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
+	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -519,8 +531,8 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check DiscoverProjects
-	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
-		core.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
+	discovery.Config.Projects["uuid-for-germany"] = append(discovery.Config.Projects["uuid-for-germany"],
+		core.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt", ParentUUID: "uuid-for-germany"},
 	)
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -556,7 +568,7 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
 
 	// SyncProject should discover the given project if not yet done
-	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
+	discovery.Config.Projects["uuid-for-germany"] = append(discovery.Config.Projects["uuid-for-germany"],
 		core.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
 	assert.HTTPRequest{

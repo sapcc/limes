@@ -5,26 +5,7 @@ package util
 
 import (
 	"time"
-
-	"gopkg.in/yaml.v2"
 )
-
-// YamlRawMessage is like json.RawMessage: During yaml.Unmarshal(), it will
-// just collect the provided YAML representation instead of parsing it into a
-// specific datatype. It can be used to defer parsing when the concrete target
-// type is not yet known when the YAML input is initially unmarshalled.
-type YamlRawMessage []byte
-
-// UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (m *YamlRawMessage) UnmarshalYAML(unmarshal func(any) error) error {
-	var data any
-	err := unmarshal(&data)
-	if err != nil {
-		return err
-	}
-	*m, err = yaml.Marshal(data)
-	return err
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

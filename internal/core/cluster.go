@@ -15,7 +15,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
@@ -38,9 +37,10 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	}
 
 	// instantiate discovery plugin
-	c.DiscoveryPlugin = DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
-	if c.DiscoveryPlugin == nil {
-		errs.Addf("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
+	var err error
+	c.DiscoveryPlugin, err = NewDiscoveryPlugin(config.Discovery)
+	if err != nil {
+		errs.Addf("setup for discovery method %s failed: %w", config.Discovery.Method, err)
 	}
 
 	// fill LiquidConnection map
@@ -73,14 +73,9 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 // calling Init() on all LiquidConnections.
 func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
 	// initialize discovery plugin
-	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
+	err := c.DiscoveryPlugin.Init(ctx, provider, eo)
 	if err != nil {
-		errs.Addf("failed to supply params to discovery method: %w", err)
-	} else {
-		err = c.DiscoveryPlugin.Init(ctx, provider, eo)
-		if err != nil {
-			errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
-		}
+		errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}
 
 	// initialize liquid connections

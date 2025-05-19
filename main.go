@@ -45,9 +45,6 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
-
-	// discovery plugins are handled via init() - no other imports exist
-	_ "github.com/sapcc/limes/internal/plugins"
 )
 
 func main() {

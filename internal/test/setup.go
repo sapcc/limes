@@ -28,7 +28,6 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	_ "github.com/sapcc/limes/internal/test/plugins"
 )
 
 type setupParams struct {
