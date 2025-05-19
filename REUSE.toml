@@ -21,6 +21,7 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
+  ".github/PULL_REQUEST_TEMPLATE",
   "internal/*/fixtures/*.json",
   "internal/*/fixtures/*.prom",
   "internal/*/fixtures/*.sql",
