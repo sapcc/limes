@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
 	"slices"
 	"time"
@@ -82,7 +83,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 		if err != nil {
 			return err
 		}
-		err = l.ReconcileLiquidConnection()
+		err = l.reconcileLiquidConnection()
 		if err != nil {
 			return err
 		}
@@ -100,11 +101,11 @@ func (l *LiquidConnection) updateServiceInfo(ctx context.Context) (err error) {
 	return err
 }
 
-// ReconcileLiquidConnection ensures consistency of tables cluster_services, cluster_resources and cluster_rates
+// reconcileLiquidConnection ensures consistency of tables cluster_services, cluster_resources and cluster_rates
 // with the latest ServiceInfo of this LiquidConnection. It is called whenever the LiquidVersion changes
 // during Scrape or ScrapeCapacity. On startup of the collect task, this function is called from the Cluster
 // where additionally, orphaned entries are removed.
-func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
+func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := l.DB.Begin()
 	if err != nil {
@@ -137,17 +138,21 @@ func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
 		},
 		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
 			return db.ClusterService{
-				NextScrapeAt:               l.timeNow(),
-				Type:                       l.ServiceType,
-				LiquidVersion:              l.LiquidServiceInfo.Version,
-				CapacityMetricFamiliesJSON: cmf,
-				UsageMetricFamiliesJSON:    umf,
+				NextScrapeAt:                    l.timeNow(),
+				Type:                            l.ServiceType,
+				LiquidVersion:                   l.LiquidServiceInfo.Version,
+				CapacityMetricFamiliesJSON:      cmf,
+				UsageMetricFamiliesJSON:         umf,
+				UsageReportNeedsProjectMetadata: l.LiquidServiceInfo.UsageReportNeedsProjectMetadata,
+				QuotaUpdateNeedsProjectMetadata: l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata,
 			}, nil
 		},
 		Update: func(service *db.ClusterService) (err error) {
 			service.LiquidVersion = l.LiquidServiceInfo.Version
 			service.CapacityMetricFamiliesJSON = cmf
 			service.UsageMetricFamiliesJSON = umf
+			service.UsageReportNeedsProjectMetadata = l.LiquidServiceInfo.UsageReportNeedsProjectMetadata
+			service.QuotaUpdateNeedsProjectMetadata = l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata
 			return nil
 		},
 	}
@@ -162,14 +167,7 @@ func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster resources for %s: %w", l.ServiceType, err)
 	}
-	wantedResources := make([]liquid.ResourceName, len(l.LiquidServiceInfo.Resources))
-	i := 0
-	for resourceName := range l.LiquidServiceInfo.Resources {
-		wantedResources[i] = resourceName
-		i++
-	}
-	// sort for testing purposes
-	slices.Sort(wantedResources)
+	wantedResources := slices.Sorted(maps.Keys(l.LiquidServiceInfo.Resources))
 
 	// do update for cluster_resources
 	resourceUpdate := db.SetUpdate[db.ClusterResource, liquid.ResourceName]{
@@ -213,14 +211,7 @@ func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster rates for %s: %w", l.ServiceType, err)
 	}
-	wantedRates := make([]liquid.RateName, len(l.LiquidServiceInfo.Rates))
-	i = 0
-	for rateName := range l.LiquidServiceInfo.Rates {
-		wantedRates[i] = rateName
-		i++
-	}
-	// sort for testing purposes
-	slices.Sort(wantedRates)
+	wantedRates := slices.Sorted(maps.Keys(l.LiquidServiceInfo.Rates))
 
 	// do update for cluster_resources
 	rateUpdate := db.SetUpdate[db.ClusterRate, liquid.RateName]{
@@ -235,6 +226,7 @@ func (l *LiquidConnection) ReconcileLiquidConnection() (err error) {
 				Name:          rateName,
 				LiquidVersion: l.LiquidServiceInfo.Version,
 				Unit:          l.LiquidServiceInfo.Rates[rateName].Unit,
+				Topology:      l.LiquidServiceInfo.Rates[rateName].Topology,
 				HasUsage:      l.LiquidServiceInfo.Rates[rateName].HasUsage,
 			}, nil
 		},

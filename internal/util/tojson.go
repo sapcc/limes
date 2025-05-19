@@ -24,6 +24,8 @@ import (
 	"fmt"
 )
 
+// RenderListToJSON is used to fill DB fields containing JSON lists.
+// Empty lists are represented as the empty string.
 func RenderListToJSON[T any](attribute string, entries []T) (string, error) {
 	if len(entries) == 0 {
 		return "", nil
@@ -35,6 +37,8 @@ func RenderListToJSON[T any](attribute string, entries []T) (string, error) {
 	return string(buf), nil
 }
 
+// RenderMapToJSON is used to fill DB fields containing JSON maps.
+// Empty maps are represented as the empty string.
 func RenderMapToJSON[T ~string, U any](attribute string, entries map[T]U) (string, error) {
 	if len(entries) == 0 {
 		return "", nil

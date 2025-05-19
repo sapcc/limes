@@ -25,9 +25,11 @@ type ClusterService struct {
 	NextScrapeAt       time.Time         `db:"next_scrape_at"`
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
 	// following fields get filled from liquid.ServiceInfo
-	LiquidVersion              int64  `db:"liquid_version"`
-	CapacityMetricFamiliesJSON string `db:"capacity_metric_families_json"`
-	UsageMetricFamiliesJSON    string `db:"usage_metric_families_json"`
+	LiquidVersion                   int64  `db:"liquid_version"`
+	CapacityMetricFamiliesJSON      string `db:"capacity_metric_families_json"`
+	UsageMetricFamiliesJSON         string `db:"usage_metric_families_json"`
+	UsageReportNeedsProjectMetadata bool   `db:"usage_report_needs_project_metadata"`
+	QuotaUpdateNeedsProjectMetadata bool   `db:"quota_update_needs_project_metadata"`
 }
 
 // ClusterResource contains a record from the `cluster_resources` table.
@@ -66,9 +68,10 @@ type ClusterRate struct {
 	ServiceID ClusterServiceID `db:"service_id"`
 	Name      liquid.RateName  `db:"name"`
 	// following fields get filled from liquid.ServiceInfo
-	LiquidVersion int64       `db:"liquid_version"`
-	Unit          liquid.Unit `db:"unit"`
-	HasUsage      bool        `db:"has_usage"`
+	LiquidVersion int64           `db:"liquid_version"`
+	Unit          liquid.Unit     `db:"unit"`
+	Topology      liquid.Topology `db:"topology"`
+	HasUsage      bool            `db:"has_usage"`
 }
 
 // Domain contains a record from the `domains` table.

@@ -82,8 +82,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.
-	Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
 	resInfo := cluster.InfoForResource(serviceType, resourceName)
 	if !resInfo.HasQuota {
@@ -229,8 +228,6 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	if err != nil {
 		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resourceName, err)
 	}
-	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.
-	// We wait for the next scrape cycle to come around and notice that `backend_quota != quota`.
 	return tx.Commit()
 }
 
