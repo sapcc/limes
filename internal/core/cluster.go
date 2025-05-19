@@ -73,7 +73,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 // calling Init() on all LiquidConnections.
 func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
 	// initialize discovery plugin
-	err := c.DiscoveryPlugin.Init(ctx, c.Config.Discovery, provider, eo)
+	err := c.DiscoveryPlugin.Init(ctx, provider, eo)
 	if err != nil {
 		errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}

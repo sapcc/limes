@@ -68,7 +68,7 @@ type DiscoveryPlugin interface {
 	// perform first-time initialization. If the plugin needs to access OpenStack
 	// APIs, it needs to spawn the respective ServiceClients in this method and
 	// retain them.
-	Init(ctx context.Context, config DiscoveryConfiguration, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	// ListDomains returns all Keystone domains in the cluster.
 	ListDomains(ctx context.Context) ([]KeystoneDomain, error)
 	// ListProjects returns all Keystone projects in the given domain.
@@ -82,7 +82,9 @@ func NewDiscoveryPlugin(cfg DiscoveryConfiguration) (DiscoveryPlugin, error) {
 		return &listDiscoveryPlugin{}, nil
 	}
 	if cfg.Method == "static" {
-		return &StaticDiscoveryPlugin{}, nil
+		return &StaticDiscoveryPlugin{
+			Config: cfg.StaticDiscoveryConfiguration,
+		}, nil
 	}
 	return nil, errors.New("no suitable discovery plugin found")
 }
@@ -92,7 +94,7 @@ type listDiscoveryPlugin struct {
 }
 
 // Init implements the DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) Init(ctx context.Context, config DiscoveryConfiguration, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *listDiscoveryPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.KeystoneV3, err = openstack.NewIdentityV3(provider, eo)
 	return err
 }
@@ -149,10 +151,7 @@ type StaticDiscoveryPlugin struct {
 }
 
 // Init implements the DiscoveryPlugin interface.
-func (p *StaticDiscoveryPlugin) Init(ctx context.Context, config DiscoveryConfiguration, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	if staticDiscoveryConfiguration, exists := config.StaticDiscoveryConfiguration.Unpack(); exists {
-		p.Config = staticDiscoveryConfiguration
-	}
+func (p *StaticDiscoveryPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
