@@ -6,12 +6,13 @@ package core
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/lib/pq"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -103,16 +104,10 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 // needs restart.
 func (c *Cluster) ReconcileLiquidConnections() (err error) {
 	// sort for testing purposes
-	serviceTypes := make([]db.ServiceType, len(c.LiquidConnections))
-	i := 0
-	for serviceType := range c.LiquidConnections {
-		serviceTypes[i] = serviceType
-		i++
-	}
-	slices.Sort(serviceTypes)
+	serviceTypes := slices.Sorted(maps.Keys(c.LiquidConnections))
 
 	for _, serviceType := range serviceTypes {
-		err := c.LiquidConnections[serviceType].ReconcileLiquidConnection()
+		err := c.LiquidConnections[serviceType].reconcileLiquidConnection()
 		if err != nil {
 			return err
 		}
@@ -120,22 +115,9 @@ func (c *Cluster) ReconcileLiquidConnections() (err error) {
 
 	// delete all orphaned cluster_services
 	// respective cluster_resources, cluster_az_resources and cluster_rates are handled by delete-cascade
-	var dbServices []db.ClusterService
-	_, err = c.DB.Select(&dbServices, `SELECT * FROM cluster_services`)
+	_, err = c.DB.Exec(`DELETE FROM cluster_services WHERE type != ALL($1)`, pq.Array(serviceTypes))
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster_service: %w", err)
-	}
-	// sort for testing purposes
-	sort.SliceStable(dbServices, func(i, j int) bool {
-		return dbServices[i].Type < dbServices[j].Type || dbServices[i].Type > dbServices[j].Type
-	})
-	for _, dbService := range dbServices {
-		if c.LiquidConnections[dbService.Type] == nil {
-			_, err = c.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, dbService.Type)
-			if err != nil {
-				return err
-			}
-		}
+		return fmt.Errorf("cannot cleanup orphaned cluster_services: %w", err)
 	}
 	return nil
 }

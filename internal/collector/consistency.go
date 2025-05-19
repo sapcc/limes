@@ -27,7 +27,7 @@ func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloo
 		Interval: 1 * time.Hour,
 		// When new services or resources are added, we need this job to populate the project level services densely.
 		// It does not take care of cluster level services, resources, or rates - they are added on demand from
-		// LiquidConnection.ReconcileLiquidConnection() or whenever the collect job is started. Project level resources
+		// LiquidConnection.reconcileLiquidConnection() or whenever the collect job is started. Project level resources
 		// and az_resources are created by the scraping job, which picks up the created project_services.
 		InitialDelay: 10 * time.Second,
 		Task:         c.CheckConsistencyAllDomains,

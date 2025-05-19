@@ -161,8 +161,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_rates (id, service_id, name, liquid_version, has_usage) VALUES (1, 1, 'firstrate', 1, TRUE);
-		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (2, 1, 'things', 1, 'az-aware');
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'unittest', %[1]d, 1);
@@ -271,8 +271,8 @@ func Test_RateScrapeFailure(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_rates (id, service_id, name, liquid_version, has_usage) VALUES (1, 1, 'firstrate', 1, TRUE);
-		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (2, 1, 'things', 1, 'az-aware');
