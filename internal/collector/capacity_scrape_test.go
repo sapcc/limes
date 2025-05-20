@@ -116,7 +116,7 @@ func Test_ScanCapacity(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
 		// cluster_services must be created as a baseline
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
@@ -269,7 +269,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
@@ -410,7 +410,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
@@ -502,7 +502,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
@@ -571,7 +571,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
@@ -661,7 +661,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 	c := getCollector(t, s)
 	scrapeJob = c.CapacityScrapeJob(s.Registry)

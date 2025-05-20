@@ -84,7 +84,7 @@ func commonRateScrapeTestSetup(t *testing.T) (s test.Setup, job jobloop.Job, wit
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testRateScrapeBasicConfigYAML, liquidServiceType)),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 	s.Cluster.Config.QuotaDistributionConfigs = []core.QuotaDistributionConfiguration{
 		{

@@ -30,11 +30,11 @@ func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloo
 		// LiquidConnection.reconcileLiquidConnection() or whenever the collect job is started. Project level resources
 		// and az_resources are created by the scraping job, which picks up the created project_services.
 		InitialDelay: 10 * time.Second,
-		Task:         c.CheckConsistencyAllDomains,
+		Task:         c.checkConsistencyAllDomains,
 	}).Setup(registerer)
 }
 
-func (c *Collector) CheckConsistencyAllDomains(_ context.Context, _ prometheus.Labels) error {
+func (c *Collector) checkConsistencyAllDomains(_ context.Context, _ prometheus.Labels) error {
 	// recurse into domains (with deterministic ordering for the unit test's sake;
 	// the DESC ordering is because I was too lazy to change the fixtures)
 	var domains []db.Domain
