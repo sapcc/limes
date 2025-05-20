@@ -11,6 +11,7 @@ import (
 	"maps"
 	"math/big"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -40,9 +41,10 @@ type LiquidConnection struct {
 	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration]
 
 	// state
-	LiquidServiceInfo liquid.ServiceInfo
-	LiquidClient      LiquidClient
-	DB                *gorp.DbMap
+	liquidServiceInfo      liquid.ServiceInfo
+	liquidServiceInfoMutex sync.RWMutex
+	LiquidClient           LiquidClient
+	DB                     *gorp.DbMap
 
 	// slots for test doubles
 	timeNow func() time.Time
@@ -70,18 +72,23 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 	if err != nil {
 		return err
 	}
-
 	return l.updateServiceInfo(ctx)
 }
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
 func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
-	if infoVersion != l.LiquidServiceInfo.Version {
-		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, l.LiquidServiceInfo.Version, infoVersion)
+	currentVersion := l.ServiceInfo().Version
+	if infoVersion != currentVersion {
+		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
 		err = l.updateServiceInfo(ctx)
 		if err != nil {
 			return err
+		}
+		// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
+		newVersion := l.ServiceInfo().Version
+		if infoVersion != newVersion {
+			return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 		}
 		err = l.reconcileLiquidConnection()
 		if err != nil {
@@ -92,13 +99,21 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 }
 
 // updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
+// It should be the only function to write LiquidServiceInfo, and is only called on init and when
+// the InfoVersion changes.
 func (l *LiquidConnection) updateServiceInfo(ctx context.Context) (err error) {
-	l.LiquidServiceInfo, err = l.LiquidClient.GetInfo(ctx)
+	l.liquidServiceInfoMutex.Lock()
+	defer l.liquidServiceInfoMutex.Unlock()
+	result, err := l.LiquidClient.GetInfo(ctx)
 	if err != nil {
 		return err
 	}
-	err = liquid.ValidateServiceInfo(l.LiquidServiceInfo)
-	return err
+	err = liquid.ValidateServiceInfo(result)
+	if err != nil {
+		return err
+	}
+	l.liquidServiceInfo = result
+	return nil
 }
 
 // reconcileLiquidConnection ensures consistency of tables cluster_services, cluster_resources and cluster_rates
@@ -121,12 +136,13 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 	}
 	var wantedServices = []db.ServiceType{l.ServiceType}
 
+	lsi := l.ServiceInfo()
 	// do update for cluster_service (as set update, for convenience)
-	cmf, err := util.RenderMapToJSON("capacity_metric_families", l.LiquidServiceInfo.CapacityMetricFamilies)
+	cmf, err := util.RenderMapToJSON("capacity_metric_families", lsi.CapacityMetricFamilies)
 	if err != nil {
 		return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", l.ServiceType, err)
 	}
-	umf, err := util.RenderMapToJSON("usage_metric_families", l.LiquidServiceInfo.UsageMetricFamilies)
+	umf, err := util.RenderMapToJSON("usage_metric_families", lsi.UsageMetricFamilies)
 	if err != nil {
 		return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", l.ServiceType, err)
 	}
@@ -140,19 +156,19 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 			return db.ClusterService{
 				NextScrapeAt:                    l.timeNow(),
 				Type:                            l.ServiceType,
-				LiquidVersion:                   l.LiquidServiceInfo.Version,
+				LiquidVersion:                   lsi.Version,
 				CapacityMetricFamiliesJSON:      cmf,
 				UsageMetricFamiliesJSON:         umf,
-				UsageReportNeedsProjectMetadata: l.LiquidServiceInfo.UsageReportNeedsProjectMetadata,
-				QuotaUpdateNeedsProjectMetadata: l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata,
+				UsageReportNeedsProjectMetadata: lsi.UsageReportNeedsProjectMetadata,
+				QuotaUpdateNeedsProjectMetadata: lsi.QuotaUpdateNeedsProjectMetadata,
 			}, nil
 		},
 		Update: func(service *db.ClusterService) (err error) {
-			service.LiquidVersion = l.LiquidServiceInfo.Version
+			service.LiquidVersion = lsi.Version
 			service.CapacityMetricFamiliesJSON = cmf
 			service.UsageMetricFamiliesJSON = umf
-			service.UsageReportNeedsProjectMetadata = l.LiquidServiceInfo.UsageReportNeedsProjectMetadata
-			service.QuotaUpdateNeedsProjectMetadata = l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata
+			service.UsageReportNeedsProjectMetadata = lsi.UsageReportNeedsProjectMetadata
+			service.QuotaUpdateNeedsProjectMetadata = lsi.QuotaUpdateNeedsProjectMetadata
 			return nil
 		},
 	}
@@ -167,7 +183,7 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster resources for %s: %w", l.ServiceType, err)
 	}
-	wantedResources := slices.Sorted(maps.Keys(l.LiquidServiceInfo.Resources))
+	wantedResources := slices.Sorted(maps.Keys(lsi.Resources))
 
 	// do update for cluster_resources
 	resourceUpdate := db.SetUpdate[db.ClusterResource, liquid.ResourceName]{
@@ -180,23 +196,23 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 			return db.ClusterResource{
 				ServiceID:           dbServices[0].ID,
 				Name:                resourceName,
-				LiquidVersion:       l.LiquidServiceInfo.Version,
-				Unit:                l.LiquidServiceInfo.Resources[resourceName].Unit,
-				Topology:            l.LiquidServiceInfo.Resources[resourceName].Topology,
-				HasCapacity:         l.LiquidServiceInfo.Resources[resourceName].HasCapacity,
-				NeedsResourceDemand: l.LiquidServiceInfo.Resources[resourceName].NeedsResourceDemand,
-				HasQuota:            l.LiquidServiceInfo.Resources[resourceName].HasQuota,
-				AttributesJSON:      string(l.LiquidServiceInfo.Resources[resourceName].Attributes),
+				LiquidVersion:       lsi.Version,
+				Unit:                lsi.Resources[resourceName].Unit,
+				Topology:            lsi.Resources[resourceName].Topology,
+				HasCapacity:         lsi.Resources[resourceName].HasCapacity,
+				NeedsResourceDemand: lsi.Resources[resourceName].NeedsResourceDemand,
+				HasQuota:            lsi.Resources[resourceName].HasQuota,
+				AttributesJSON:      string(lsi.Resources[resourceName].Attributes),
 			}, nil
 		},
 		Update: func(res *db.ClusterResource) (err error) {
-			res.LiquidVersion = l.LiquidServiceInfo.Version
-			res.Unit = l.LiquidServiceInfo.Resources[res.Name].Unit
-			res.Topology = l.LiquidServiceInfo.Resources[res.Name].Topology
-			res.HasCapacity = l.LiquidServiceInfo.Resources[res.Name].HasCapacity
-			res.NeedsResourceDemand = l.LiquidServiceInfo.Resources[res.Name].NeedsResourceDemand
-			res.HasQuota = l.LiquidServiceInfo.Resources[res.Name].HasQuota
-			res.AttributesJSON = string(l.LiquidServiceInfo.Resources[res.Name].Attributes)
+			res.LiquidVersion = lsi.Version
+			res.Unit = lsi.Resources[res.Name].Unit
+			res.Topology = lsi.Resources[res.Name].Topology
+			res.HasCapacity = lsi.Resources[res.Name].HasCapacity
+			res.NeedsResourceDemand = lsi.Resources[res.Name].NeedsResourceDemand
+			res.HasQuota = lsi.Resources[res.Name].HasQuota
+			res.AttributesJSON = string(lsi.Resources[res.Name].Attributes)
 			return nil
 		},
 	}
@@ -211,7 +227,7 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster rates for %s: %w", l.ServiceType, err)
 	}
-	wantedRates := slices.Sorted(maps.Keys(l.LiquidServiceInfo.Rates))
+	wantedRates := slices.Sorted(maps.Keys(lsi.Rates))
 
 	// do update for cluster_resources
 	rateUpdate := db.SetUpdate[db.ClusterRate, liquid.RateName]{
@@ -224,16 +240,17 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 			return db.ClusterRate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
-				LiquidVersion: l.LiquidServiceInfo.Version,
-				Unit:          l.LiquidServiceInfo.Rates[rateName].Unit,
-				Topology:      l.LiquidServiceInfo.Rates[rateName].Topology,
-				HasUsage:      l.LiquidServiceInfo.Rates[rateName].HasUsage,
+				LiquidVersion: lsi.Version,
+				Unit:          lsi.Rates[rateName].Unit,
+				Topology:      lsi.Rates[rateName].Topology,
+				HasUsage:      lsi.Rates[rateName].HasUsage,
 			}, nil
 		},
 		Update: func(rate *db.ClusterRate) (err error) {
-			rate.LiquidVersion = l.LiquidServiceInfo.Version
-			rate.Unit = l.LiquidServiceInfo.Rates[rate.Name].Unit
-			rate.HasUsage = l.LiquidServiceInfo.Rates[rate.Name].HasUsage
+			rate.LiquidVersion = lsi.Version
+			rate.Unit = lsi.Rates[rate.Name].Unit
+			rate.Topology = lsi.Rates[rate.Name].Topology
+			rate.HasUsage = lsi.Rates[rate.Name].HasUsage
 			return nil
 		},
 	}
@@ -242,17 +259,15 @@ func (l *LiquidConnection) reconcileLiquidConnection() (err error) {
 		return err
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	return nil
+	return tx.Commit()
 }
 
 // ServiceInfo returns metadata for this liquid.
 // This includes metadata for all the resources and rates that this liquid scrapes.
 func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
-	return l.LiquidServiceInfo
+	l.liquidServiceInfoMutex.RLock()
+	defer l.liquidServiceInfoMutex.RUnlock()
+	return l.liquidServiceInfo
 }
 
 // Scrape queries the backend service for the quota and usage data of all
@@ -264,7 +279,8 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // usage in every AZ.
 func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error) {
 	// shortcut for liquids that only have rates and no resources
-	if len(l.LiquidServiceInfo.Resources) == 0 && len(l.LiquidServiceInfo.UsageMetricFamilies) == 0 {
+	lsi := l.ServiceInfo()
+	if len(lsi.Resources) == 0 && len(lsi.UsageMetricFamilies) == 0 {
 		return liquid.ServiceUsageReport{}, nil
 	}
 
@@ -283,7 +299,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return liquid.ServiceUsageReport{}, err
 	}
 
-	err = liquid.ValidateUsageReport(result, req, l.LiquidServiceInfo)
+	err = liquid.ValidateUsageReport(result, req, l.ServiceInfo())
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
@@ -311,7 +327,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		return liquid.ServiceCapacityReport{}, err
 	}
 
-	err = liquid.ValidateCapacityReport(result, req, l.LiquidServiceInfo)
+	err = liquid.ValidateCapacityReport(result, req, l.ServiceInfo())
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
@@ -414,13 +430,14 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // BuildServiceCapacityRequest generates the request body payload for querying
 // the LIQUID API endpoint /v1/report-capacity
 func (l *LiquidConnection) BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	lsi := l.ServiceInfo()
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
-		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(l.LiquidServiceInfo.Resources)),
+		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(lsi.Resources)),
 	}
 
 	var err error
-	for resName, resInfo := range l.LiquidServiceInfo.Resources {
+	for resName, resInfo := range lsi.Resources {
 		if !resInfo.HasCapacity {
 			continue
 		}
@@ -439,7 +456,7 @@ func (l *LiquidConnection) BuildServiceCapacityRequest(backchannel CapacityScrap
 // the LIQUID API endpoint /v1/projects/:uuid/report-usage
 func (l *LiquidConnection) BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
-	if l.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
+	if l.ServiceInfo().UsageReportNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 	return req, nil
@@ -449,7 +466,7 @@ func (l *LiquidConnection) BuildServiceUsageRequest(project KeystoneProject, all
 // given domain to the values specified here.
 func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
-	if l.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
+	if l.ServiceInfo().QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
@@ -471,7 +488,8 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 // counter resets in the backend.
 func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// shortcut for liquids that do not have rates
-	if len(l.LiquidServiceInfo.Rates) == 0 {
+	lsi := l.ServiceInfo()
+	if len(lsi.Rates) == 0 {
 		return nil, "", nil
 	}
 
@@ -479,7 +497,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 		AllAZs:          allAZs,
 		SerializedState: json.RawMessage(prevSerializedState),
 	}
-	if l.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
+	if lsi.UsageReportNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
@@ -494,7 +512,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 	}
 
 	result = make(map[liquid.RateName]*big.Int)
-	for rateName := range l.LiquidServiceInfo.Rates {
+	for rateName := range lsi.Rates {
 		rateReport := resp.Rates[rateName]
 		if rateReport == nil {
 			return nil, "", fmt.Errorf("missing report for rate %q", rateName)

@@ -38,7 +38,7 @@ type setupParams struct {
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
-	WithCollectorSetup       bool
+	WithClusterLevelRecords  bool
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -80,11 +80,11 @@ func WithProject(p core.KeystoneProject) SetupOption {
 	}
 }
 
-// WithCollectorSetup is a SetupOption that sets up the Cluster the same ways
+// WithClusterLevelRecords is a SetupOption that sets up the Cluster the same ways
 // as the limes-collect would do. Namely, this reconciles the LiquidConnections
 // on startup.
-func WithCollectorSetup(params *setupParams) {
-	params.WithCollectorSetup = true
+func WithClusterLevelRecords(params *setupParams) {
+	params.WithClusterLevelRecords = true
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
@@ -136,7 +136,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
 	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB)
-	if params.WithCollectorSetup {
+	if params.WithClusterLevelRecords {
 		err := s.Cluster.ReconcileLiquidConnections()
 		if err != nil {
 			logg.Fatal("failed to reconcile liquid connections: %w", err)

@@ -109,7 +109,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -585,7 +585,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
@@ -627,7 +627,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
-		test.WithCollectorSetup,
+		test.WithClusterLevelRecords,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
