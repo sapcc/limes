@@ -319,7 +319,11 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
+	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', 0, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, stale, rates_scraped_at, rates_scrape_duration_secs, rates_checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', TRUE, %[1]d, 5, %[1]d, 0, %[2]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');

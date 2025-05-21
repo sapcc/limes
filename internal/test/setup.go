@@ -32,14 +32,14 @@ import (
 )
 
 type setupParams struct {
-	DBSetupOptions           []easypg.TestSetupOption
-	DBFixtureFile            string
-	ConfigYAML               string
-	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
-	APIMiddlewares           []httpapi.API
-	Projects                 []*core.KeystoneProject
-	WithEmptyRecordsAsNeeded bool
-	WithClusterLevelRecords  bool
+	DBSetupOptions                []easypg.TestSetupOption
+	DBFixtureFile                 string
+	ConfigYAML                    string
+	APIBuilder                    func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
+	APIMiddlewares                []httpapi.API
+	Projects                      []*core.KeystoneProject
+	WithEmptyRecordsAsNeeded      bool
+	WithClusterLevelRecordCleanup bool
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -85,7 +85,7 @@ func WithProject(p core.KeystoneProject) SetupOption {
 // as the limes-collect would do. Namely, this reconciles the LiquidConnections
 // on startup.
 func WithClusterLevelRecords(params *setupParams) {
-	params.WithClusterLevelRecords = true
+	params.WithClusterLevelRecordCleanup = true
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
@@ -137,12 +137,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
 	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB)
-	if params.WithClusterLevelRecords {
-		err := s.Cluster.ReconcileLiquidConnections()
-		if err != nil {
-			logg.Fatal("failed to reconcile liquid connections: %w", err)
-		}
-	}
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -276,7 +270,7 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time, dbm *gorp.DbMap) *core.Cluster {
 	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow, dbm)
 	if errs.IsEmpty() {
-		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
+		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{}, false)
 	}
 	for _, err := range errs {
 		t.Error(err)

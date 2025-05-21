@@ -131,7 +131,7 @@ func main() {
 	dbm := db.InitORM(must.Return(db.Init()))
 	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm)
 	errs.LogFatalIfError()
-	errs = cluster.Connect(ctx, provider, eo)
+	errs = cluster.Connect(ctx, provider, eo, taskName == "collect")
 	errs.LogFatalIfError()
 
 	// select task
@@ -158,7 +158,7 @@ func printUsageAndExit(exitCode int) {
 	os.Exit(exitCode)
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 // task: collect
 
 func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, _ gophercloud.EndpointOpts) {
@@ -171,12 +171,6 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	mailClient := None[collector.MailClient]()
 	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
 		mailClient = Some(must.Return(collector.NewMailClient(provider, mailConfig.Endpoint)))
-	}
-
-	// bring liquidConnections into sync with the database
-	err := cluster.ReconcileLiquidConnections()
-	if err != nil {
-		logg.Fatal("reconciling liquid connections on startup failed: %w", err)
 	}
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
@@ -233,7 +227,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 // task: serve
 
 func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) {
@@ -275,7 +269,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, mux))
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 // task: serve data metrics
 
 func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []string) {

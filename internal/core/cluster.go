@@ -5,7 +5,6 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -78,7 +77,7 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all LiquidConnections.
-func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, fromDb bool) (errs errext.ErrorSet) {
 	// initialize discovery plugin
 	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
@@ -86,45 +85,36 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	} else {
 		err = c.DiscoveryPlugin.Init(ctx, provider, eo)
 		if err != nil {
-			errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
+			errs.Addf("failed to initialize discovery method: %w", err)
 		}
 	}
 
-	// initialize liquid connections
-	for serviceType := range c.Config.Liquids {
+	// initialize liquid connections, if the liquid api is reachable the ServiceInfo is persisted
+	serviceTypes := slices.Sorted(maps.Keys(c.Config.Liquids))
+	for _, serviceType := range serviceTypes {
 		conn := c.LiquidConnections[serviceType]
-		err := conn.Init(ctx, provider, eo)
+		err := conn.Init(ctx, provider, eo, fromDb)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
 		}
+	}
+	err = c.cleanupLeftoverLiquidConnections()
+	if err != nil {
+		errs.Addf("failed to cleanup leftover liquid connections: %w", util.UnpackError(err))
 	}
 
 	return errs
 }
 
-// ReconcileLiquidConnections should be called once on startup of the limes-collect task, so that
-// the database tables are in a consistent state with the configured LiquidConnections. For this,
-// each individual LiquidConnection is reconciled and leftover entries are deleted. This means resources
-// and rates can change without restarting the limes-collect task, but a change in of LiquidConnections
-// needs restart.
-func (c *Cluster) ReconcileLiquidConnections() (err error) {
+// cleanupLeftoverLiquidConnections takes care of orphaned liquid connections in the database.
+// It should be called once on startup, the removal of LiquidConnections at runtime is not necessary.
+// The tables cluster_resources, cluster_az_resources and cluster_rates are handled by delete-cascade.
+func (c *Cluster) cleanupLeftoverLiquidConnections() (err error) {
 	// sort for testing purposes
 	serviceTypes := slices.Sorted(maps.Keys(c.LiquidConnections))
 
-	for _, serviceType := range serviceTypes {
-		err := c.LiquidConnections[serviceType].reconcileLiquidConnection()
-		if err != nil {
-			return err
-		}
-	}
-
-	// delete all orphaned cluster_services
-	// respective cluster_resources, cluster_az_resources and cluster_rates are handled by delete-cascade
 	_, err = c.DB.Exec(`DELETE FROM cluster_services WHERE type != ALL($1)`, pq.Array(serviceTypes))
-	if err != nil {
-		return fmt.Errorf("cannot cleanup orphaned cluster_services: %w", err)
-	}
-	return nil
+	return err
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be

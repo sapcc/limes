@@ -37,6 +37,19 @@ func RenderListToJSON[T any](attribute string, entries []T) (string, error) {
 	return string(buf), nil
 }
 
+// JSONToAny is used to unmarshal from a JSON DB field.
+// It is convenient to use if multiple fields are unmarshalled consecutively, because it adds the errors to an errorset.
+func JSONToAny[T any](value, attribute string) (result T, err error) {
+	if value == "" {
+		return result, nil
+	}
+	err = json.Unmarshal([]byte(value), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to unmarshal %s: %w", attribute, err)
+	}
+	return result, nil
+}
+
 // RenderMapToJSON is used to fill DB fields containing JSON maps.
 // Empty maps are represented as the empty string.
 func RenderMapToJSON[T ~string, U any](attribute string, entries map[T]U) (string, error) {

@@ -67,12 +67,28 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, ti
 
 // Init is called before any other interface methods, and allows the LiquidConnection to
 // perform first-time initialization.
-func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, readFromDB bool) (err error) {
 	l.LiquidClient, err = NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: l.LiquidServiceType})
 	if err != nil {
 		return err
 	}
-	return l.updateServiceInfo(ctx)
+
+	var apiSuccess bool
+	if readFromDB {
+		_, err = l.updateServiceInfo(ctx, dbOnly)
+	} else {
+		apiSuccess, err = l.updateServiceInfo(ctx, apiThenDb)
+	}
+	if err != nil {
+		return fmt.Errorf("initializing ServiceInfo: %w", err)
+	}
+	if apiSuccess {
+		err = l.reconcileLiquidConnection()
+	}
+	if err != nil {
+		return fmt.Errorf("saving ServiceInfo initially: %w", err)
+	}
+	return nil
 }
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
@@ -81,7 +97,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	currentVersion := l.ServiceInfo().Version
 	if infoVersion != currentVersion {
 		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
-		err = l.updateServiceInfo(ctx)
+		_, err = l.updateServiceInfo(ctx, apiOnly)
 		if err != nil {
 			return err
 		}
@@ -92,28 +108,119 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 		}
 		err = l.reconcileLiquidConnection()
 		if err != nil {
-			return err
+			return fmt.Errorf("saving ServiceInfo: %w", err)
 		}
 	}
 	return nil
 }
 
-// updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
-// It should be the only function to write LiquidServiceInfo, and is only called on init and when
-// the InfoVersion changes.
-func (l *LiquidConnection) updateServiceInfo(ctx context.Context) (err error) {
+type OperationsMode int
+
+const (
+	dbOnly OperationsMode = iota
+	apiOnly
+	apiThenDb
+)
+
+// updateServiceInfo modifies the liquidServiceInfo of the LiquidConnection. In collect-task it is called on Init
+// or whenever the InfoVersion on a report changes. On non-collect-tasks it is called continuously every
+// few seconds, in db-only mode. The API takes precedence over the database.
+func (l *LiquidConnection) updateServiceInfo(ctx context.Context, operationsMode OperationsMode) (apiSuccess bool, err error) {
 	l.liquidServiceInfoMutex.Lock()
 	defer l.liquidServiceInfoMutex.Unlock()
-	result, err := l.LiquidClient.GetInfo(ctx)
+	var result liquid.ServiceInfo
+
+	if (operationsMode == apiOnly) || (operationsMode == apiThenDb) {
+		result, err = l.LiquidClient.GetInfo(ctx)
+		if err == nil {
+			apiSuccess = true
+		}
+	}
+	if (operationsMode == dbOnly) || (operationsMode == apiThenDb && err != nil) {
+		result, err = l.readServiceInfo()
+	}
 	if err != nil {
-		return err
+		return apiSuccess, err
 	}
 	err = liquid.ValidateServiceInfo(result)
 	if err != nil {
-		return err
+		return apiSuccess, err
 	}
 	l.liquidServiceInfo = result
-	return nil
+	return apiSuccess, nil
+}
+
+// readServiceInfo reads the ServiceInfo from the database as fallback in case the Liquid is not
+// reachable on startup. We read the properties of the ServiceInfo individually per entity instead
+// of an SQL-join, so that possible inconsistencies of the database can be reported with a more precise error message.
+func (l *LiquidConnection) readServiceInfo() (liquidConnection liquid.ServiceInfo, err error) {
+	var dbServices []db.ClusterService
+	_, err = l.DB.Select(&dbServices, `SELECT * FROM cluster_services WHERE type = $1`, l.ServiceType)
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("cannot inspect existing cluster_service %s: %w", l.ServiceType, err)
+	}
+	// more than one is not possible due to the key/unique constraint
+	if len(dbServices) == 0 {
+		return liquid.ServiceInfo{}, fmt.Errorf("no cluster_service found for %s", l.ServiceType)
+	}
+
+	var dbResources []db.ClusterResource
+	_, err = l.DB.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, dbServices[0].ID)
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("cannot inspect existing cluster resources for %s: %w", l.ServiceType, err)
+	}
+
+	var dbRates []db.ClusterRate
+	_, err = l.DB.Select(&dbRates, `SELECT * FROM cluster_rates WHERE service_id = $1`, dbServices[0].ID)
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("cannot inspect existing cluster rates for %s: %w", l.ServiceType, err)
+	}
+
+	// construct LiquidServiceInfo
+	var resources = make(map[liquid.ResourceName]liquid.ResourceInfo, len(dbResources))
+	for _, dbResource := range dbResources {
+		if dbResource.LiquidVersion != dbServices[0].LiquidVersion {
+			return liquid.ServiceInfo{}, fmt.Errorf("cluster_resource %s has a different LiquidVersion %d than the cluster_service %s with LiquidVersion %d", dbResource.Name, dbResource.LiquidVersion, l.ServiceType, dbServices[0].LiquidVersion)
+		}
+		resources[dbResource.Name] = liquid.ResourceInfo{
+			Unit:                dbResource.Unit,
+			Topology:            dbResource.Topology,
+			HasCapacity:         dbResource.HasCapacity,
+			NeedsResourceDemand: dbResource.NeedsResourceDemand,
+			HasQuota:            dbResource.HasQuota,
+			Attributes:          []byte(dbResource.AttributesJSON),
+		}
+	}
+	var rates = make(map[liquid.RateName]liquid.RateInfo, len(dbRates))
+	for _, dbRate := range dbRates {
+		if dbRate.LiquidVersion != dbServices[0].LiquidVersion {
+			return liquid.ServiceInfo{}, fmt.Errorf("cluster_rate %s has a different LiquidVersion %d than the cluster_service %s with LiquidVersion %d", dbRate.Name, dbRate.LiquidVersion, l.ServiceType, dbServices[0].LiquidVersion)
+		}
+		rates[dbRate.Name] = liquid.RateInfo{
+			Unit:     dbRate.Unit,
+			Topology: dbRate.Topology,
+			HasUsage: dbRate.HasUsage,
+		}
+	}
+	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](dbServices[0].CapacityMetricFamiliesJSON, "capacity_metric_families")
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("cannot deserialize capacityMetricFamiliesJSON for %s: %w", l.ServiceType, err)
+	}
+	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](dbServices[0].UsageMetricFamiliesJSON, "usage_metric_families")
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("cannot deserialize usageMetricsFamiliesJSON for %s: %w", l.ServiceType, err)
+	}
+	liquidConnection = liquid.ServiceInfo{
+		Version:                         dbServices[0].LiquidVersion,
+		Resources:                       resources,
+		Rates:                           rates,
+		CapacityMetricFamilies:          capacityMetricFamilies,
+		UsageMetricFamilies:             usageMetricFamilies,
+		UsageReportNeedsProjectMetadata: dbServices[0].UsageReportNeedsProjectMetadata,
+		QuotaUpdateNeedsProjectMetadata: dbServices[0].QuotaUpdateNeedsProjectMetadata,
+	}
+
+	return liquidConnection, nil
 }
 
 // reconcileLiquidConnection ensures consistency of tables cluster_services, cluster_resources and cluster_rates

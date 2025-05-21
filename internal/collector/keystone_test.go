@@ -52,6 +52,10 @@ func Test_ScanDomains(t *testing.T) {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
+	// ignore standard cluster_resources/ cluster_services baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
 	// are then constructed by the scraper)
@@ -62,8 +66,7 @@ func Test_ScanDomains(t *testing.T) {
 	sort.Strings(expectedNewDomains) // order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
+	tr.DBChanges().AssertEqualToFile("fixtures/scandomains1.sql")
 
 	// second ScanDomains should not discover anything new
 	s.Clock.StepBy(10 * time.Minute)
