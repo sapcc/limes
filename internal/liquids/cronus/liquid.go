@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
@@ -29,7 +30,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version: 1,
+		Version: time.Now().Unix(),
 		Rates: map[liquid.RateName]liquid.RateInfo{
 			"attachment_size":   {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
 			"data_transfer_in":  {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},

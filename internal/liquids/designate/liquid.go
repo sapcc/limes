@@ -5,6 +5,7 @@ package designate
 
 import (
 	"context"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
@@ -25,7 +26,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version: 1,
+		Version: time.Now().Unix(),
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"zones": {
 				Unit:     liquid.UnitNone,

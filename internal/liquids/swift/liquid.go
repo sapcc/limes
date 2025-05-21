@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -36,7 +37,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version: 1,
+		Version: time.Now().Unix(),
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				Unit:        liquid.UnitBytes,
