@@ -34,10 +34,11 @@ type setupParams struct {
 	DBSetupOptions           []easypg.TestSetupOption
 	DBFixtureFile            string
 	ConfigYAML               string
-	APIBuilder               func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
+	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
+	WithClusterLevelRecords  bool
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -64,7 +65,7 @@ func WithConfig(yamlStr string) SetupOption {
 // Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
 // directly call this function because that would create an import cycle, so it
 // must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API, middlewares ...httpapi.API) SetupOption {
+func WithAPIHandler(apiBuilder func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API, middlewares ...httpapi.API) SetupOption {
 	return func(params *setupParams) {
 		params.APIBuilder = apiBuilder
 		params.APIMiddlewares = middlewares
@@ -77,6 +78,13 @@ func WithProject(p core.KeystoneProject) SetupOption {
 	return func(params *setupParams) {
 		params.Projects = append(params.Projects, &p)
 	}
+}
+
+// WithClusterLevelRecords is a SetupOption that sets up the Cluster the same ways
+// as the limes-collect would do. Namely, this reconciles the LiquidConnections
+// on startup.
+func WithClusterLevelRecords(params *setupParams) {
+	params.WithClusterLevelRecords = true
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
@@ -126,8 +134,14 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
+	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB)
+	if params.WithClusterLevelRecords {
+		err := s.Cluster.ReconcileLiquidConnections()
+		if err != nil {
+			logg.Fatal("failed to reconcile liquid connections: %w", err)
+		}
+	}
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -156,7 +170,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	if params.APIBuilder != nil {
 		s.Handler = httpapi.Compose(
 			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken),
+				params.APIBuilder(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken),
 				httpapi.WithoutLogging(),
 			}, params.APIMiddlewares...)...,
 		)
@@ -250,7 +264,7 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	opts := append(slices.Clone(extraOpts),
 		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
-			"cluster_services", "cluster_resources", "cluster_az_resources",
+			"cluster_services", "cluster_resources", "cluster_rates", "cluster_az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",
 			"project_services", "project_resources", "project_az_resources",
 		),
@@ -258,8 +272,8 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
+func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time, dbm *gorp.DbMap) *core.Cluster {
+	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow, dbm)
 	if errs.IsEmpty() {
 		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
 	}

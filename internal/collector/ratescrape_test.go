@@ -84,6 +84,7 @@ func commonRateScrapeTestSetup(t *testing.T) (s test.Setup, job jobloop.Job, wit
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testRateScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithClusterLevelRecords,
 	)
 	s.Cluster.Config.QuotaDistributionConfigs = []core.QuotaDistributionConfiguration{
 		{
@@ -160,6 +161,11 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (2, 1, 'things', 1, 'az-aware');
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'unittest', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'otherrate', 42, 120000000000, '');
 		INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'secondrate', 10, 1000000000, '');
@@ -167,7 +173,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		INSERT INTO project_services (id, project_id, type, stale, rates_stale, next_scrape_at, rates_next_scrape_at) VALUES (2, 2, 'unittest', TRUE, TRUE, 0, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
-	`)
+	`, s.Clock.Now().Unix())
 
 	// first Scrape should create the entries
 	s.Clock.StepBy(scrapeInterval)
@@ -263,7 +269,24 @@ func Test_RateScrapeFailure(t *testing.T) {
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	tr0.AssertEqualToFile("fixtures/scrape0.sql")
+	//nolint:dupword // false positive on "TRUE, TRUE"
+	tr0.AssertEqualf(`
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
+		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
+		
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (2, 1, 'things', 1, 'az-aware');
+		
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'unittest', %[1]d, 1);
+		
+		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
+		
+		INSERT INTO project_services (id, project_id, type, stale, rates_stale, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'unittest', TRUE, TRUE, 0, 0);
+		INSERT INTO project_services (id, project_id, type, stale, rates_stale, next_scrape_at, rates_next_scrape_at) VALUES (2, 2, 'unittest', TRUE, TRUE, 0, 0);
+		
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
+    `, s.Clock.Now().Unix())
 
 	// ScrapeRates should not touch the DB when scraping fails
 	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))

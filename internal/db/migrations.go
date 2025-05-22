@@ -4,7 +4,7 @@
 package db
 
 var sqlMigrations = map[string]string{
-	//NOTE: Migrations 1 through 44 have been rolled up into one at 2024-10-21
+	// NOTE: Migrations 1 through 44 have been rolled up into one at 2024-10-21
 	// to better represent the current baseline of the DB schema.
 	"044_rollup.down.sql": `
 		DROP TABLE cluster_capacitors;
@@ -355,4 +355,47 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN max_quota_from_backend;
 
 	`,
+	"054_persist_service_info.down.sql": `
+		DROP TABLE cluster_rates;
+		ALTER TABLE cluster_resources
+			DROP COLUMN liquid_version,
+			DROP COLUMN unit,
+			DROP COLUMN topology,
+			DROP COLUMN has_capacity,
+			DROP COLUMN needs_resource_demand,
+			DROP COLUMN has_quota,
+			DROP COLUMN attributes_json;
+		ALTER TABLE cluster_services
+			DROP COLUMN liquid_version,
+			DROP COLUMN capacity_metric_families_json,
+			DROP COLUMN usage_metric_families_json,
+			DROP COLUMN usage_report_needs_project_metadata,
+			DROP COLUMN quota_update_needs_project_metadata;
+	`,
+	"054_persist_service_info.up.sql": `
+		CREATE TABLE cluster_rates (
+			id              BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id      BIGINT     NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+			name            TEXT       NOT NULL,
+			liquid_version  BIGINT     NOT NULL DEFAULT 0,
+			unit            TEXT       NOT NULL DEFAULT '',
+			topology 		TEXT 	   NOT NULL DEFAULT '',
+			has_usage       BOOLEAN    NOT NULL DEFAULT FALSE,
+			UNIQUE (service_id, name)
+		);
+		ALTER TABLE cluster_resources
+			ADD COLUMN liquid_version         BIGINT   NOT NULL DEFAULT 0,
+			ADD COLUMN unit                   TEXT     NOT NULL DEFAULT '',
+			ADD COLUMN topology               TEXT     NOT NULL DEFAULT '',
+			ADD COLUMN has_capacity           BOOLEAN  NOT NULL DEFAULT FALSE,
+			ADD COLUMN needs_resource_demand  BOOLEAN  NOT NULL DEFAULT FALSE,
+			ADD COLUMN has_quota              BOOLEAN  NOT NULL DEFAULT FALSE,
+			ADD COLUMN attributes_json        TEXT     NOT NULL DEFAULT '';
+		ALTER TABLE cluster_services
+			ADD COLUMN liquid_version                         BIGINT   NOT NULL DEFAULT 0,
+			ADD COLUMN capacity_metric_families_json          TEXT     NOT NULL DEFAULT '',
+			ADD COLUMN usage_metric_families_json             TEXT     NOT NULL DEFAULT '',
+			ADD COLUMN usage_report_needs_project_metadata    BOOLEAN  NOT NULL DEFAULT FALSE,
+			ADD COLUMN quota_update_needs_project_metadata    BOOLEAN  NOT NULL DEFAULT FALSE;
+		`,
 }

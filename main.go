@@ -125,7 +125,8 @@ func main() {
 	must.Succeed(err)
 
 	// load configuration and connect to cluster
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))
+	dbm := db.InitORM(must.Return(db.Init()))
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm)
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
@@ -163,13 +164,16 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	}
 	isAuthoritative := osext.GetenvBool("LIMES_AUTHORITATIVE")
 
-	// connect to database
-	dbm := db.InitORM(must.Return(db.Init()))
-
 	// setup mail client if requested
 	mailClient := None[collector.MailClient]()
 	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
 		mailClient = Some(must.Return(collector.NewMailClient(provider, mailConfig.Endpoint)))
+	}
+
+	// bring liquidConnections into sync with the database
+	err := cluster.ReconcileLiquidConnections()
+	if err != nil {
+		logg.Fatal("reconciling liquid connections on startup failed: %w", err)
 	}
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
@@ -177,7 +181,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// that for now, and instead construct worker threads in such a way that they
 	// can be terminated at any time without leaving the system in an inconsistent
 	// state, mostly through usage of DB transactions.)
-	c := collector.NewCollector(cluster, dbm)
+	c := collector.NewCollector(cluster)
 	resourceScrapeJob := c.ResourceScrapeJob(nil)
 	rateScrapeJob := c.RateScrapeJob(nil)
 	syncQuotaToBackendJob := c.SyncQuotaToBackendJob(nil)
@@ -207,16 +211,16 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	}
 
 	// use main thread to emit Prometheus metrics
-	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})
-	prometheus.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: cluster, DB: dbm})
-	prometheus.MustRegister(&collector.UsageCollectionMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: cluster.DB})
+	prometheus.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: cluster, DB: cluster.DB})
+	prometheus.MustRegister(&collector.UsageCollectionMetricsCollector{Cluster: cluster, DB: cluster.DB})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return dbm.Db.PingContext(ctx)
+				return cluster.DB.Db.PingContext(ctx)
 			},
 		},
 	))
@@ -233,9 +237,6 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
-
-	// connect to database
-	dbm := db.InitORM(must.Return(db.Init()))
 
 	// connect to Hermes RabbitMQ if requested
 	auditor := audittools.NewNullAuditor()
@@ -259,7 +260,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, dbm, tokenValidator, auditor, time.Now, api.GenerateTransferToken),
+		api.NewV1API(cluster, tokenValidator, auditor, time.Now, api.GenerateTransferToken),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
@@ -279,14 +280,11 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 		printUsageAndExit(1)
 	}
 
-	// connect to database
-	dbm := db.InitORM(must.Return(db.Init()))
-
 	// serve data metrics
 	skipZero := osext.GetenvBool("LIMES_DATA_METRICS_SKIP_ZERO")
 	dmr := collector.DataMetricsReporter{
 		Cluster:      cluster,
-		DB:           dbm,
+		DB:           cluster.DB,
 		ReportZeroes: !skipZero,
 	}
 
@@ -296,7 +294,7 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return dbm.Db.PingContext(ctx)
+				return cluster.DB.Db.PingContext(ctx)
 			},
 		},
 	))

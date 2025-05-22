@@ -57,7 +57,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := collector.NewCollector(p.Cluster, p.DB)
+	c := collector.NewCollector(p.Cluster)
 	newDomainUUIDs, err := c.ScanDomains(r.Context(), collector.ScanDomainsOpts{})
 	if respondwith.ErrorText(w, err) {
 		return

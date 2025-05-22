@@ -5,7 +5,6 @@ package collector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -153,50 +152,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
+	// a cluster_resources update is not necessary, as it is done within c.scrapeLiquidCapacity if necessary
 	// collect existing cluster_resources
-	var dbResources []db.ClusterResource
-	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources`)
+	var dbOwnedResources []db.ClusterResource
+	_, err = tx.Select(&dbOwnedResources, `SELECT cr.* FROM cluster_resources as cr JOIN cluster_services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
-	}
-
-	// define the scope of the update
-	var dbOwnedResources []db.ClusterResource
-	for _, res := range dbResources {
-		if res.ServiceID == service.ID {
-			dbOwnedResources = append(dbOwnedResources, res)
-		}
-	}
-
-	var wantedResources []liquid.ResourceName
-
-	for resourceName := range capacityData.Resources {
-		if !c.Cluster.HasResource(service.Type, resourceName) {
-			logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", service.ID, service.Type, resourceName)
-			continue
-		}
-		wantedResources = append(wantedResources, resourceName)
-	}
-	slices.Sort(wantedResources)
-
-	// create and delete cluster_resources for this cluster_service as needed
-	setUpdate := db.SetUpdate[db.ClusterResource, liquid.ResourceName]{
-		ExistingRecords: dbOwnedResources,
-		WantedKeys:      wantedResources,
-		KeyForRecord: func(resource db.ClusterResource) liquid.ResourceName {
-			return resource.Name
-		},
-		Create: func(resourceName liquid.ResourceName) (db.ClusterResource, error) {
-			return db.ClusterResource{
-				ServiceID: service.ID,
-				Name:      resourceName,
-			}, nil
-		},
-		Update: func(res *db.ClusterResource) (err error) { return nil },
-	}
-	dbOwnedResources, err = setUpdate.Execute(tx)
-	if err != nil {
-		return err
 	}
 
 	// collect cluster_az_resources for the cluster_resources owned by this capacitor
@@ -218,6 +179,10 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
 	for _, res := range dbOwnedResources {
 		resourceData := capacityData.Resources[res.Name]
+		if resourceData == nil {
+			logg.Error("could not find resource %s in capacity data of %s, probably the liquid did not bump the version correctly", res.Name, service.Type)
+			continue
+		}
 
 		setUpdate := db.SetUpdate[db.ClusterAZResource, liquid.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
@@ -235,7 +200,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 				data := resourceData.PerAZ[azRes.AvailabilityZone]
 				azRes.RawCapacity = data.Capacity
 				azRes.Usage = data.Usage
-				azRes.SubcapacitiesJSON, err = renderListToJSON("subcapacities", data.Subcapacities)
+				azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", data.Subcapacities)
 				return err
 			},
 		}
@@ -274,7 +239,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.DB, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.Cluster, now)
 		if err != nil {
 			return err
 		}
@@ -334,15 +299,4 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 		}
 	}
 	return tx.Commit()
-}
-
-func renderListToJSON[T any](attribute string, entries []T) (string, error) {
-	if len(entries) == 0 {
-		return "", nil
-	}
-	buf, err := json.Marshal(entries)
-	if err != nil {
-		return "", fmt.Errorf("could not convert %s to JSON: %w", attribute, err)
-	}
-	return string(buf), nil
 }

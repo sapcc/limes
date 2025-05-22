@@ -11,7 +11,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -83,7 +82,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
 	resInfo := cluster.InfoForResource(serviceType, resourceName)
 	if !resInfo.HasQuota {
@@ -97,7 +96,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	// run the quota computation in a transaction (this must be done inside this
 	// function because we want to commit this wide-reaching transaction before
 	// starting to talk to backend services for ApplyBackendQuota)
-	tx, err := dbm.Begin()
+	tx, err := cluster.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -229,11 +228,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	if err != nil {
 		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resourceName, err)
 	}
-
 	return tx.Commit()
-
-	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.
-	// We wait for the next scrape cycle to come around and notice that `backend_quota != quota`.
 }
 
 // Calculation space for a single project AZ resource.

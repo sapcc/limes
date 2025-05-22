@@ -135,17 +135,13 @@ func Test_ScanCapacity(t *testing.T) {
 	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
+		// cluster_services must be created as a baseline
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
-
-	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
 	insertTime := s.Clock.Now()
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})
-		mustT(t, err)
-	}
 
 	capacityReport := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
@@ -179,9 +175,11 @@ func Test_ScanCapacity(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (1, 'shared', %d);
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (2, 'unshared', %d);
-	`, insertTime.Unix(), insertTime.Unix())
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota) VALUES (2, 2, 'capacity', 1, 'B', 'flat', TRUE, TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', %[1]d, 1);
+	`, s.Clock.Now().Unix())
 
 	// check that capacity records are created correctly (and that nonexistent
 	// resources are ignored by the scraper)
@@ -190,8 +188,6 @@ func Test_ScanCapacity(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'any', 42, 8);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 2, 'any', 42, 8);
-		INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
-		INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 2, 'capacity');
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared';
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
@@ -221,21 +217,41 @@ func Test_ScanCapacity(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	// next scan should throw out the crap records and recreate the deleted ones;
-	// also change the reported Capacity to see if updates are getting through
 	capacityReport.Resources["things"].PerAZ["any"].Capacity = 23
 	capacityReport.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
+	tr.DBChanges().Ignore()
+
+	// if we don't bump the version, we will observe that for "things" nothing happens (as it is unknown
+	// to the database) and for "unknown" there is no value
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'unshared';
+	`,
+		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
+	)
+
+	// now we bump the version, so that the services and resources are reconciled
+	mockLiquidClient.IncrementServiceInfoVersion()
+	mockLiquidClient.IncrementCapacityReportInfoVersion()
+	mockLiquidClient2.IncrementServiceInfoVersion()
+	mockLiquidClient2.IncrementCapacityReportInfoVersion()
+	setClusterCapacitorsStale(t, s)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM cluster_az_resources WHERE id = 3 AND resource_id = 3 AND az = 'any';
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (4, 4, 'any', 23, 4);
-		DELETE FROM cluster_resources WHERE id = 1 AND service_id = 1 AND name = 'things';
-		INSERT INTO cluster_resources (id, service_id, name) VALUES (4, 1, 'things');
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity';
+		DELETE FROM cluster_resources WHERE id = 3 AND service_id = 2 AND name = 'unknown';
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE);
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'unshared';
 	`,
@@ -272,23 +288,19 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		// cluster_services must be created as a baseline
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
-	// cluster_services are created as a baseline (this is usually done by the CheckConsistencyJob)
-	insertTime := s.Clock.Now()
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})
-		mustT(t, err)
-	}
-
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (1, 'shared', %d);
-	`, insertTime.Unix())
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, capacity_metric_families_json) VALUES (1, 'shared', %[1]d, 1, '{"limes_unittest_capacity_larger_half":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_capacity_smaller_half":{"type":"gauge","help":"","labelKeys":null}}');
+	`, s.Clock.Now().Unix())
 
 	// check that scraping correctly updates subcapacities on an existing record
 	buf := must.Return(json.Marshal(map[string]any{"az": "az-one"}))
@@ -339,7 +351,6 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (1, 1, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]');
-		INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -418,23 +429,19 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		// cluster_services must be created as a baseline
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
-	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
-	insertTime := s.Clock.Now()
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})
-		mustT(t, err)
-	}
-
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (1, 'shared', %d);
-	`, insertTime.Unix())
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+	`, s.Clock.Now().Unix())
 
 	capacityReport := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
@@ -462,7 +469,6 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 21, 4);
 	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 21, 4);
-	INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
 	UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -515,25 +521,24 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		// cluster_services must be created as a baseline
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
-	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
-	insertTime := s.Clock.Now()
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})
-		mustT(t, err)
-	}
-
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (1, 'shared', %d);
-	`, insertTime.Unix())
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+	`, s.Clock.Now().Unix())
 
 	// adjust the capacity report to not show any resources
+	// this is a state which should not happen in production - it leads to a logged error
 	res := srvInfo.Resources["capacity"]
 	res.HasCapacity = false
 	srvInfo.Resources["capacity"] = res
@@ -562,6 +567,20 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
+
+	// now we bump the version, so that the services and resources are reconciled
+	mockLiquidClient.IncrementServiceInfoVersion()
+	mockLiquidClient.IncrementCapacityReportInfoVersion()
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+
+	tr.DBChanges().AssertEqualf(`
+        UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE cluster_services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
 }
 
 func Test_ScanManualCapacity(t *testing.T) {
@@ -572,25 +591,23 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
+		test.WithClusterLevelRecords,
 	)
 
 	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
-	// cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
-	insertTime := s.Clock.Now()
-	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
-		err := s.DB.Insert(&db.ClusterService{Type: serviceType, NextScrapeAt: insertTime})
-		mustT(t, err)
-	}
-
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at) VALUES (1, 'shared', %d);
-	`, insertTime.Unix())
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+	`, s.Clock.Now().Unix())
 
 	// adjust the capacity report to not show any capacity
+	// this is a state which should not happen in production - it leads to a logged error
 	res := srvInfo.Resources["capacity"]
 	res.HasCapacity = false
 	srvInfo.Resources["capacity"] = res
@@ -603,9 +620,22 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 1000000);
-		INSERT INTO cluster_resources (id, service_id, name) VALUES (1, 1, 'things');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 2, 'any', 1000000);
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+
+	// now we bump the version, so that the services and resources are reconciled
+	mockLiquidClient.IncrementServiceInfoVersion()
+	mockLiquidClient.IncrementCapacityReportInfoVersion()
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+
+	tr.DBChanges().AssertEqualf(`
+        UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE cluster_services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
@@ -651,6 +681,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+		test.WithClusterLevelRecords,
 	)
 	c := getCollector(t, s)
 	scrapeJob = c.CapacityScrapeJob(s.Registry)
