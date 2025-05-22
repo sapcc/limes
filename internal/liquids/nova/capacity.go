@@ -172,6 +172,11 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// enumerate matching hypervisors, prepare data structures for binpacking
 	hypervisorsByAZ := make(map[liquid.AvailabilityZone]BinpackHypervisors)
+	for _, az := range req.AllAZs {
+		// explicitly initializing entries for each AZ here ensures that we report a result for each AZ
+		// (as required by Limes), even if there is no compute capacity in that AZ
+		hypervisorsByAZ[az] = nil
+	}
 	shadowedHypervisorsByAZ := make(map[liquid.AvailabilityZone][]MatchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
 	err = l.HypervisorSelection.ForeachHypervisor(ctx, l.NovaV2, l.PlacementV1, func(h MatchingHypervisor) error {
