@@ -199,6 +199,9 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 			Update: func(azRes *db.ClusterAZResource) (err error) {
 				data := resourceData.PerAZ[azRes.AvailabilityZone]
 				azRes.RawCapacity = data.Capacity
+				if data.Capacity > 0 {
+					azRes.LastNonzeroRawCapacity = Some(data.Capacity)
+				}
 				azRes.Usage = data.Usage
 				azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", data.Subcapacities)
 				return err

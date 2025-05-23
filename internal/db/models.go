@@ -60,6 +60,11 @@ type ClusterAZResource struct {
 	RawCapacity       uint64                 `db:"raw_capacity"`
 	Usage             Option[uint64]         `db:"usage"`
 	SubcapacitiesJSON string                 `db:"subcapacities"`
+
+	// LastNonzeroRawCapacity is None initially, and gets filled whenever capacity scrape sees a non-zero capacity value.
+	// We use this as a signal for ACPQ to distinguish new AZs in buildup that should be ignored for the purposes of base quota overcommit,
+	// from existing AZs with faulty capacity recording that should block base quota overcommit.
+	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
 }
 
 // ClusterRate contains a record from the `cluster_rates` table.

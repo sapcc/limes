@@ -305,13 +305,14 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	// enumerate which AZs allow quota overcommit
 	allowsQuotaOvercommit = make(map[limes.AvailabilityZone]bool)
 	isAZAware := false
-	allRealAZsAllowQuotaOvercommit := true
+	allowsQuotaOvercommitInAny := true
 	for az := range isRelevantAZ {
-		allowsQuotaOvercommit[az] = stats[az].AllowsQuotaOvercommit(cfg)
+		allowsGrowthQuotaOvercommit, allowsBaseQuotaOvercommit := stats[az].allowsQuotaOvercommit(cfg)
+		allowsQuotaOvercommit[az] = allowsGrowthQuotaOvercommit
 		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
 			isAZAware = true
-			if !allowsQuotaOvercommit[az] {
-				allRealAZsAllowQuotaOvercommit = false
+			if !allowsBaseQuotaOvercommit {
+				allowsQuotaOvercommitInAny = false
 			}
 		}
 	}
@@ -319,7 +320,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
 	// in all the real AZs, so it can only allow quota overcommit if all AZs do
 	if isAZAware && resInfo.Topology != liquid.AZSeparatedTopology {
-		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allRealAZsAllowQuotaOvercommit
+		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allowsQuotaOvercommitInAny
 	}
 
 	// initialize data structure where new quota will be computed (this uses eager

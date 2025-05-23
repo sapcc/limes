@@ -9,10 +9,10 @@ INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (2, 
 INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (3, 2, 'capacity', 1);
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 2, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 3, 'az-one', 90, 12, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (4, 3, 'az-two', 95, 15, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (2, 2, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]', 246);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (3, 3, 'az-one', 90, 12, '', 90);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (4, 3, 'az-two', 95, 15, '', 95);
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

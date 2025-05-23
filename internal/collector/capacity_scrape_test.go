@@ -186,8 +186,8 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'any', 42, 8);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 2, 'any', 42, 8);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 42, 8, 42);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (2, 2, 'any', 42, 8, 42);
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared';
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
@@ -248,7 +248,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM cluster_az_resources WHERE id = 3 AND resource_id = 3 AND az = 'any';
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (4, 4, 'any', 23, 4);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (4, 4, 'any', 23, 4, 23);
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity';
 		DELETE FROM cluster_resources WHERE id = 3 AND service_id = 2 AND name = 'unknown';
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE);
@@ -350,7 +350,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (1, 1, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', 42);
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -386,7 +386,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]' WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 10 WHERE id = 1 AND resource_id = 1 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -467,8 +467,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 21, 4);
-	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 21, 4);
+	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (1, 1, 'az-one', 21, 4, 21);
+	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (2, 1, 'az-two', 21, 4, 21);
 	UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -484,8 +484,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -508,6 +508,97 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`, scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix())
+}
+
+func TestScanCapacityReportsZeroValues(t *testing.T) {
+	srvInfo := test.DefaultLiquidServiceInfo()
+	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	s := test.NewSetup(t,
+		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		// cluster_services must be created as a baseline
+		test.WithClusterLevelRecords,
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	// when the capacity report shows zero capacity and usage...
+	res := srvInfo.Resources["things"]
+	res.HasCapacity = true
+	srvInfo.Resources["things"] = res
+	zeroReport := liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one": {Capacity: 0, Usage: Some[uint64](0)},
+					"az-two": {Capacity: 0, Usage: Some[uint64](0)},
+				},
+			},
+			"things": {
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 0, Usage: Some[uint64](0)}),
+			},
+		},
+	}
+	mockLiquidClient.SetCapacityReport(zeroReport)
+
+	// ...scrape will record those values faithfully and not set "last_nonzero_raw_capacity"
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 0, 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 0, 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (3, 2, 'any', 0, 0);
+		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+
+	// when the capacity report shows non-zero capacity and usage...
+	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one": {Capacity: 10, Usage: Some[uint64](5)},
+					"az-two": {Capacity: 10, Usage: Some[uint64](5)},
+				},
+			},
+			"things": {
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 20, Usage: Some[uint64](10)}),
+			},
+		},
+	})
+
+	// ...scrape will record those values and set "last_nonzero_raw_capacity" because a non-zero value was observed
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 3 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+
+	// when the capacity report once again shows zero capacity and usage afterwards...
+	mockLiquidClient.SetCapacityReport(zeroReport)
+
+	// ...scrape will record those values and, once again, leave "last_nonzero_raw_capacity" untouched
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
 }
 
 func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
@@ -575,7 +666,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-        UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE cluster_services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared';
 	`,
@@ -620,7 +711,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 2, 'any', 1000000);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, last_nonzero_raw_capacity) VALUES (1, 2, 'any', 1000000, 1000000);
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -633,7 +724,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-        UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE cluster_services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared';
 	`,

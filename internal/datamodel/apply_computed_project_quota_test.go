@@ -508,7 +508,8 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 			},
 		},
 		"az-two": {
-			Capacity: 0,
+			Capacity:                      0,
+			ObservedNonzeroCapacityBefore: false,
 			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				// az-two is completely devoid of both capacity and usage
 				401: constantUsage(0),
@@ -550,7 +551,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 	// has 0 capacity and 0 usage, so calculating the utilization ratio as
 	// (usage / capacity) gave a NaN from divide-by-zero and thus blocked quota
 	// overcommit for base quota in the "any" AZ.
-	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+	expected := acpqGlobalTarget{
 		"az-one": {
 			401: {Allocated: 2}, // 1 * 1.2 = 1.2 rounded up because of GrowthMinimum
 			402: {Allocated: 0},
@@ -579,7 +580,47 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 			404: {Allocated: 5},
 			405: {Allocated: 5},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
+	}
+	expectACPQResult(t, input, cfg, nil, expected, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
+
+	// Same result if we have seen capacity in az-two before, but now it's gone and there is also no usage.
+	// We assume that the AZ is in decom, and do not have it block base quota overcommit, either.
+	input["az-two"] = clusterAZAllocationStats{
+		Capacity:                      0,
+		ObservedNonzeroCapacityBefore: true,
+		ProjectStats:                  input["az-two"].ProjectStats,
+	}
+	expectACPQResult(t, input, cfg, nil, expected, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
+
+	// The situation looks different if we have seen capacity in az-two before, but now it's gone while usage is still reported.
+	// We assume that this is because of a bug in the liquid, and will choose the safe option of disallowing base quota overcommit.
+	input["az-two"] = clusterAZAllocationStats{
+		Capacity:                      0,
+		ObservedNonzeroCapacityBefore: true,
+		ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			401: constantUsage(0),
+			402: constantUsage(0),
+			403: constantUsage(1),
+			404: constantUsage(0),
+			405: constantUsage(0),
+		},
+	}
+	expected["az-two"] = acpqAZTarget{
+		401: {Allocated: 0},
+		402: {Allocated: 0},
+		403: {Allocated: 1}, // because of existing usage
+		404: {Allocated: 0},
+		405: {Allocated: 0},
+	}
+	expected["any"] = acpqAZTarget{
+		// after assigning AZ-aware quotas, there is 4 unused capacity in az-three, which gets distributed as base quota
+		401: {Allocated: 1},
+		402: {Allocated: 1},
+		403: {Allocated: 0},
+		404: {Allocated: 1},
+		405: {Allocated: 1},
+	}
+	expectACPQResult(t, input, cfg, nil, expected, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
 
 func TestAllForbiddenWithAZSeparated(t *testing.T) {
