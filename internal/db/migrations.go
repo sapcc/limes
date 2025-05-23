@@ -334,11 +334,11 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_resources
 			ADD COLUMN min_quota_from_backend BIGINT DEFAULT NULL,
 			ADD COLUMN max_quota_from_backend BIGINT DEFAULT NULL;
-			
+
 		UPDATE project_resources
 			SET max_quota_from_backend = 0
 			WHERE forbidden = TRUE;
-		
+
 		ALTER TABLE project_resources
 			DROP COLUMN forbidden;
 	`,
@@ -353,7 +353,6 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_resources
 			DROP COLUMN min_quota_from_backend,
 			DROP COLUMN max_quota_from_backend;
-
 	`,
 	"054_persist_service_info.down.sql": `
 		DROP TABLE cluster_rates;
@@ -379,7 +378,7 @@ var sqlMigrations = map[string]string{
 			name            TEXT       NOT NULL,
 			liquid_version  BIGINT     NOT NULL DEFAULT 0,
 			unit            TEXT       NOT NULL DEFAULT '',
-			topology 		TEXT 	   NOT NULL DEFAULT '',
+			topology        TEXT       NOT NULL DEFAULT '',
 			has_usage       BOOLEAN    NOT NULL DEFAULT FALSE,
 			UNIQUE (service_id, name)
 		);
@@ -397,5 +396,13 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN usage_metric_families_json             TEXT     NOT NULL DEFAULT '',
 			ADD COLUMN usage_report_needs_project_metadata    BOOLEAN  NOT NULL DEFAULT FALSE,
 			ADD COLUMN quota_update_needs_project_metadata    BOOLEAN  NOT NULL DEFAULT FALSE;
-		`,
+	`,
+	"055_add_cluster_az_resources_last_nonzero_raw_capacity.down.sql": `
+		ALTER TABLE cluster_az_resources
+			DROP COLUMN last_nonzero_raw_capacity;
+	`,
+	"055_add_cluster_az_resources_last_nonzero_raw_capacity.up.sql": `
+		ALTER TABLE cluster_az_resources
+			ADD COLUMN last_nonzero_raw_capacity BIGINT DEFAULT NULL;
+	`,
 }

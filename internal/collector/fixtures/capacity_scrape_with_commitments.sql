@@ -13,14 +13,14 @@ INSERT INTO cluster_resources (id, service_id, name) VALUES (2, 1, 'capacity');
 INSERT INTO cluster_resources (id, service_id, name) VALUES (3, 2, 'things');
 INSERT INTO cluster_resources (id, service_id, name) VALUES (4, 2, 'capacity');
 
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 42, 8);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 42, 8);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (3, 2, 'az-one', 42, 8);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (4, 2, 'az-two', 42, 8);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (5, 3, 'az-one', 23, 4);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (6, 3, 'az-two', 23, 4);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (7, 4, 'az-one', 23, 4);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (8, 4, 'az-two', 23, 4);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (1, 1, 'az-one', 42, 8, 42);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (2, 1, 'az-two', 42, 8, 42);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (3, 2, 'az-one', 42, 8, 42);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (4, 2, 'az-two', 42, 8, 42);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (5, 3, 'az-one', 23, 4, 23);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (6, 3, 'az-two', 23, 4, 23);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (7, 4, 'az-one', 23, 4, 23);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (8, 4, 'az-two', 23, 4, 23);
 
 -- one domain
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

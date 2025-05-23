@@ -26,28 +26,36 @@ import (
 // - ConfirmPendingCommitments
 type clusterAZAllocationStats struct {
 	Capacity uint64
+
+	// Whether last_nonzero_raw_capacity is not NULL.
+	ObservedNonzeroCapacityBefore bool
+
 	// Using db.ProjectResourceID as a key here is only somewhat arbitrary:
 	// ProjectServiceID and ProjectID could also be used, but then we would have to use more JOINs in some queries.
 	ProjectStats map[db.ProjectResourceID]projectAZAllocationStats
 }
 
-func (c clusterAZAllocationStats) AllowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) bool {
-	if cfg.AllowQuotaOvercommitUntilAllocatedPercent == 0 {
-		// optimization
-		return false
-	}
-
+// Returns two separate opinions:
+//   - Whether growth quota overcommit is allowed in this AZ, and
+//   - whether this AZ is fine with allowing base quota overcommit in the `any` AZ.
+func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) (allowsGrowth, allowsBase bool) {
 	usedCapacity := uint64(0)
 	for _, stats := range c.ProjectStats {
 		usedCapacity += max(stats.Committed, stats.Usage)
 	}
-	if c.Capacity == 0 {
-		// explicit special case to avoid divide-by-zero below
-		return usedCapacity == 0
-	}
 
-	usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
-	return usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
+	if c.Capacity == 0 {
+		// If we have no capacity, we will definitely forbid growth quota overcommit in this AZ.
+		// But we do not block base quota overcommit in some specific scenarios:
+		// - when the AZ never had any capacity (either because this resource is just not available here, or because it is still in buildup)
+		// - when there is no usage either (e.g. during decommissioning)
+		return false, !c.ObservedNonzeroCapacityBefore || usedCapacity == 0
+	} else {
+		// If there is a reliable capacity measurement, we can voice a strong opinion.
+		usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
+		result := usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
+		return result, result
+	}
 }
 
 func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64, behavior core.CommitmentBehavior) bool {
@@ -104,7 +112,7 @@ type projectAZAllocationStats struct {
 
 var (
 	getRawCapacityInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT car.az, car.raw_capacity
+		SELECT car.az, car.raw_capacity, car.last_nonzero_raw_capacity IS NOT NULL
 		  FROM cluster_services cs
 		  JOIN cluster_resources cr ON cr.service_id = cs.id
 		  JOIN cluster_az_resources car ON car.resource_id = cr.id
@@ -136,12 +144,14 @@ func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.Re
 	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
 	err := sqlext.ForeachRow(dbi, getRawCapacityInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			az          limes.AvailabilityZone
-			rawCapacity uint64
+			az                            limes.AvailabilityZone
+			rawCapacity                   uint64
+			observedNonzeroCapacityBefore bool
 		)
-		err := rows.Scan(&az, &rawCapacity)
+		err := rows.Scan(&az, &rawCapacity, &observedNonzeroCapacityBefore)
 		result[az] = clusterAZAllocationStats{
-			Capacity: overcommitFactor.ApplyTo(rawCapacity),
+			Capacity:                      overcommitFactor.ApplyTo(rawCapacity),
+			ObservedNonzeroCapacityBefore: observedNonzeroCapacityBefore,
 		}
 		return err
 	})

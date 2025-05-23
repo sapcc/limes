@@ -7,10 +7,10 @@ INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_versi
 INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (1, 1, 'capacity', 1);
 INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (2, 2, 'capacity', 1);
 
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'az-one', 10, 6, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 1, 'az-two', 20, 6, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 2, 'az-one', 30, 6, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (4, 2, 'az-two', 40, 6, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'az-one', 10, 6, '', 10);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (2, 1, 'az-two', 20, 6, '', 20);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (3, 2, 'az-one', 30, 6, '', 30);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (4, 2, 'az-two', 40, 6, '', 40);
 
 -- two domains (default setup for StaticDiscoveryPlugin)
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
