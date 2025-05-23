@@ -51,39 +51,38 @@ func (c clusterAZAllocationStats) AllowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 }
 
 func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64, behavior core.CommitmentBehavior) bool {
-	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
-	usedCapacity := uint64(0)
+	// calculate `sum_over_projects(max(committed, usage))` before and after the requested changes
+	var (
+		usedCapacityBefore = uint64(0)
+		usedCapacityAfter  = uint64(0)
+	)
 	for projectResourceID, stats := range c.ProjectStats {
-		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
-		usedCapacity += max(committed, stats.Usage)
+		usedCapacityBefore += max(stats.Committed, stats.Usage)
+		committedAfter := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
+		usedCapacityAfter += max(committedAfter, stats.Usage)
 	}
 
-	// commitment can be confirmed if it and all other commitments and usage fit in the committable portion of the total capacity
+	// all changes that do not increase `usedCapacity` are safe to allow
+	if usedCapacityAfter <= usedCapacityBefore {
+		logg.Debug("CanAcceptCommitmentChanges: accepted because usedCapacity does not increase (%d -> %d)",
+			usedCapacityBefore, usedCapacityAfter)
+		return true
+	}
+
+	// commitment increases can be confirmed if all commitments and usage fit in the committable portion of the total capacity
 	committableCapacity := c.Capacity
 	if thresholdPercent, ok := behavior.UntilPercent.Unpack(); ok {
 		committableCapacity = uint64(float64(c.Capacity) * thresholdPercent / 100)
 	}
-	if usedCapacity <= committableCapacity {
-		logg.Debug("CanAcceptCommitmentChanges: accepted")
+	if usedCapacityAfter <= committableCapacity {
+		logg.Debug("CanAcceptCommitmentChanges: accepted because usedCapacity increases within committableCapacity (%d -> %d <= %d)",
+			usedCapacityBefore, usedCapacityAfter, committableCapacity)
 		return true
 	}
 
-	// As an exception, even if capacity is exceeded:
-	// - Commitments can always be reduced.
-	// - Commitments can always be increased to cover existing usage.
-	// This rule is designed to accommodate edits that do not change `usedCapacity` as computed above.
-	for projectResourceID, stats := range c.ProjectStats {
-		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
-
-		if additions[projectResourceID] > 0 && committed > stats.Usage {
-			logg.Debug("CanAcceptCommitmentChanges: forbidden by commitment target %d > usage %d in resourceID = %d",
-				committed, stats.Usage, projectResourceID)
-			return false
-		}
-	}
-
-	logg.Debug("CanAcceptCommitmentChanges: accepted")
-	return true
+	logg.Debug("CanAcceptCommitmentChanges: rejected because usedCapacity grows to exceed committableCapacity (%d -> %d > %d)",
+		usedCapacityBefore, usedCapacityAfter, committableCapacity)
+	return false
 }
 
 // Like `lhs - rhs`, but never underflows below 0.

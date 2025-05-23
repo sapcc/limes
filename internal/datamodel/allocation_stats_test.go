@@ -64,4 +64,14 @@ func TestCanAcceptCommitmentChanges(t *testing.T) {
 	subtractions := map[db.ProjectResourceID]uint64{2: 3}
 	result = stats.CanAcceptCommitmentChanges(nil, subtractions, behavior)
 	assert.DeepEqual(t, "CanAcceptCommitmentChanges", result, true)
+
+	// acceptable! reported capacity is overcommitted, but moving an unused commitment from one project
+	// to another is always allowed because the total amount of allocations does not increase
+	stats.Capacity = 50
+	stats.ProjectStats[4] = projectAZAllocationStats{Committed: 50, Usage: 10}
+	stats.ProjectStats[5] = projectAZAllocationStats{Committed: 0, Usage: 0}
+	additions = map[db.ProjectResourceID]uint64{5: 30}
+	subtractions = map[db.ProjectResourceID]uint64{4: 30}
+	result = stats.CanAcceptCommitmentChanges(additions, subtractions, behavior)
+	assert.DeepEqual(t, "CanAcceptCommitmentChanges", result, true)
 }
