@@ -88,7 +88,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) ([]*limesresources.DomainReport, error) {
 	var fields map[string]any
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
@@ -158,7 +158,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if !filter.Includes[dbServiceType][dbResourceName] {
 			return nil
 		}
-		service, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
+		service, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
 
 		service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
 		service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
@@ -216,7 +216,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if !filter.Includes[dbServiceType][dbResourceName] {
 				return nil
 			}
-			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
+			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
 
 			if resource.PerAZ == nil {
 				resource.PerAZ = make(limesresources.DomainAZResourceReports)
@@ -260,7 +260,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if !filter.Includes[dbServiceType][dbResourceName] {
 				return nil
 			}
-			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
+			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
 
 			if resource.PerAZ[az] == nil {
 				return nil
@@ -326,7 +326,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	return result, nil
 }
 
-func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
@@ -342,7 +342,8 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 
 	resource, exists := service.Resources[apiIdentity.Name]
 	if !exists {
-		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 		resource = &limesresources.DomainResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),

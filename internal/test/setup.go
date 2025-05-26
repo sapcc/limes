@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
@@ -41,7 +42,8 @@ type setupParams struct {
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
-	WithClusterLevelRecords  bool
+	WithLiquidConnections    bool
+	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -83,11 +85,22 @@ func WithProject(p core.KeystoneProject) SetupOption {
 	}
 }
 
-// WithClusterLevelRecords is a SetupOption that sets up the Cluster the same ways
-// as the limes-collect would do. Namely, this reconciles the LiquidConnections
-// on startup.
-func WithClusterLevelRecords(params *setupParams) {
-	params.WithClusterLevelRecords = true
+// WithLiquidConnections is a SetupOption that sets up the Cluster the same way
+// as the limes-collect task would do. This means a) the LiquidConnections are filled
+// and b) persisted to the database.
+func WithLiquidConnections(params *setupParams) {
+	params.WithLiquidConnections = true
+}
+
+// WithPersistedServiceInfo is a SetupOption that fills ServiceInfo into the DB before setting up the Cluster instance.
+// This is used to test how Cluster.Connect() reacts to preexisting metadata in the DB.
+func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOption {
+	return func(params *setupParams) {
+		if params.PersistedServiceInfo == nil {
+			params.PersistedServiceInfo = make(map[db.ServiceType]liquid.ServiceInfo)
+		}
+		params.PersistedServiceInfo[st] = si
+	}
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
@@ -157,13 +170,27 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB)
-	if params.WithClusterLevelRecords {
-		err := s.Cluster.ReconcileLiquidConnections()
+
+	// we need the Cluster for the availability zones, so create it first
+	var errs errext.ErrorSet
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), s.Clock.Now, s.DB, params.WithLiquidConnections)
+	failIfErrs(t, errs)
+
+	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
+	for serviceType, serviceInfo := range params.PersistedServiceInfo {
+		err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Clock.Now(), s.DB)
 		if err != nil {
-			logg.Fatal("failed to reconcile liquid connections: %w", err)
+			t.Fatal(err)
 		}
 	}
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	failIfErrs(t, errs)
+
+	serviceInfos, err := s.Cluster.AllServiceInfos()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -235,7 +262,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				resInfos := s.Cluster.LiquidConnections[serviceType].ServiceInfo().Resources
+				resInfos := core.InfoForService(serviceInfos, serviceType).Resources
 				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
@@ -292,16 +319,12 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time, dbm *gorp.DbMap) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow, dbm)
-	if errs.IsEmpty() {
-		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
-	}
+func failIfErrs(t *testing.T, errs errext.ErrorSet) {
+	t.Helper()
 	for _, err := range errs {
 		t.Error(err)
 	}
 	if t.Failed() {
 		t.FailNow()
 	}
-	return cluster
 }

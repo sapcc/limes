@@ -6,8 +6,6 @@ package collector
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strconv"
 	"time"
 
@@ -32,7 +30,9 @@ const (
 )
 
 // CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one ClusterService entry.
-// ClusterResources and ClusterAZResources are managed by this job. ClusterServices are managed by the CheckConsistencyJob.
+// ClusterResources and ClusterAZResources are managed indirectly by this job, because a bump of the InfoVersion
+// on Liquid side causes a reconciliation against the DB. Extraneous ClusterServices are only deleted on startup
+// of the Collector, by Cluster.Connect.
 func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[capacityScrapeTask]{
 		Metadata: jobloop.JobMetadata{
@@ -129,7 +129,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		service.SerializedMetrics = string(serializedMetrics)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		service.ScrapeErrorMessage = ""
-		//NOTE: in this case, we continue below, with the cluster_resources update
+		// NOTE: in this case, we continue below, with the cluster_resources update
 		// the cluster_services row will be updated at the end of the tx
 	} else {
 		err = util.UnpackError(err)
@@ -152,19 +152,19 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// a cluster_resources update is not necessary, as it is done within c.scrapeLiquidCapacity if necessary
 	// collect existing cluster_resources
-	var dbOwnedResources []db.ClusterResource
-	_, err = tx.Select(&dbOwnedResources, `SELECT cr.* FROM cluster_resources as cr JOIN cluster_services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
+	var dbResources []db.ClusterResource
+	_, err = tx.Select(&dbResources, `SELECT cr.* FROM cluster_resources as cr JOIN cluster_services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
 	}
 
 	// collect cluster_az_resources for the cluster_resources owned by this capacitor
-	dbOwnedResourceIDs := make([]any, len(dbOwnedResources))
-	for idx, res := range dbOwnedResources {
-		dbOwnedResourceIDs[idx] = res.ID
+	dbResourceIDs := make([]any, len(dbResources))
+	for idx, res := range dbResources {
+		dbResourceIDs[idx] = res.ID
 	}
 	var dbAZResources []db.ClusterAZResource
-	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbOwnedResourceIDs}, 0)
+	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbResourceIDs}, 0)
 	_, err = tx.Select(&dbAZResources, `SELECT * FROM cluster_az_resources WHERE `+whereClause, queryArgs...)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster AZ resources: %w", err)
@@ -174,40 +174,34 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
 
-	// for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
-	for _, res := range dbOwnedResources {
-		resourceData := capacityData.Resources[res.Name]
-		if resourceData == nil {
-			logg.Error("could not find resource %s in capacity data of %s, probably the liquid did not bump the version correctly", res.Name, service.Type)
+	// cluster_az_resources should be there - enumerate the data an complain if they don't match
+	for _, res := range dbResources {
+		resourceData, resExists := capacityData.Resources[res.Name]
+		if !resExists {
+			logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
 			continue
 		}
-
-		setUpdate := db.SetUpdate[db.ClusterAZResource, liquid.AvailabilityZone]{
-			ExistingRecords: dbAZResourcesByResourceID[res.ID],
-			WantedKeys:      slices.Sorted(maps.Keys(resourceData.PerAZ)),
-			KeyForRecord: func(azRes db.ClusterAZResource) liquid.AvailabilityZone {
-				return azRes.AvailabilityZone
-			},
-			Create: func(az liquid.AvailabilityZone) (db.ClusterAZResource, error) {
-				return db.ClusterAZResource{
-					ResourceID:       res.ID,
-					AvailabilityZone: az,
-				}, nil
-			},
-			Update: func(azRes *db.ClusterAZResource) (err error) {
-				data := resourceData.PerAZ[azRes.AvailabilityZone]
-				azRes.RawCapacity = data.Capacity
-				if data.Capacity > 0 {
-					azRes.LastNonzeroRawCapacity = Some(data.Capacity)
-				}
-				azRes.Usage = data.Usage
-				azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", data.Subcapacities)
+		for _, azRes := range dbAZResourcesByResourceID[res.ID] {
+			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
+			if !azResExists && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
+				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", azRes.AvailabilityZone, res.Name, service.Type)
+			}
+			if !azResExists {
+				continue
+			}
+			azRes.RawCapacity = azResourceData.Capacity
+			if azResourceData.Capacity > 0 {
+				azRes.LastNonzeroRawCapacity = Some(azResourceData.Capacity)
+			}
+			azRes.Usage = azResourceData.Usage
+			azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", azResourceData.Subcapacities)
+			if err != nil {
 				return err
-			},
-		}
-		_, err = setUpdate.Execute(tx)
-		if err != nil {
-			return err
+			}
+			_, err := tx.Update(&azRes)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -221,7 +215,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all cluster resources thus updated, sync commitment states with reality
-	for _, res := range dbOwnedResources {
+	for _, res := range dbResources {
 		now := c.MeasureTime()
 		_, err := c.DB.Exec(updateProjectCommitmentStatesForResourceQuery, service.Type, res.Name, now)
 		if err != nil {
@@ -229,18 +223,25 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}
 
+	serviceInfos, err := c.Cluster.AllServiceInfos()
+	if err != nil {
+		return err
+	}
+
 	// for all cluster resources thus updated, try to confirm pending commitments
-	for _, res := range dbOwnedResources {
-		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name)
+	for _, res := range dbResources {
+		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name, serviceInfos)
 		if err != nil {
 			return err
 		}
 	}
 
 	// for all cluster resources thus updated, recompute project quotas if necessary
-	for _, res := range dbOwnedResources {
+	for _, res := range dbResources {
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.Cluster, now)
+		serviceInfo := core.InfoForService(serviceInfos, service.Type)
+		resInfo := core.InfoForResource(serviceInfo, res.Name)
+		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, resInfo, c.Cluster, now)
 		if err != nil {
 			return err
 		}
@@ -261,9 +262,10 @@ func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.L
 	return capacityData, serializedMetrics, nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
+func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
 	behavior := c.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
-	resInfo := c.Cluster.InfoForResource(serviceType, resourceName)
+	serviceInfo := core.InfoForService(serviceInfos, serviceType)
+	resInfo := core.InfoForResource(serviceInfo, resourceName)
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource

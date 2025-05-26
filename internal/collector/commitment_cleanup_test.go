@@ -50,6 +50,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testCleanupOldCommitmentsConfigYAML, liquidServiceType)),
+		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
 

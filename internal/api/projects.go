@@ -46,9 +46,14 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
-	filter := reports.ReadFilter(r, p.Cluster)
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, serviceInfos, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -67,7 +72,12 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster))
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -197,8 +207,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster)
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*maxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
@@ -215,7 +230,8 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			if resRequest.MaxQuota == nil {
 				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: None[uint64]()}
 			} else {
-				resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
+				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 				if !resInfo.HasQuota {
 					msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -230,7 +246,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				if resRequest.Unit != nil {
 					requestedMaxQuota.Unit = *resRequest.Unit
 				}
-				convertedMaxQuota, err := core.ConvertUnitFor(p.Cluster, dbServiceType, dbResourceName, requestedMaxQuota)
+				convertedMaxQuota, err := core.ConvertUnitFor(serviceInfo, dbResourceName, requestedMaxQuota)
 				if err != nil {
 					msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 					http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -275,7 +291,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, p.Cluster, p.timeNow(), *dbDomain, *dbProject, srv.Ref())
+		}.Run(tx, serviceInfos[srv.Ref().Type], p.timeNow(), *dbDomain, *dbProject, srv.Ref())
 		if respondwith.ErrorText(w, err) {
 			return
 		}

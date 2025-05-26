@@ -4,6 +4,8 @@
 package datamodel
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
@@ -25,10 +27,16 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 	}
 	logg.Debug("checking consistency for %d project services in project %s...", len(services), project.UUID)
 
+	// as this is called from the collect task, this is no database access
+	serviceInfos, err := cluster.AllServiceInfos()
+	if err != nil {
+		return err
+	}
+
 	// cleanup entries for services that have been removed from the configuration
 	for _, srv := range services {
 		seen[srv.Type] = true
-		if !cluster.HasService(srv.Type) {
+		if !core.HasService(serviceInfos, srv.Type) {
 			logg.Info("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
 			_, err := dbi.Delete(&srv)
 			if err != nil {
@@ -39,7 +47,7 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 	}
 
 	// create missing service entries
-	for _, serviceType := range cluster.ServiceTypesInAlphabeticalOrder() {
+	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		if seen[serviceType] {
 			continue
 		}

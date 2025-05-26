@@ -103,13 +103,19 @@ const (
 	`
 )
 
-func setupTest(t *testing.T, startData string, srvInfoShared, srvInfoUnshared liquid.ServiceInfo) (s test.Setup) {
+func setupTest(t *testing.T, startData string) (s test.Setup) {
+	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/shared/objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/shared/objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"service/shared/objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/shared/objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
+	srvInfoUnshared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
+		"service/unshared/instances:create": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
+		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	_, liquidServiceTypeShared := test.NewMockLiquidClient(srvInfoShared)
 	_, liquidServiceTypeUnshared := test.NewMockLiquidClient(srvInfoUnshared)
@@ -124,9 +130,7 @@ func setupTest(t *testing.T, startData string, srvInfoShared, srvInfoUnshared li
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared'.
 	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -157,9 +161,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 }
 
 func Test_EmptyScrapeErrorReport(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "/dev/null", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "/dev/null")
 
 	// check ListScrapeErrors
 	assert.HTTPRequest{
@@ -171,9 +173,7 @@ func Test_EmptyScrapeErrorReport(t *testing.T) {
 }
 
 func Test_RateScrapeErrorOperations(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared' that has rate data.
 	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -204,9 +204,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 }
 
 func Test_EmptyRateScrapeErrorReport(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "/dev/null", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "/dev/null")
 
 	// check ListRateScrapeErrors
 	assert.HTTPRequest{
@@ -218,9 +216,7 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 }
 
 func Test_ClusterOperations(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	// check GetCluster
 	assert.HTTPRequest{
@@ -298,9 +294,7 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func Test_DomainOperations(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
@@ -381,9 +375,7 @@ func Test_DomainOperations(t *testing.T) {
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
@@ -709,9 +701,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 }
 
 func Test_EmptyProjectList(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	_, err := s.DB.Exec(`DELETE FROM project_commitments`)
 	if err != nil {
@@ -734,9 +724,7 @@ func Test_EmptyProjectList(t *testing.T) {
 
 func Test_LargeProjectList(t *testing.T) {
 	// start without any projects pre-defined in the start data
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data-minimal.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data-minimal.sql")
 	// we don't care about the various ResourceBehaviors in this test
 	s.Cluster.Config.ResourceBehaviors = nil
 	for idx, scfg := range s.Cluster.Config.Liquids {
@@ -877,9 +865,7 @@ func Test_LargeProjectList(t *testing.T) {
 }
 
 func Test_PutMaxQuotaOnProject(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -976,9 +962,10 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	res := srvInfoShared.Resources["capacity"]
-	res.HasQuota = false
-	srvInfoShared.Resources["capacity"] = res
+	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE id = 3")
+	if err != nil {
+		t.Error(err)
+	}
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
@@ -998,9 +985,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 }
 
 func Test_Historical_Usage(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}'  WHERE id=7 AND resource_id=4 AND az='az-one'`)
 	if err != nil {
 		t.Fatal(err)
@@ -1016,9 +1001,7 @@ func Test_Historical_Usage(t *testing.T) {
 }
 
 func TestResourceRenaming(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	// a shorthand constructor (unfortunately it is hard to construct regexpext.ConfigSet
 	// by hand because the element type (the Key/Value pair) not a named type)
@@ -1261,14 +1244,7 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 
 func Test_SeparatedTopologyOperations(t *testing.T) {
 	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	s := setupTest(t, "fixtures/start-data-az-separated.sql", srvInfoShared, srvInfoUnshared)
-	srvInfoShared.Resources["capacity_az_separated"] = liquid.ResourceInfo{
-		Unit:     liquid.UnitBytes,
-		Topology: liquid.AZSeparatedTopology,
-		HasQuota: true,
-	}
+	s := setupTest(t, "fixtures/start-data-az-separated.sql")
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",

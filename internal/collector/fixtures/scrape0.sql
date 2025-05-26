@@ -1,3 +1,10 @@
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-one', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'az-two', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 2, 'unknown', 0);
+
 INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 

@@ -23,6 +23,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		// here, we use the LiquidConnections, as this runs within the collect task
+		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 

@@ -111,6 +111,8 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testQuotaOverridesNoRenamingConfigYAML, liquidServiceType)),
+		// here, we use the LiquidConnections, as this runs within the collect task
+		test.WithLiquidConnections,
 	)
 	overrides, errs := LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {
@@ -125,6 +127,8 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testQuotaOverridesWithRenamingConfigYAML, liquidServiceType)),
+		// here, we use the LiquidConnections, as this runs within the collect task
+		test.WithLiquidConnections,
 	)
 	overrides, errs := LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {

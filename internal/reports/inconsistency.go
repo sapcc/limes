@@ -70,7 +70,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
+func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*Inconsistencies, error) {
 	// Initialize inconsistencies as Inconsistencies type.
 	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
@@ -79,9 +79,10 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		OverspentQuotas:     []OverspentProjectQuota{},
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
-	nm := core.BuildResourceNameMapping(cluster)
 
-	//ospqReportQuery: data for overspent project quota inconsistencies
+	nm := core.BuildResourceNameMapping(cluster, serviceInfos)
+
+	// ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
 	//nolint:dupl
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
@@ -105,7 +106,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 			return nil
 		}
 
-		ospq.Unit = cluster.InfoForResource(dbServiceType, dbResourceName).Unit
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		ospq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -114,7 +116,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		return nil, err
 	}
 
-	//mmpqReportQuery: data for mismatch project quota inconsistencies
+	// mmpqReportQuery: data for mismatch project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	//nolint:dupl
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
@@ -138,7 +140,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 			return nil
 		}
 
-		mmpq.Unit = cluster.InfoForResource(dbServiceType, dbResourceName).Unit
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		mmpq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

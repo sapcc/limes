@@ -116,7 +116,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -672,7 +672,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
@@ -714,7 +714,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
@@ -734,6 +734,9 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

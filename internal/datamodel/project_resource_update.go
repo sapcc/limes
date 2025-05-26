@@ -13,7 +13,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -31,7 +30,7 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) ([]db.ProjectResource, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) ([]db.ProjectResource, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
@@ -46,7 +45,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 
 	// collect ResourceInfo instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
-	for resName, resInfo := range cluster.LiquidConnections[srv.Type].ServiceInfo().Resources {
+	for resName, resInfo := range serviceInfo.Resources {
 		allResources[resName] = resourceState{
 			Original: nil, // might be filled in the next loop below
 			Info:     &resInfo,

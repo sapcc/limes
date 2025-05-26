@@ -33,3 +33,16 @@ func RenderMapToJSON[T ~string, U any](attribute string, entries map[T]U) (strin
 	}
 	return string(buf), nil
 }
+
+// JSONToAny is used to unmarshal from a JSON DB field.
+// Empty strings result in an empty value of type T.
+func JSONToAny[T any](value, attribute string) (result T, err error) {
+	if value == "" {
+		return result, nil
+	}
+	err = json.Unmarshal([]byte(value), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to unmarshal %s: %w", attribute, err)
+	}
+	return result, nil
+}
