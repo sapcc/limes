@@ -191,12 +191,17 @@ exposes data of a corresponding OpenStack Service. There is no possibility to co
 liquid. For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md). Each
 `liquids[]` section of the configuration file must contain the fields `service_type` (how the service is identified) and `area`
 (a grouping of services, e.g. `network, compute, storage`). The liquid endpoint will be located in the Keystone service catalog at
-service type `liquid-$SERVICE_TYPE`, unless this default is overridden by `liquid_service_type`.
+service type `liquid-$SERVICE_TYPE`, unless this default is overridden by `liquid_service_type` (to be deprecated soon).
 
-Currently, any increase in the `ServiceInfo` version of the liquid will result in an update of the `LiquidConnection.LiquidServiceInfo`
-during a scrape (capacity, project-usage, project-rates). This change is also replicated to the database, but the data is never read
-from there yet. Soon, we want to use `ServiceInfo` from the database to allow startup of Limes with a temporarily unavailable liquid
-connection.
+The data from the `liquids[]` config section is read by the collector service on startup and used to instantiate connections to the liquids.
+The connection is used to query the`ServiceInfo` objects, which are then persisted in the database. When a liquid is not accessible on collector
+startup, the collector will try to read the necessary information from the database. If both methods fail, the startup of the collector will fail.
+Besides saving this information on startup, any increase in the `ServiceInfo.version` of the liquid will result in an update of the information
+on the application layer and the database during scrape operations.
+
+The other services besides the collector will not utilize the configuration of the `liquids[]`, instead they always utilize the latest information
+from the database - without any caching. For more information on what the different services do, check the
+[operators documentation](../operators/index.md#overview).
 
 #### Commitment behavior
 

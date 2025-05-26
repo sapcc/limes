@@ -16,6 +16,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 // DefaultLiquidServiceInfo builds the default ServiceInfo that most mock liquids use.
@@ -51,9 +52,10 @@ type MockLiquidClient struct {
 	usageReportError      error
 	capacityReportError   error
 	quotaError            error
+	serviceInfoError      error
 }
 
-var mockLiquidClients = make(map[string]core.LiquidClient)
+var mockLiquidClients = make(map[db.ServiceType]core.LiquidClient)
 
 // NewMockLiquidClient creates a new MockLiquidClient instance.
 //
@@ -64,20 +66,20 @@ var mockLiquidClients = make(map[string]core.LiquidClient)
 // Additionally, the client is put into an internal registry under the returned
 // service type string. This value shall be put into the cluster configuration
 // to allow the core.Cluster object to find your mock client.
-func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClient, liquidServiceType string) {
+func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClient, serviceType db.ServiceType) {
 	// We use a randomly-generated service type here, in order to allow for
 	// multiple tests to proceed in parallel without interfering with each other
 	// (once we deem this actually safe to do).
-	liquidServiceType = must.Return(uuid.NewV4()).String()
+	serviceType = db.ServiceType(must.Return(uuid.NewV4()).String())
 
 	client = &MockLiquidClient{serviceInfo: serviceInfo}
-	mockLiquidClients[liquidServiceType] = client
+	mockLiquidClients[serviceType] = client
 	return
 }
 
 func init() {
 	core.NewLiquidClient = func(_ *gophercloud.ProviderClient, _ gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (core.LiquidClient, error) {
-		client, ok := mockLiquidClients[opts.ServiceType]
+		client, ok := mockLiquidClients[db.ServiceType(opts.ServiceType)]
 		if !ok {
 			return nil, fmt.Errorf("no MockLiquidClient registered for service type %q", opts.ServiceType)
 		}
@@ -86,7 +88,14 @@ func init() {
 }
 
 func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
+	if l.serviceInfoError != nil {
+		return liquid.ServiceInfo{}, l.serviceInfoError
+	}
 	return l.serviceInfo, nil
+}
+
+func (l *MockLiquidClient) SetServiceInfoError(err error) {
+	l.serviceInfoError = err
 }
 
 func (l *MockLiquidClient) SetServiceInfo(info liquid.ServiceInfo) {

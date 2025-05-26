@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -30,14 +31,15 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	connection, ok := p.Cluster.LiquidConnections[serviceType]
-	if !ok {
+	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
+	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
+	if !p.Cluster.HasService(serviceType) && !p.Cluster.HasService(normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := connection.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones)
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, p.Cluster.ResourcesForService(normalizedServiceType))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -53,14 +55,15 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	serviceType := r.URL.Query().Get("service_type")
+	serviceType := db.ServiceType(r.URL.Query().Get("service_type"))
 	if serviceType == "" {
 		http.Error(w, "missing required parameter: service_type", http.StatusBadRequest)
 		return
 	}
 
-	connection, ok := p.Cluster.LiquidConnections[db.ServiceType(serviceType)]
-	if !ok {
+	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
+	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
+	if !p.Cluster.HasService(serviceType) && !p.Cluster.HasService(normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
@@ -89,7 +92,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	domain := core.KeystoneDomainFromDB(dbDomain)
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
-	serviceUsageRequest, err := connection.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones)
+	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, p.Cluster.InfoForService(normalizedServiceType).UsageReportNeedsProjectMetadata)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

@@ -51,7 +51,7 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	 LIMIT 1
 `)
 
-func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
+func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 	if !c.Cluster.HasService(serviceType) {
 		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
@@ -204,7 +204,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			if !resInfo.HasQuota {
 				continue
 			}
-			//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
+			// NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
 			targetQuotasForBackend[resName] = liquid.ResourceQuotaRequest{Quota: targetQuotasInDB[resName], PerAZ: targetAZQuotasInDB[resName]}
 		}
 
