@@ -259,12 +259,7 @@ func (h Hypervisor) Description() string {
 }
 
 func (h Hypervisor) isInAggregate(aggr aggregates.Aggregate) bool {
-	for _, host := range aggr.Hosts {
-		if h.Service.Host == host {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(aggr.Hosts, h.Service.Host)
 }
 
 func (h Hypervisor) getResourceProviderID(resourceProviders []resourceproviders.ResourceProvider) (string, error) {

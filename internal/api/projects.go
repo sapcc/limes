@@ -6,6 +6,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/gorilla/mux"
 	. "github.com/majewsky/gg/option"
@@ -126,13 +127,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 			return
 		}
 		projectUUID := mux.Vars(r)["project_id"]
-		found := false
-		for _, newUUID := range newProjectUUIDs {
-			if projectUUID == newUUID {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(newProjectUUIDs, projectUUID)
 		if !found {
 			http.Error(w, "no such project", http.StatusNotFound)
 			return
