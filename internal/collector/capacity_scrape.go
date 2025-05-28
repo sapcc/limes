@@ -131,7 +131,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		service.SerializedMetrics = string(serializedMetrics)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		service.ScrapeErrorMessage = ""
-		//NOTE: in this case, we continue below, with the cluster_resources update
+		// NOTE: in this case, we continue below, with the cluster_resources update
 		// the cluster_services row will be updated at the end of the tx
 	} else {
 		err = util.UnpackError(err)
@@ -180,7 +180,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	for _, res := range dbOwnedResources {
 		resourceData := capacityData.Resources[res.Name]
 		if resourceData == nil {
-			logg.Error("could not find resource %s in capacity data of %s, probably the liquid did not bump the version correctly", res.Name, service.Type)
+			logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
 			continue
 		}
 

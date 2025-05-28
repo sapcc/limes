@@ -51,6 +51,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 			UUID: "uuid-for-project-1",
 		}),
 		test.WithEmptyRecordsAsNeeded,
+		test.WithPersistedServiceInfo("unittest", srvInfo),
 	)
 	return
 }

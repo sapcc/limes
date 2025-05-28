@@ -44,8 +44,8 @@ func BuildResourceNameMapping(cluster *Cluster) ResourceNameMapping {
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
-	for dbServiceType, connection := range cluster.LiquidConnections {
-		for dbResourceName := range connection.ServiceInfo().Resources {
+	for _, dbServiceType := range cluster.ServiceTypesInAlphabeticalOrder() {
+		for dbResourceName := range cluster.ResourcesForService(dbServiceType) {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.fromAPIToDB[apiRef] = dbRef
@@ -62,9 +62,9 @@ func BuildRateNameMapping(cluster *Cluster) RateNameMapping {
 		fromAPIToDB: make(map[RateRef]dbRateRef),
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
-	for dbServiceType, connection := range cluster.LiquidConnections {
+	for _, dbServiceType := range cluster.ServiceTypesInAlphabeticalOrder() {
 		dbRateNames := make(map[liquid.RateName]struct{})
-		for dbRateName := range connection.ServiceInfo().Rates {
+		for dbRateName := range cluster.RatesForService(dbServiceType) {
 			dbRateNames[dbRateName] = struct{}{}
 		}
 		cfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)

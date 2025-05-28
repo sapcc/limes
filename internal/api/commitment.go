@@ -738,7 +738,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id")
 	token := p.CheckToken(r)
-	if !token.Require(w, "project:edit") { //NOTE: There is a more specific AuthZ check further down below.
+	if !token.Require(w, "project:edit") { // NOTE: There is a more specific AuthZ check further down below.
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -1184,8 +1184,8 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for targetServiceType, connection := range p.Cluster.LiquidConnections {
-			for targetResourceName, targetResInfo := range connection.ServiceInfo().Resources {
+		for _, targetServiceType := range p.Cluster.ServiceTypesInAlphabeticalOrder() {
+			for targetResourceName, targetResInfo := range p.Cluster.ResourcesForService(targetServiceType) {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}
