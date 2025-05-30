@@ -1,9 +1,9 @@
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
-limes_newest_scraped_at{service="unittest",service_name="unittest"} 10880
+limes_newest_scraped_at{service="unittest",service_name="unittest"} 12690
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
-limes_oldest_scraped_at{service="unittest",service_name="unittest"} 10875
+limes_oldest_scraped_at{service="unittest",service_name="unittest"} 12685
 # HELP limes_unittest_capacity_usage 
 # TYPE limes_unittest_capacity_usage gauge
 limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20

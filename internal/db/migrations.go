@@ -405,4 +405,22 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_az_resources
 			ADD COLUMN last_nonzero_raw_capacity BIGINT DEFAULT NULL;
 	`,
+	"056_merge_scrape_and_scrape_rates_job.down.sql": `
+		ALTER TABLE project_services
+			ADD COLUMN rates_scraped_at			   TIMESTAMP  DEFAULT NULL,	
+			ADD COLUMN rates_stale                 BOOLEAN    NOT NULL DEFAULT FALSE,
+			ADD COLUMN rates_scrape_duration_secs  REAL       NOT NULL DEFAULT 0,
+			ADD COLUMN rates_checked_at            TIMESTAMP  DEFAULT NULL,
+			ADD COLUMN rates_scrape_error_message  TEXT       NOT NULL DEFAULT '',
+			ADD COLUMN rates_next_scrape_at        TIMESTAMP  NOT NULL DEFAULT NOW();
+	`,
+	"056_merge_scrape_and_scrape_rates_job.up.sql": `
+		ALTER TABLE project_services
+			DROP COLUMN rates_scraped_at,
+			DROP COLUMN rates_stale,
+			DROP COLUMN rates_scrape_duration_secs,
+			DROP COLUMN rates_checked_at,
+			DROP COLUMN rates_scrape_error_message,
+			DROP COLUMN rates_next_scrape_at;
+	`,
 }

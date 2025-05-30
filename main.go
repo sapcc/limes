@@ -182,13 +182,11 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// can be terminated at any time without leaving the system in an inconsistent
 	// state, mostly through usage of DB transactions.)
 	c := collector.NewCollector(cluster)
-	resourceScrapeJob := c.ResourceScrapeJob(nil)
-	rateScrapeJob := c.RateScrapeJob(nil)
+	scrapeJob := c.ScrapeJob(nil)
 	syncQuotaToBackendJob := c.SyncQuotaToBackendJob(nil)
 	for serviceType := range cluster.LiquidConnections {
 		opt := jobloop.WithLabel("service_type", string(serviceType))
-		go resourceScrapeJob.Run(ctx, opt)
-		go rateScrapeJob.Run(ctx, opt)
+		go scrapeJob.Run(ctx, opt)
 		if isAuthoritative {
 			go syncQuotaToBackendJob.Run(ctx, opt)
 		}

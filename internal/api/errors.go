@@ -28,6 +28,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, map[string]any{"scrape_errors": scrapeErrors})
 }
 
+// TODO: deprecated
 // ListRateScrapeErrors handles GET /rates/v1/admin/scrape-errors.
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/admin/scrape-errors")
