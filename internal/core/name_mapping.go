@@ -15,7 +15,6 @@ import (
 // ResourceNameMapping contains an efficient pre-computed mapping between
 // API-level and DB-level service and resource identifiers.
 type ResourceNameMapping struct {
-	cluster     *Cluster
 	fromAPIToDB map[ResourceRef]dbResourceRef
 	fromDBToAPI map[dbResourceRef]ResourceRef
 }
@@ -38,14 +37,13 @@ type dbRateRef struct {
 }
 
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
-func BuildResourceNameMapping(cluster *Cluster) ResourceNameMapping {
+func BuildResourceNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liquid.ServiceInfo) ResourceNameMapping {
 	nm := ResourceNameMapping{
-		cluster:     cluster,
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
-	for _, dbServiceType := range cluster.ServiceTypesInAlphabeticalOrder() {
-		for dbResourceName := range cluster.ResourcesForService(dbServiceType) {
+	for dbServiceType, serviceInfos := range serviceInfos {
+		for dbResourceName := range serviceInfos.Resources {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.fromAPIToDB[apiRef] = dbRef
@@ -56,15 +54,16 @@ func BuildResourceNameMapping(cluster *Cluster) ResourceNameMapping {
 }
 
 // BuildRateNameMapping constructs a new RateNameMapping instance.
-func BuildRateNameMapping(cluster *Cluster) RateNameMapping {
+func BuildRateNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liquid.ServiceInfo) RateNameMapping {
 	nm := RateNameMapping{
 		cluster:     cluster,
 		fromAPIToDB: make(map[RateRef]dbRateRef),
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
-	for _, dbServiceType := range cluster.ServiceTypesInAlphabeticalOrder() {
+	serviceTypes := ServiceTypesInAlphabeticalOrder(serviceInfos)
+	for _, dbServiceType := range serviceTypes {
 		dbRateNames := make(map[liquid.RateName]struct{})
-		for dbRateName := range cluster.RatesForService(dbServiceType) {
+		for dbRateName := range RatesForService(serviceInfos, dbServiceType) {
 			dbRateNames[dbRateName] = struct{}{}
 		}
 		cfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)

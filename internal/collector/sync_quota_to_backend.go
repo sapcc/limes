@@ -53,7 +53,13 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 
 func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
-	if !c.Cluster.HasService(serviceType) {
+
+	serviceInfos, err := c.Cluster.InfoForService(serviceType)
+	if err != nil {
+		return db.ProjectService{}, err
+	}
+
+	if !core.HasService(serviceInfos, serviceType) {
 		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
@@ -117,13 +123,18 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	}
 	startedAt := c.MeasureTime()
 
+	serviceInfos, err := c.Cluster.InfoForService(srv.Type)
+	if err != nil {
+		return err
+	}
+
 	// collect backend quota values that we want to apply
 	targetQuotasInDB := make(map[liquid.ResourceName]uint64)
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	azSeparatedNeedsApply := false
 	var azSeparatedResourceIDs []db.ProjectResourceID
-	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
 			resourceID      db.ProjectResourceID
 			resourceName    liquid.ResourceName
@@ -136,7 +147,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 
-		resInfo := c.Cluster.InfoForResource(srv.Type, resourceName)
+		resInfo := core.InfoForResource(serviceInfos, srv.Type, resourceName)
 		if !resInfo.HasQuota {
 			return nil
 		}

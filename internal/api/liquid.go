@@ -31,15 +31,20 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
 	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
 	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
-	if !p.Cluster.HasService(serviceType) && !p.Cluster.HasService(normalizedServiceType) {
+	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, p.Cluster.ResourcesForService(normalizedServiceType))
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, core.ResourcesForService(serviceInfos, normalizedServiceType))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -61,9 +66,14 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
 	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
 	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
-	if !p.Cluster.HasService(serviceType) && !p.Cluster.HasService(normalizedServiceType) {
+	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
@@ -75,7 +85,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	var dbProject db.Project
-	err := p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
+	err = p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "project not found", http.StatusNotFound)
 		return
@@ -92,7 +102,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	domain := core.KeystoneDomainFromDB(dbDomain)
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
-	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, p.Cluster.InfoForService(normalizedServiceType).UsageReportNeedsProjectMetadata)
+	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, serviceInfos[normalizedServiceType].UsageReportNeedsProjectMetadata)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

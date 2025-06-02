@@ -14,11 +14,11 @@ import (
 // argument, it uses the native unit of the specified resource. In contrast to
 // ConvertTo(), this also handles UnitUnspecified. Values with unspecified unit
 // will be interpreted as being in the native unit, and will not be converted.
-func ConvertUnitFor(cluster *Cluster, serviceType db.ServiceType, resourceName liquid.ResourceName, v limes.ValueWithUnit) (uint64, error) {
+func ConvertUnitFor(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType, resourceName liquid.ResourceName, v limes.ValueWithUnit) (uint64, error) {
 	if v.Unit == limes.UnitUnspecified {
 		return v.Value, nil
 	}
-	targetUnit := cluster.InfoForResource(serviceType, resourceName).Unit
+	targetUnit := InfoForResource(serviceInfos, serviceType, resourceName).Unit
 	result, err := v.ConvertTo(targetUnit)
 	return result.Value, err
 }

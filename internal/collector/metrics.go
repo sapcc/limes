@@ -517,12 +517,15 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
-	resourceInfoCache := newResourceInfoCache(d.Cluster)
+	serviceInfos, err := d.Cluster.AllServiceInfos()
+	if err != nil {
+		return nil, err
+	}
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
-	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			dbServiceType     db.ServiceType
 			dbResourceName    liquid.ResourceName
@@ -594,8 +597,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for _, serviceType := range d.Cluster.ServiceTypesInAlphabeticalOrder() {
-		for resName := range resourceInfoCache.get(serviceType) {
+	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+		for resName := range serviceInfos[serviceType].Resources {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -760,8 +763,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	}
 
 	// fetch metadata for services/resources
-	for _, serviceType := range d.Cluster.ServiceTypesInAlphabeticalOrder() {
-		for dbResourceName, resourceInfo := range resourceInfoCache.get(serviceType) {
+	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+		for dbResourceName, resourceInfo := range serviceInfos[serviceType].Resources {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
@@ -892,27 +895,4 @@ func (c resourceAndRateBehaviorCache) GetCommitmentBehavior(srvType db.ServiceTy
 		c.cbCache[srvType][resName] = behavior
 	}
 	return behavior
-}
-
-// Caches the result of repeated Cluster.ResourcesForService calls.
-//
-// This does not use the cluster.LiquidConnections map, because this code runs outside the collect task.
-// If a ServiceInfo is not found, empty ServiceInfo is returned!
-type resourceInfoCache struct {
-	cluster         *core.Cluster
-	resourceInfoMap map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo
-}
-
-func newResourceInfoCache(cluster *core.Cluster) resourceInfoCache {
-	serviceInfoMap := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo)
-	return resourceInfoCache{cluster, serviceInfoMap}
-}
-
-func (s resourceInfoCache) get(serviceType db.ServiceType) map[liquid.ResourceName]liquid.ResourceInfo {
-	_, exists := s.resourceInfoMap[serviceType]
-	if !exists {
-		serviceInfo := s.cluster.ResourcesForService(serviceType)
-		s.resourceInfoMap[serviceType] = serviceInfo
-	}
-	return s.resourceInfoMap[serviceType]
 }

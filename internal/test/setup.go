@@ -153,6 +153,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 	}
 	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB, params.WithLiquidConnections)
+
+	serviceInfos, err := s.Cluster.AllServiceInfos()
+	if err != nil {
+		t.Error(err)
+	}
+
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -226,7 +232,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				resInfos := s.Cluster.ResourcesForService(serviceType)
+				resInfos := core.ResourcesForService(serviceInfos, serviceType)
 				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),

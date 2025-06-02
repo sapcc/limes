@@ -124,13 +124,17 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	if dbProject == nil {
 		return
 	}
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
 
 	// enumerate project AZ resources
-	filter := reports.ReadFilter(r, p.Cluster)
+	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
 	azResourceLocationsByID := make(map[db.ProjectAZResourceID]core.AZResourceLocation)
-	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			id  db.ProjectAZResourceID
 			loc core.AZResourceLocation
@@ -140,7 +144,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 			return err
 		}
 		// this check is defense in depth (the DB should be consistent with our config)
-		if p.Cluster.HasResource(loc.ServiceType, loc.ResourceName) {
+		if core.HasResource(serviceInfos, loc.ServiceType, loc.ResourceName) {
 			azResourceLocationsByID[id] = loc
 		}
 		return nil
@@ -166,14 +170,14 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 			// defense in depth (the DB should not change that much between those two queries above)
 			continue
 		}
-		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token))
+		resInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token, resInfo.Unit))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
-	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
@@ -181,7 +185,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ResourceName:     apiIdentity.Name,
 		AvailabilityZone: loc.AvailabilityZone,
 		Amount:           c.Amount,
-		Unit:             resInfo.Unit,
+		Unit:             unit,
 		Duration:         c.Duration,
 		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
 		CreatorUUID:      c.CreatorUUID,
@@ -197,6 +201,9 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	}
 }
 
+// parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
+// This function in its current form should only be used if the serviceInfo is not necessary to be used outside
+// of this validation to avoid unnecessary database queries.
 func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (*limesresources.CommitmentRequest, *core.AZResourceLocation, *core.ScopedCommitmentBehavior) {
 	// parse request
 	var parseTarget struct {
@@ -208,7 +215,13 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	req := parseTarget.Request
 
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster)
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if err != nil {
+		msg := "db connection error"
+		http.Error(w, msg, http.StatusInternalServerError)
+		return nil, nil, nil
+	}
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
 	dbServiceType, dbResourceName, ok := nm.MapFromV1API(req.ServiceType, req.ResourceName)
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
@@ -216,7 +229,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		return nil, nil, nil
 	}
 	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
-	resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
+	resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
 	if len(behavior.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil
@@ -410,6 +423,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,
 		Request:    r,
@@ -421,7 +440,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			DomainName:      dbDomain.Name,
 			ProjectID:       dbProject.UUID,
 			ProjectName:     dbProject.Name,
-			Commitments:     []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
+			Commitments:     []limesresources.Commitment{commitment},
 			WorkflowContext: Some(creationContext),
 		},
 	})
@@ -441,8 +460,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)
-	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": c})
+	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": commitment})
 }
 
 // MergeProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/merge.
@@ -578,7 +596,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token)
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+
+	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token, resourceInfo.Unit)
 	auditEvent := commitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
@@ -711,8 +735,14 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+
 	// Create resultset and auditlogs
-	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token)
+	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token, resourceInfo.Unit)
 	auditEvent := commitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
@@ -781,6 +811,12 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -792,7 +828,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,
 			ProjectName: dbProject.Name,
-			Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, loc, token)},
+			Commitments: []limesresources.Commitment{c},
 		},
 	})
 
@@ -941,7 +977,15 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1039,7 +1083,12 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1129,7 +1178,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1168,7 +1222,12 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 
 	// validate request
 	vars := mux.Vars(r)
-	nm := core.BuildResourceNameMapping(p.Cluster)
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
 	sourceServiceType, sourceResourceName, exists := nm.MapFromV1API(
 		limes.ServiceType(vars["service_type"]),
 		limesresources.ResourceName(vars["resource_name"]),
@@ -1179,13 +1238,14 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	sourceBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(sourceServiceType, sourceResourceName))
-	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
+
+	sourceResInfo := core.InfoForResource(serviceInfos, sourceServiceType, sourceResourceName)
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for _, targetServiceType := range p.Cluster.ServiceTypesInAlphabeticalOrder() {
-			for targetResourceName, targetResInfo := range p.Cluster.ResourcesForService(targetServiceType) {
+		for _, targetServiceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+			for targetResourceName, targetResInfo := range core.ResourcesForService(serviceInfos, targetServiceType) {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}
@@ -1276,7 +1336,11 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := parseTarget.Request
-	nm := core.BuildResourceNameMapping(p.Cluster)
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
 	targetServiceType, targetResourceName, exists := nm.MapFromV1API(req.TargetService, req.TargetResource)
 	if !exists {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.TargetService, req.TargetResource)
@@ -1366,6 +1430,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	relatedCommitmentIDs := make([]db.ProjectCommitmentID, 0)
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
+	resourceInfo := core.InfoForResource(serviceInfos, sourceLoc.ServiceType, sourceLoc.ResourceName)
 	if remainingAmount > 0 {
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		if respondwith.ErrorText(w, err) {
@@ -1377,7 +1442,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		auditEvent.Commitments = append(auditEvent.Commitments,
-			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token),
+			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token, resourceInfo.Unit),
 		)
 	}
 
@@ -1414,7 +1479,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
+	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token, resourceInfo.Unit)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
 	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
 		Reason:               db.CommitmentReasonSplit,
@@ -1512,7 +1577,12 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,

@@ -231,9 +231,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}
 
+	serviceInfos, err := c.Cluster.AllServiceInfos()
+	if err != nil {
+		return err
+	}
+
 	// for all cluster resources thus updated, try to confirm pending commitments
 	for _, res := range dbOwnedResources {
-		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name)
+		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name, serviceInfos)
 		if err != nil {
 			return err
 		}
@@ -242,7 +247,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(service.Type, res.Name, c.Cluster, now, serviceInfos)
 		if err != nil {
 			return err
 		}
@@ -263,9 +268,9 @@ func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.L
 	return capacityData, serializedMetrics, nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
+func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
 	behavior := c.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
-	resInfo := c.Cluster.InfoForResource(serviceType, resourceName)
+	resInfo := core.InfoForResource(serviceInfos, serviceType, resourceName)
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource

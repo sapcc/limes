@@ -116,7 +116,9 @@ func (l *LiquidConnection) updateServiceInfo(ctx context.Context, dbFallback boo
 	if err != nil && dbFallback {
 		apiSuccess = false
 		logg.Info("request to Liquid failed for %s, searching in db next: %w", l.LiquidServiceType, err)
-		result, err = readServiceInfoFromDB(l.ServiceType, l.DB)
+		var serviceInfos map[db.ServiceType]liquid.ServiceInfo
+		serviceInfos, err = readServiceInfoFromDB(l.DB, Some(l.ServiceType))
+		result = serviceInfos[l.ServiceType]
 	}
 	if err != nil {
 		return false, err
