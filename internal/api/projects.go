@@ -102,10 +102,10 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 // SyncProject handles POST /v1/domains/:domain_id/projects/:project_id/sync.
 func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/sync")
-	p.doSyncProject(w, r, "stale")
+	p.doSyncProject(w, r)
 }
 
-func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, staleField string) {
+func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -141,7 +141,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 	}
 
 	// mark all project services as stale to force limes-collect to sync ASAP
-	_, err := p.DB.Exec(`UPDATE project_services SET `+staleField+` = '1' WHERE project_id = $1`, dbProject.ID)
+	_, err := p.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"regexp"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
@@ -79,6 +81,7 @@ const (
 				liquid_service_type: %[1]s
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
+			- { resource: unittest/capacity, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
 	`
 )
@@ -101,6 +104,10 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 				HasQuota:    true,
 			},
 		},
+		Rates: map[liquid.RateName]liquid.RateInfo{
+			"firstrate":  {Topology: liquid.FlatTopology, HasUsage: true},
+			"secondrate": {Unit: "KiB", Topology: liquid.FlatTopology, HasUsage: true},
+		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},
 			"limes_unittest_things_usage":   {Type: liquid.MetricTypeGauge},
@@ -114,9 +121,30 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	prepareDomainsAndProjectsForScrape(t, s)
 
 	c := getCollector(t, s)
-	scrapeJob = c.ResourceScrapeJob(s.Registry)
+	scrapeJob = c.ScrapeJob(s.Registry)
 	withLabel = jobloop.WithLabel("service_type", "unittest")
 	syncJob = c.SyncQuotaToBackendJob(s.Registry)
+
+	// for one of the projects, put some records in for rate limits, to check that
+	// the scraper does not mess with those values
+	err := s.DB.Insert(&db.ProjectRate{
+		ServiceID: 1,
+		Name:      "otherrate",
+		Limit:     Some[uint64](10),
+		Window:    Some(1 * limesrates.WindowSeconds),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.DB.Insert(&db.ProjectRate{
+		ServiceID: 1,
+		Name:      "anotherrate",
+		Limit:     Some[uint64](42),
+		Window:    Some(2 * limesrates.WindowMinutes),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	serviceUsageReport = liquid.ServiceUsageReport{
 		InfoVersion: 1,
@@ -170,6 +198,23 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			"limes_unittest_capacity_usage": {{Value: 0}},
 			"limes_unittest_things_usage":   {{Value: 4}},
 		},
+		Rates: map[liquid.RateName]*liquid.RateUsageReport{
+			"firstrate": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZRateUsageReport{
+					"any": {
+						Usage: Some(big.NewInt(1024)),
+					},
+				},
+			},
+			"secondrate": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZRateUsageReport{
+					"any": {
+						Usage: Some(big.NewInt(2048)),
+					},
+				},
+			},
+		},
+		SerializedState: []byte(`{"firstrate":1024,"secondrate":2048}`),
 	}
 	mockLiquidClient.SetUsageReport(serviceUsageReport)
 	return
@@ -205,12 +250,16 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (7, 3, 'any', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (8, 3, 'az-one', 0, 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (9, 3, 'az-two', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'secondrate', '2048');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'secondrate', '2048');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2, 1, 'things', 0, 42);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 2, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 2, 'things', 0, 42);
-		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -417,6 +466,37 @@ func Test_ScrapeSuccess(t *testing.T) {
 		State:               db.CommitmentStatePending,
 		CreationContextJSON: buf,
 	}))
+	tr.DBChanges().Ignore()
+
+	// test that changes in rates are reflected in the db
+	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(2048))
+	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
+	serviceUsageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
+	mockLiquidClient.SetUsageReport(serviceUsageReport)
+
+	s.Clock.StepBy(scrapeInterval)
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
+	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(8192))
+	serviceUsageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
+	mockLiquidClient.SetUsageReport(serviceUsageReport)
+
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_rates SET usage_as_bigint = '2048' WHERE service_id = 1 AND name = 'firstrate';
+		UPDATE project_rates SET usage_as_bigint = '4096' WHERE service_id = 1 AND name = 'secondrate';
+		UPDATE project_rates SET usage_as_bigint = '4096' WHERE service_id = 2 AND name = 'firstrate';
+		UPDATE project_rates SET usage_as_bigint = '8192' WHERE service_id = 2 AND name = 'secondrate';
+		UPDATE project_services SET scraped_at = %[1]d, rates_scrape_state = '{"firstrate":2048,"secondrate":4096}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, rates_scrape_state = '{"firstrate":4096,"secondrate":8192}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`,
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
 
 	// check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
@@ -456,7 +536,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	s, job, withLabel, _, _, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
 
 	// we will see an expected ERROR during testing, do not make the test fail because of this
-	expectedErrorRx := regexp.MustCompile(`^during resource scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
+	expectedErrorRx := regexp.MustCompile(`^during scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -529,12 +609,16 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (7, 2, 'az-one', 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (8, 2, 'az-two', 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (9, 3, 'az-one', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'secondrate', '2048');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'secondrate', '2048');
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 4 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -594,7 +678,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
-	job := c.ResourceScrapeJob(s.Registry)
+	job := c.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	// check that Scrape() behaves properly when encountering a liquid with
@@ -607,7 +691,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	tr0.AssertEqualf(`
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, rates_stale, serialized_metrics, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[2]d, 5, TRUE, '{}', %[2]d, %[3]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, serialized_metrics, checked_at, next_scrape_at) VALUES (1, 1, 'noop', %[2]d, 5, '{}', %[2]d, %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
@@ -636,13 +720,13 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
-	job := c.ResourceScrapeJob(s.Registry)
+	job := c.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	// check that Scrape() behaves properly when encountering a liquid with
 	// no Resources() (in the wild, this can happen because some liquids
 	// only have Rates())
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during resource scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`))
 
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -652,7 +736,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, -1);
-		INSERT INTO project_services (id, project_id, type, scraped_at, rates_stale, checked_at, scrape_error_message, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', 0, TRUE, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d, 0);
+		INSERT INTO project_services (id, project_id, type, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 'noop', 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
@@ -700,12 +784,16 @@ func Test_TopologyScrapes(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage, backend_quota) VALUES (6, 3, 'az-two', 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (7, 4, 'az-one', 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}', 21);
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (8, 4, 'az-two', 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}', 21);
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'secondrate', '2048');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'firstrate', '1024');
+		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (2, 'secondrate', '2048');
 		INSERT INTO project_resources (id, service_id, name) VALUES (1, 1, 'capacity');
 		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'things');
 		INSERT INTO project_resources (id, service_id, name) VALUES (3, 2, 'capacity');
 		INSERT INTO project_resources (id, service_id, name) VALUES (4, 2, 'things');
-		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, rates_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 		`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -760,6 +848,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
+		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
 		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE cluster_services SET liquid_version = 2 WHERE id = 1 AND type = 'unittest';
@@ -790,11 +880,11 @@ func Test_TopologyScrapes(t *testing.T) {
 	mockLiquidClient.IncrementServiceInfoVersion()
 	mockLiquidClient.IncrementUsageReportInfoVersion()
 
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: service usage report validation should fail for mismatched topology and AZ reports
 	resInfoCap.Topology = liquid.FlatTopology
 	srvInfo.Resources["capacity"] = resInfoCap
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: received ServiceUsageReport is invalid: .Resources[\"capacity\"].PerAZ has entries for []liquid.AvailabilityZone{\"az-one\", \"az-two\"}, which is invalid for topology \"flat\" (expected entries for []liquid.AvailabilityZone{\"any\"}); .Resources[\"capacity\"] has no quota reported on resource level, which is invalid for HasQuota = true and topology \"flat\""))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/dresden: received ServiceUsageReport is invalid: .Resources[\"capacity\"].PerAZ has entries for []liquid.AvailabilityZone{\"az-one\", \"az-two\"}, which is invalid for topology \"flat\" (expected entries for []liquid.AvailabilityZone{\"any\"}); .Resources[\"capacity\"] has no quota reported on resource level, which is invalid for HasQuota = true and topology \"flat\""))
 }

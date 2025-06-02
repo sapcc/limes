@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math/big"
 	"slices"
 	"time"
 
@@ -32,7 +33,7 @@ const (
 
 var (
 	// find the next project that needs to have resources scraped
-	findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
+	findProjectForScrapeQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_services
 		-- filter by service type
 		WHERE type = $1
@@ -50,18 +51,18 @@ var (
 		WHERE pr.service_id = $1
 	`)
 
-	writeResourceScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
+	writeScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services SET
 			-- timing information
 			checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3,
 			-- serialized state returned by LiquidConnection
-			serialized_metrics = $4,
+			serialized_metrics = $4, rates_scrape_state = $5,
 			-- other
 			stale = FALSE, scrape_error_message = ''
-		WHERE id = $5
+		WHERE id = $6
 	`)
 
-	writeResourceScrapeErrorQuery = sqlext.SimplifyWhitespace(`
+	writeScrapeErrorQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services SET
 			-- timing information
 			checked_at = $1, next_scrape_at = $2,
@@ -71,33 +72,35 @@ var (
 	`)
 )
 
-// ResourceScrapeJob looks at one specific project service per task, collects
-// quota and usage information from the backend service, and adjusts the
-// backend quota if it differs from the desired values.
+// ScrapeJob looks at one specific project service per task, collects
+// quota and usage information from the backend service as well as checks the
+// database for outdated or missing rate records for the given service.
+// The backend quota is adjusted if it differs from the desired values
+// and rate records are updated by querying the backend service.
 //
 // This job is not ConcurrencySafe, but multiple instances can safely be run in
 // parallel if they act on separate service types. The job can only be run if
 // a target service type is specified using the
 // `jobloop.WithLabel("service_type", serviceType)` option.
-func (c *Collector) ResourceScrapeJob(registerer prometheus.Registerer) jobloop.Job {
+func (c *Collector) ScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[projectScrapeTask]{
 		Metadata: jobloop.JobMetadata{
-			ReadableName: "scrape project quota and usage",
+			ReadableName: "scrape project quota, usage and rate usage",
 			CounterOpts: prometheus.CounterOpts{
-				Name: "limes_resource_scrapes",
-				Help: "Counter for resource scrape operations per Keystone project.",
+				Name: "limes_scrapes",
+				Help: "Counter for scrape operations per Keystone project.",
 			},
 			CounterLabels: []string{"service_type", "service_name"},
 		},
 		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (projectScrapeTask, error) {
-			return c.discoverScrapeTask(labels, findProjectForResourceScrapeQuery)
+			return c.discoverScrapeTask(labels, findProjectForScrapeQuery)
 		},
-		ProcessTask: c.processResourceScrapeTask,
+		ProcessTask: c.processScrapeTask,
 	}).Setup(registerer)
 }
 
-// This is the task type for ResourceScrapeJob and RateScrapeJob. The natural
-// task type for these jobs is just db.ProjectService, but this more elaborate
+// This is the task type for ScrapeJob. The natural
+// task type for this job is just db.ProjectService, but this more elaborate
 // task type allows us to reuse timing information from the discover step.
 type projectScrapeTask struct {
 	// data loaded during discoverScrapeTask
@@ -136,7 +139,7 @@ func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProjec
 	return
 }
 
-func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
+func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
 	connection := c.Cluster.LiquidConnections[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -150,44 +153,65 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	// perform resource scrape
 	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project)
 	if err != nil {
+		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 		task.Err = util.UnpackError(err)
+		return c.recordScrapeError(task, srv, dbProject, dbDomain, project)
 	}
-	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
-	// write result on success; if anything fails, try to record the error in the DB
-	if task.Err == nil {
-		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics)
-		if err != nil {
-			task.Err = fmt.Errorf("while writing results into DB: %w", err)
-		}
+	// perform rate scrape
+	rateData, ratesScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState)
+	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
+	if err != nil {
+		task.Err = util.UnpackError(err)
+		return c.recordScrapeError(task, srv, dbProject, dbDomain, project)
 	}
-	if task.Err != nil {
-		_, err := c.DB.Exec(
-			writeResourceScrapeErrorQuery,
-			task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
-			task.Err.Error(), srv.ID,
+
+	// write resource results
+	err = c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData)
+	if err != nil {
+		return fmt.Errorf("while writing resource results into DB: %w", err)
+	}
+
+	// write rate results
+	err = c.writeRateScrapeResult(task, rateData)
+	if err != nil {
+		return fmt.Errorf("while writing rate results into DB: %w", err)
+	}
+
+	// update scraped_at timestamp and reset the stale flag on this service so
+	// that we don't scrape it again immediately afterwards
+	_, err = c.DB.Exec(writeScrapeSuccessQuery,
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
+		string(serializedMetrics), ratesScrapeState, srv.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("while updating metadata on project service: %w", err)
+	}
+	return nil
+}
+
+func (c *Collector) recordScrapeError(task projectScrapeTask, srv db.ProjectService, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
+	_, err := c.DB.Exec(
+		writeScrapeErrorQuery,
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
+		task.Err.Error(), srv.ID,
+	)
+	if err != nil {
+		c.LogError("additional DB error while writing resource scrape error for service %s in project %s: %s",
+			srv.Type, project.UUID, err.Error(),
 		)
+	}
+
+	if srv.ScrapedAt.IsNone() {
+		// see explanation inside the called function's body
+		err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
 		if err != nil {
-			c.LogError("additional DB error while writing resource scrape error for service %s in project %s: %s",
+			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
 				srv.Type, project.UUID, err.Error(),
 			)
 		}
-
-		if srv.ScrapedAt.IsNone() {
-			// see explanation inside the called function's body
-			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
-			if err != nil {
-				c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
-					srv.Type, project.UUID, err.Error(),
-				)
-			}
-		}
 	}
-
-	if task.Err == nil {
-		return nil
-	}
-	return fmt.Errorf("during resource scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
+	return fmt.Errorf("during scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
 func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
@@ -202,7 +226,7 @@ func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidCon
 	return resourceData, serializedMetrics, nil
 }
 
-func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serializedMetrics []byte) error {
+func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport) error {
 	srv := task.Service
 
 	for resName, resData := range resourceData.Resources {
@@ -364,17 +388,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		}
 	}
 
-	// update scraped_at timestamp and reset the stale flag on this service so
-	// that we don't scrape it again immediately afterwards; also persist all other
-	// attributes that we have not written yet
-	_, err = tx.Exec(writeResourceScrapeSuccessQuery,
-		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
-		string(serializedMetrics), srv.ID,
-	)
-	if err != nil {
-		return fmt.Errorf("while updating metadata on project service: %w", err)
-	}
-
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("while committing transaction: %w", err)
@@ -385,6 +398,78 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	}
 
 	return nil
+}
+
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[liquid.RateName]*big.Int) error {
+	srv := task.Service
+	connection := c.Cluster.LiquidConnections[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+
+	tx, err := c.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	// update existing project_rates entries
+	rateExists := make(map[liquid.RateName]bool)
+	var rates []db.ProjectRate
+	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, srv.ID)
+	if err != nil {
+		return err
+	}
+
+	if len(rates) > 0 {
+		stmt, err := tx.Prepare(`UPDATE project_rates SET usage_as_bigint = $1 WHERE service_id = $2 AND name = $3`)
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, rate := range rates {
+			rateExists[rate.Name] = true
+
+			usageData, exists := rateData[rate.Name]
+			if !exists {
+				if rate.UsageAsBigint != "" {
+					c.LogError(
+						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper connection for %s?)",
+						rate.Name, srv.ID, srv.Type,
+					)
+				}
+				continue
+			}
+			usageAsBigint := usageData.String()
+			if usageAsBigint != rate.UsageAsBigint {
+				_, err := stmt.Exec(usageAsBigint, srv.ID, rate.Name)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// insert missing project_rates entries
+	for rateName := range connection.ServiceInfo().Rates {
+		if _, exists := rateExists[rateName]; exists {
+			continue
+		}
+		usageData := rateData[rateName]
+
+		rate := &db.ProjectRate{
+			ServiceID: srv.ID,
+			Name:      rateName,
+		}
+		if usageData != nil {
+			rate.UsageAsBigint = usageData.String()
+		}
+
+		err = tx.Insert(rate)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID]) error {

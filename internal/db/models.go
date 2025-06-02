@@ -97,25 +97,19 @@ type Project struct {
 
 // ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
-	ID                      ProjectServiceID  `db:"id"`
-	ProjectID               ProjectID         `db:"project_id"`
-	Type                    ServiceType       `db:"type"`
-	ScrapedAt               Option[time.Time] `db:"scraped_at"` // None if never scraped so far
-	CheckedAt               Option[time.Time] `db:"checked_at"`
-	NextScrapeAt            time.Time         `db:"next_scrape_at"`
-	Stale                   bool              `db:"stale"`
-	ScrapeDurationSecs      float64           `db:"scrape_duration_secs"`
-	ScrapeErrorMessage      string            `db:"scrape_error_message"`
-	RatesScrapedAt          Option[time.Time] `db:"rates_scraped_at"` // same as above
-	RatesCheckedAt          Option[time.Time] `db:"rates_checked_at"`
-	RatesNextScrapeAt       time.Time         `db:"rates_next_scrape_at"`
-	RatesStale              bool              `db:"rates_stale"`
-	RatesScrapeDurationSecs float64           `db:"rates_scrape_duration_secs"`
-	RatesScrapeState        string            `db:"rates_scrape_state"`
-	RatesScrapeErrorMessage string            `db:"rates_scrape_error_message"`
-	SerializedMetrics       string            `db:"serialized_metrics"`
-	QuotaDesyncedAt         Option[time.Time] `db:"quota_desynced_at"` // None if all quota = backend quota
-	QuotaSyncDurationSecs   float64           `db:"quota_sync_duration_secs"`
+	ID                    ProjectServiceID  `db:"id"`
+	ProjectID             ProjectID         `db:"project_id"`
+	Type                  ServiceType       `db:"type"`
+	ScrapedAt             Option[time.Time] `db:"scraped_at"` // None if never scraped so far
+	CheckedAt             Option[time.Time] `db:"checked_at"`
+	NextScrapeAt          time.Time         `db:"next_scrape_at"`
+	Stale                 bool              `db:"stale"`
+	ScrapeDurationSecs    float64           `db:"scrape_duration_secs"`
+	ScrapeErrorMessage    string            `db:"scrape_error_message"`
+	RatesScrapeState      string            `db:"rates_scrape_state"`
+	SerializedMetrics     string            `db:"serialized_metrics"`
+	QuotaDesyncedAt       Option[time.Time] `db:"quota_desynced_at"` // None if all quota = backend quota
+	QuotaSyncDurationSecs float64           `db:"quota_sync_duration_secs"`
 }
 
 // Ref converts a ProjectService into its ProjectServiceRef.

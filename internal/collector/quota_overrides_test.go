@@ -47,7 +47,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	})
 
 	c := getCollector(t, s)
-	scrapeJob := c.ResourceScrapeJob(s.Registry)
+	scrapeJob := c.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects

@@ -1,5 +1,5 @@
 {
-  "rate_scrape_errors": [
+  "scrape_errors": [
     {
       "project": {
         "id": "uuid-for-berlin",
@@ -11,7 +11,7 @@
       },
       "affected_projects": 2,
       "service_type": "shared",
-      "checked_at": 23,
+      "checked_at": 22,
       "message": "could not scrape rate data for shared service"
     },
     {
@@ -24,7 +24,7 @@
         }
       },
       "service_type": "unshared",
-      "checked_at": 12,
+      "checked_at": 11,
       "message": "could not scrape rate data for this specific unshared service"
     }
   ]

@@ -49,22 +49,6 @@ var maxScrapedAtGauge = prometheus.NewGaugeVec(
 	[]string{"service", "service_name"},
 )
 
-var minRatesScrapedAtGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_oldest_rates_scraped_at",
-		Help: "Oldest (i.e. smallest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
-	},
-	[]string{"service", "service_name"},
-)
-
-var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_newest_rates_scraped_at",
-		Help: "Newest (i.e. largest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
-	},
-	[]string{"service", "service_name"},
-)
-
 // AggregateMetricsCollector is a prometheus.Collector that submits
 // dynamically-calculated aggregate metrics about scraping progress.
 type AggregateMetricsCollector struct {
@@ -76,12 +60,10 @@ type AggregateMetricsCollector struct {
 func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	minScrapedAtGauge.Describe(ch)
 	maxScrapedAtGauge.Describe(ch)
-	minRatesScrapedAtGauge.Describe(ch)
-	maxRatesScrapedAtGauge.Describe(ch)
 }
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
-	SELECT type, MIN(scraped_at), MAX(scraped_at), MIN(rates_scraped_at), MAX(rates_scraped_at)
+	SELECT type, MIN(scraped_at), MAX(scraped_at), MIN(scraped_at), MAX(scraped_at)
 	  FROM project_services
 	 WHERE scraped_at IS NOT NULL
 	 GROUP BY type
@@ -97,10 +79,6 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	minScrapedAtDesc := <-descCh
 	maxScrapedAtGauge.Describe(descCh)
 	maxScrapedAtDesc := <-descCh
-	minRatesScrapedAtGauge.Describe(descCh)
-	minRatesScrapedAtDesc := <-descCh
-	maxRatesScrapedAtGauge.Describe(descCh)
-	maxRatesScrapedAtDesc := <-descCh
 
 	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
 		var (
@@ -129,18 +107,6 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				string(serviceType), string(serviceType),
-			)
-		}
-		if len(connection.ServiceInfo().Rates) > 0 {
-			ch <- prometheus.MustNewConstMetric(
-				minRatesScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
-				string(serviceType), string(serviceType),
-			)
-			ch <- prometheus.MustNewConstMetric(
-				maxRatesScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(maxRatesScrapedAt),
 				string(serviceType), string(serviceType),
 			)
 		}

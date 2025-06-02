@@ -28,7 +28,7 @@ import (
 // project reports (and then reclaim their memory usage) as soon as possible.
 var (
 	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, ps.type, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	SELECT p.id, ps.type, ps.scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
 	  FROM projects p
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_rates pra ON pra.service_id = ps.id
