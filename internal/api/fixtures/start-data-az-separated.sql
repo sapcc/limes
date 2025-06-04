@@ -4,7 +4,7 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (1, 1, 'shared',   UNIX(22), UNIX(23), UNIX(22), UNIX(23));
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (1, 1, 'shared',   UNIX(22), UNIX(22));
 
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1,  1, 'capacity_az_separated', NULL, NULL);
 

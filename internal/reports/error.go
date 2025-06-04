@@ -6,7 +6,6 @@ package reports
 import (
 	"database/sql"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -41,12 +40,6 @@ type ScrapeError struct {
 
 func GetScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
 	return getScrapeErrors(dbi, filter, scrapeErrorsQuery)
-}
-
-func GetRateScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
-	dbQuery := strings.ReplaceAll(scrapeErrorsQuery, "scrape_error_message", "rates_scrape_error_message")
-	dbQuery = strings.ReplaceAll(dbQuery, "checked_at", "rates_checked_at")
-	return getScrapeErrors(dbi, filter, dbQuery)
 }
 
 func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeError, error) {

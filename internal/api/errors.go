@@ -28,18 +28,8 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, map[string]any{"scrape_errors": scrapeErrors})
 }
 
+// deprecated
 // ListRateScrapeErrors handles GET /rates/v1/admin/scrape-errors.
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/rates/v1/admin/scrape-errors")
-	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:show_errors") {
-		return
-	}
-
-	scrapeErrors, err := reports.GetRateScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster))
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	respondwith.JSON(w, http.StatusOK, map[string]any{"rate_scrape_errors": scrapeErrors})
+	p.ListScrapeErrors(w, r)
 }
