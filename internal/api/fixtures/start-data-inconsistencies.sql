@@ -1,4 +1,9 @@
 -- start data for inconsistencies test
+
+INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'shared', '2018-06-13 15:06:37', '2018-06-13 15:06:37', 1);
+
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit) VALUES (1, 1, 'capacity', 1, 'B');
+
 -- "cloud" cluster has two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany',  'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'pakistan', 'uuid-for-pakistan');

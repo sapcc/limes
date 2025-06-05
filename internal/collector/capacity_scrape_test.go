@@ -136,7 +136,7 @@ func Test_ScanCapacity(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -289,7 +289,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -430,7 +430,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -516,7 +516,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -613,7 +613,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -621,7 +621,6 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
@@ -682,7 +681,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -690,7 +689,6 @@ func Test_ScanManualCapacity(t *testing.T) {
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
@@ -772,7 +770,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
 	scrapeJob = c.CapacityScrapeJob(s.Registry)

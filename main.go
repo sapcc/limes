@@ -126,7 +126,7 @@ func main() {
 
 	// load configuration and connect to cluster
 	dbm := db.InitORM(must.Return(db.Init()))
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm)
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
@@ -168,12 +168,6 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	mailClient := None[collector.MailClient]()
 	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
 		mailClient = Some(must.Return(collector.NewMailClient(provider, mailConfig.Endpoint)))
-	}
-
-	// bring liquidConnections into sync with the database
-	err := cluster.ReconcileLiquidConnections()
-	if err != nil {
-		logg.Fatal("reconciling liquid connections on startup failed: %w", err)
 	}
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and

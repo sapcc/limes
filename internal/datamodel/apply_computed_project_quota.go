@@ -82,9 +82,9 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.Cluster, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
 	// only run for resources with quota and autogrow QD model
-	resInfo := cluster.InfoForResource(serviceType, resourceName)
+	resInfo := core.InfoForResource(serviceInfos, serviceType, resourceName)
 	if !resInfo.HasQuota {
 		return nil
 	}

@@ -20,7 +20,12 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scrapeErrors, err := reports.GetScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster))
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	scrapeErrors, err := reports.GetScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -36,7 +41,12 @@ func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	scrapeErrors, err := reports.GetRateScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster))
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	scrapeErrors, err := reports.GetRateScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

@@ -89,7 +89,7 @@ var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 
 // Collect implements the prometheus.Collector interface.
 func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
-	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
+	// NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
 	// instances because it is faster.
 
 	descCh := make(chan *prometheus.Desc, 1)
@@ -365,6 +365,10 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 // their rendered forms (i.e. something like `{bar="bar",foo="foo"} 42` instead
 // of a dozen allocations for each label name, label value, label pair, a map
 // of label pairs, and so on) in order to save memory.
+//
+// This exporter cannot use Cluster.LiquidConnections, because it runs outside
+// of the collect task. Therefore, it uses the convenience methods of the Cluster
+// to get the necessary liquid.ResourceInfo data.
 type DataMetricsReporter struct {
 	Cluster      *core.Cluster
 	DB           *gorp.DbMap
@@ -513,11 +517,15 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
+	serviceInfos, err := d.Cluster.AllServiceInfos()
+	if err != nil {
+		return nil, err
+	}
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
-	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			dbServiceType     db.ServiceType
 			dbResourceName    liquid.ResourceName
@@ -589,8 +597,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for serviceType, connection := range d.Cluster.LiquidConnections {
-		for resName := range connection.ServiceInfo().Resources {
+	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+		for resName := range serviceInfos[serviceType].Resources {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -755,19 +763,19 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	}
 
 	// fetch metadata for services/resources
-	for dbServiceType, connection := range d.Cluster.LiquidConnections {
-		for dbResourceName, resourceInfo := range connection.ServiceInfo().Resources {
-			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
+	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+		for dbResourceName, resourceInfo := range serviceInfos[serviceType].Resources {
+			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+				apiIdentity.Name, apiIdentity.ServiceType, serviceType,
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
 			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
 			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
 
-			autogrowCfg, ok := d.Cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
+			autogrowCfg, ok := d.Cluster.QuotaDistributionConfigForResource(serviceType, dbResourceName).Autogrow.Unpack()
 			if ok {
 				metric := dataMetric{Labels: labels, Value: autogrowCfg.GrowthMultiplier}
 				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
@@ -776,9 +784,9 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 				result["limes_autogrow_quota_overcommit_threshold_percent"] = append(result["limes_autogrow_quota_overcommit_threshold_percent"], metric)
 			}
 
-			for _, duration := range behaviorCache.GetCommitmentBehavior(dbServiceType, dbResourceName).Durations {
+			for _, duration := range behaviorCache.GetCommitmentBehavior(serviceType, dbResourceName).Durations {
 				labels := fmt.Sprintf(`duration=%q,resource=%q,service=%q,service_name=%q`,
-					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, serviceType,
 				)
 				metric := dataMetric{Labels: labels, Value: 1.0}
 				result["limes_available_commitment_duration"] = append(result["limes_available_commitment_duration"], metric)
