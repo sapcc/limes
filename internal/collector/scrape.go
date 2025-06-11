@@ -90,12 +90,10 @@ func (c *Collector) ScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 				Name: "limes_scrapes",
 				Help: "Counter for scrape operations per Keystone project.",
 			},
-			CounterLabels: []string{"service_type", "service_name"},
+			CounterLabels: []string{"service_type"},
 		},
-		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (projectScrapeTask, error) {
-			return c.discoverScrapeTask(labels, findProjectForScrapeQuery)
-		},
-		ProcessTask: c.processScrapeTask,
+		DiscoverTask: c.discoverScrapeTask,
+		ProcessTask:  c.processScrapeTask,
 	}).Setup(registerer)
 }
 
@@ -111,15 +109,14 @@ type projectScrapeTask struct {
 	Err error
 }
 
-func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (task projectScrapeTask, err error) {
+func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labels) (task projectScrapeTask, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 	if !c.Cluster.HasService(serviceType) {
 		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
-	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
 	task.Timing.StartedAt = c.MeasureTime()
-	err = c.DB.SelectOne(&task.Service, query, serviceType, task.Timing.StartedAt)
+	err = c.DB.SelectOne(&task.Service, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
 	return task, err
 }
 

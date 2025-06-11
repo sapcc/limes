@@ -29,16 +29,12 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // scraped_at aggregate metrics
 
-// TODO: When merging these metrics together while merging the resource
-// scraping and rate scraping loops, please also get rid of the duplicate label
-// `service_name` that is currently retained for backwards compatibility (which
-// is to say, I didn't care to assess the impact of removing it yet).
 var minScrapedAtGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_oldest_scraped_at",
 		Help: "Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"service", "service_name"},
+	[]string{"service"},
 )
 
 var maxScrapedAtGauge = prometheus.NewGaugeVec(
@@ -46,7 +42,7 @@ var maxScrapedAtGauge = prometheus.NewGaugeVec(
 		Name: "limes_newest_scraped_at",
 		Help: "Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"service", "service_name"},
+	[]string{"service"},
 )
 
 // AggregateMetricsCollector is a prometheus.Collector that submits
@@ -102,12 +98,12 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				string(serviceType), string(serviceType),
+				string(serviceType),
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				string(serviceType), string(serviceType),
+				string(serviceType),
 			)
 		}
 		return nil
