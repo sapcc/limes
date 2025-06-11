@@ -13,7 +13,6 @@ import (
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -82,7 +81,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
@@ -147,7 +146,7 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "ironic-flavors", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "ironic-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
@@ -193,18 +192,21 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", liquidServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "nova-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType db.ServiceType, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
-	s := test.NewSetup(t,
+func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+	opts = append([]test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
 		test.WithAPIHandler(NewV1API),
+	}, opts...)
+	s := test.NewSetup(t,
+		opts...,
 	)
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule(string(ruleID))),
+		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
@@ -295,7 +297,7 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
@@ -323,12 +325,23 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
+	attrs := map[string]any{
+		"cores":    5,
+		"ram_mib":  23,
+		"disk_gib": 42,
+	}
+	buf := must.Return(json.Marshal(attrs))
+	srvInfo := test.DefaultLiquidServiceInfo()
+	resInfo := srvInfo.Resources["capacity"]
+	resInfo.Attributes = buf
+	srvInfo.Resources["capacity"] = resInfo
+
 	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -382,7 +395,7 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "ironic-flavors", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "ironic-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
@@ -484,18 +497,22 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", liquidServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "nova-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType db.ServiceType, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {
-	s := test.NewSetup(t,
+func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+	localOpts := []test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
 		test.WithAPIHandler(NewV1API),
+	}
+	opts = append(localOpts, opts...)
+	s := test.NewSetup(t,
+		opts...,
 	)
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule(string(ruleID))),
+		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
 	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,

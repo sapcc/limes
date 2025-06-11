@@ -54,12 +54,13 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 
-	serviceInfos, err := c.Cluster.InfoForService(serviceType)
+	maybeServiceInfo, err := c.Cluster.InfoForService(serviceType)
 	if err != nil {
 		return db.ProjectService{}, err
 	}
 
-	if !core.HasService(serviceInfos, serviceType) {
+	_, ok := maybeServiceInfo.Unpack()
+	if !ok {
 		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
@@ -123,9 +124,13 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	}
 	startedAt := c.MeasureTime()
 
-	serviceInfos, err := c.Cluster.InfoForService(srv.Type)
+	maybeServiceInfo, err := c.Cluster.InfoForService(srv.Type)
 	if err != nil {
 		return err
+	}
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		return fmt.Errorf("no such service type: %s", srv.Type)
 	}
 
 	// collect backend quota values that we want to apply
@@ -147,7 +152,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 
-		resInfo := core.InfoForResource(serviceInfos, srv.Type, resourceName)
+		resInfo := core.InfoForResource(serviceInfo, resourceName)
 		if !resInfo.HasQuota {
 			return nil
 		}

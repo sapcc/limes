@@ -135,18 +135,21 @@ func (c *Cluster) AllServiceInfos() (map[db.ServiceType]liquid.ServiceInfo, erro
 }
 
 // InfoForService returns the ServiceInfo for a given service. If the service does not
-// exist, an empty map is returned. It should be used instead of Cluster.AllServiceInfos
-// when only one service is needed, to avoid the overhead of loading all services. It has the same
-// signature as Cluster.AllServiceInfos to allow to use the utility types, but only returns a single entry
-func (c *Cluster) InfoForService(serviceType db.ServiceType) (map[db.ServiceType]liquid.ServiceInfo, error) {
+// exist, None[liquid.ServiceInfo] is returned. It should be used instead of Cluster.AllServiceInfos
+// when only one service is needed, to avoid the overhead of loading all services.
+func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.ServiceInfo], error) {
 	if len(c.LiquidConnections) == 0 {
-		return readServiceInfoFromDB(c.DB, Some(serviceType))
+		serviceInfos, err := readServiceInfoFromDB(c.DB, Some(serviceType))
+		if err != nil {
+			return None[liquid.ServiceInfo](), err
+		}
+		return Some(serviceInfos[serviceType]), nil
 	}
 	connection := c.LiquidConnections[serviceType]
 	if connection == nil {
-		return map[db.ServiceType]liquid.ServiceInfo{}, nil
+		return None[liquid.ServiceInfo](), nil
 	}
-	return map[db.ServiceType]liquid.ServiceInfo{serviceType: connection.ServiceInfo()}, nil
+	return Some(connection.ServiceInfo()), nil
 }
 
 // This is used to reach ConfigSets stored inside type ServiceConfiguration.
@@ -236,21 +239,20 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions for working with ServiceInfos and Resources
 
-// ServiceTypesInAlphabeticalOrder can be used when service types need to be
-// iterated over in a stable order (mostly to ensure deterministic behavior in unit tests).
-func ServiceTypesInAlphabeticalOrder(serviceInfos map[db.ServiceType]liquid.ServiceInfo) []db.ServiceType {
-	result := make([]db.ServiceType, 0, len(serviceInfos))
-	for serviceType := range serviceInfos {
-		result = append(result, serviceType)
-	}
-	slices.Sort(result)
-	return result
-}
-
 // HasService checks whether the given service is enabled in this cluster.
 func HasService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) bool {
 	_, exists := serviceInfos[serviceType]
 	return exists
+}
+
+// InfoForService returns the ServiceInfo for the given service type.
+// If the service does not exist, an empty ServiceInfo is returned.
+func InfoForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) liquid.ServiceInfo {
+	serviceInfo, exists := serviceInfos[serviceType]
+	if !exists {
+		return liquid.ServiceInfo{}
+	}
+	return serviceInfo
 }
 
 // HasResource checks whether the given service is enabled in this cluster and
@@ -264,29 +266,14 @@ func HasResource(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType
 	return exists
 }
 
-// InfoForResource returns the ResourceInfo for a given service and resource. If the service or
-// resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
-// .Category == "") is returned.
-func InfoForResource(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType, resourceName liquid.ResourceName) liquid.ResourceInfo {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return liquid.ResourceInfo{Unit: limes.UnitNone}
-	}
+// InfoForResource returns the ResourceInfo for a given service and resource. If the service
+// does not exist, an empty ResourceInfo (with .Unit == UnitNone and .Category == "") is returned.
+func InfoForResource(serviceInfo liquid.ServiceInfo, resourceName liquid.ResourceName) liquid.ResourceInfo {
 	resInfo, exists := serviceInfo.Resources[resourceName]
 	if !exists {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
 	return resInfo
-}
-
-// ResourcesForService returns a list of all resources for the given service type.
-// If the service does not exist, an empty list is returned.
-func ResourcesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) map[liquid.ResourceName]liquid.ResourceInfo {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return make(map[liquid.ResourceName]liquid.ResourceInfo)
-	}
-	return serviceInfo.Resources
 }
 
 // HasUsageForRate checks whether the given service is enabled in this cluster and
@@ -335,7 +322,7 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 // with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape or ScrapeCapacity
 // or on Init from the collect-task. It does not have the LiquidConnection as receiverType, so that it can be
 // reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(timeNow func() time.Time, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbm *gorp.DbMap) (err error) {
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, timeNow time.Time, dbm *gorp.DbMap) (err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -368,7 +355,7 @@ func SaveServiceInfoToDB(timeNow func() time.Time, serviceType db.ServiceType, s
 		},
 		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
 			return db.ClusterService{
-				NextScrapeAt:                    timeNow(),
+				NextScrapeAt:                    timeNow,
 				Type:                            serviceType,
 				LiquidVersion:                   serviceInfo.Version,
 				CapacityMetricFamiliesJSON:      cmf,

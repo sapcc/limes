@@ -220,7 +220,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
 			translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
 			if translate != nil {
-				resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 				*subcapacitiesInAZ, err = translate(*subcapacitiesInAZ, *availabilityZone, dbResourceName, resInfo)
 				if err != nil {
 					return fmt.Errorf("could not apply TranslationRule to subcapacities in %s/%s/%s: %w",
@@ -465,7 +466,8 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	resource, exists := service.Resources[apiIdentity.Name]
 	if !exists {
-		resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 		resource = &limesresources.ClusterResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForCluster().ForAPI(now).AsPointer(),

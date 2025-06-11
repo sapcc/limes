@@ -106,7 +106,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 			return nil
 		}
 
-		ospq.Unit = core.InfoForResource(serviceInfos, dbServiceType, dbResourceName).Unit
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		ospq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -139,7 +140,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 			return nil
 		}
 
-		mmpq.Unit = core.InfoForResource(serviceInfos, dbServiceType, dbResourceName).Unit
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		mmpq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

@@ -68,7 +68,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
 	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, stream.WriteItem, serviceInfos))
+	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, serviceInfos, stream.WriteItem))
 }
 
 // GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.

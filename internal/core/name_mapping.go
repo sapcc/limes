@@ -4,6 +4,9 @@
 package core
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -42,8 +45,8 @@ func BuildResourceNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
-	for dbServiceType, serviceInfos := range serviceInfos {
-		for dbResourceName := range serviceInfos.Resources {
+	for dbServiceType, serviceInfo := range serviceInfos {
+		for dbResourceName := range serviceInfo.Resources {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.fromAPIToDB[apiRef] = dbRef
@@ -60,7 +63,7 @@ func BuildRateNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liqu
 		fromAPIToDB: make(map[RateRef]dbRateRef),
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
-	serviceTypes := ServiceTypesInAlphabeticalOrder(serviceInfos)
+	serviceTypes := slices.Sorted(maps.Keys(serviceInfos))
 	for _, dbServiceType := range serviceTypes {
 		dbRateNames := make(map[liquid.RateName]struct{})
 		for dbRateName := range RatesForService(serviceInfos, dbServiceType) {

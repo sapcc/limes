@@ -342,7 +342,8 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 
 	resource, exists := service.Resources[apiIdentity.Name]
 	if !exists {
-		resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+		resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 		resource = &limesresources.DomainResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),

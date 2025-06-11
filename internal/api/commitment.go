@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -170,7 +171,8 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 			// defense in depth (the DB should not change that much between those two queries above)
 			continue
 		}
-		resInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
+		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token, resInfo.Unit))
 	}
 
@@ -229,7 +231,8 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		return nil, nil, nil
 	}
 	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
-	resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+	serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+	resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 	if len(behavior.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil
@@ -423,11 +426,16 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,
@@ -596,11 +604,16 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 
 	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token, resourceInfo.Unit)
 	auditEvent := commitmentEventTarget{
@@ -735,11 +748,16 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 
 	// Create resultset and auditlogs
 	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token, resourceInfo.Unit)
@@ -811,11 +829,16 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
@@ -977,11 +1000,16 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1083,11 +1111,16 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -1178,11 +1211,16 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
@@ -1239,13 +1277,14 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	}
 	sourceBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(sourceServiceType, sourceResourceName))
 
-	sourceResInfo := core.InfoForResource(serviceInfos, sourceServiceType, sourceResourceName)
+	serviceInfo := core.InfoForService(serviceInfos, sourceServiceType)
+	sourceResInfo := core.InfoForResource(serviceInfo, sourceResourceName)
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for _, targetServiceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
-			for targetResourceName, targetResInfo := range core.ResourcesForService(serviceInfos, targetServiceType) {
+		for _, targetServiceType := range slices.Sorted(maps.Keys(serviceInfos)) {
+			for targetResourceName, targetResInfo := range serviceInfos[targetServiceType].Resources {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}
@@ -1430,7 +1469,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	relatedCommitmentIDs := make([]db.ProjectCommitmentID, 0)
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
-	resourceInfo := core.InfoForResource(serviceInfos, sourceLoc.ServiceType, sourceLoc.ResourceName)
+	serviceInfo := core.InfoForService(serviceInfos, sourceLoc.ServiceType)
+	resourceInfo := core.InfoForResource(serviceInfo, sourceLoc.ResourceName)
 	if remainingAmount > 0 {
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		if respondwith.ErrorText(w, err) {
@@ -1577,11 +1617,16 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	serviceInfos, err := p.Cluster.InfoForService(loc.ServiceType)
+	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfos, loc.ServiceType, loc.ResourceName)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),

@@ -88,6 +88,8 @@ func WithLiquidConnections(params *setupParams) {
 	params.WithLiquidConnections = true
 }
 
+// WithPersistedServiceInfo is a SetupOption that fills ServiceInfo into the DB before setting up the Cluster instance.
+// This is used to test how Cluster.Connect() reacts to preexisting metadata in the DB.
 func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
 		if params.PersistedServiceInfo == nil {
@@ -147,7 +149,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
 	for serviceType, serviceInfo := range params.PersistedServiceInfo {
-		err := core.SaveServiceInfoToDB(s.Clock.Now, serviceType, serviceInfo, s.DB)
+		err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Clock.Now(), s.DB)
 		if err != nil {
 			t.Error(err)
 		}
@@ -232,7 +234,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				resInfos := core.ResourcesForService(serviceInfos, serviceType)
+				resInfos := core.InfoForService(serviceInfos, serviceType).Resources
 				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
 					dbProjectResource := &db.ProjectResource{
 						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),

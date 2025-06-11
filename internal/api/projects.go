@@ -52,7 +52,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, stream.WriteItem, serviceInfos))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, serviceInfos, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -235,7 +235,8 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			if resRequest.MaxQuota == nil {
 				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: None[uint64]()}
 			} else {
-				resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 				if !resInfo.HasQuota {
 					msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -250,7 +251,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				if resRequest.Unit != nil {
 					requestedMaxQuota.Unit = *resRequest.Unit
 				}
-				convertedMaxQuota, err := core.ConvertUnitFor(serviceInfos, dbServiceType, dbResourceName, requestedMaxQuota)
+				convertedMaxQuota, err := core.ConvertUnitFor(serviceInfo, dbResourceName, requestedMaxQuota)
 				if err != nil {
 					msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 					http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -295,7 +296,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, serviceInfos, p.timeNow(), *dbDomain, *dbProject, srv.Ref())
+		}.Run(tx, serviceInfos[srv.Ref().Type], p.timeNow(), *dbDomain, *dbProject, srv.Ref())
 		if respondwith.ErrorText(w, err) {
 			return
 		}

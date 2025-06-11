@@ -4,6 +4,8 @@
 package datamodel
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
@@ -45,7 +47,7 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 	}
 
 	// create missing service entries
-	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		if seen[serviceType] {
 			continue
 		}

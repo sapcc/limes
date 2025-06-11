@@ -42,7 +42,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, serviceInfos map[db.Serv
 	_, withDetail := queryValues["detail"]
 
 	f := Filter{
-		Includes:               make(map[db.ServiceType]map[liquid.ResourceName]bool, len(core.ServiceTypesInAlphabeticalOrder(serviceInfos))),
+		Includes:               make(map[db.ServiceType]map[liquid.ResourceName]bool, len(serviceInfos)),
 		ServiceTypeIsFiltered:  (len(apiServiceTypes) + len(apiAreas)) > 0,
 		ResourceNameIsFiltered: len(apiResourceNames) > 0,
 		WithSubresources:       withDetail,
@@ -50,13 +50,13 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, serviceInfos map[db.Serv
 		WithAZBreakdown:        strings.Contains(r.Header.Get("X-Limes-V2-API-Preview"), "per-az"),
 	}
 
-	for _, dbServiceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+	for _, dbServiceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 		if !apiAreas.Matches(srvCfg.Area) {
 			continue
 		}
 
-		for dbResourceName := range core.ResourcesForService(serviceInfos, dbServiceType) {
+		for dbResourceName := range serviceInfos[dbServiceType].Resources {
 			apiIdentity := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 
 			if !apiServiceTypes.Matches(string(apiIdentity.ServiceType)) {

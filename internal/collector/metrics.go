@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"net/http"
 	"slices"
@@ -597,7 +598,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		for resName := range serviceInfos[serviceType].Resources {
 			if capacityReported[serviceType][resName] {
 				continue
@@ -763,7 +764,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	}
 
 	// fetch metadata for services/resources
-	for _, serviceType := range core.ServiceTypesInAlphabeticalOrder(serviceInfos) {
+	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		for dbResourceName, resourceInfo := range serviceInfos[serviceType].Resources {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API

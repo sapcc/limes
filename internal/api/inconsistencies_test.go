@@ -47,9 +47,6 @@ func TestFullInconsistencyReport(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	/*_, tr0 := easypg.NewTracker(t, s.DB.Db)
-	tr0.AssertEqual("")*/
-
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/inconsistencies",

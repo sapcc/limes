@@ -111,12 +111,13 @@ type projectScrapeTask struct {
 func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (task projectScrapeTask, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 
-	serviceInfos, err := c.Cluster.InfoForService(serviceType)
+	maybeServiceInfo, err := c.Cluster.InfoForService(serviceType)
 	if err != nil {
 		return projectScrapeTask{}, err
 	}
+	_, ok := maybeServiceInfo.Unpack()
 
-	if !core.HasService(serviceInfos, serviceType) {
+	if !ok {
 		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
@@ -160,14 +161,18 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	}
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
-	serviceInfos, err := c.Cluster.InfoForService(srv.Type)
+	maybeServiceInfo, err := c.Cluster.InfoForService(srv.Type)
 	if err != nil {
 		task.Err = fmt.Errorf("while getting ServiceInfos: %w", err)
+	}
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		task.Err = fmt.Errorf("no such service type: %q", srv.Type)
 	}
 
 	// write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {
-		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics, serviceInfos)
+		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics, serviceInfo)
 		if err != nil {
 			task.Err = fmt.Errorf("while writing results into DB: %w", err)
 		}
@@ -186,7 +191,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 
 		if srv.ScrapedAt.IsNone() {
 			// see explanation inside the called function's body
-			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref(), serviceInfos)
+			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref(), serviceInfo)
 			if err != nil {
 				c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
 					srv.Type, project.UUID, err.Error(),
@@ -213,11 +218,11 @@ func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidCon
 	return resourceData, serializedMetrics, nil
 }
 
-func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serializedMetrics []byte, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
+func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serializedMetrics []byte, serviceInfo liquid.ServiceInfo) error {
 	srv := task.Service
 
 	for resName, resData := range resourceData.Resources {
-		resInfo := core.InfoForResource(serviceInfos, task.Service.Type, resName)
+		resInfo := core.InfoForResource(serviceInfo, resName)
 		if len(resData.PerAZ) == 0 {
 			// ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.PerAZ = liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0})
@@ -264,7 +269,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	updateResource := func(res *db.ProjectResource) error {
 		backendQuota := resourceData.Resources[res.Name].Quota
 
-		resInfo := core.InfoForResource(serviceInfos, srv.Type, res.Name)
+		resInfo := core.InfoForResource(serviceInfo, res.Name)
 		if resInfo.HasQuota {
 			if resInfo.Topology != liquid.AZSeparatedTopology {
 				res.BackendQuota = backendQuota
@@ -279,7 +284,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
-	}.Run(tx, serviceInfos, c.MeasureTime(), dbDomain, dbProject, srv.Ref())
+	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, srv.Ref())
 	if err != nil {
 		return err
 	}
@@ -326,7 +331,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.PhysicalUsage = data.PhysicalUsage
 
 				// set AZ backend quota.
-				resInfo := core.InfoForResource(serviceInfos, srv.Type, res.Name)
+				resInfo := core.InfoForResource(serviceInfo, res.Name)
 				if resInfo.Topology == liquid.AZSeparatedTopology && resInfo.HasQuota {
 					azRes.BackendQuota = data.Quota
 				} else {
@@ -398,7 +403,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	return nil
 }
 
-func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID], serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
+func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID], serviceInfo liquid.ServiceInfo) error {
 	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,
@@ -421,14 +426,14 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// that quota overrides are persisted)
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
-			resInfo := core.InfoForResource(serviceInfos, srv.Type, res.Name)
+			resInfo := core.InfoForResource(serviceInfo, res.Name)
 			if resInfo.HasQuota && res.BackendQuota.IsNone() {
 				res.BackendQuota = Some[int64](-1)
 			}
 			return nil
 		},
 		LogError: c.LogError,
-	}.Run(tx, serviceInfos, c.MeasureTime(), dbDomain, dbProject, srv)
+	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, srv)
 	if err != nil {
 		return err
 	}

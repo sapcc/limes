@@ -37,14 +37,14 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
-	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
+	normalizedServiceType := db.ServiceType(strings.TrimPrefix(string(serviceType), "liquid-"))
 	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, core.ResourcesForService(serviceInfos, normalizedServiceType))
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, serviceInfos[normalizedServiceType].Resources)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -72,7 +72,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
-	normalizedServiceType := db.ServiceType(strings.ReplaceAll(string(serviceType), "liquid-", ""))
+	normalizedServiceType := db.ServiceType(strings.TrimPrefix(string(serviceType), "liquid-"))
 	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return

@@ -68,7 +68,7 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
+func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo, submit func(*limesresources.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
@@ -189,7 +189,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new resource report when necessary
 		resReport := srvReport.Resources[apiIdentity.Name]
 		if resReport == nil {
-			resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 				Usage:            0,
@@ -238,7 +239,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if azSubresources != nil {
 			translate := behavior.TranslationRuleInV1API.TranslateSubresources
 			if translate != nil {
-				resInfo := core.InfoForResource(serviceInfos, dbServiceType, dbResourceName)
+				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 				*azSubresources, err = translate(*azSubresources, *az, dbResourceName, resInfo)
 				if err != nil {
 					return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
@@ -401,7 +403,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
-func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesrates.ProjectReport) error, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
+func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo, submit func(*limesrates.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID

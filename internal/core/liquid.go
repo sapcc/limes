@@ -74,7 +74,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 		return fmt.Errorf("getting ServiceInfo: %w", err)
 	}
 	if apiSuccess {
-		err = SaveServiceInfoToDB(l.timeNow, l.ServiceType, l.ServiceInfo(), l.DB)
+		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.timeNow(), l.DB)
 	}
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
@@ -97,7 +97,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 		if infoVersion != newVersion {
 			return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 		}
-		err = SaveServiceInfoToDB(l.timeNow, l.ServiceType, l.ServiceInfo(), l.DB)
+		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.timeNow(), l.DB)
 		if err != nil {
 			return err
 		}
