@@ -65,6 +65,7 @@ func (i VolumeTypeInfo) String() string {
 
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+	gophercloud.ServiceTypeAliases["block-storage"] = []string{"volumev3"}
 	l.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
 	return err
 }
