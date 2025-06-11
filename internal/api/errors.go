@@ -28,8 +28,9 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, map[string]any{"scrape_errors": scrapeErrors})
 }
 
-// deprecated
 // ListRateScrapeErrors handles GET /rates/v1/admin/scrape-errors.
+//
+// Deprecated:
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	p.ListScrapeErrors(w, r)
 }

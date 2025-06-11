@@ -89,8 +89,9 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 200, map[string]any{"project": project})
 }
 
-// deprecated
 // SyncProjectRates handles POST /v1/domains/:domain_id/projects/:project_id/sync.
+//
+// Deprecated:
 func (p *v1Provider) SyncProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id/sync")
 	p.SyncProject(w, r)
