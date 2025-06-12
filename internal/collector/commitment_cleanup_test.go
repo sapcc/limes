@@ -97,6 +97,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000001",
 		ID:                  1,
 		AZResourceID:        1,
 		Amount:              10,
@@ -111,6 +112,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000002",
 		ID:                  2,
 		AZResourceID:        1,
 		Amount:              10,
@@ -126,7 +128,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// job should set it to "expired", but leave it around for now
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 2 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_commitments SET state = 'expired' WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
+	`)
 
 	// one month later, the commitment should be deleted
 	s.Clock.StepBy(10 * oneDay)
@@ -134,18 +138,25 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 	s.Clock.StepBy(30 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 2 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_commitments WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
+	`)
 
 	// test 2: simulate a commitment that was created yesterday,
 	// and then converted five minutes later
 	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	supersedeContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonConvert, RelatedCommitmentIDs: []db.ProjectCommitmentID{4}}
+	supersedeContext := db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonConvert,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{4},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000004"},
+	}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                   3,
+		UUID:                 "00000000-0000-0000-0000-000000000003",
 		AZResourceID:         1,
 		Amount:               10,
 		Duration:             commitmentForOneDay,
@@ -157,11 +168,16 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreationContextJSON:  json.RawMessage(buf),
 		SupersedeContextJSON: Some(json.RawMessage(supersedeBuf)),
 	}))
-	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonConvert, RelatedCommitmentIDs: []db.ProjectCommitmentID{3}}
+	creationContext = db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonConvert,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{3},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000003"},
+	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  4,
+		UUID:                "00000000-0000-0000-0000-000000000004",
 		AZResourceID:        2,
 		Amount:              10,
 		Duration:            commitmentForOneDay,
@@ -176,22 +192,29 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// the commitment in state "superseded" should not be touched when moving to state "expired"
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 4 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_commitments SET state = 'expired' WHERE id = 4 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000004';
+	`)
 
 	// when cleaning up, both commitments should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL;
-		DELETE FROM project_commitments WHERE id = 4 AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000003';
+		DELETE FROM project_commitments WHERE id = 4 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000004';
 	`)
 
 	// test 3: simulate two commitments with different expiration dates that were merged
-	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{7}}
+	creationContext = db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonMerge,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{7},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000007"},
+	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	commitment5 := db.ProjectCommitment{
 		ID:                  5,
+		UUID:                "00000000-0000-0000-0000-000000000005",
 		AZResourceID:        1,
 		Amount:              10,
 		Duration:            commitmentForOneDay,
@@ -205,6 +228,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	mustT(t, c.DB.Insert(&commitment5))
 	commitment6 := db.ProjectCommitment{
 		ID:                  6,
+		UUID:                "00000000-0000-0000-0000-000000000006",
 		AZResourceID:        1,
 		Amount:              5,
 		Duration:            commitmentForOneDay,
@@ -216,11 +240,16 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreationContextJSON: buf,
 	}
 	mustT(t, c.DB.Insert(&commitment6))
-	creationContext = db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{5, 6}}
+	creationContext = db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonMerge,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5, 6},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000005", "00000000-0000-0000-0000-000000000006"},
+	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  7,
+		UUID:                "00000000-0000-0000-0000-000000000007",
 		AZResourceID:        1,
 		Amount:              15,
 		Duration:            commitmentForOneDay,
@@ -236,14 +265,14 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// the superseded commitments should not be touched
 	s.Clock.StepBy(5 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 7 AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 7 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000007';`)
 
 	// when cleaning up, all commitments related to the merge should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments WHERE id = 5 AND transfer_token = NULL;
-		DELETE FROM project_commitments WHERE id = 6 AND transfer_token = NULL;
-		DELETE FROM project_commitments WHERE id = 7 AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 5 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000005';
+		DELETE FROM project_commitments WHERE id = 6 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000006';
+		DELETE FROM project_commitments WHERE id = 7 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000007';
 	`)
 }

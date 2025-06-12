@@ -33,6 +33,7 @@ import (
 // Commitment is the API representation of an *existing* commitment as reported by Limes.
 type Commitment struct {
 	ID               int64                  `json:"id"`
+	UUID             string                 `json:"uuid"`
 	ServiceType      limes.ServiceType      `json:"service_type"`
 	ResourceName     ResourceName           `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`

@@ -57,6 +57,10 @@ type ProjectAZResourceID int64
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ProjectCommitmentID int64
 
+// ProjectCommitmentUUID is a UUID into the project_commitments table. This typedef is
+// used to distinguish these UUIDs from UUIDs of other tables or raw string values.
+type ProjectCommitmentUUID string
+
 // ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
 type ResourceRef[I ~int64] struct {
 	ServiceID I                   `db:"service_id"`

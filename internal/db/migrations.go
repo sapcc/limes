@@ -405,4 +405,15 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_az_resources
 			ADD COLUMN last_nonzero_raw_capacity BIGINT DEFAULT NULL;
 	`,
+	"056_add_project_commitments_uuid.down.sql": `
+		ALTER TABLE project_commitments
+			DROP COLUMN uuid;
+	`,
+	// DB-level UUID generation is only used during the migration, afterwards the application level takes on that duty
+	"056_add_project_commitments_uuid.up.sql": `
+		ALTER TABLE project_commitments
+			ADD COLUMN uuid TEXT NOT NULL DEFAULT gen_random_uuid() UNIQUE;
+		ALTER TABLE project_commitments
+			ALTER COLUMN uuid DROP DEFAULT;
+	`,
 }
