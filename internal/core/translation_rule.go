@@ -227,8 +227,8 @@ func translateIronicSubcapacities(input string, az limes.AvailabilityZone, _ liq
 		ProvisionState       string                 `json:"provision_state,omitempty"`
 		TargetProvisionState *string                `json:"target_provision_state,omitempty"`
 		AvailabilityZone     limes.AvailabilityZone `json:"availability_zone"`
-		RAM                  limes.ValueWithUnit    `json:"ram,omitempty"`
-		Disk                 limes.ValueWithUnit    `json:"disk,omitempty"`
+		RAM                  limes.ValueWithUnit    `json:"ram"`
+		Disk                 limes.ValueWithUnit    `json:"disk"`
 		Cores                uint64                 `json:"cores,omitempty"`
 		SerialNumber         string                 `json:"serial,omitempty"`
 		InstanceID           *string                `json:"instance_id,omitempty"`
