@@ -177,6 +177,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
+		UUID:             string(c.UUID),
 		ServiceType:      apiIdentity.ServiceType,
 		ResourceName:     apiIdentity.Name,
 		AvailabilityZone: loc.AvailabilityZone,
@@ -368,6 +369,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	dbCommitment := db.ProjectCommitment{
+		UUID:                p.generateProjectCommitmentUUID(),
 		AZResourceID:        azResourceID,
 		Amount:              req.Amount,
 		Duration:            req.Duration,
@@ -474,6 +476,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Load commitments
 	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
+	commitmentUUIDs := make([]db.ProjectCommitmentUUID, len(commitmentIDs))
 	for i, commitmentID := range commitmentIDs {
 		err := p.DB.SelectOne(&dbCommitments[i], findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -482,6 +485,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		} else if respondwith.ErrorText(w, err) {
 			return
 		}
+		commitmentUUIDs[i] = dbCommitments[i].UUID
 	}
 
 	// Verify that all commitments agree on resource and AZ and are active
@@ -517,6 +521,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	// Create merged template
 	now := p.timeNow()
 	dbMergedCommitment := db.ProjectCommitment{
+		UUID:         p.generateProjectCommitmentUUID(),
 		AZResourceID: azResourceID,
 		Amount:       0,                                   // overwritten below
 		Duration:     limesresources.CommitmentDuration{}, // overwritten below
@@ -539,8 +544,9 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Fill workflow context
 	creationContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonMerge,
-		RelatedCommitmentIDs: commitmentIDs,
+		Reason:                 db.CommitmentReasonMerge,
+		RelatedCommitmentIDs:   commitmentIDs,
+		RelatedCommitmentUUIDs: commitmentUUIDs,
 	}
 	buf, err := json.Marshal(creationContext)
 	if respondwith.ErrorText(w, err) {
@@ -556,8 +562,9 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Mark merged commits as superseded
 	supersedeContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonMerge,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbMergedCommitment.ID},
+		Reason:                 db.CommitmentReasonMerge,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbMergedCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbMergedCommitment.UUID},
 	}
 	buf, err = json.Marshal(supersedeContext)
 	if respondwith.ErrorText(w, err) {
@@ -667,14 +674,16 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	creationContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonRenew,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+		Reason:                 db.CommitmentReasonRenew,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 	dbRenewedCommitment := db.ProjectCommitment{
+		UUID:                p.generateProjectCommitmentUUID(),
 		AZResourceID:        dbCommitment.AZResourceID,
 		Amount:              dbCommitment.Amount,
 		Duration:            dbCommitment.Duration,
@@ -693,8 +702,9 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	renewContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonRenew,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbRenewedCommitment.ID},
+		Reason:                 db.CommitmentReasonRenew,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbRenewedCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbRenewedCommitment.UUID},
 	}
 	buf, err = json.Marshal(renewContext)
 	if respondwith.ErrorText(w, err) {
@@ -909,8 +919,9 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		supersedeContext := db.CommitmentWorkflowContext{
-			Reason:               db.CommitmentReasonSplit,
-			RelatedCommitmentIDs: []db.ProjectCommitmentID{transferCommitment.ID, remainingCommitment.ID},
+			Reason:                 db.CommitmentReasonSplit,
+			RelatedCommitmentIDs:   []db.ProjectCommitmentID{transferCommitment.ID, remainingCommitment.ID},
+			RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
 		}
 		buf, err := json.Marshal(supersedeContext)
 		if respondwith.ErrorText(w, err) {
@@ -962,14 +973,16 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) (db.ProjectCommitment, error) {
 	now := p.timeNow()
 	creationContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonSplit,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+		Reason:                 db.CommitmentReasonSplit,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
 		return db.ProjectCommitment{}, err
 	}
 	return db.ProjectCommitment{
+		UUID:                p.generateProjectCommitmentUUID(),
 		AZResourceID:        dbCommitment.AZResourceID,
 		Amount:              amount,
 		Duration:            dbCommitment.Duration,
@@ -987,14 +1000,16 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ProjectAZResourceID, amount uint64) (db.ProjectCommitment, error) {
 	now := p.timeNow()
 	creationContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonConvert,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+		Reason:                 db.CommitmentReasonConvert,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
 		return db.ProjectCommitment{}, err
 	}
 	return db.ProjectCommitment{
+		UUID:                p.generateProjectCommitmentUUID(),
 		AZResourceID:        azResourceID,
 		Amount:              amount,
 		Duration:            dbCommitment.Duration,
@@ -1364,7 +1379,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		ProjectName: dbProject.Name,
 	}
 
-	relatedCommitmentIDs := make([]db.ProjectCommitmentID, 0)
+	var (
+		relatedCommitmentIDs   []db.ProjectCommitmentID
+		relatedCommitmentUUIDs []db.ProjectCommitmentUUID
+	)
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
 	if remainingAmount > 0 {
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
@@ -1372,6 +1390,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
+		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
 		err = tx.Insert(&remainingCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -1386,6 +1405,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
+	relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, convertedCommitment.UUID)
 	err = tx.Insert(&convertedCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1394,8 +1414,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// supersede the original commitment
 	now := p.timeNow()
 	supersedeContext := db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonConvert,
-		RelatedCommitmentIDs: relatedCommitmentIDs,
+		Reason:                 db.CommitmentReasonConvert,
+		RelatedCommitmentIDs:   relatedCommitmentIDs,
+		RelatedCommitmentUUIDs: relatedCommitmentUUIDs,
 	}
 	buf, err := json.Marshal(supersedeContext)
 	if respondwith.ErrorText(w, err) {
@@ -1417,8 +1438,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
 	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
-		Reason:               db.CommitmentReasonSplit,
-		RelatedCommitmentIDs: []db.ProjectCommitmentID{dbCommitment.ID},
+		Reason:                 db.CommitmentReasonSplit,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
 	})
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
