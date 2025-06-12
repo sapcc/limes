@@ -12,14 +12,14 @@
             "window": "1s"
           }
         ],
-        "max_scraped_at": 45,
-        "min_scraped_at": 23
+        "max_scraped_at": 44,
+        "min_scraped_at": 22
       },
       {
         "type": "unshared",
         "area": "unshared",
-        "max_scraped_at": 34,
-        "min_scraped_at": 12
+        "max_scraped_at": 33,
+        "min_scraped_at": 11
       }
     ]
   }

@@ -77,7 +77,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 `)
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pra.name, MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
+	SELECT ps.type, pra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
 	  JOIN project_rates pra ON pra.service_id = ps.id
 	 WHERE TRUE {{AND ps.type = $service_type}}

@@ -43,10 +43,8 @@ func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.
 			},
 			CounterLabels: []string{"service_type"},
 		},
-		DiscoverTask: func(ctx context.Context, labels prometheus.Labels) (capacityScrapeTask, error) {
-			return c.discoverCapacityScrapeTask(ctx, labels)
-		},
-		ProcessTask: c.processCapacityScrapeTask,
+		DiscoverTask: c.discoverCapacityScrapeTask,
+		ProcessTask:  c.processCapacityScrapeTask,
 	}).Setup(registerer)
 }
 

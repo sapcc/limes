@@ -176,7 +176,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql", srvInfoShared, srvInfoUnshared)
 
 	// Add a scrape error to one specific service with type 'unshared' that has rate data.
-	_, err := s.DB.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
 		"could not scrape rate data for this specific unshared service",
 		1, "unshared",
 	)
@@ -186,7 +186,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 
 	// Add the same scrape error to both services with type 'shared' that have rate data.
 	// This will ensure that they get grouped under a dummy project.
-	_, err = s.DB.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE (id = $2 OR id = $3) AND type = $4`,
+	_, err = s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE (id = $2 OR id = $3) AND type = $4`,
 		"could not scrape rate data for shared service",
 		2, 4, "shared",
 	)
@@ -197,7 +197,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	// check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/rates/v1/admin/scrape-errors",
+		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-list.json"),
 	}.Check(t, s.Handler)
@@ -211,7 +211,7 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 	// check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/rates/v1/admin/scrape-errors",
+		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-empty.json"),
 	}.Check(t, s.Handler)
@@ -548,24 +548,22 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
 
-	// DiscoverProjects sets `stale` and `rates_stale` on new project_services;
+	// DiscoverProjects sets `stale` on new project_services;
 	// clear this to avoid confusion in the next test
-	_, err := s.DB.Exec(`UPDATE project_services SET stale = FALSE, rates_stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
+	_, err := s.DB.Exec(`UPDATE project_services SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// check SyncProject
-	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
-	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB /*, nothing */)
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
-	expectStaleProjectServices(t, s.DB, "stale", "dresden:shared", "dresden:unshared")
-	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB, "dresden:shared", "dresden:unshared")
 
 	// SyncProject should discover the given project if not yet done
 	discovery.Config.Projects["uuid-for-germany"] = append(discovery.Config.Projects["uuid-for-germany"],
@@ -577,9 +575,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
-	expectStaleProjectServices(t, s.DB, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
-	// since the project is entirely new, rate scraping is also marked as being needed immediately
-	expectStaleProjectServices(t, s.DB, "rates_stale", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, s.DB, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 
 	// check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -680,15 +676,15 @@ func Test_ProjectOperations(t *testing.T) {
 	}
 }
 
-func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string, pairs ...string) {
+func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) {
 	t.Helper()
 
-	queryStr := fmt.Sprintf(`
+	queryStr := sqlext.SimplifyWhitespace(`
 		SELECT p.name, ps.type
-		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 WHERE ps.%s
+		 FROM projects p JOIN project_services ps ON ps.project_id = p.id
+		 WHERE ps.stale
 		 ORDER BY p.name, ps.type
-	`, staleField)
+	`)
 	var actualPairs []string
 
 	err := sqlext.ForeachRow(dbm, queryStr, nil, func(rows *sql.Rows) error {
@@ -828,12 +824,10 @@ func Test_LargeProjectList(t *testing.T) {
 		}
 		for _, serviceType := range []db.ServiceType{"shared", "unshared"} {
 			service := db.ProjectService{
-				ProjectID:      project.ID,
-				Type:           serviceType,
-				ScrapedAt:      Some(scrapedAt),
-				CheckedAt:      Some(scrapedAt),
-				RatesScrapedAt: Some(scrapedAt),
-				RatesCheckedAt: Some(scrapedAt),
+				ProjectID: project.ID,
+				Type:      serviceType,
+				ScrapedAt: Some(scrapedAt),
+				CheckedAt: Some(scrapedAt),
 			}
 			err = s.DB.Insert(&service)
 			if err != nil {

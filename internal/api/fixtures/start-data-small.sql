@@ -17,7 +17,7 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'domainone', 'uuid-for-domainone
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'projectone', 'uuid-for-projectone', 'uuid-for-domainone');
 
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (1, 1, 'first', UNIX(11), UNIX(12), UNIX(11), UNIX(12));
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (1, 1, 'first', UNIX(11), UNIX(11));
 
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1,  1, 'things',   0, 0);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2,  1, 'capacity', 0, 0);
