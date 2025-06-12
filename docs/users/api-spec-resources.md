@@ -493,7 +493,8 @@ The following fields can appear in the response body:
 | Field | Type | Description |
 | ----- | ---- | ----------- |
 | `commitments` | list of objects | List of commitments in the given project. |
-| `commitments[].id` | integer | A unique identifier for this commitment. |
+| `commitments[].id` | integer | A unique numerical identifier for this commitment. This API uses this numerical ID to refer to the commitment in other API calls. |
+| `commitments[].uuid` | integer | A unique string identifier for this commitment. The next major version of this API will use this UUID instead of the numerical ID to refer to commitments in API calls. |
 | `commitments[].service_type`<br>`commitments[].resource_name` | string | The resource for which usage is committed. |
 | `commitments[].availability_zone` | string | The availability zone in which usage is committed. |
 | `commitments[].amount` | integer | The amount of usage that was committed to. |

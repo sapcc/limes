@@ -5,7 +5,6 @@ package api
 
 import (
 	"fmt"
-	"strconv"
 
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
@@ -103,7 +102,7 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 	}
 	res := cadf.Resource{
 		TypeURI:     "service/resources/commitment",
-		ID:          strconv.FormatInt(t.Commitments[0].ID, 10),
+		ID:          t.Commitments[0].UUID,
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   t.ProjectID,

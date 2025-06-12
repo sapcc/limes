@@ -8,7 +8,11 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/must"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 func intoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
@@ -28,4 +32,11 @@ func GenerateTransferToken() string {
 		panic(err.Error())
 	}
 	return hex.EncodeToString(tokenBytes)
+}
+
+// GenerateProjectCommitmentUUID generates a random ProjectCommitmentUUID.
+func GenerateProjectCommitmentUUID() db.ProjectCommitmentUUID {
+	// UUID generation will only raise an error if reading from /dev/urandom fails,
+	// which is a wildly unexpected OS-level error and thus fine as a fatal error
+	return db.ProjectCommitmentUUID(must.Return(uuid.NewV4()).String())
 }

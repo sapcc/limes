@@ -172,6 +172,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -206,6 +207,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}
 	resp2 := assert.JSONObject{
 		"id":                2,
+		"uuid":              test.GenerateDummyCommitmentUUID(2),
 		"service_type":      "first",
 		"resource_name":     "things",
 		"availability_zone": "any",
@@ -307,6 +309,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}
 	resp3 := assert.JSONObject{
 		"id":                3,
+		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "first",
 		"resource_name":     "things",
 		"availability_zone": "any",
@@ -776,6 +779,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -816,6 +820,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// TransferAmount < CommitmentAmount
 	resp2 := assert.JSONObject{
 		"id":                3,
+		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -889,6 +894,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -960,6 +966,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -978,6 +985,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp2 := assert.JSONObject{
 		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -995,6 +1003,7 @@ func Test_TransferCommitment(t *testing.T) {
 	// Split commitment
 	resp3 := assert.JSONObject{
 		"id":                2,
+		"uuid":              test.GenerateDummyCommitmentUUID(2),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1012,6 +1021,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 	resp4 := assert.JSONObject{
 		"id":                2,
+		"uuid":              test.GenerateDummyCommitmentUUID(2),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1277,6 +1287,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	resp := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                id,
+			"uuid":              test.GenerateDummyCommitmentUUID(id),
 			"service_type":      targetService,
 			"resource_name":     targetResource,
 			"availability_zone": "az-one",
@@ -1294,6 +1305,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	respWithConfirmBy := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                id,
+			"uuid":              test.GenerateDummyCommitmentUUID(id),
 			"service_type":      targetService,
 			"resource_name":     targetResource,
 			"availability_zone": "az-one",
@@ -1471,6 +1483,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                1,
+			"uuid":              test.GenerateDummyCommitmentUUID(1),
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -1510,6 +1523,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                2,
+			"uuid":              test.GenerateDummyCommitmentUUID(2),
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -1638,6 +1652,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}
 	resp3 := assert.JSONObject{
 		"id":                3,
+		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1653,6 +1668,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}
 	resp4 := assert.JSONObject{
 		"id":                4,
+		"uuid":              test.GenerateDummyCommitmentUUID(4),
 		"service_type":      "second",
 		"resource_name":     "other",
 		"availability_zone": "az-one",
@@ -1669,6 +1685,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Merged commitment
 	resp5 := assert.JSONObject{
 		"id":                5,
+		"uuid":              test.GenerateDummyCommitmentUUID(5),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -1804,7 +1821,11 @@ func Test_MergeCommitments(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
-	expectedContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonMerge, RelatedCommitmentIDs: []db.ProjectCommitmentID{5}}
+	expectedContext := db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonMerge,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5},
+		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{test.GenerateDummyCommitmentUUID(5)},
+	}
 	var supersedeContext db.CommitmentWorkflowContext
 	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
 	if err != nil {
@@ -1866,6 +1887,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                3,
+		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -1881,6 +1903,7 @@ func Test_RenewCommitments(t *testing.T) {
 	}
 	resp2 := assert.JSONObject{
 		"id":                4,
+		"uuid":              test.GenerateDummyCommitmentUUID(4),
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
