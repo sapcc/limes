@@ -121,3 +121,11 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:delete', NULL, NULL, '0');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:unlimited', NULL, NULL, '1048576');
 -- not pictured: paris has no records at all, so the API will only display the default rate limits
+
+-- insert some bullshit data that should be filtered out by the internal/reports/ logic
+-- the logic is that only project_services/ resources/ az_resource/ rates with a valid cluster entry are considered
+INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (101, 101, 'things', 2, 2);
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (101, 101, 'any', NULL, 1, 1, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:frobnicate', 5, 1000000000, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:frobnicate', 5, 1000000000, '');

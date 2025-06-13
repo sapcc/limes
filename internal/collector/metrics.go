@@ -567,6 +567,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 					az, apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
 				)
 				metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
+				// TODO: Do we want to report "unknown" AZ here always or only if applicable?
 				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
 
 				azUsage := usagePerAZ[az]

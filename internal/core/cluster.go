@@ -73,7 +73,7 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType, timeNow, dbm)
+		connection := MakeLiquidConnection(l, serviceType, config.AvailabilityZones, timeNow, dbm)
 		c.LiquidConnections[serviceType] = &connection
 	}
 	return c, errs
@@ -318,11 +318,11 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions for working with ServiceInfo and DB
 
-// SaveServiceInfoToDB ensures consistency of tables cluster_services, cluster_resources and cluster_rates
-// with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape or ScrapeCapacity
-// or on Init from the collect-task. It does not have the LiquidConnection as receiverType, so that it can be
-// reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, timeNow time.Time, dbm *gorp.DbMap) (err error) {
+// SaveServiceInfoToDB ensures consistency of tables cluster_services, cluster_resources, cluster_az_resources
+// and cluster_rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
+// or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
+// so that it can be reused from the testSetup to create DB entries.
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, timeNow time.Time, dbm *gorp.DbMap) (err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -417,9 +417,54 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return nil
 		},
 	}
-	_, err = resourceUpdate.Execute(tx)
+	dbResources, err = resourceUpdate.Execute(tx)
 	if err != nil {
 		return err
+	}
+
+	// collect existing cluster_az_resources
+	var dbAZResources []db.ClusterAZResource
+	_, err = tx.Select(&dbAZResources, `SELECT car.* FROM cluster_az_resources car JOIN cluster_resources cr ON car.resource_id = cr.id WHERE cr.service_id = $1`, dbServices[0].ID)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster AZ resources for %s: %w", serviceType, err)
+	}
+	dbAZResourcesByResourceID := make(map[db.ClusterResourceID][]db.ClusterAZResource)
+	for _, azRes := range dbAZResources {
+		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
+	}
+	// for cluster_az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
+	for _, res := range dbResources {
+		// depending on the topology, we can construct the various necessary AZs
+		var wantedKeys []limes.AvailabilityZone
+		if res.Topology == liquid.FlatTopology {
+			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
+		} else {
+			// TODO: in order to avoid summing all AZs, we should introduce a special value for "all AZs"
+			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneUnknown}
+			wantedKeys = append(wantedKeys, availabilityZones...)
+			slices.Sort(wantedKeys)
+		}
+		setUpdate := db.SetUpdate[db.ClusterAZResource, liquid.AvailabilityZone]{
+			ExistingRecords: dbAZResourcesByResourceID[res.ID],
+			WantedKeys:      wantedKeys,
+			KeyForRecord: func(azRes db.ClusterAZResource) liquid.AvailabilityZone {
+				return azRes.AvailabilityZone
+			},
+			Create: func(az liquid.AvailabilityZone) (db.ClusterAZResource, error) {
+				return db.ClusterAZResource{
+					ResourceID:       res.ID,
+					AvailabilityZone: az,
+				}, nil
+			},
+			Update: func(azRes *db.ClusterAZResource) error {
+				// we don't know more than the existence of the AZ, so we don't update anything
+				return nil
+			},
+		}
+		_, err = setUpdate.Execute(tx)
+		if err != nil {
+			return err
+		}
 	}
 
 	// collect existing cluster_rates and the wanted cluster_rates

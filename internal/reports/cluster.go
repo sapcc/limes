@@ -357,11 +357,21 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if len(resource.PerAZ) >= 2 {
 				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
 				// AZSeparatedTopology does not provide the "any" AZ.
-				if capaInAny == nil {
-					continue
-				}
-				if capaInAny.Capacity == 0 && capaInAny.Usage == nil && capaInAny.ProjectsUsage == 0 {
+				if capaInAny != nil && capaInAny.Capacity == 0 && capaInAny.Usage == nil && capaInAny.ProjectsUsage == 0 {
 					delete(resource.PerAZ, limes.AvailabilityZoneAny)
+				}
+			}
+
+			// a somewhat similar logic applies to the "unknown" AZ, but here we can check whether
+			// any of the values are non-zero
+			if len(resource.CapacityPerAZ) >= 2 {
+				capaInUnknown := resource.CapacityPerAZ[limes.AvailabilityZoneUnknown]
+				if capaInUnknown != nil && capaInUnknown.Capacity == 0 && capaInUnknown.Usage == 0 && capaInUnknown.RawCapacity == 0 {
+					delete(resource.CapacityPerAZ, limes.AvailabilityZoneUnknown)
+				}
+				capaInUnknown2 := resource.PerAZ[limes.AvailabilityZoneUnknown]
+				if capaInUnknown2 != nil && capaInUnknown2.Capacity == 0 && capaInUnknown2.Usage == nil && capaInUnknown2.ProjectsUsage == 0 && (capaInUnknown2.PhysicalUsage == nil || *capaInUnknown2.PhysicalUsage == 0) {
+					delete(resource.PerAZ, limes.AvailabilityZoneUnknown)
 				}
 			}
 		}

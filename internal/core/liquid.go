@@ -36,6 +36,7 @@ type LiquidConnection struct {
 	ServiceType                     db.ServiceType
 	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]
 	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration]
+	AvailabilityZones               []limes.AvailabilityZone
 
 	// state
 	liquidServiceInfo      liquid.ServiceInfo
@@ -48,7 +49,7 @@ type LiquidConnection struct {
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
 	if lc.LiquidServiceType == "" {
 		lc.LiquidServiceType = "liquid-" + string(serviceType)
 	}
@@ -57,6 +58,7 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, ti
 		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
+		AvailabilityZones:               availabilityZones,
 		timeNow:                         timeNow,
 		DB:                              dbm,
 	}
@@ -74,7 +76,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 		return fmt.Errorf("getting ServiceInfo: %w", err)
 	}
 	if apiSuccess {
-		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.timeNow(), l.DB)
+		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
 	}
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
@@ -97,7 +99,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 		if infoVersion != newVersion {
 			return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 		}
-		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.timeNow(), l.DB)
+		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
 		if err != nil {
 			return err
 		}

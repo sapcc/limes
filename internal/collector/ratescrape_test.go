@@ -160,6 +160,12 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	// we set up our initial rates correctly
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 2, 'unknown', 0);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
@@ -269,6 +275,13 @@ func Test_RateScrapeFailure(t *testing.T) {
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 2, 'unknown', 0);
+
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		
@@ -319,6 +332,10 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', 0, 1);

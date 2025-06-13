@@ -20,6 +20,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
@@ -147,18 +148,25 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
+
+	// we need the Cluster for the availability zones, so create it first
+	var errs errext.ErrorSet
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), s.Clock.Now, s.DB, params.WithLiquidConnections)
+	failIfErrs(t, errs)
+
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
 	for serviceType, serviceInfo := range params.PersistedServiceInfo {
-		err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Clock.Now(), s.DB)
+		err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Clock.Now(), s.DB)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 	}
-	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML, s.Clock.Now, s.DB, params.WithLiquidConnections)
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	failIfErrs(t, errs)
 
 	serviceInfos, err := s.Cluster.AllServiceInfos()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	s.Registry = prometheus.NewPedanticRegistry()
@@ -291,16 +299,12 @@ func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap 
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
-func initCluster(t *testing.T, ctx context.Context, configYAML string, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) *core.Cluster {
-	cluster, errs := core.NewClusterFromYAML([]byte(configYAML), timeNow, dbm, fillLiquidConnections)
-	if errs.IsEmpty() {
-		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
-	}
+func failIfErrs(t *testing.T, errs errext.ErrorSet) {
+	t.Helper()
 	for _, err := range errs {
 		t.Error(err)
 	}
 	if t.Failed() {
 		t.FailNow()
 	}
-	return cluster
 }
