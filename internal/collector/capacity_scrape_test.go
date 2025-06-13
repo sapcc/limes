@@ -136,7 +136,7 @@ func Test_ScanCapacity(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -175,6 +175,8 @@ func Test_ScanCapacity(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota) VALUES (2, 2, 'capacity', 1, 'B', 'flat', TRUE, TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
@@ -186,8 +188,8 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 42, 8, 42);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (2, 2, 'any', 42, 8, 42);
+		UPDATE cluster_az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared';
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
@@ -289,7 +291,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -298,6 +300,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, capacity_metric_families_json) VALUES (1, 'shared', %[1]d, 1, '{"limes_unittest_capacity_larger_half":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_capacity_smaller_half":{"type":"gauge","help":"","labelKeys":null}}');
 	`, s.Clock.Now().Unix())
@@ -350,8 +353,8 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 42, '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', 42);
-		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+		UPDATE cluster_az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any';
+ 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -430,7 +433,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -439,6 +442,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
 	`, s.Clock.Now().Unix())
@@ -467,9 +473,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (1, 1, 'az-one', 21, 4, 21);
-	INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (2, 1, 'az-two', 21, 4, 21);
-	UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -516,7 +522,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -549,9 +555,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'az-one', 0, 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 1, 'az-two', 0, 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (3, 2, 'any', 0, 0);
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 4 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -579,7 +585,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
 		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
-		UPDATE cluster_az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 3 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 4 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -594,7 +600,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
 		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
-		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -613,7 +619,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
 		// cluster_services must be created as a baseline
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -621,8 +627,11 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
@@ -682,7 +691,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 
 	c := getCollector(t, s)
@@ -690,8 +699,11 @@ func Test_ScanManualCapacity(t *testing.T) {
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
@@ -711,7 +723,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, last_nonzero_raw_capacity) VALUES (1, 2, 'any', 1000000, 1000000);
+		UPDATE cluster_az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 4 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -772,7 +784,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
 	scrapeJob = c.CapacityScrapeJob(s.Registry)

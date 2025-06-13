@@ -11,6 +11,7 @@ limes_cluster_capacity{resource="things",service="shared",service_name="shared"}
 # TYPE limes_cluster_capacity_per_az gauge
 limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 15
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 15
+limes_cluster_capacity_per_az{availability_zone="unknown",resource="things",service="shared",service_name="shared"} 0
 # HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
 # TYPE limes_cluster_usage_per_az gauge
 limes_cluster_usage_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 3

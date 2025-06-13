@@ -84,7 +84,7 @@ func commonRateScrapeTestSetup(t *testing.T) (s test.Setup, job jobloop.Job, wit
 	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testRateScrapeBasicConfigYAML, liquidServiceType)),
-		test.WithClusterLevelRecords,
+		test.WithLiquidConnections,
 	)
 	s.Cluster.Config.QuotaDistributionConfigs = []core.QuotaDistributionConfiguration{
 		{
@@ -159,8 +159,13 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	// check that ScanDomains created the domain, project and their services; and
 	// we set up our initial rates correctly
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 2, 'unknown', 0);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (1, 1, 'capacity', 1, 'az-aware');
@@ -269,8 +274,14 @@ func Test_RateScrapeFailure(t *testing.T) {
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	//nolint:dupword // false positive on "TRUE, TRUE"
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 2, 'unknown', 0);
+
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 		INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
 		
@@ -305,6 +316,7 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	_, liquidServiveType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiveType)),
+		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
@@ -320,6 +332,13 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', 0, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, stale, rates_scraped_at, rates_scrape_duration_secs, rates_checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', TRUE, %[1]d, 5, %[1]d, 0, %[2]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');

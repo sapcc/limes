@@ -28,7 +28,13 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		return
 	}
 
-	nameMapping := core.BuildResourceNameMapping(c)
+	serviceInfos, err := c.AllServiceInfos()
+	if err != nil {
+		errs.Add(err)
+		return
+	}
+
+	nameMapping := core.BuildResourceNameMapping(c, serviceInfos)
 	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.LiquidConnections))
 	for dbServiceType, connection := range c.LiquidConnections {
 		allResInfos[dbServiceType] = connection.ServiceInfo().Resources
