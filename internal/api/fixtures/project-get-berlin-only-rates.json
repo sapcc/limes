@@ -35,7 +35,7 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 23
+        "scraped_at": 22
       },
       {
         "type": "unshared",
@@ -62,7 +62,7 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 12
+        "scraped_at": 11
       }
     ]
   }

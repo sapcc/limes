@@ -51,10 +51,9 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	err = s.DB.Insert(&db.ProjectService{
-		ProjectID:         1,
-		Type:              "whatever",
-		NextScrapeAt:      time.Unix(0, 0).UTC(),
-		RatesNextScrapeAt: time.Unix(0, 0).UTC(),
+		ProjectID:    1,
+		Type:         "whatever",
+		NextScrapeAt: time.Unix(0, 0).UTC(),
 	})
 	if err != nil {
 		t.Error(err)

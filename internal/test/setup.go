@@ -205,13 +205,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			for serviceType := range s.Cluster.Config.Liquids {
 				t0 := time.Unix(0, 0).UTC()
 				dbProjectService := &db.ProjectService{
-					ID:             db.ProjectServiceID(len(s.ProjectServices) + 1),
-					ProjectID:      dbProject.ID,
-					Type:           serviceType,
-					ScrapedAt:      Some(t0),
-					RatesScrapedAt: Some(t0),
-					CheckedAt:      Some(t0),
-					RatesCheckedAt: Some(t0),
+					ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
+					ProjectID: dbProject.ID,
+					Type:      serviceType,
+					ScrapedAt: Some(t0),
+					CheckedAt: Some(t0),
 				}
 				mustDo(t, s.DB.Insert(dbProjectService))
 				s.ProjectServices = append(s.ProjectServices, dbProjectService)

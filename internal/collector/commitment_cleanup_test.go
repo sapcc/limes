@@ -79,7 +79,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	mustT(t, err)
 	projectCount, err := c.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
 	mustT(t, err)
-	scrapeJob := c.ResourceScrapeJob(s.Registry)
+	scrapeJob := c.ScrapeJob(s.Registry)
 	mustT(t, jobloop.ProcessMany(scrapeJob, s.Ctx, int(projectCount), jobloop.WithLabel("service_type", "unittest")))
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)

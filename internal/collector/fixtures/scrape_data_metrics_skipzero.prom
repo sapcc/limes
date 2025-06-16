@@ -39,6 +39,12 @@ limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berli
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="unittest"} 13
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="unittest"} 20
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="unittest"} 13
+# HELP limes_project_rate_usage Usage of a Limes rate for an OpenStack project. These are counters that never reset.
+# TYPE limes_project_rate_usage gauge
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest",service_name="unittest"} 2048
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="secondrate",service="unittest",service_name="unittest"} 4096
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="firstrate",service="unittest",service_name="unittest"} 4096
+limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="secondrate",service="unittest",service_name="unittest"} 8192
 # HELP limes_project_usage Actual (logical) usage of a Limes resource for an OpenStack project.
 # TYPE limes_project_usage gauge
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="unittest"} 20
