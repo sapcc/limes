@@ -164,6 +164,7 @@ type ProjectRate struct {
 // ProjectCommitment contains a record from the `project_commitments` table.
 type ProjectCommitment struct {
 	ID           ProjectCommitmentID               `db:"id"`
+	UUID         ProjectCommitmentUUID             `db:"uuid"`
 	AZResourceID ProjectAZResourceID               `db:"az_resource_id"`
 	Amount       uint64                            `db:"amount"`
 	Duration     limesresources.CommitmentDuration `db:"duration"`
@@ -223,8 +224,9 @@ const (
 // CommitmentWorkflowContext is the type definition for the JSON payload in the
 // CreationContextJSON and SupersedeContextJSON fields of type ProjectCommitment.
 type CommitmentWorkflowContext struct {
-	Reason               CommitmentReason      `json:"reason"`
-	RelatedCommitmentIDs []ProjectCommitmentID `json:"related_ids,omitempty"`
+	Reason                 CommitmentReason        `json:"reason"`
+	RelatedCommitmentIDs   []ProjectCommitmentID   `json:"related_ids,omitempty"` // TODO: remove when v1 API is removed (v2 API uses only UUIDs to refer to commitments)
+	RelatedCommitmentUUIDs []ProjectCommitmentUUID `json:"related_uuids,omitempty"`
 }
 
 // CommitmentReason is an enum. It appears in type CommitmentWorkflowContext.

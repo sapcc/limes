@@ -427,8 +427,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
-	for _, amount := range []uint64{7, 8} {
+	for idx, amount := range []uint64{7, 8} {
 		mustT(t, s.DB.Insert(&db.ProjectCommitment{
+			UUID:                db.ProjectCommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			AZResourceID:        2,
 			Amount:              amount,
 			Duration:            commitmentForOneYear,
@@ -443,6 +444,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	}
 	// AZResourceID = 8 has two commitments in different states to test aggregation over different states
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000003",
 		AZResourceID:        8,
 		Amount:              10,
 		Duration:            commitmentForOneYear,
@@ -455,6 +457,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreationContextJSON: buf,
 	}))
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000004",
 		AZResourceID:        8,
 		Amount:              10,
 		Duration:            commitmentForOneYear,

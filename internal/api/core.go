@@ -55,15 +55,15 @@ type v1Provider struct {
 	// see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
 	// slots for test doubles
-	timeNow func() time.Time
-	// identifies commitments that will be transferred to other projects.
-	generateTransferToken func() string
+	timeNow                       func() time.Time
+	generateTransferToken         func() string
+	generateProjectCommitmentUUID func() db.ProjectCommitmentUUID
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string) httpapi.API {
+func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() db.ProjectCommitmentUUID) httpapi.API {
 	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
@@ -81,6 +81,7 @@ func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 		},
 	}
 	p.generateTransferToken = generateTransferToken
+	p.generateProjectCommitmentUUID = generateProjectCommitmentUUID
 
 	return p
 }
