@@ -909,34 +909,34 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	desyncedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND resource_id = 1 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 11 AND resource_id = 6 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 12 AND resource_id = 6 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 13 AND resource_id = 6 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 14 AND resource_id = 8 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 15 AND resource_id = 8 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 16 AND resource_id = 8 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 2 AND resource_id = 3 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 3 AND resource_id = 5 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 4 AND resource_id = 7 AND az = 'any';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 5 AND resource_id = 2 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 6 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 250 WHERE id = 7 AND resource_id = 2 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 8 AND resource_id = 4 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE id = 9 AND resource_id = 4 AND az = 'az-one';
-		UPDATE project_resources SET quota = 0 WHERE id = 1 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 0 WHERE id = 3 AND service_id = 2 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET quota = 0 WHERE id = 5 AND service_id = 3 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 6 AND service_id = 3 AND name = 'capacity';
-		UPDATE project_resources SET quota = 0 WHERE id = 7 AND service_id = 4 AND name = 'things';
-		UPDATE project_resources SET quota = 10 WHERE id = 8 AND service_id = 4 AND name = 'capacity';
-		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'first';
-		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND type = 'second';
-		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 3 AND project_id = 2 AND type = 'first';
-		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND type = 'second';
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 1 AND project_id = 1 AND az_resource_id = 1;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 12;
+		UPDATE project_az_resources_v2 SET quota = 8 WHERE id = 11 AND project_id = 2 AND az_resource_id = 4;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 12 AND project_id = 2 AND az_resource_id = 5;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 13 AND project_id = 2 AND az_resource_id = 6;
+		UPDATE project_az_resources_v2 SET quota = 8 WHERE id = 14 AND project_id = 2 AND az_resource_id = 10;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 15 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 16 AND project_id = 2 AND az_resource_id = 12;
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 2 AND project_id = 1 AND az_resource_id = 7;
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 3 AND project_id = 2 AND az_resource_id = 1;
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 4 AND project_id = 2 AND az_resource_id = 7;
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 5 AND project_id = 1 AND az_resource_id = 4;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_az_resources_v2 SET quota = 250 WHERE id = 7 AND project_id = 1 AND az_resource_id = 6;
+		UPDATE project_az_resources_v2 SET quota = 8 WHERE id = 8 AND project_id = 1 AND az_resource_id = 10;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 9 AND project_id = 1 AND az_resource_id = 11;
+		UPDATE project_resources_v2 SET quota = 0 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources_v2 SET quota = 251 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		UPDATE project_resources_v2 SET quota = 0 WHERE id = 3 AND project_id = 1 AND resource_id = 3;
+		UPDATE project_resources_v2 SET quota = 10 WHERE id = 4 AND project_id = 1 AND resource_id = 4;
+		UPDATE project_resources_v2 SET quota = 0 WHERE id = 5 AND project_id = 2 AND resource_id = 1;
+		UPDATE project_resources_v2 SET quota = 10 WHERE id = 6 AND project_id = 2 AND resource_id = 2;
+		UPDATE project_resources_v2 SET quota = 0 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
+		UPDATE project_resources_v2 SET quota = 10 WHERE id = 8 AND project_id = 2 AND resource_id = 4;
+		UPDATE project_services_v2 SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		UPDATE project_services_v2 SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
+		UPDATE project_services_v2 SET quota_desynced_at = %[2]d WHERE id = 3 AND project_id = 2 AND service_id = 1;
+		UPDATE project_services_v2 SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
 	`, timestampUpdates(true), desyncedAt1.Unix(), desyncedAt2.Unix())
 
 	// day 1: test that confirmation works at all
@@ -947,9 +947,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 10 WHERE id = 6 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
-		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 10 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
+		UPDATE project_resources_v2 SET quota = 260 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, timestampUpdates(false), scrapedAt1.Unix())
 
 	// day 2: test that confirmation considers the resource's capacity overcommit factor
@@ -961,10 +961,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 110 WHERE id = 6 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000003';
-		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 110 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
+		UPDATE project_commitments_v2 SET state = 'pending' WHERE id = 3 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000003';
+		UPDATE project_resources_v2 SET quota = 360 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, timestampUpdates(false), scrapedAt1.Unix())
 
 	// day 3: test confirmation order with several commitments, on second/capacity in az-one
@@ -978,12 +978,12 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 0 WHERE id = 14 AND resource_id = 8 AND az = 'any';
-		UPDATE project_az_resources SET quota = 20 WHERE id = 15 AND resource_id = 8 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 4 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000004';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 5 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000005';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 6 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000006';
-		UPDATE project_resources SET quota = 21 WHERE id = 8 AND service_id = 4 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 14 AND project_id = 2 AND az_resource_id = 10;
+		UPDATE project_az_resources_v2 SET quota = 20 WHERE id = 15 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 4 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000004';
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 5 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000005';
+		UPDATE project_commitments_v2 SET state = 'pending' WHERE id = 6 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000006';
+		UPDATE project_resources_v2 SET quota = 21 WHERE id = 8 AND project_id = 2 AND resource_id = 4;
 	`, timestampUpdates(false), scrapedAt2.Unix(), scrapedAt2.Unix())
 
 	// day 4: test how confirmation interacts with existing usage, on first/capacity in az-two
@@ -995,10 +995,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 300 WHERE id = 7 AND resource_id = 2 AND az = 'az-two';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 7 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000007';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 8 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000008';
-		UPDATE project_resources SET quota = 410 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 300 WHERE id = 7 AND project_id = 1 AND az_resource_id = 6;
+		UPDATE project_commitments_v2 SET state = 'pending' WHERE id = 7 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000007';
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 8 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000008';
+		UPDATE project_resources_v2 SET quota = 410 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, timestampUpdates(false), scrapedAt1.Unix())
 
 	// day 5: test commitments that cannot be confirmed until the previous commitment expires, on second/capacity in az-one
@@ -1011,11 +1011,11 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 22 WHERE id = 10 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 0 WHERE id = 8 AND resource_id = 4 AND az = 'any';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 10 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000010';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 9 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000009';
-		UPDATE project_resources SET quota = 23 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 22 WHERE id = 10 AND project_id = 1 AND az_resource_id = 12;
+		UPDATE project_az_resources_v2 SET quota = 0 WHERE id = 8 AND project_id = 1 AND az_resource_id = 10;
+		UPDATE project_commitments_v2 SET state = 'pending' WHERE id = 10 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000010';
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 9 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000009';
+		UPDATE project_resources_v2 SET quota = 23 WHERE id = 4 AND project_id = 1 AND resource_id = 4;
 	`, timestampUpdates(false), scrapedAt2.Unix())
 
 	// ...Once ID=9 expires an hour later, ID=10 can be confirmed.
@@ -1024,13 +1024,13 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 2 WHERE id = 16 AND resource_id = 8 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE id = 8 AND resource_id = 4 AND az = 'any';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 10 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000010';
-		UPDATE project_commitments SET state = 'expired' WHERE id = 9 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000009';
-		UPDATE project_resources SET quota = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET quota = 22 WHERE id = 8 AND service_id = 4 AND name = 'capacity';
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 12;
+		UPDATE project_az_resources_v2 SET quota = 2 WHERE id = 16 AND project_id = 2 AND az_resource_id = 12;
+		UPDATE project_az_resources_v2 SET quota = 8 WHERE id = 8 AND project_id = 1 AND az_resource_id = 10;
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active' WHERE id = 10 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000010';
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 9 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000009';
+		UPDATE project_resources_v2 SET quota = 10 WHERE id = 4 AND project_id = 1 AND resource_id = 4;
+		UPDATE project_resources_v2 SET quota = 22 WHERE id = 8 AND project_id = 2 AND resource_id = 4;
 	`, timestampUpdates(false), scrapedAt2.Unix())
 
 	// test GetGlobalResourceDemand (this is not used by any of our mock liquids,
@@ -1093,15 +1093,15 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 
 	// day 1: schedule two mails for different projects
 	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
-	_, err := s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
+	_, err := s.DB.Exec("UPDATE project_commitments_v2 SET notify_on_confirm=true WHERE id=1;")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// (Commitment ID: 11) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
-			INSERT INTO project_commitments
-			(id, uuid, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, notify_on_confirm, creation_context_json)
-			VALUES(11, '00000000-0000-0000-0000-000000000011', 15, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
+			INSERT INTO project_commitments_v2
+			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(11, '00000000-0000-0000-0000-000000000011', 2, 11, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1112,27 +1112,27 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 10 WHERE id = 6 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active', notify_on_confirm = TRUE WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (11, 15, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000011');
+		UPDATE project_az_resources_v2 SET quota = 10 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_commitments_v2 SET confirmed_at = %d, state = 'active', notify_on_confirm = TRUE WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
+		INSERT INTO project_commitments_v2 (id, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (11, 2, 11, 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000011');
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[2]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:service Resource:resource AZ:az-one', %[3]d);
-		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources_v2 SET quota = 260 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, timestampUpdates(), scrapedAt1.Unix(), scrapedAt2.Unix())
 
 	// day 2: schedule one mail with two commitments for the same project.
 	// (Commitment IDs: 12, 13) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
 	_, err = s.DB.Exec(`
-			INSERT INTO project_commitments
-			(id, uuid, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
-			VALUES(12, '00000000-0000-0000-0000-000000000012', 15, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			INSERT INTO project_commitments_v2
+			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(12, '00000000-0000-0000-0000-000000000012', 2, 11, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.DB.Exec(`
-			INSERT INTO project_commitments
-			(id, uuid, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
-			VALUES(13, '00000000-0000-0000-0000-000000000013', 15, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			INSERT INTO project_commitments_v2
+			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, notify_on_confirm, creation_context_json)
+			VALUES(13, '00000000-0000-0000-0000-000000000013', 2, 11, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1140,15 +1140,15 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 7 WHERE id = 14 AND resource_id = 8 AND az = 'any';
-		UPDATE project_az_resources SET quota = 2 WHERE id = 15 AND resource_id = 8 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 110 WHERE id = 6 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET state = 'expired' WHERE id = 11 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000011';
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (12, 15, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000012');
-		INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (13, 15, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000013');
-		UPDATE project_commitments SET confirmed_at = 172825, state = 'active' WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000003';
+		UPDATE project_az_resources_v2 SET quota = 7 WHERE id = 14 AND project_id = 2 AND az_resource_id = 10;
+		UPDATE project_az_resources_v2 SET quota = 2 WHERE id = 15 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_az_resources_v2 SET quota = 110 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 11 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000011';
+		INSERT INTO project_commitments_v2 (id, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (12, 2, 11, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000012');
+		INSERT INTO project_commitments_v2 (id, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, state, notify_on_confirm, creation_context_json, uuid) VALUES (13, 2, 11, 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, 'active', TRUE, '{}', '00000000-0000-0000-0000-000000000013');
+		UPDATE project_commitments_v2 SET confirmed_at = 172825, state = 'active' WHERE id = 2 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000002';
+		UPDATE project_commitments_v2 SET state = 'pending' WHERE id = 3 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000003';
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one', %d);
-		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources_v2 SET quota = 360 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, timestampUpdates(), scrapedAt2.Unix())
 }

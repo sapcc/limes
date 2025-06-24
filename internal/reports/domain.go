@@ -28,62 +28,71 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 // NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	WITH project_az_sums AS (
-	  SELECT resource_id,
-	         SUM(usage) AS usage,
-	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
-	         COUNT(physical_usage) > 0 AS has_physical_usage
-	    FROM project_az_resources
-	   GROUP BY resource_id
+	  SELECT pazr.project_id, cr.id AS resource_id,
+	         SUM(pazr.usage) AS usage,
+	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
+	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
+	    FROM project_az_resources_v2 as pazr
+		JOIN cluster_az_resources as cazr ON cazr.id = pazr.az_resource_id
+		JOIN cluster_resources as cr ON cr.id = cazr.resource_id
+	   GROUP BY pazr.project_id, cr.id
 	)
-	SELECT p.domain_id, ps.type, pr.name, SUM(pr.quota), SUM(pas.usage),
+	SELECT p.domain_id, cs.type, cr.name, SUM(pr.quota), SUM(pas.usage),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
-	 WHERE %s GROUP BY p.domain_id, ps.type, pr.name
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  CROSS JOIN projects p
+	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
+	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
+	  LEFT OUTER JOIN project_az_sums pas ON pas.project_id = p.id AND pas.resource_id = cr.id 
+	 WHERE TRUE {{AND cs.type = $service_type}} AND %s GROUP BY p.domain_id, cs.type, cr.name
 `)
 
 var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
-	  SELECT az_resource_id, SUM(amount) AS amount
-	    FROM project_commitments
+	  SELECT project_id, az_resource_id, SUM(amount) AS amount
+	    FROM project_commitments_v2
 	   WHERE state = 'active'
-	   GROUP BY az_resource_id
+	   GROUP BY project_id, az_resource_id
 	)
-	SELECT p.domain_id, ps.type, pr.name, par.az,
-	       SUM(par.quota), SUM(par.usage),
-	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
-	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0)))
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  JOIN project_az_resources par ON par.resource_id = pr.id
-	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
-	 WHERE %s
-	 GROUP BY p.domain_id, ps.type, pr.name, par.az
+	SELECT p.domain_id, cs.type, cr.name, cazr.az,
+	       SUM(pazr.quota), SUM(pazr.usage),
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
+	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0)))
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  CROSS JOIN projects p
+	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
+	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
+	  JOIN project_az_resources_v2 pazr ON pazr.project_id = p.id AND pazr.az_resource_id = cazr.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
+	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az
 `)
 
 var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
-	  SELECT az_resource_id, duration,
+	  SELECT project_id, az_resource_id, duration,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
-	    FROM project_commitments
-	   GROUP BY az_resource_id, duration
+	    FROM project_commitments_v2
+	   GROUP BY project_id, az_resource_id, duration
 	)
-	SELECT p.domain_id, ps.type, pr.name, par.az,
+	SELECT p.domain_id, cs.type, cr.name, cazr.az,
 	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  JOIN project_az_resources par ON par.resource_id = pr.id
-	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
-	 WHERE %s
-	 GROUP BY p.domain_id, ps.type, pr.name, par.az, pcs.duration
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  CROSS JOIN projects p
+	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
+	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
+	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
+	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az, pcs.duration
 `)
 
 // GetDomains returns reports for all domains in the given cluster or, if

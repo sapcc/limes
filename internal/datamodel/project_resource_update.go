@@ -20,7 +20,7 @@ import (
 // within a single project service.
 type ProjectResourceUpdate struct {
 	// A custom callback that will be called once for each resource in the given service.
-	UpdateResource func(*db.ProjectResource) error
+	UpdateResource func(*db.ProjectResourceV2, liquid.ResourceName) error
 	// If nil, logg.Error is used. Unit tests should give t.Errorf here.
 	LogError func(msg string, args ...any)
 }
@@ -30,7 +30,7 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) ([]db.ProjectResource, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ClusterServiceID]) ([]db.ProjectResourceV2, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
@@ -39,29 +39,49 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	// resource. Then we will compute the target state of the DB record. We only
 	// need to write into the DB if `.Target` ends up different from `.Original`.
 	type resourceState struct {
-		Info     *liquid.ResourceInfo
-		Original *db.ProjectResource
+		Info                         *liquid.ResourceInfo
+		Original                     *db.ProjectResourceV2
+		CorrespondingClusterResource *db.ClusterResource
+	}
+
+	// collect cluster_resources for reference of the resource_id
+	var clusterResources []db.ClusterResource
+	_, err := dbi.Select(&clusterResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, srv.ID)
+	if err != nil {
+		return nil, fmt.Errorf("while loading %s cluster resources: %w", srv.Type, err)
+	}
+	var (
+		clusterResourcesByID   = make(map[db.ClusterResourceID]db.ClusterResource, len(clusterResources))
+		clusterResourcesByName = make(map[liquid.ResourceName]db.ClusterResource, len(clusterResources))
+	)
+	for _, clusterResource := range clusterResources {
+		clusterResourcesByID[clusterResource.ID] = clusterResource
+		clusterResourcesByName[clusterResource.Name] = clusterResource
 	}
 
 	// collect ResourceInfo instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
 	for resName, resInfo := range serviceInfo.Resources {
+		correspondingClusterResource := clusterResourcesByName[resName]
 		allResources[resName] = resourceState{
-			Original: nil, // might be filled in the next loop below
-			Info:     &resInfo,
+			Original:                     nil, // might be filled in the next loop below
+			Info:                         &resInfo,
+			CorrespondingClusterResource: &correspondingClusterResource,
 		}
 	}
 
-	// collect existing resources for this service
-	var dbResources []db.ProjectResource
-	_, err := dbi.Select(&dbResources, `SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
+	// collect existing project_resources for this service
+	var dbResources []db.ProjectResourceV2
+	_, err = dbi.Select(&dbResources, `SELECT pr.* FROM project_resources_v2 pr JOIN cluster_resources cr ON pr.resource_id = cr.id WHERE cr.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
 	}
 	for _, res := range dbResources {
-		allResources[res.Name] = resourceState{
-			Original: &res,
-			Info:     allResources[res.Name].Info, // might be nil if not filled in the previous loop
+		correspondingClusterResource := clusterResourcesByID[res.ResourceID]
+		allResources[correspondingClusterResource.Name] = resourceState{
+			Original:                     &res,
+			CorrespondingClusterResource: &correspondingClusterResource,
+			Info:                         allResources[correspondingClusterResource.Name].Info, // might be nil if not filled in the previous loop
 		}
 	}
 
@@ -73,7 +93,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	slices.Sort(allResourceNames)
 
 	// for each resource...
-	var result []db.ProjectResource
+	var result []db.ProjectResourceV2
 	hasBackendQuotaDrift := false
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
@@ -92,9 +112,9 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 		resInfo := *state.Info
 
 		// setup a copy of `state.Original` (or a new resource) that we can write into
-		res := db.ProjectResource{
-			ServiceID: srv.ID,
-			Name:      resName,
+		res := db.ProjectResourceV2{
+			ProjectID:  project.ID,
+			ResourceID: state.CorrespondingClusterResource.ID,
 		}
 		if state.Original != nil {
 			res = *state.Original
@@ -103,7 +123,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 		// update in place while enforcing validation rules
 		validateResourceConstraints(&res, resInfo)
 		if u.UpdateResource != nil {
-			err := u.UpdateResource(&res)
+			err := u.UpdateResource(&res, resName)
 			if err != nil {
 				return nil, err
 			}
@@ -114,12 +134,12 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 		if state.Original == nil {
 			err := dbi.Insert(&res)
 			if err != nil {
-				return nil, fmt.Errorf("while inserting %s/%s resource in the DB: %w", srv.Type, res.Name, err)
+				return nil, fmt.Errorf("while inserting %s/%s resource in the DB: %w", srv.Type, resName, err)
 			}
 		} else if !reflect.DeepEqual(*state.Original, res) {
 			_, err := dbi.Update(&res)
 			if err != nil {
-				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, res.Name, err)
+				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, resName, err)
 			}
 		}
 		result = append(result, res)
@@ -137,8 +157,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	// if this update caused `quota != backend_quota` anywhere,
 	// request SetQuotaJob to take over (unless we already have an open request)
 	if hasBackendQuotaDrift {
-		query := `UPDATE project_services SET quota_desynced_at = $2 WHERE id = $1 AND quota_desynced_at IS NULL`
-		_, err := dbi.Exec(query, srv.ID, now)
+		query := `UPDATE project_services_v2 ps SET quota_desynced_at = $1 FROM cluster_services cs WHERE cs.id = ps.service_id AND cs.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
+		_, err := dbi.Exec(query, now, srv.ID, project.ID)
 		if err != nil {
 			return nil, fmt.Errorf("while scheduling backend sync for %s quotas: %w", srv.Type, err)
 		}
@@ -148,7 +168,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(res *db.ProjectResource, resInfo liquid.ResourceInfo) {
+func validateResourceConstraints(res *db.ProjectResourceV2, resInfo liquid.ResourceInfo) {
 	if !resInfo.HasQuota || resInfo.Topology == liquid.AZSeparatedTopology {
 		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = None[uint64]()

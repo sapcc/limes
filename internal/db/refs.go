@@ -53,6 +53,10 @@ type ProjectResourceID int64
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ProjectAZResourceID int64
 
+// ProjectRateID is an ID into the project_rates table. This typedef is
+// used to distinguish these IDs from IDs of other tables or raw int64 values.
+type ProjectRateID int64
+
 // ProjectCommitmentID is an ID into the project_commitments table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ProjectCommitmentID int64

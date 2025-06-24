@@ -450,4 +450,177 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_rates
 			ADD FOREIGN KEY (service_id, liquid_version) REFERENCES cluster_services (id, liquid_version) DEFERRABLE INITIALLY DEFERRED;
 	`,
+	"059_project_level_v2_artifacts.down.sql": `
+		DROP TABLE project_services_v2;
+		DROP TABLE project_resources_v2;
+		DROP TABLE project_az_resources_v2;
+		DROP TABLE project_rates_v2;
+		DROP TABLE project_commitments_v2;
+	`,
+	"059_project_level_v2_artifacts.up.sql": `
+		CREATE TABLE project_services_v2 (
+    		id								BIGSERIAL	NOT NULL PRIMARY KEY,
+    		project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+    		service_id						BIGINT		NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+    		scraped_at						TIMESTAMP	DEFAULT NULL, -- null if scraping did not happen yet
+    		stale 							BOOLEAN		NOT NULL DEFAULT FALSE,
+    		scrape_duration_secs 			REAL		NOT NULL DEFAULT 0,
+    		rates_scrape_state 				TEXT		NOT NULL DEFAULT '',
+    		serialized_metrics 				TEXT		NOT NULL DEFAULT '',
+    		checked_at 						TIMESTAMP	DEFAULT NULL,
+    		scrape_error_message 			TEXT		NOT NULL DEFAULT '',
+    		next_scrape_at 					TIMESTAMP	NOT NULL DEFAULT NOW(),
+    		quota_desynced_at				TIMESTAMP	DEFAULT NULL,
+    		quota_sync_duration_secs		REAL       	NOT NULL DEFAULT 0,
+			UNIQUE (project_id, service_id)
+		);
+		CREATE INDEX project_services_v2_stale_idx ON project_services_v2 (stale);
+		CREATE TABLE project_resources_v2 (
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    resource_id						bigint		NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
+		    quota							BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+		    backend_quota 					BIGINT		DEFAULT NULL,
+		    max_quota_from_outside_admin	BIGINT		DEFAULT NULL,
+		    override_quota_from_config		BIGINT		DEFAULT NULL,
+		    max_quota_from_local_admin		BIGINT		DEFAULT NULL,
+		    forbidden						BOOLEAN		NOT NULL DEFAULT FALSE,
+		    UNIQUE (project_id, resource_id)
+		);
+		CREATE TABLE project_az_resources_v2 (
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    az_resource_id					BIGINT		NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
+		    quota							BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+		    usage							BIGINT		NOT NULL,
+		    physical_usage					BIGINT		DEFAULT NULL,
+		    subresources					TEXT		NOT NULL DEFAULT '',
+		    historical_usage				TEXT		NOT NULL DEFAULT '',
+		    backend_quota					BIGINT		DEFAULT NULL,
+		    UNIQUE (project_id, az_resource_id)
+		);
+		CREATE TABLE project_rates_v2 (
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    rate_id 						BIGINT		NOT NULL REFERENCES cluster_rates ON DELETE CASCADE,
+		    rate_limit						BIGINT		DEFAULT NULL, -- null = not rate-limited
+			window_ns						BIGINT		DEFAULT NULL, -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint					TEXT		NOT NULL,     -- empty = not scraped
+			UNIQUE (project_id, rate_id)
+		);
+		CREATE TABLE project_commitments_v2 (
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE RESTRICT,
+		    az_resource_id					BIGINT		NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
+		    amount							BIGINT		NOT NULL,
+		    duration						TEXT		NOT NULL,
+			created_at						TIMESTAMP	NOT NULL,
+			creator_uuid					TEXT		NOT NULL,
+			creator_name					TEXT		NOT NULL,
+			confirm_by						TIMESTAMP	DEFAULT NULL,
+			confirmed_at					TIMESTAMP	DEFAULT NULL,
+			expires_at						TIMESTAMP	NOT NULL,
+		    superseded_at					TIMESTAMP	DEFAULT NULL,
+		    transfer_status					TEXT		NOT NULL DEFAULT '',
+			transfer_token					TEXT		DEFAULT NULL UNIQUE, -- default is NULL instead of '' to enable the uniqueness constraint below
+			state							TEXT		NOT NULL,
+		    notify_on_confirm				BOOLEAN		NOT NULL DEFAULT FALSE,
+		    notified_for_expiration			BOOLEAN		NOT NULL DEFAULT FALSE,
+		    creation_context_json			JSONB 		NOT NULL,
+		    supersede_context_json			JSONB		DEFAULT NULL,
+		    renew_context_json				JSONB		DEFAULT NULL,
+		    uuid 							TEXT		NOT NULL DEFAULT gen_random_uuid() UNIQUE
+		);
+		INSERT INTO project_services_v2 ( project_id, service_id, scraped_at, stale, scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, next_scrape_at, quota_desynced_at, quota_sync_duration_secs )
+			SELECT
+				p.id as project_id,
+				cs.id as service_id,
+				ps.scraped_at,
+				ps.stale,
+				ps.scrape_duration_secs,
+				ps.rates_scrape_state,
+				ps.serialized_metrics,
+				ps.checked_at,
+				ps.scrape_error_message,
+				ps.next_scrape_at,
+				ps.quota_desynced_at,
+				ps.quota_sync_duration_secs
+			FROM project_services ps
+			JOIN projects p ON ps.project_id = p.id
+			JOIN cluster_services as cs ON ps.type = cs.type;
+		INSERT INTO project_resources_v2 ( project_id, resource_id, quota, backend_quota, max_quota_from_outside_admin, override_quota_from_config, max_quota_from_local_admin, forbidden	)
+			SELECT 
+				p.id as project_id,
+				cr.id as resource_id,
+				pr.quota,
+				pr.backend_quota,
+				pr.max_quota_from_outside_admin,
+				pr.override_quota_from_config,
+				pr.max_quota_from_local_admin,
+				pr.forbidden
+			FROM project_resources pr
+			JOIN project_services ps ON pr.service_id = ps.id
+			JOIN projects p ON ps.project_id = p.id
+			JOIN cluster_services cs ON ps.type = cs.type
+			JOIN cluster_resources cr ON cs.id = cr.service_id AND pr.name = cr.name;
+		INSERT INTO project_az_resources_v2 ( project_id, az_resource_id, quota, usage, physical_usage, subresources, historical_usage, backend_quota )
+			SELECT 
+				p.id as project_id,
+				cazr.id as az_resource_id,
+				pazr.quota,
+				pazr.usage,
+				pazr.physical_usage,
+				pazr.subresources,
+				pazr.historical_usage,
+				pazr.backend_quota
+			FROM project_az_resources pazr
+			JOIN project_resources pr ON pazr.resource_id = pr.id
+			JOIN project_services ps ON pr.service_id = ps.id
+			JOIN projects p ON ps.project_id = p.id
+			JOIN cluster_services cs ON ps.type = cs.type
+			JOIN cluster_resources cr ON cs.id = cr.service_id AND pr.name = cr.name
+			JOIN cluster_az_resources cazr ON cr.id = cazr.resource_id AND pazr.az = cazr.az;
+		INSERT INTO project_rates_v2 ( project_id, rate_id, rate_limit, window_ns, usage_as_bigint )
+			SELECT 
+				p.id as project_id,
+				cra.id as rate_id,
+				pra.rate_limit,
+				pra.window_ns,
+				pra.usage_as_bigint
+			FROM project_rates pra
+			JOIN project_services ps ON pra.service_id = ps.id
+			JOIN projects p ON ps.project_id = p.id
+			JOIN cluster_services cs ON ps.type = cs.type
+			JOIN cluster_rates cra ON cs.id = cra.service_id AND pra.name = cra.name;
+		INSERT INTO project_commitments_v2 ( project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, transfer_status, transfer_token, state, notify_on_confirm, notified_for_expiration, creation_context_json, supersede_context_json, renew_context_json, uuid )
+			SELECT
+			    p.id as project_id,
+				cazr.id as az_resource_id,
+				pc.amount,
+				pc.duration,
+				pc.created_at,
+				pc.creator_uuid,
+				pc.creator_name,
+				pc.confirm_by,
+				pc.confirmed_at,
+				pc.expires_at,
+				pc.superseded_at,
+				pc.transfer_status,
+				pc.transfer_token,
+				pc.state,
+				pc.notify_on_confirm,
+				pc.notified_for_expiration,
+				pc.creation_context_json,
+				pc.supersede_context_json,
+				pc.renew_context_json,
+				pc.uuid
+			FROM project_commitments pc
+			JOIN project_az_resources pazr ON pc.az_resource_id = pazr.id
+			JOIN project_resources pr ON pazr.resource_id = pr.id
+			JOIN project_services ps ON pr.service_id = ps.id
+			JOIN projects p ON ps.project_id = p.id
+			JOIN cluster_services cs ON ps.type = cs.type
+			JOIN cluster_resources cr ON cs.id = cr.service_id AND pr.name = cr.name
+			JOIN cluster_az_resources cazr ON cr.id = cazr.resource_id AND pazr.az = cazr.az;
+	`,
 }

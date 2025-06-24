@@ -4,15 +4,19 @@
 package collector
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/majewsky/gg/option"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -108,8 +112,8 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type, stale, next_scrape_at) VALUES (7, 4, 'shared', TRUE, %[1]d);
-		INSERT INTO project_services (id, project_id, type, stale, next_scrape_at) VALUES (8, 4, 'unshared', TRUE, %[1]d);
+		INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (7, 4, 1, TRUE, %[1]d);
+		INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 4, 2, TRUE, %[1]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france');
 	`,
 		s.Clock.Now().Unix(),
@@ -127,16 +131,48 @@ func Test_ScanDomains(t *testing.T) {
 	assert.DeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
-	// ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
+	// ScanDomains with ScanAllProjects should notice the deleted project and don't cleanup because of active commitments
+	commitmentForOneDay, err := limesresources.ParseCommitmentDuration("1 day")
+	mustT(t, err)
+	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
+	buf, err := json.Marshal(creationContext)
+	mustT(t, err)
+	mustT(t, s.DB.Insert(&db.ProjectCommitmentV2{
+		UUID:                "00000000-0000-0000-0000-000000000001",
+		ProjectID:           4,
+		AZResourceID:        1,
+		Amount:              10,
+		Duration:            commitmentForOneDay,
+		CreatedAt:           s.Clock.Now(),
+		CreatorUUID:         "dummy",
+		CreatorName:         "dummy",
+		ConfirmedAt:         option.Some(s.Clock.Now()),
+		ExpiresAt:           commitmentForOneDay.AddTo(s.Clock.Now()),
+		State:               db.CommitmentStateActive,
+		CreationContextJSON: buf,
+	}))
+	tr.DBChanges().Ignore()
+	s.Clock.StepBy(10 * time.Minute)
+	_, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
+	if err == nil {
+		t.Errorf("ScanDomains #6 did not fail when it should have")
+	}
+	assert.DeepEqual(t, "error string after ScanDomains #6", err.Error(), "while removing deleted Keystone project france/bordeaux from our database: project has commitments which are not superseeded or expired")
+	tr.DBChanges().AssertEmpty()
+
+	// now we set the commitment to expired, the deletion succeeds
+	_, err = s.DB.Exec(`UPDATE project_commitments_v2 SET state = $1`, db.CommitmentStateExpired)
+	mustT(t, err)
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
-		t.Errorf("ScanDomains #6 failed: %v", err)
+		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_services WHERE id = 7 AND project_id = 4 AND type = 'shared';
-		DELETE FROM project_services WHERE id = 8 AND project_id = 4 AND type = 'unshared';
+		DELETE FROM project_commitments_v2 WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
+		DELETE FROM project_services_v2 WHERE id = 7 AND project_id = 4 AND service_id = 1;
+		DELETE FROM project_services_v2 WHERE id = 8 AND project_id = 4 AND service_id = 2;
 		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';
 	`)
 
@@ -147,13 +183,13 @@ func Test_ScanDomains(t *testing.T) {
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
-		t.Errorf("ScanDomains #7 failed: %v", err)
+		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
-		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND type = 'shared';
-		DELETE FROM project_services WHERE id = 6 AND project_id = 3 AND type = 'unshared';
+		DELETE FROM project_services_v2 WHERE id = 5 AND project_id = 3 AND service_id = 1;
+		DELETE FROM project_services_v2 WHERE id = 6 AND project_id = 3 AND service_id = 2;
 		DELETE FROM projects WHERE id = 3 AND uuid = 'uuid-for-paris';
 	`)
 
@@ -165,7 +201,7 @@ func Test_ScanDomains(t *testing.T) {
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
-		t.Errorf("ScanDomains #8 failed: %v", err)
+		t.Errorf("ScanDomains #9 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`

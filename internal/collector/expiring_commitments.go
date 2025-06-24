@@ -28,7 +28,7 @@ const (
 // For all applicable commitments within a project the mail content to inform customers will be prepared and added to a queue.
 // Long-term commitments will be queued while short-term commitments will only be marked as notified.
 func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Registerer) jobloop.Job {
-	return (&jobloop.ProducerConsumerJob[[]db.ProjectCommitment]{
+	return (&jobloop.ProducerConsumerJob[[]db.ProjectCommitmentV2]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "add expiring commitments to mail queue",
 			CounterOpts: prometheus.CounterOpts{
@@ -42,20 +42,20 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 var (
-	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments WHERE expires_at <= $1 AND state = 'active' AND renew_context_json IS NULL AND NOT notified_for_expiration`
+	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments_v2 WHERE expires_at <= $1 AND state = 'active' AND renew_context_json IS NULL AND NOT notified_for_expiration`
 	locateExpiringCommitmentsQuery   = sqlext.SimplifyWhitespace(`
-		SELECT ps.project_id, ps.type, pr.name, par.az, pc.id
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = par.id
+		SELECT pc.project_id, cs.type, cr.name, cazr.az, pc.id
+		  FROM cluster_services cs
+		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		  JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id
 		WHERE pc.id = ANY($1)
-		ORDER BY ps.type, pr.name, par.az ASC, pc.amount DESC
+		ORDER BY cs.type, cr.name, cazr.az ASC, pc.amount DESC
 	`)
-	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = true WHERE id = ANY($1)`
+	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments_v2 SET notified_for_expiration = true WHERE id = ANY($1)`
 )
 
-func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (result []db.ProjectCommitment, err error) {
+func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (result []db.ProjectCommitmentV2, err error) {
 	now := c.MeasureTime()
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
 	_, err = c.DB.Select(&result, discoverExpiringCommitmentsQuery, cutoff)
@@ -69,7 +69,7 @@ func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.
 	}
 }
 
-func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitments []db.ProjectCommitment, _ prometheus.Labels) error {
+func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitments []db.ProjectCommitmentV2, _ prometheus.Labels) error {
 	now := c.MeasureTime()
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
 	tx, err := c.DB.Begin()
@@ -79,7 +79,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// find which commitments need a notification
-	longTermCommitmentsByID := make(map[db.ProjectCommitmentID]db.ProjectCommitment)
+	longTermCommitmentsByID := make(map[db.ProjectCommitmentID]db.ProjectCommitmentV2)
 	var shortTermCommitmentIDs []db.ProjectCommitmentID
 	for _, c := range commitments {
 		if c.Duration.AddTo(now).Before(cutoff) {

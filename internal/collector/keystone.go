@@ -5,7 +5,9 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -227,25 +229,13 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	}
 
 	// add records to `project_services` table
-	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject, c.MeasureTime())
+	err = datamodel.AddMissingProjectServices(tx, c.Cluster, *domain, *dbProject, c.MeasureTime())
 	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
-
-var deleteCommitmentsInProjectQuery = sqlext.SimplifyWhitespace(`
-	DELETE FROM project_commitments WHERE id IN (
-		SELECT pc.id
-		  FROM projects p
-		  JOIN project_services ps ON ps.project_id = p.id
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		 WHERE p.id = $1 AND pc.state IN ($2, $3)
-	)
-`)
 
 // Deletes a project from the DB after it was deleted in Keystone.
 // This requires special care because some constraints are "ON DELETE RESTRICT".
@@ -260,15 +250,20 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	// it is fine to delete a project that only has superseded and expired commitments on it
 	// (if there are commitments in any other state, the `DELETE FROM projects` below will fail
 	// and rollback the full transaction)
-	_, err = tx.Exec(deleteCommitmentsInProjectQuery, project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired)
+	_, err = tx.Exec(
+		`DELETE FROM project_commitments_v2 WHERE project_id = $1 AND state IN ($2, $3)`,
+		project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired,
+	)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.Delete(project)
-	if err != nil {
-		return err
+	if err == nil {
+		return tx.Commit()
 	}
-
-	return tx.Commit()
+	if strings.Contains(err.Error(), `update or delete on table "projects" violates foreign key constraint "project_commitments_v2_project_id_fkey"`) {
+		return errors.New("project has commitments which are not superseeded or expired")
+	}
+	return err
 }

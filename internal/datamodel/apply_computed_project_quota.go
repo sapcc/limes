@@ -28,9 +28,10 @@ import (
 var (
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pr.id, pr.forbidden, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.override_quota_from_config
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.forbidden IS NOT NULL
+		  FROM cluster_services cs
+		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+		 WHERE cs.type = $1 AND cr.name = $2 AND (pr.forbidden IS NOT NULL
 		                                       OR pr.max_quota_from_outside_admin IS NOT NULL
 		                                       OR pr.max_quota_from_local_admin IS NOT NULL
 		                                       OR pr.override_quota_from_config IS NOT NULL)
@@ -39,13 +40,25 @@ var (
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
+		UPDATE project_az_resources_v2 pazr
+		SET quota = $1
+		FROM cluster_az_resources cazr
+		JOIN cluster_resources cr ON cr.id = cazr.resource_id
+		JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+		WHERE pazr.az_resource_id = cazr.id AND pr.project_id = pazr.project_id
+		AND pazr.quota IS DISTINCT FROM $1 AND cazr.az = $2 AND pr.id = $3
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2 RETURNING service_id
+		UPDATE project_resources_v2 SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2
 	`)
+	acpqProjectServiceResultQuery = sqlext.SimplifyWhitespace(`
+		SELECT ps.id 
+		FROM project_resources_v2 pr
+		JOIN cluster_resources cr ON pr.resource_id = cr.id
+		JOIN project_services_v2 ps ON cr.service_id = ps.service_id AND ps.project_id = pr.project_id
+		WHERE pr.id = $1`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services SET quota_desynced_at = $1 WHERE id = $2 AND quota_desynced_at IS NULL
+		UPDATE project_services_v2 SET quota_desynced_at = $1 WHERE id = $2 AND quota_desynced_at IS NULL
 	`)
 )
 
@@ -165,7 +178,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				// AZSeparatedTopology does not update resource quota. Therefore the service desync needs to be queued right here.
 				if resourceInfo.Topology == liquid.AZSeparatedTopology {
 					var serviceID db.ProjectServiceID
-					err := tx.SelectOne(&serviceID, `SELECT service_id FROM project_resources WHERE id = $1`, resourceID)
+					err := tx.SelectOne(&serviceID, acpqProjectServiceResultQuery, resourceID)
 					if err != nil {
 						return fmt.Errorf("in project resource %d: %w", resourceID, err)
 					}
@@ -197,12 +210,20 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				quotaToWrite = nil
 			}
 
-			var serviceID db.ProjectServiceID
-			err := stmt.QueryRow(quotaToWrite, resourceID).Scan(&serviceID)
-			if err == sql.ErrNoRows {
+			result, err := stmt.Exec(quotaToWrite, resourceID)
+			if err != nil {
+				return fmt.Errorf("in project resource %d: %w", resourceID, err)
+			}
+			rowsAffected, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("in project resource %d: %w", resourceID, err)
+			}
+			if rowsAffected == 0 {
 				// if quota was not actually changed, do not remember this project service as being stale
 				continue
 			}
+			var serviceID db.ProjectServiceID
+			err = tx.SelectOne(&serviceID, acpqProjectServiceResultQuery, resourceID)
 			if err != nil {
 				return fmt.Errorf("in project resource %d: %w", resourceID, err)
 			}
