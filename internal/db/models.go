@@ -32,6 +32,10 @@ type ClusterService struct {
 	QuotaUpdateNeedsProjectMetadata bool   `db:"quota_update_needs_project_metadata"`
 }
 
+func (s ClusterService) Ref() ServiceRef[ClusterServiceID] {
+	return ServiceRef[ClusterServiceID]{ID: s.ID, Type: s.Type}
+}
+
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
 	ID        ClusterResourceID   `db:"id"`
@@ -95,11 +99,11 @@ type Project struct {
 	ParentUUID string    `db:"parent_uuid"`
 }
 
-// ProjectService contains a record from the `project_services` table.
-type ProjectService struct {
+// ProjectServiceV2 contains a record from the `project_services_v2` table.
+type ProjectServiceV2 struct {
 	ID                    ProjectServiceID  `db:"id"`
 	ProjectID             ProjectID         `db:"project_id"`
-	Type                  ServiceType       `db:"type"`
+	ServiceID             ClusterServiceID  `db:"service_id"`
 	ScrapedAt             Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	CheckedAt             Option[time.Time] `db:"checked_at"`
 	NextScrapeAt          time.Time         `db:"next_scrape_at"`
@@ -112,47 +116,38 @@ type ProjectService struct {
 	QuotaSyncDurationSecs float64           `db:"quota_sync_duration_secs"`
 }
 
-// Ref converts a ProjectService into its ProjectServiceRef.
-func (s ProjectService) Ref() ServiceRef[ProjectServiceID] {
-	return ServiceRef[ProjectServiceID]{ID: s.ID, Type: s.Type}
-}
-
-// ProjectResource contains a record from the `project_resources` table. Quota
+// ProjectResourceV2 contains a record from the `project_resources_v2` table. Quota
 // values are NULL for resources that do not track quota.
-type ProjectResource struct {
-	ID                       ProjectResourceID   `db:"id"`
-	ServiceID                ProjectServiceID    `db:"service_id"`
-	Name                     liquid.ResourceName `db:"name"`
-	Quota                    Option[uint64]      `db:"quota"`
-	BackendQuota             Option[int64]       `db:"backend_quota"`
-	Forbidden                bool                `db:"forbidden"`
-	MaxQuotaFromOutsideAdmin Option[uint64]      `db:"max_quota_from_outside_admin"`
-	MaxQuotaFromLocalAdmin   Option[uint64]      `db:"max_quota_from_local_admin"`
-	OverrideQuotaFromConfig  Option[uint64]      `db:"override_quota_from_config"`
+type ProjectResourceV2 struct {
+	ID                       ProjectResourceID `db:"id"`
+	ProjectID                ProjectID         `db:"project_id"`
+	ResourceID               ClusterResourceID `db:"resource_id"`
+	Quota                    Option[uint64]    `db:"quota"`
+	BackendQuota             Option[int64]     `db:"backend_quota"`
+	Forbidden                bool              `db:"forbidden"`
+	MaxQuotaFromOutsideAdmin Option[uint64]    `db:"max_quota_from_outside_admin"`
+	MaxQuotaFromLocalAdmin   Option[uint64]    `db:"max_quota_from_local_admin"`
+	OverrideQuotaFromConfig  Option[uint64]    `db:"override_quota_from_config"`
 }
 
-// Ref returns the ResourceRef for this resource.
-func (r ProjectResource) Ref() ResourceRef[ProjectServiceID] {
-	return ResourceRef[ProjectServiceID]{r.ServiceID, r.Name}
+// ProjectAZResourceV2 contains a record from the `project_az_resources_v2` table.
+type ProjectAZResourceV2 struct {
+	ID                  ProjectAZResourceID `db:"id"`
+	ProjectID           ProjectID           `db:"project_id"`
+	AZResourceID        ClusterAZResourceID `db:"az_resource_id"`
+	Quota               Option[uint64]      `db:"quota"`
+	BackendQuota        Option[int64]       `db:"backend_quota"`
+	Usage               uint64              `db:"usage"`
+	PhysicalUsage       Option[uint64]      `db:"physical_usage"`
+	SubresourcesJSON    string              `db:"subresources"`
+	HistoricalUsageJSON string              `db:"historical_usage"`
 }
 
-// ProjectAZResource contains a record from the `project_az_resources` table.
-type ProjectAZResource struct {
-	ID                  ProjectAZResourceID    `db:"id"`
-	ResourceID          ProjectResourceID      `db:"resource_id"`
-	AvailabilityZone    limes.AvailabilityZone `db:"az"`
-	Quota               Option[uint64]         `db:"quota"`
-	BackendQuota        Option[int64]          `db:"backend_quota"`
-	Usage               uint64                 `db:"usage"`
-	PhysicalUsage       Option[uint64]         `db:"physical_usage"`
-	SubresourcesJSON    string                 `db:"subresources"`
-	HistoricalUsageJSON string                 `db:"historical_usage"`
-}
-
-// ProjectRate contains a record from the `project_rates` table.
-type ProjectRate struct {
-	ServiceID     ProjectServiceID          `db:"service_id"`
-	Name          liquid.RateName           `db:"name"`
+// ProjectRateV2 contains a record from the `project_rates_v2` table.
+type ProjectRateV2 struct {
+	ID            ProjectRateID             `db:"id"`
+	ProjectID     ProjectID                 `db:"project_id"`
+	RateID        ClusterRateID             `db:"rate_id"`
 	Limit         Option[uint64]            `db:"rate_limit"`      // None for rates that don't have a limit (just a usage)
 	Window        Option[limesrates.Window] `db:"window_ns"`       // None for rates that don't have a limit (just a usage)
 	UsageAsBigint string                    `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
@@ -161,11 +156,12 @@ type ProjectRate struct {
 	//  use strings throughout and cast into bigints in the scraper only.
 }
 
-// ProjectCommitment contains a record from the `project_commitments` table.
-type ProjectCommitment struct {
+// ProjectCommitmentV2 contains a record from the `project_commitments_v2` table.
+type ProjectCommitmentV2 struct {
 	ID           ProjectCommitmentID               `db:"id"`
 	UUID         ProjectCommitmentUUID             `db:"uuid"`
-	AZResourceID ProjectAZResourceID               `db:"az_resource_id"`
+	ProjectID    ProjectID                         `db:"project_id"`
+	AZResourceID ClusterAZResourceID               `db:"az_resource_id"`
 	Amount       uint64                            `db:"amount"`
 	Duration     limesresources.CommitmentDuration `db:"duration"`
 	CreatedAt    time.Time                         `db:"created_at"`
@@ -257,10 +253,10 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
-	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
-	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")
-	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
-	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
-	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
+	db.AddTableWithName(ProjectServiceV2{}, "project_services_v2").SetKeys(true, "id")
+	db.AddTableWithName(ProjectResourceV2{}, "project_resources_v2").SetKeys(true, "id")
+	db.AddTableWithName(ProjectAZResourceV2{}, "project_az_resources_v2").SetKeys(true, "id")
+	db.AddTableWithName(ProjectRateV2{}, "project_rates_v2").SetKeys(true, "id")
+	db.AddTableWithName(ProjectCommitmentV2{}, "project_commitments_v2").SetKeys(true, "id")
 	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "id")
 }

@@ -27,18 +27,20 @@ type capacityScrapeBackchannelImpl struct {
 
 var (
 	getResourceDemandQuery = sqlext.SimplifyWhitespace(`
-		SELECT par.az, par.usage, COALESCE(pc_view.active, 0), COALESCE(pc_view.pending, 0)
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
+		SELECT cazr.az, pazr.usage, COALESCE(pc_view.active, 0), COALESCE(pc_view.pending, 0)
+		  FROM cluster_services cs
+		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id
 		  LEFT OUTER JOIN (
-		    SELECT az_resource_id AS az_resource_id,
+		    SELECT az_resource_id,
+				   project_id,
 		           SUM(amount) FILTER (WHERE state = 'active') AS active,
 		           SUM(amount) FILTER (WHERE state = 'pending') AS pending
-		      FROM project_commitments
-		     GROUP BY az_resource_id
-		  ) pc_view ON pc_view.az_resource_id = par.id
-		 WHERE ps.type = $1 AND pr.name = $2
+		      FROM project_commitments_v2
+		     GROUP BY az_resource_id, project_id
+		  ) pc_view ON pc_view.az_resource_id = cazr.id AND pc_view.project_id = pazr.project_id
+		 WHERE cs.type = $1 AND cr.name = $2
 	`)
 )
 

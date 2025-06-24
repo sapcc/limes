@@ -19,13 +19,27 @@ import (
 func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, now time.Time) error {
 	// list existing records
 	seen := make(map[db.ServiceType]bool)
-	var services []db.ProjectService
+	var services []db.ProjectServiceV2
 	_, err := dbi.Select(&services,
-		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, project.ID)
+		`SELECT * FROM project_services_v2 WHERE project_id = $1`, project.ID)
 	if err != nil {
 		return err
 	}
 	logg.Debug("checking consistency for %d project services in project %s...", len(services), project.UUID)
+
+	// get translation for service types
+	clusterServiceByID, err := db.BuildIndexOfDBResult(
+		dbi,
+		func(service db.ClusterService) db.ClusterServiceID { return service.ID },
+		`SELECT * FROM cluster_services ORDER BY type`,
+	)
+	if err != nil {
+		return err
+	}
+	clusterServiceByType := make(map[db.ServiceType]db.ClusterService, len(clusterServiceByID))
+	for _, service := range clusterServiceByID {
+		clusterServiceByType[service.Type] = service
+	}
 
 	// as this is called from the collect task, this is no database access
 	serviceInfos, err := cluster.AllServiceInfos()
@@ -35,9 +49,10 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 
 	// cleanup entries for services that have been removed from the configuration
 	for _, srv := range services {
-		seen[srv.Type] = true
-		if !core.HasService(serviceInfos, srv.Type) {
-			logg.Info("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
+		srvType := clusterServiceByID[srv.ServiceID].Type
+		seen[srvType] = true
+		if !core.HasService(serviceInfos, srvType) {
+			logg.Info("cleaning up %s service entry for project %s/%s", srvType, domain.Name, project.Name)
 			_, err := dbi.Delete(&srv)
 			if err != nil {
 				return err
@@ -53,9 +68,14 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 		}
 
 		logg.Info("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
-		err := dbi.Insert(&db.ProjectService{
+		clusterService, exists := clusterServiceByType[serviceType]
+		// defense in depth: a cluster service can theoretically not get deleted during runtime, but we better make sure
+		if !exists {
+			continue
+		}
+		err := dbi.Insert(&db.ProjectServiceV2{
 			ProjectID: project.ID,
-			Type:      serviceType,
+			ServiceID: clusterService.ID,
 			// immediate scraping of this new service is required to create `project_resources`
 			// and `project_az_resources` entries and thus make the project service fully functional
 			NextScrapeAt: now,

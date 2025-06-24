@@ -36,12 +36,8 @@ func Test_Consistency(t *testing.T) {
 	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency0.sql")
 
-	// remove some *_services entries
+	// remove some *_services entries (project level done by referential integrity)
 	_, err = s.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = s.DB.Exec(`DELETE FROM project_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
@@ -50,9 +46,9 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err = s.DB.Insert(&db.ProjectService{
+	err = s.DB.Insert(&db.ProjectServiceV2{
 		ProjectID:    1,
-		Type:         "whatever",
+		ServiceID:    3,
 		NextScrapeAt: time.Unix(0, 0).UTC(),
 	})
 	if err != nil {
