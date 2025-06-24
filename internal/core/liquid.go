@@ -88,36 +88,39 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 // and triggers the update and persisting if necessary.
 func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
 	currentVersion := l.ServiceInfo().Version
-	if infoVersion != currentVersion {
-		logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
-		_, err = l.updateServiceInfo(ctx, false)
-		if err != nil {
-			return err
-		}
-		// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
-		newVersion := l.ServiceInfo().Version
-		if infoVersion != newVersion {
-			return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
-		}
-		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
-		if err != nil {
-			return err
-		}
+	if infoVersion == currentVersion {
+		return nil
+	}
+
+	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
+	_, err = l.updateServiceInfo(ctx, false)
+	if err != nil {
+		return err
+	}
+	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
+	newVersion := l.ServiceInfo().Version
+	if infoVersion != newVersion {
+		return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
+	}
+	err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 // updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
-// It should be the only function to write LiquidServiceInfo, and is only called on init and when
-// the InfoVersion changes.
+// If the liquid is not reachable it can fall back to reading the ServiceInfo from the database
+// - if the dbFallback parameter is set. It is only called on init and when the InfoVersion changes.
 func (l *LiquidConnection) updateServiceInfo(ctx context.Context, dbFallback bool) (apiSuccess bool, err error) {
 	l.liquidServiceInfoMutex.Lock()
 	defer l.liquidServiceInfoMutex.Unlock()
 	apiSuccess = true
 	result, err := l.LiquidClient.GetInfo(ctx)
+	// result, err := liquid.ServiceInfo{}, errors.New("some error")
 	if err != nil && dbFallback {
 		apiSuccess = false
-		logg.Info("request to Liquid failed for %s, searching in db next: %w", l.LiquidServiceType, err)
+		logg.Info("request to Liquid failed for %s, falling back to DB: %w", l.LiquidServiceType, err)
 		var serviceInfos map[db.ServiceType]liquid.ServiceInfo
 		serviceInfos, err = readServiceInfoFromDB(l.DB, Some(l.ServiceType))
 		result = serviceInfos[l.ServiceType]

@@ -219,9 +219,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 
 	// validate request
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if err != nil {
-		msg := "db connection error"
-		http.Error(w, msg, http.StatusInternalServerError)
+	if respondwith.ErrorText(w, err) {
 		return nil, nil, nil
 	}
 	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)

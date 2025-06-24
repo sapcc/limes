@@ -8,7 +8,7 @@ limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="u
 limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unittest",service_name="unittest"} 0
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
-limes_cluster_capacity{resource="capacity",service="unittest",service_name="unittest"} 0
+limes_cluster_capacity{resource="capacity",service="unittest",service_name="unittest"} 1234
 limes_cluster_capacity{resource="things",service="unittest",service_name="unittest"} 0
 # HELP limes_cluster_capacity_per_az Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.
 # TYPE limes_cluster_capacity_per_az gauge
@@ -16,8 +16,7 @@ limes_cluster_capacity_per_az{availability_zone="az-one",resource="capacity",ser
 limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",service="unittest",service_name="unittest"} 0
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="capacity",service="unittest",service_name="unittest"} 0
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="unittest",service_name="unittest"} 0
-limes_cluster_capacity_per_az{availability_zone="unknown",resource="capacity",service="unittest",service_name="unittest"} 0
-limes_cluster_capacity_per_az{availability_zone="unknown",resource="things",service="unittest",service_name="unittest"} 0
+limes_cluster_capacity_per_az{availability_zone="unknown",resource="capacity",service="unittest",service_name="unittest"} 1234
 # HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
 # TYPE limes_domain_quota gauge
 limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest",service_name="unittest"} 40

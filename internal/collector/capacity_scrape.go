@@ -174,16 +174,27 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
 
-	// cluster_az_resources should be there - enumerate the data an complain if they don't match
+	serviceInfos, err := c.Cluster.AllServiceInfos()
+	if err != nil {
+		return err
+	}
+	serviceInfo := core.InfoForService(serviceInfos, service.Type)
+
+	// cluster_az_resources should be there - enumerate the data an complain if they don't match (with exceptions)
 	for _, res := range dbResources {
 		resourceData, resExists := capacityData.Resources[res.Name]
 		if !resExists {
 			logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
 			continue
 		}
+
+		resourceTopology := core.InfoForResource(serviceInfo, res.Name).Topology
+		_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
 		for _, azRes := range dbAZResourcesByResourceID[res.ID] {
 			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
-			if !azResExists && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
+			// az=unknown does not have to exist
+			// specific AZs do not need capacity when az=any has capacity (sum should be correct)
+			if !azResExists && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown && resourceTopology != liquid.FlatTopology && !anyAZexists {
 				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", azRes.AvailabilityZone, res.Name, service.Type)
 			}
 			if !azResExists {
@@ -221,11 +232,6 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		if err != nil {
 			return fmt.Errorf("while updating project_commitments.state for %s/%s: %w", service.Type, res.Name, err)
 		}
-	}
-
-	serviceInfos, err := c.Cluster.AllServiceInfos()
-	if err != nil {
-		return err
 	}
 
 	// for all cluster resources thus updated, try to confirm pending commitments
