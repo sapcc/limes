@@ -1,7 +1,8 @@
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 3, 'az-one', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 3, 'az-two', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (7, 3, 'unknown', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (8, 4, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (10, 4, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 3, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (7, 3, 'az-one', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (8, 3, 'az-two', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (9, 3, 'unknown', 0);
 
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (4, 2, 'things', 1, 'flat', TRUE);

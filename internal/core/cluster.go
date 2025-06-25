@@ -436,11 +436,16 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	for _, res := range dbResources {
 		// depending on the topology, we can construct the various necessary AZs
 		var wantedKeys []limes.AvailabilityZone
-		if res.Topology == liquid.FlatTopology {
+		// rewrite to switch statement
+		switch res.Topology {
+		case liquid.FlatTopology:
 			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
-		} else {
-			// TODO: in order to avoid summing all AZs, we should introduce a special value for "all AZs"
+		case liquid.AZAwareTopology:
+			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneUnknown, limes.AvailabilityZoneAny}
+		default:
 			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneUnknown}
+		}
+		if res.Topology != liquid.FlatTopology {
 			wantedKeys = append(wantedKeys, availabilityZones...)
 			slices.Sort(wantedKeys)
 		}

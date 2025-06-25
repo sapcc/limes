@@ -210,7 +210,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, 
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
-	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 2`,
+	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 3`,
 		string(must.Return(json.Marshal(subcapacitiesInLiquidFormat))),
 	)
 	if err != nil {

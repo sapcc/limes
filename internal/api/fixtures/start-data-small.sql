@@ -10,8 +10,10 @@ INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topol
 
 -- "capacity" is modeled as AZ-aware, "things" is not
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'any', 0, 0, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 2, 'az-one', 0, 0, '');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 2, 'az-two', 0, 0, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 2, 'any', 0, 0, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 2, 'az-one', 0, 0, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (4, 2, 'az-two', 0, 0, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (5, 2, 'unknown', 0, 0, '');
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'domainone', 'uuid-for-domainone');
 

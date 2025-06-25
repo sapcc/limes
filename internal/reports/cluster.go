@@ -353,25 +353,29 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			// project_az_resources always has entries for "any", even if the resource
 			// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
 			// the base quotas; we ignore those entries here if the "any" usage is
-			// zero and there are other AZs
-			if len(resource.PerAZ) >= 2 {
-				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
-				// AZSeparatedTopology does not provide the "any" AZ.
-				if capaInAny != nil && capaInAny.Capacity == 0 && capaInAny.Usage == nil && capaInAny.ProjectsUsage == 0 {
-					delete(resource.PerAZ, limes.AvailabilityZoneAny)
-				}
-			}
-
-			// a somewhat similar logic applies to the "unknown" AZ, but here we can check whether
-			// any of the values are non-zero
+			// zero and there are other AZs.
+			// "unknown" may exist because the location for usages or capacities may be
+			// unknown.
 			if len(resource.CapacityPerAZ) >= 2 {
 				capaInUnknown := resource.CapacityPerAZ[limes.AvailabilityZoneUnknown]
 				if capaInUnknown != nil && capaInUnknown.Capacity == 0 && capaInUnknown.Usage == 0 && capaInUnknown.RawCapacity == 0 {
 					delete(resource.CapacityPerAZ, limes.AvailabilityZoneUnknown)
 				}
-				capaInUnknown2 := resource.PerAZ[limes.AvailabilityZoneUnknown]
-				if capaInUnknown2 != nil && capaInUnknown2.Capacity == 0 && capaInUnknown2.Usage == nil && capaInUnknown2.ProjectsUsage == 0 && (capaInUnknown2.PhysicalUsage == nil || *capaInUnknown2.PhysicalUsage == 0) {
+				// defense in depth: any should never have capacity, but better check it too
+				capaInAny := resource.CapacityPerAZ[limes.AvailabilityZoneAny]
+				if capaInAny != nil && capaInAny.Capacity == 0 && capaInAny.Usage == 0 && capaInAny.RawCapacity == 0 {
+					delete(resource.CapacityPerAZ, limes.AvailabilityZoneAny)
+				}
+			}
+
+			if len(resource.PerAZ) >= 2 {
+				capaInUnknown := resource.PerAZ[limes.AvailabilityZoneUnknown]
+				if capaInUnknown != nil && capaInUnknown.Capacity == 0 && (capaInUnknown.Usage == nil || *capaInUnknown.Usage == 0) && capaInUnknown.ProjectsUsage == 0 && (capaInUnknown.PhysicalUsage == nil || *capaInUnknown.PhysicalUsage == 0) && len(capaInUnknown.Subcapacities) == 0 {
 					delete(resource.PerAZ, limes.AvailabilityZoneUnknown)
+				}
+				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
+				if capaInAny != nil && capaInAny.Capacity == 0 && (capaInAny.Usage == nil || *capaInAny.Usage == 0) && capaInAny.ProjectsUsage == 0 && (capaInAny.PhysicalUsage == nil || *capaInAny.PhysicalUsage == 0) && len(capaInAny.Subcapacities) == 0 {
+					delete(resource.PerAZ, limes.AvailabilityZoneAny)
 				}
 			}
 		}

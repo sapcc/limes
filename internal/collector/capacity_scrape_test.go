@@ -442,9 +442,10 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
 	`, s.Clock.Now().Unix())
@@ -473,8 +474,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -490,8 +491,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -555,9 +556,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET usage = 0 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
-		UPDATE cluster_az_resources SET usage = 0 WHERE id = 4 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET usage = 0 WHERE id = 5 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -583,9 +584,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
-		UPDATE cluster_az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 4 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 5 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -598,9 +599,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
-		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 0, usage = 0 WHERE id = 5 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -628,10 +629,11 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
@@ -700,10 +702,11 @@ func Test_ScanManualCapacity(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'unknown', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-one', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'any', 0);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
@@ -723,7 +726,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 4 AND resource_id = 2 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 5 AND resource_id = 2 AND az = 'any';
 		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
