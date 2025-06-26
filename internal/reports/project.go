@@ -68,12 +68,12 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
+func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo, submit func(*limesresources.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildResourceNameMapping(cluster)
+	nm := core.BuildResourceNameMapping(cluster, serviceInfos)
 
 	// first, query for basic project information
 	//
@@ -189,7 +189,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new resource report when necessary
 		resReport := srvReport.Resources[apiIdentity.Name]
 		if resReport == nil {
-			resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 				Usage:            0,
@@ -238,7 +239,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if azSubresources != nil {
 			translate := behavior.TranslationRuleInV1API.TranslateSubresources
 			if translate != nil {
-				resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 				*azSubresources, err = translate(*azSubresources, *az, dbResourceName, resInfo)
 				if err != nil {
 					return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
@@ -401,12 +403,12 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
-func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesrates.ProjectReport) error) error {
+func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo, submit func(*limesrates.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildRateNameMapping(cluster)
+	nm := core.BuildRateNameMapping(cluster, serviceInfos)
 
 	// first, query for basic project information
 	//
@@ -476,11 +478,11 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 				currentProjectID = 0
 				return nil
 			}
-			projectReport = initProjectRateReport(projectInfo, cluster, nm)
+			projectReport = initProjectRateReport(projectInfo, cluster, nm, serviceInfos)
 		}
 
 		// if we don't have a valid service type, we're done with this result row
-		if !cluster.HasService(dbServiceType) {
+		if !core.HasService(serviceInfos, dbServiceType) {
 			return nil
 		}
 		apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
@@ -508,8 +510,8 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		// one because of the default rate limit, so this is only relevant for
 		// rates that only have a usage)
 		rateReport := srvReport.Rates[apiRateName]
-		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(dbServiceType, dbRateName) {
-			rateInfo := cluster.InfoForRate(dbServiceType, dbRateName)
+		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && core.HasUsageForRate(serviceInfos, dbServiceType, dbRateName) {
+			rateInfo := core.InfoForRate(serviceInfos, dbServiceType, dbRateName)
 			rateReport = &limesrates.ProjectRateReport{
 				RateInfo: core.BuildAPIRateInfo(apiRateName, rateInfo),
 			}
@@ -550,7 +552,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	// (e.g. because the request filter was for `?service=none`)
 	emptyProjectReports := make([]*limesrates.ProjectReport, 0, len(allProjectInfos))
 	for _, projectInfo := range allProjectInfos {
-		emptyProjectReports = append(emptyProjectReports, initProjectRateReport(projectInfo, cluster, nm))
+		emptyProjectReports = append(emptyProjectReports, initProjectRateReport(projectInfo, cluster, nm, serviceInfos))
 	}
 	slices.SortFunc(emptyProjectReports, func(lhs, rhs *limesrates.ProjectReport) int {
 		return strings.Compare(lhs.UUID, rhs.UUID)
@@ -566,7 +568,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 }
 
 // Builds a fresh ProjectReport with default rate-limits pre-filled from the cluster config.
-func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.RateNameMapping) *limesrates.ProjectReport {
+func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.RateNameMapping, serviceInfos map[db.ServiceType]liquid.ServiceInfo) *limesrates.ProjectReport {
 	report := limesrates.ProjectReport{
 		ProjectInfo: projectInfo,
 		Services:    make(limesrates.ProjectServiceReports),
@@ -589,7 +591,7 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 				report.Services[apiServiceType] = srvReport
 			}
 
-			rateInfo := cluster.InfoForRate(dbServiceType, rateLimitConfig.Name)
+			rateInfo := core.InfoForRate(serviceInfos, dbServiceType, rateLimitConfig.Name)
 			srvReport.Rates[apiRateName] = &limesrates.ProjectRateReport{
 				RateInfo: core.BuildAPIRateInfo(apiRateName, rateInfo),
 				Limit:    rateLimitConfig.Limit,

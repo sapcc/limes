@@ -1,12 +1,21 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
 INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'unshared', UNIX(1000), UNIX(2000), 1);
-INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared',   UNIX(1100), UNIX(2100), 1);
+INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared', UNIX(1100), UNIX(2100), 1);
 
 -- all services have the resources "things" and "capacity"
-INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (1, 1, 'things', 1);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (2, 2, 'things', 1);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (3, 2, 'capacity', 1);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 2, 'things', 1, 'flat', TRUE);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (4, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 2, 'service/shared/objects:create', 1, 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 2, 'service/shared/objects:delete', 1, 'MiB', 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (3, 2, 'service/shared/objects:unlimited', 1, 'KiB', 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (4, 2, 'service/shared/objects:update', 1, 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (5, 1, 'service/unshared/instances:create', 1, 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (6, 1, 'service/unshared/instances:delete', 1, 'flat', TRUE);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (7, 1, 'service/unshared/instances:update', 1, 'flat', TRUE);
 
 -- "capacity" is modeled as AZ-aware, "things" is not
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139);
@@ -114,16 +123,9 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 -- not pictured: paris has no records at all, so the API will only display the default rate limits
 
 -- insert some bullshit data that should be filtered out by the internal/reports/ logic
--- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
-INSERT INTO cluster_services (id, type, liquid_version) VALUES (101, 'weird', 1);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (101, 101, 'things', 1);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 101, 'any', 2, 1, '');
+-- the logic is that only project_services/ resources/ az_resource/ rates with a valid cluster entry are considered
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (101, 101, 'things', 2, 2);
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (101, 101, 'any', NULL, 1, 1, '');
-
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (102, 1, 'items', 2, 2);
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (102, 102, 'any', NULL, 1, 1, '');
-
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:frobnicate', 5, 1000000000, '');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:frobnicate', 5, 1000000000, '');

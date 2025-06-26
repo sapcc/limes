@@ -60,12 +60,17 @@ type RateValidationError struct {
 // Results are collected into u.Requests. The return value is only set for unexpected
 // errors, not for validation errors.
 func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.Interface) error {
-	projectReport, err := GetProjectRateReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
+	serviceInfos, err := u.Cluster.AllServiceInfos()
 	if err != nil {
 		return err
 	}
 
-	nm := core.BuildRateNameMapping(u.Cluster)
+	projectReport, err := GetProjectRateReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{}, serviceInfos)
+	if err != nil {
+		return err
+	}
+
+	nm := core.BuildRateNameMapping(u.Cluster, serviceInfos)
 	u.Requests = make(map[db.ServiceType]map[liquid.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.

@@ -46,6 +46,8 @@ func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testKeystoneConfigYAML, liquidServiceType)),
+		// the functions called from the tests of this setup run in collect task, so we use the LiquidConnections
+		test.WithLiquidConnections,
 	)
 	return s, s.Cluster
 }

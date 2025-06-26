@@ -82,10 +82,9 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, resourceInfo liquid.ResourceInfo, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
-	resInfo := cluster.InfoForResource(serviceType, resourceName)
-	if !resInfo.HasQuota {
+	if !resourceInfo.HasQuota {
 		return nil
 	}
 	cfg, ok := cluster.QuotaDistributionConfigForResource(serviceType, resourceName).Autogrow.Unpack()
@@ -147,7 +146,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		buf, _ := json.Marshal(constraints) //nolint:errcheck
 		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resourceName, string(buf))
 	}
-	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resInfo)
+	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resourceInfo)
 	if logg.ShowDebug {
 		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resourceName, allowsQuotaOvercommit)
 		buf, _ := json.Marshal(target) //nolint:errcheck
@@ -164,7 +163,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 					return fmt.Errorf("in AZ %s in project resource %d: %w", az, resourceID, err)
 				}
 				// AZSeparatedTopology does not update resource quota. Therefore the service desync needs to be queued right here.
-				if resInfo.Topology == liquid.AZSeparatedTopology {
+				if resourceInfo.Topology == liquid.AZSeparatedTopology {
 					var serviceID db.ProjectServiceID
 					err := tx.SelectOne(&serviceID, `SELECT service_id FROM project_resources WHERE id = $1`, resourceID)
 					if err != nil {
@@ -194,7 +193,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 			// If we set anything other than nil here, this would lead to unnecessary quota syncs with the backend,
 			// because backendQuota != quota.
 			quotaToWrite := &quota
-			if resInfo.Topology == liquid.AZSeparatedTopology {
+			if resourceInfo.Topology == liquid.AZSeparatedTopology {
 				quotaToWrite = nil
 			}
 
