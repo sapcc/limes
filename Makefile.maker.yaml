@@ -17,6 +17,7 @@ dockerfile:
     - /*.yaml
 
 golang:
+  autoupdateableDeps: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
   setGoModVersion: true
 
 golangciLint:
