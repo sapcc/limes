@@ -180,9 +180,6 @@ linters:
       - linters:
           - goconst
         path: (.+)_test\.go
-      - linters:
-        - dupword
-        text: TRUE,
     paths:
       - third_party$
       - builtin$
