@@ -634,10 +634,13 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'any', 0);
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware'%[1]s%[1]s%[1]s);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
-	`, s.Clock.Now().Unix())
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[2]d, 1);
+	`,
+		", TRUE", // TODO: remove this workaround once dupword in golangci-lint has been updated to not trip on "TRUE, TRUE, TRUE" in an SQL literal
+		s.Clock.Now().Unix(),
+	)
 
 	// adjust the capacity report to not show any resources
 	// this is a state which should not happen in production - it leads to a logged error
@@ -707,10 +710,13 @@ func Test_ScanManualCapacity(t *testing.T) {
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (5, 2, 'any', 0);
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware'%[1]s%[1]s%[1]s);
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'flat', TRUE);
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
-	`, s.Clock.Now().Unix())
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[2]d, 1);
+	`,
+		", TRUE", // TODO: remove this workaround once dupword in golangci-lint has been updated to not trip on "TRUE, TRUE, TRUE" in an SQL literal
+		s.Clock.Now().Unix(),
+	)
 
 	// adjust the capacity report to not show any capacity
 	// this is a state which should not happen in production - it leads to a logged error
