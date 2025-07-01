@@ -13,13 +13,17 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/regexpext"
 )
 
 type Logic struct {
 	// configuration
-	WithSubcapacities        bool `json:"with_subcapacities"`
-	WithVolumeSubresources   bool `json:"with_volume_subresources"`
-	WithSnapshotSubresources bool `json:"with_snapshot_subresources"`
+	WithSubcapacities        bool                    `json:"with_subcapacities"`
+	WithVolumeSubresources   bool                    `json:"with_volume_subresources"`
+	WithSnapshotSubresources bool                    `json:"with_snapshot_subresources"`
+	ManagePrivateVolumeTypes regexpext.BoundedRegexp `json:"manage_private_volume_types"`
+	IgnorePublicVolumeTypes  regexpext.BoundedRegexp `json:"ignore_public_volume_types"`
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
@@ -73,14 +77,32 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	// discover volume types
-	allPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{}).AllPages(ctx)
+	allPublicPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "true"}).AllPages(ctx)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
-	vtSpecs, err := volumetypes.ExtractVolumeTypes(allPages)
+	vtSpecs, err := volumetypes.ExtractVolumeTypes(allPublicPages)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
+	if l.ManagePrivateVolumeTypes != "" {
+		allPrivatePages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "false"}).AllPages(ctx)
+		if err != nil {
+			return liquid.ServiceInfo{}, err
+		}
+		vtPrivateSpecs, err := volumetypes.ExtractVolumeTypes(allPrivatePages)
+		if err != nil {
+			return liquid.ServiceInfo{}, err
+		}
+		var matchingVtPrivateSpecs []volumetypes.VolumeType
+		for _, spec := range vtPrivateSpecs {
+			if l.ManagePrivateVolumeTypes.MatchString(spec.Name) {
+				matchingVtPrivateSpecs = append(matchingVtPrivateSpecs, spec)
+			}
+		}
+		vtSpecs = append(vtSpecs, matchingVtPrivateSpecs...)
+	}
+
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
 	for _, vtSpec := range vtSpecs {
 		if !vtSpec.IsPublic && !vtSpec.PublicAccess {
