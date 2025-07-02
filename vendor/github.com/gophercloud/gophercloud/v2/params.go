@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sapcc/go-bits/logg"
 )
 
 /*
@@ -416,6 +418,7 @@ func BuildQueryString(opts any) (*url.URL, error) {
 						} else {
 							params[tags[0]] = append(params[tags[0]], values...)
 						}
+						logg.Info("params: %v", params)
 					case reflect.Map:
 						if v.Type().Key().Kind() == reflect.String && v.Type().Elem().Kind() == reflect.String {
 							var s []string

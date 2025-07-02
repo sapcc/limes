@@ -13,7 +13,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 )
 
@@ -77,35 +76,21 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	// discover volume types
-	allPublicPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "true"}).AllPages(ctx)
+	allPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "none"}).AllPages(ctx)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
-	vtSpecs, err := volumetypes.ExtractVolumeTypes(allPublicPages)
+	vtSpecs, err := volumetypes.ExtractVolumeTypes(allPages)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
-	}
-	if l.ManagePrivateVolumeTypes != "" {
-		allPrivatePages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "false"}).AllPages(ctx)
-		if err != nil {
-			return liquid.ServiceInfo{}, err
-		}
-		vtPrivateSpecs, err := volumetypes.ExtractVolumeTypes(allPrivatePages)
-		if err != nil {
-			return liquid.ServiceInfo{}, err
-		}
-		var matchingVtPrivateSpecs []volumetypes.VolumeType
-		for _, spec := range vtPrivateSpecs {
-			if l.ManagePrivateVolumeTypes.MatchString(spec.Name) {
-				matchingVtPrivateSpecs = append(matchingVtPrivateSpecs, spec)
-			}
-		}
-		vtSpecs = append(vtSpecs, matchingVtPrivateSpecs...)
 	}
 
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
 	for _, vtSpec := range vtSpecs {
-		if !vtSpec.IsPublic && !vtSpec.PublicAccess {
+		if !vtSpec.IsPublic && !vtSpec.PublicAccess && !l.ManagePrivateVolumeTypes.MatchString(vtSpec.Name) {
+			continue
+		}
+		if l.IgnorePublicVolumeTypes.MatchString(vtSpec.Name) {
 			continue
 		}
 
