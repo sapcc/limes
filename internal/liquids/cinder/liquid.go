@@ -26,12 +26,14 @@ type Logic struct {
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
-	VolumeTypes      liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
-	VolumeTypeAccess liquidapi.State[map[VolumeType][]volumetypes.VolumeTypeAccess]
+	VolumeTypes liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
+
+	VolumeTypeAccess liquidapi.State[map[VolumeType]map[ProjectID]struct{}]
 }
 
 // VolumeType is a type with convenience functions for deriving resource names.
 type VolumeType string
+type ProjectID string
 
 func (vt VolumeType) CapacityResourceName() liquid.ResourceName {
 	return liquid.ResourceName("capacity_" + string(vt))
@@ -87,7 +89,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
-	vtAccess := make(map[VolumeType][]volumetypes.VolumeTypeAccess, len(vtSpecs))
+	vtAccess := make(map[VolumeType]map[ProjectID]struct{})
 	for _, vtSpec := range vtSpecs {
 		vtIsPrivate := !vtSpec.IsPublic && !vtSpec.PublicAccess
 		if vtIsPrivate && !l.ManagePrivateVolumeTypes.MatchString(vtSpec.Name) {
@@ -108,11 +110,22 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			if err != nil {
 				return liquid.ServiceInfo{}, err
 			}
-			accessResult, err := volumetypes.ExtractAccesses(vtAccessPages)
+			accessResults, err := volumetypes.ExtractAccesses(vtAccessPages)
 			if err != nil {
 				return liquid.ServiceInfo{}, err
 			}
-			vtAccess[VolumeType(vtSpec.Name)] = accessResult
+
+			if len(accessResults) == 0 {
+				vtAccess[VolumeType(vtSpec.Name)] = make(map[ProjectID]struct{})
+			}
+			for _, result := range accessResults {
+				volumeType := VolumeType(vtSpec.Name)
+				projId := ProjectID(result.ProjectID)
+				if _, ok := vtAccess[volumeType]; !ok {
+					vtAccess[volumeType] = make(map[ProjectID]struct{}, len(accessResults))
+				}
+				vtAccess[volumeType][projId] = struct{}{}
+			}
 		}
 	}
 	l.VolumeTypes.Set(volumeTypes)
