@@ -32,7 +32,7 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -45,7 +45,7 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
 	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, serviceInfos[normalizedServiceType].Resources)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -67,7 +67,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -89,13 +89,13 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "project not found", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	var dbDomain db.Domain
 	err = p.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -103,7 +103,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
 	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, serviceInfos[normalizedServiceType].UsageReportNeedsProjectMetadata)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
