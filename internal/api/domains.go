@@ -23,12 +23,12 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -48,12 +48,12 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"domain": domain})
@@ -69,7 +69,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 
 	c := collector.NewCollector(p.Cluster)
 	newDomainUUIDs, err := c.ScanDomains(r.Context(), collector.ScanDomainsOpts{})
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
