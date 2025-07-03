@@ -209,7 +209,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, sql.ErrNoRows):
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)
 		return nil
-	case respondwith.ErrorText(w, err):
+	case respondwith.ObfuscatedErrorText(w, err):
 		return nil
 	default:
 		return &domain
@@ -249,7 +249,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	case err == nil && domain.ID != project.DomainID:
 		http.Error(w, "no such project", http.StatusNotFound)
 		return nil, false
-	case respondwith.ErrorText(w, err):
+	case respondwith.ObfuscatedErrorText(w, err):
 		return nil, false
 	default:
 		return project, true
