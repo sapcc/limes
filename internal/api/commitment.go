@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -102,7 +103,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -126,7 +127,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		}
 		return nil
 	})
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -135,7 +136,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	whereStr, whereArgs = db.BuildSimpleWhereClause(map[string]any{"pc.project_id": dbProject.ID}, len(joinArgs))
 	var dbCommitments []db.ProjectCommitment
 	_, err = p.DB.Select(&dbCommitments, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -210,7 +211,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 
 	// validate request
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return nil, nil, nil
 	}
 	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
@@ -283,7 +284,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	)
 	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	if !resourceAllowsCommitments {
@@ -302,7 +303,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// check for committable capacity
 	result, err := datamodel.CanConfirmNewCommitment(*loc, dbProject.ID, req.Amount, p.Cluster, p.DB)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
@@ -334,7 +335,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	)
 	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	if !resourceAllowsCommitments {
@@ -359,7 +360,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// we want to validate committable capacity in the same transaction that creates the commitment
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
@@ -368,7 +369,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	dbCommitment := db.ProjectCommitment{
@@ -394,7 +395,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		ok, err := datamodel.CanConfirmNewCommitment(*loc, dbProject.ID, req.Amount, p.Cluster, tx)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		if !ok {
@@ -409,15 +410,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// create commitment
 	err = tx.Insert(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
+
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -425,6 +423,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
+
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
@@ -447,15 +451,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt.IsSome() {
 		_, err := p.DB.Exec(`UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, loc.ServiceType)
-		if respondwith.ErrorText(w, err) {
-			return
+		if err != nil {
+			logg.Error("could not trigger a new capacity scrape after creating commitment %s: %s", dbCommitment.UUID, err.Error())
 		}
-	}
-
-	// display the possibly confirmed commitment to the user
-	err = p.DB.SelectOne(&dbCommitment, `SELECT * FROM project_commitments WHERE id = $1`, dbCommitment.ID)
-	if respondwith.ErrorText(w, err) {
-		return
 	}
 
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": commitment})
@@ -496,7 +494,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no such commitment", http.StatusNotFound)
 			return
-		} else if respondwith.ErrorText(w, err) {
+		} else if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		commitmentUUIDs[i] = dbCommitments[i].UUID
@@ -521,13 +519,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// Start transaction for creating new commitment and marking merged commitments as superseded
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
@@ -564,14 +562,14 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		RelatedCommitmentUUIDs: commitmentUUIDs,
 	}
 	buf, err := json.Marshal(creationContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	dbMergedCommitment.CreationContextJSON = json.RawMessage(buf)
 
 	// Insert into database
 	err = tx.Insert(&dbMergedCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -582,7 +580,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbMergedCommitment.UUID},
 	}
 	buf, err = json.Marshal(supersedeContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	for _, dbCommitment := range dbCommitments {
@@ -590,18 +588,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.State = db.CommitmentStateSuperseded
 		_, err = tx.Update(&dbCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 	}
 
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -609,8 +602,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token, resourceInfo.Unit)
 	auditEvent := commitmentEventTarget{
 		DomainID:        dbDomain.UUID,
@@ -657,7 +655,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	now := p.timeNow()
@@ -684,18 +682,18 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create renewed commitment
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -705,7 +703,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	dbRenewedCommitment := db.ProjectCommitment{
@@ -724,7 +722,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	err = tx.Insert(&dbRenewedCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -734,22 +732,17 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbRenewedCommitment.UUID},
 	}
 	buf, err = json.Marshal(renewContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -757,9 +750,14 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
+
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
 
 	// Create resultset and auditlogs
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token, resourceInfo.Unit)
 	auditEvent := commitmentEventTarget{
 		DomainID:        dbDomain.UUID,
@@ -804,7 +802,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	var loc core.AZResourceLocation
@@ -814,7 +812,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -826,11 +824,11 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// perform deletion
 	_, err = p.DB.Delete(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -920,13 +918,13 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// Mark whole commitment or a newly created, splitted one as transferrable.
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
@@ -942,7 +940,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = Some(transferToken)
 		_, err = tx.Update(&dbCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 	} else {
@@ -950,21 +948,21 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
 		transferCommitment, err := p.buildSplitCommitment(dbCommitment, transferAmount)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
 		transferCommitment.TransferToken = Some(transferToken)
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		err = tx.Insert(&transferCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		err = tx.Insert(&remainingCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		supersedeContext := db.CommitmentWorkflowContext{
@@ -973,36 +971,32 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
 		}
 		buf, err := json.Marshal(supersedeContext)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		dbCommitment.State = db.CommitmentStateSuperseded
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		_, err = tx.Update(&dbCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		dbCommitment = transferCommitment
 	}
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -1010,11 +1004,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
-	if respondwith.ErrorText(w, err) {
+
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+
+	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1103,7 +1100,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found.", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1114,12 +1111,12 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "location data not found.", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -1164,7 +1161,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1175,7 +1172,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1186,7 +1183,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	)
 	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, targetProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	if !resourceAllowsCommitments {
@@ -1198,12 +1195,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// validate that we have enough committable capacity on the receiving side
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, dbCommitment.ProjectID, targetProject.ID, p.Cluster, tx)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	if !ok {
@@ -1215,16 +1212,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	dbCommitment.TransferToken = None[string]()
 	dbCommitment.ProjectID = targetProject.ID
 	_, err = tx.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -1232,6 +1225,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
+
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
@@ -1273,7 +1272,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	// validate request
 	vars := mux.Vars(r)
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1359,7 +1358,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	var sourceLoc core.AZResourceLocation
@@ -1369,7 +1368,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName).ForDomain(dbDomain.Name)
@@ -1388,7 +1387,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	req := parseTarget.Request
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
@@ -1435,7 +1434,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
@@ -1446,7 +1445,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	)
 	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
 		Scan(&targetAZResourceID, &resourceAllowsCommitments)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	// defense in depth. ServiceType and ResourceName of source and target are already checked. Here it's possible to explicitly check the ID's.
@@ -1468,7 +1467,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// Therefore only the addition to the target resource has to be checked against.
 	if dbCommitment.ConfirmedAt.IsSome() {
 		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, dbProject.ID, conversionAmount, p.Cluster, p.DB)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		if !ok {
@@ -1493,13 +1492,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	resourceInfo := core.InfoForResource(serviceInfo, sourceLoc.ResourceName)
 	if remainingAmount > 0 {
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
 		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
 		err = tx.Insert(&remainingCommitment)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		auditEvent.Commitments = append(auditEvent.Commitments,
@@ -1508,13 +1507,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	convertedCommitment, err := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
 	relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, convertedCommitment.UUID)
 	err = tx.Insert(&convertedCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1526,19 +1525,19 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		RelatedCommitmentUUIDs: relatedCommitmentUUIDs,
 	}
 	buf, err := json.Marshal(supersedeContext)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	dbCommitment.State = db.CommitmentStateSuperseded
 	dbCommitment.SupersededAt = Some(now)
 	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1594,7 +1593,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1617,7 +1616,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	behavior := p.Cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName).ForDomain(dbDomain.Name)
@@ -1637,12 +1636,12 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	dbCommitment.Duration = req.Duration
 	dbCommitment.ExpiresAt = newExpiresAt
 	_, err = p.DB.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
