@@ -49,11 +49,14 @@ The following methods to assign pools to volume types are implemented:
 - Regular Pools are grouped into volume types by matching their `volume_backend_name` against `extra_specs.volume_backend_name` of the volume type.
 - Remaining Pools are grouped into volume types by matching their `storage_protocol` and `quality_type` against the `extra_specs.storage_protocol` and
   `extra_secs.quality_type` of the volume type.
+- Private are grouped into volume types by matching their `storage_protocol` and `vendor_name` against the `extra_specs.storage_protocol` and
+  `extra_secs.vendor_name` of the volume type.
 
-| Matching | Volume Type         | Pools               |
-| -------- | ------------------- | ------------------- |
-| Type 1   | volume_backend_name | volume_backend_name |
-| Type 2   | storage_protocol<br>quality_type    | storage_protocol<br>quality_type    |
+| Matching | Volume Type                      | Pools                            |
+| -------- | -------------------------------- | -------------------------------- |
+| Type 1   | volume_backend_name              | volume_backend_name              |
+| Type 2   | storage_protocol<br>quality_type | storage_protocol<br>quality_type |
+| Type 3   | storage_protocol<br>vendor_name  | storage_protocol<br>vendor_name  |
 
 Pools without a matching volume type are ignored.
 

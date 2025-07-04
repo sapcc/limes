@@ -73,6 +73,7 @@ type ListOptsBuilder interface {
 // ListOpts holds options for listing Volume Types. It is passed to the volumetypes.List
 // function.
 type ListOpts struct {
+	IsPublic string `q:"is_public"`
 	// Comma-separated list of sort keys and optional sort directions in the
 	// form of <key>[:<direction>].
 	Sort string `q:"sort"`

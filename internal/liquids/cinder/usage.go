@@ -28,11 +28,18 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		return liquid.ServiceUsageReport{}, err
 	}
 
+	vtAcessList := l.VolumeTypeAccess.Get()
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 	for volumeType := range l.VolumeTypes.Get() {
-		resources[volumeType.CapacityResourceName()] = data.QuotaSet[volumeType.CapacityQuotaName()].ToResourceReport(req.AllAZs)
-		resources[volumeType.SnapshotsResourceName()] = data.QuotaSet[volumeType.SnapshotsQuotaName()].ToResourceReport(req.AllAZs)
-		resources[volumeType.VolumesResourceName()] = data.QuotaSet[volumeType.VolumesQuotaName()].ToResourceReport(req.AllAZs)
+		isForbidden := false
+		if projectIDsWithAccess, ok := vtAcessList[volumeType]; ok {
+			if _, ok := projectIDsWithAccess[ProjectID(projectUUID)]; !ok {
+				isForbidden = true
+			}
+		}
+		resources[volumeType.CapacityResourceName()] = data.QuotaSet[volumeType.CapacityQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
+		resources[volumeType.SnapshotsResourceName()] = data.QuotaSet[volumeType.SnapshotsQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
+		resources[volumeType.VolumesResourceName()] = data.QuotaSet[volumeType.VolumesQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
 	}
 
 	// NOTE: We always enumerate volume subresources because we need them for the
@@ -240,9 +247,13 @@ func (f *QuotaSetField) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-func (f QuotaSetField) ToResourceReport(allAZs []liquid.AvailabilityZone) *liquid.ResourceUsageReport {
-	return &liquid.ResourceUsageReport{
+func (f QuotaSetField) ToResourceReport(allAZs []liquid.AvailabilityZone, isForbidden bool) *liquid.ResourceUsageReport {
+	report := &liquid.ResourceUsageReport{
 		Quota: Some(f.Quota),
 		PerAZ: liquid.AZResourceUsageReport{Usage: f.Usage}.PrepareForBreakdownInto(allAZs),
 	}
+	if isForbidden {
+		report.Forbidden = true
+	}
+	return report
 }
