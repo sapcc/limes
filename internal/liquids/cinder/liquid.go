@@ -62,6 +62,7 @@ type VolumeTypeInfo struct {
 	VolumeBackendName string
 	StorageProtocol   string
 	QualityType       string
+	VendorName        string
 }
 
 // String returns a string representation of this VolumeTypeInfo for log messages.
@@ -103,6 +104,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
 			StorageProtocol:   vtSpec.ExtraSpecs["storage_protocol"],
 			QualityType:       vtSpec.ExtraSpecs["quality_type"],
+			VendorName:        vtSpec.ExtraSpecs["vendor_name"],
 		}
 
 		if vtIsPrivate {
