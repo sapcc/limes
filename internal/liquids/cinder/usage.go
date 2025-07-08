@@ -28,15 +28,11 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		return liquid.ServiceUsageReport{}, err
 	}
 
-	vtAcessList := l.VolumeTypeAccess.Get()
+	vtAccessMap := l.VolumeTypeAccess.Get()
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 	for volumeType := range l.VolumeTypes.Get() {
-		isForbidden := false
-		if projectIDsWithAccess, ok := vtAcessList[volumeType]; ok {
-			if _, ok := projectIDsWithAccess[ProjectID(projectUUID)]; !ok {
-				isForbidden = true
-			}
-		}
+		_, isAllowed := vtAccessMap[volumeType][ProjectID(projectUUID)]
+		isForbidden := !isAllowed
 		resources[volumeType.CapacityResourceName()] = data.QuotaSet[volumeType.CapacityQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
 		resources[volumeType.SnapshotsResourceName()] = data.QuotaSet[volumeType.SnapshotsQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
 		resources[volumeType.VolumesResourceName()] = data.QuotaSet[volumeType.VolumesQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
@@ -248,12 +244,9 @@ func (f *QuotaSetField) UnmarshalJSON(buf []byte) error {
 }
 
 func (f QuotaSetField) ToResourceReport(allAZs []liquid.AvailabilityZone, isForbidden bool) *liquid.ResourceUsageReport {
-	report := &liquid.ResourceUsageReport{
-		Quota: Some(f.Quota),
-		PerAZ: liquid.AZResourceUsageReport{Usage: f.Usage}.PrepareForBreakdownInto(allAZs),
+	return &liquid.ResourceUsageReport{
+		Quota:     Some(f.Quota),
+		PerAZ:     liquid.AZResourceUsageReport{Usage: f.Usage}.PrepareForBreakdownInto(allAZs),
+		Forbidden: isForbidden,
 	}
-	if isForbidden {
-		report.Forbidden = true
-	}
-	return report
 }

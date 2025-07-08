@@ -79,7 +79,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
-	// discover volume types
+	// discover volume types. The option 'IsPublic: "none"' retrieves public and private volume types.
 	allPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{IsPublic: "none"}).AllPages(ctx)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
@@ -96,7 +96,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		if vtIsPrivate && !l.ManagePrivateVolumeTypes.MatchString(vtSpec.Name) {
 			continue
 		}
-		if l.IgnorePublicVolumeTypes.MatchString(vtSpec.Name) {
+		if !vtIsPrivate && l.IgnorePublicVolumeTypes.MatchString(vtSpec.Name) {
 			continue
 		}
 
@@ -120,13 +120,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			if len(accessResults) == 0 {
 				vtAccess[VolumeType(vtSpec.Name)] = make(map[ProjectID]struct{})
 			}
+			accessMap := make(map[ProjectID]struct{}, len(accessResults))
 			for _, result := range accessResults {
-				volumeType := VolumeType(vtSpec.Name)
-				projId := ProjectID(result.ProjectID)
-				if _, ok := vtAccess[volumeType]; !ok {
-					vtAccess[volumeType] = make(map[ProjectID]struct{}, len(accessResults))
-				}
-				vtAccess[volumeType][projId] = struct{}{}
+				accessMap[ProjectID(result.ProjectID)] = struct{}{}
+				vtAccess[VolumeType(vtSpec.Name)] = accessMap
 			}
 		}
 	}
