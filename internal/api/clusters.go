@@ -24,7 +24,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	showBasic := !token.Check("cluster:show")
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -38,7 +38,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cluster, err := reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter, serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"cluster": cluster})

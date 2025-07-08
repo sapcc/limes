@@ -33,12 +33,12 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"cluster": cluster})
@@ -62,7 +62,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -93,12 +93,12 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"project": project})
@@ -167,7 +167,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	} else {
 		var err error
 		tx, err = p.DB.Begin()
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		defer sqlext.RollbackUnlessCommitted(tx)
@@ -177,7 +177,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	// validate inputs (within the DB transaction, to ensure that we do not apply
 	// inconsistent values later)
 	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -197,7 +197,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
 		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -207,7 +207,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 			// Check all rate limits.
 			var rates []db.ProjectRate
 			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
-			if respondwith.ErrorText(w, err) {
+			if respondwith.ObfuscatedErrorText(w, err) {
 				return
 			}
 			ratesByName := make(map[liquid.RateName]db.ProjectRate)
@@ -241,11 +241,11 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		}
 		return nil
 	})
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
