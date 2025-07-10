@@ -117,10 +117,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 				return liquid.ServiceInfo{}, err
 			}
 
-			if len(accessResults) == 0 {
-				vtAccess[VolumeType(vtSpec.Name)] = make(map[ProjectID]struct{})
-			}
 			accessMap := make(map[ProjectID]struct{}, len(accessResults))
+			if len(accessResults) == 0 {
+				vtAccess[VolumeType(vtSpec.Name)] = accessMap
+			}
 			for _, result := range accessResults {
 				accessMap[ProjectID(result.ProjectID)] = struct{}{}
 				vtAccess[VolumeType(vtSpec.Name)] = accessMap
