@@ -18,7 +18,8 @@ None.
 ## Resources
 
 Some of these resources are provided by optional Neutron extensions.
-Each resource will only be provided if Neutron advertises it in the default quota set.
+Each resource will only be provided if Neutron advertises it in the default quota set and if it is accepted by this liquid.
+Accepted resources are hardcoded in the liquid (see list below).
 
 | Resource               | Unit | Capabilities                         |
 | ---------------------- | ---- | ------------------------------------ |
@@ -33,3 +34,6 @@ Each resource will only be provided if Neutron advertises it in the default quot
 | `subnets`              | None | HasCapacity = false, HasQuota = true |
 | `bgpvpns`              | None | HasCapacity = false, HasQuota = true |
 | `trunks`               | None | HasCapacity = false, HasQuota = true |
+| `routers_flavor_$NAME` | None | HasCapacity = false, HasQuota = true (SAP-specific extension) |
+
+If there is a `$NAME` placeholder, there will be a resource for any quota that is advertised by Neutron with a matching name.

@@ -6,6 +6,7 @@ package neutron
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -39,6 +40,19 @@ var neutronNameForResource = map[liquid.ResourceName]string{
 	"trunks":  "trunk",
 }
 
+func getNeutronNameForResource(resourceName liquid.ResourceName) string {
+	val, exists := neutronNameForResource[resourceName]
+	if exists {
+		return val
+	} else {
+		return string(resourceName)
+	}
+}
+
+var dynamicQuotaPrefixes = []string{
+	"routers_flavor_",
+}
+
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	l.NeutronV2, err = openstack.NewNetworkV2(provider, eo)
@@ -50,6 +64,23 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 		return fmt.Errorf("cannot find project scope of own token: %w", err)
 	}
 	return nil
+}
+
+func getResourceNameIfQuotaRelevant(neutronName string) Option[liquid.ResourceName] {
+	// check for static quota name
+	for resName, v := range neutronNameForResource {
+		if v == neutronName {
+			return Some(resName)
+		}
+	}
+
+	// check for dynamic quota names
+	for _, prefix := range dynamicQuotaPrefixes {
+		if strings.HasPrefix(neutronName, prefix) {
+			return Some(liquid.ResourceName(neutronName))
+		}
+	}
+	return None[liquid.ResourceName]()
 }
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
@@ -68,9 +99,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	// we support all resources that Neutron supports and that we also know about
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(neutronNameForResource))
-	for resName, neutronName := range neutronNameForResource {
-		_, exists := data.Quota[neutronName]
-		if exists {
+	for neutronName := range data.Quota {
+		resName, isRelevantQuota := getResourceNameIfQuotaRelevant(neutronName).Unpack()
+
+		if isRelevantQuota {
 			resources[resName] = liquid.ResourceInfo{
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
@@ -107,7 +139,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 	resourceReports := make(map[liquid.ResourceName]*liquid.ResourceUsageReport, len(serviceInfo.Resources))
 	for resName := range serviceInfo.Resources {
-		resData := data.Resources[neutronNameForResource[resName]]
+		resData := data.Resources[getNeutronNameForResource(resName)]
 		resourceReports[resName] = &liquid.ResourceUsageReport{
 			Quota: Some(resData.Quota),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: resData.Usage}),
@@ -124,7 +156,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	neutronQuotas := make(quotaSet, len(serviceInfo.Resources))
 	for resName := range serviceInfo.Resources {
-		neutronQuotas[neutronNameForResource[resName]] = req.Resources[resName].Quota
+		neutronQuotas[getNeutronNameForResource(resName)] = req.Resources[resName].Quota
 	}
 	_, err := quotas.Update(ctx, l.NeutronV2, projectUUID, neutronQuotas).Extract()
 	return err
