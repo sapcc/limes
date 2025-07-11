@@ -18,8 +18,8 @@ None.
 ## Resources
 
 Some of these resources are provided by optional Neutron extensions.
-Each resource will only be provided if Neutron advertises it in the default quota set and if it is accepted by limes.
-Accepted resources are hardcoded in limes (see list below).
+Each resource will only be provided if Neutron advertises it in the default quota set and if it is accepted by this liquid.
+Accepted resources are hardcoded in the liquid (see list below).
 
 | Resource               | Unit | Capabilities                         |
 | ---------------------- | ---- | ------------------------------------ |
@@ -34,8 +34,6 @@ Accepted resources are hardcoded in limes (see list below).
 | `subnets`              | None | HasCapacity = false, HasQuota = true |
 | `bgpvpns`              | None | HasCapacity = false, HasQuota = true |
 | `trunks`               | None | HasCapacity = false, HasQuota = true |
+| `routers_flavor_$NAME` | None | HasCapacity = false, HasQuota = true (SAP-specific extension) |
 
-In addition we also support dynamically registered Neutron resources.
-These accepted based on a list of prefixes.
-Currently this contains only `routers_flavor_`.
-Note that this is a SAP-specific add-on.
+If there is a `$NAME` placeholder, there will be a resource for any quota that is advertised by Neutron with a matching name.
