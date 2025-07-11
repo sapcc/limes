@@ -70,14 +70,14 @@ func getResourceNameIfQuotaRelevant(neutronName string) Option[liquid.ResourceNa
 	// check for static quota name
 	for resName, v := range neutronNameForResource {
 		if v == neutronName {
-			return Some[liquid.ResourceName](resName)
+			return Some(resName)
 		}
 	}
 
 	// check for dynamic quota names
 	for _, prefix := range dynamicQuotaPrefixes {
 		if strings.HasPrefix(neutronName, prefix) {
-			return Some[liquid.ResourceName](liquid.ResourceName(neutronName))
+			return Some(liquid.ResourceName(neutronName))
 		}
 	}
 	return None[liquid.ResourceName]()
@@ -100,7 +100,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	// we support all resources that Neutron supports and that we also know about
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(neutronNameForResource))
 	for neutronName := range data.Quota {
-		var resName, isRelevantQuota = getResourceNameIfQuotaRelevant(neutronName).Unpack()
+		resName, isRelevantQuota := getResourceNameIfQuotaRelevant(neutronName).Unpack()
 
 		if isRelevantQuota {
 			resources[resName] = liquid.ResourceInfo{
