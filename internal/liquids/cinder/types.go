@@ -6,7 +6,7 @@ package cinder
 import "github.com/gophercloud/gophercloud/v2"
 
 // TODO: Workaround until https://github.com/gophercloud/gophercloud/pull/3454 is merged and released.
-// Remove the ListOps type once the referenced PR is merged and released.
+// Remove the ListOpts type once the referenced PR is merged and released.
 
 type ListOpts struct {
 	// Specifies whether the query should include public or private Volume Types.
