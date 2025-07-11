@@ -80,7 +80,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	// discover volume types. The option 'IsPublic: "none"' retrieves public and private volume types.
-	allPages, err := volumetypes.List(l.CinderV3, ListOpts{IsPublic: "none"}).AllPages(ctx)
+	allPages, err := volumetypes.List(l.CinderV3, ListOpts{IsPublic: VisibilityDefault}).AllPages(ctx)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
