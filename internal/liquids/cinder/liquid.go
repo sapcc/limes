@@ -13,21 +13,27 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/regexpext"
 )
 
 type Logic struct {
 	// configuration
-	WithSubcapacities        bool `json:"with_subcapacities"`
-	WithVolumeSubresources   bool `json:"with_volume_subresources"`
-	WithSnapshotSubresources bool `json:"with_snapshot_subresources"`
+	WithSubcapacities        bool                    `json:"with_subcapacities"`
+	WithVolumeSubresources   bool                    `json:"with_volume_subresources"`
+	WithSnapshotSubresources bool                    `json:"with_snapshot_subresources"`
+	ManagePrivateVolumeTypes regexpext.BoundedRegexp `json:"manage_private_volume_types"`
+	IgnorePublicVolumeTypes  regexpext.BoundedRegexp `json:"ignore_public_volume_types"`
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
 	VolumeTypes liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
+
+	VolumeTypeAccess liquidapi.State[map[VolumeType]map[ProjectID]struct{}]
 }
 
 // VolumeType is a type with convenience functions for deriving resource names.
 type VolumeType string
+type ProjectID string
 
 func (vt VolumeType) CapacityResourceName() liquid.ResourceName {
 	return liquid.ResourceName("capacity_" + string(vt))
@@ -56,6 +62,7 @@ type VolumeTypeInfo struct {
 	VolumeBackendName string
 	StorageProtocol   string
 	QualityType       string
+	VendorName        string
 }
 
 // String returns a string representation of this VolumeTypeInfo for log messages.
@@ -72,8 +79,8 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
-	// discover volume types
-	allPages, err := volumetypes.List(l.CinderV3, volumetypes.ListOpts{}).AllPages(ctx)
+	// discover volume types. The option 'IsPublic: "None"' retrieves public and private volume types.
+	allPages, err := volumetypes.List(l.CinderV3, ListOpts{IsPublic: VisibilityDefault}).AllPages(ctx)
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
@@ -81,9 +88,15 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
+
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
+	vtAccess := make(map[VolumeType]map[ProjectID]struct{})
 	for _, vtSpec := range vtSpecs {
-		if !vtSpec.IsPublic && !vtSpec.PublicAccess {
+		vtIsPrivate := !vtSpec.IsPublic && !vtSpec.PublicAccess
+		if vtIsPrivate && !l.ManagePrivateVolumeTypes.MatchString(vtSpec.Name) {
+			continue
+		}
+		if !vtIsPrivate && l.IgnorePublicVolumeTypes.MatchString(vtSpec.Name) {
 			continue
 		}
 
@@ -91,9 +104,28 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
 			StorageProtocol:   vtSpec.ExtraSpecs["storage_protocol"],
 			QualityType:       vtSpec.ExtraSpecs["quality_type"],
+			VendorName:        vtSpec.ExtraSpecs["vendor_name"],
+		}
+
+		if vtIsPrivate {
+			vtAccessPages, err := volumetypes.ListAccesses(l.CinderV3, vtSpec.ID).AllPages(ctx)
+			if err != nil {
+				return liquid.ServiceInfo{}, err
+			}
+			accessResults, err := volumetypes.ExtractAccesses(vtAccessPages)
+			if err != nil {
+				return liquid.ServiceInfo{}, err
+			}
+
+			accessMap := make(map[ProjectID]struct{}, len(accessResults))
+			for _, result := range accessResults {
+				accessMap[ProjectID(result.ProjectID)] = struct{}{}
+			}
+			vtAccess[VolumeType(vtSpec.Name)] = accessMap
 		}
 	}
 	l.VolumeTypes.Set(volumeTypes)
+	l.VolumeTypeAccess.Set(vtAccess)
 
 	// build ResourceInfo set
 	resInfoForCapacity := liquid.ResourceInfo{

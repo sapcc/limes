@@ -13,11 +13,15 @@ This liquid provides support for the block storage service Cinder.
 
 ## Service-specific configuration
 
-| Field                        | Type    | Description                                                |
-| ---------------------------- | ------- | ---------------------------------------------------------- |
-| `with_subcapacities`         | boolean | If true, subcapacities are reported.                       |
-| `with_snapshot_subresources` | boolean | If true, subresources are reported on snapshots resources. |
-| `with_volume_subresources`   | boolean | If true, subresources are reported on volumes resources.   |
+| Field                                     | Type                    | Description                                                                     |
+| ----------------------------------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| `with_subcapacities`                      | boolean                 | If true, subcapacities are reported.                                            |
+| `with_snapshot_subresources`              | boolean                 | If true, subresources are reported on snapshots resources.                      |
+| `with_volume_subresources`                | boolean                 | If true, subresources are reported on volumes resources.                        |
+| `manage_private_volume_types`<sup>1</sup> | regexpext.BoundedRegexp | If set, matching private volume types will be considered for liquid reports.    |
+| `ignore_public_volume_types`<sup>1</sup>  | regexpext.BoundedRegexp | If set, matching public volume types will not be considered for liquid reports. |
+
+<sup>1</sup> Values are regular expressions [in the Go syntax](https://pkg.go.dev/regexp/syntax). Leading `^` and trailing `$` anchors are implied automatically.
 
 ## Resources
 
@@ -49,11 +53,14 @@ The following methods to assign pools to volume types are implemented:
 - Regular Pools are grouped into volume types by matching their `volume_backend_name` against `extra_specs.volume_backend_name` of the volume type.
 - Remaining Pools are grouped into volume types by matching their `storage_protocol` and `quality_type` against the `extra_specs.storage_protocol` and
   `extra_secs.quality_type` of the volume type.
+- Private are grouped into volume types by matching their `storage_protocol` and `vendor_name` against the `extra_specs.storage_protocol` and
+  `extra_secs.vendor_name` of the volume type.
 
-| Matching | Volume Type         | Pools               |
-| -------- | ------------------- | ------------------- |
-| Type 1   | volume_backend_name | volume_backend_name |
-| Type 2   | storage_protocol<br>quality_type    | storage_protocol<br>quality_type    |
+| Matching | Volume Type                      | Pools                            |
+| -------- | -------------------------------- | -------------------------------- |
+| Type 1   | volume_backend_name              | volume_backend_name              |
+| Type 2   | storage_protocol<br>quality_type | storage_protocol<br>quality_type |
+| Type 3   | storage_protocol<br>vendor_name  | storage_protocol<br>vendor_name  |
 
 Pools without a matching volume type are ignored.
 
