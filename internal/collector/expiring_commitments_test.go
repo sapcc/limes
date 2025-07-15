@@ -58,12 +58,12 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	// successfully queue two projects with 2 commitments each. Ignore short-term commitments and mark them as notified.
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 4 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000004';
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 5 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000005';
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 6 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000006';
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 7 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000007';
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 8 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000008';
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 9 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000009';
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-two', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-two', %[1]d);
 	`, c.MeasureTime().Unix())
@@ -90,7 +90,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	mailConfig.Templates = originalMailTemplates
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 99 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000099';
+		UPDATE project_commitments_v2 SET notified_for_expiration = TRUE WHERE id = 99 AND uuid = '00000000-0000-0000-0000-000000000099' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one', %d);
 	`, c.MeasureTime().Unix())
 }

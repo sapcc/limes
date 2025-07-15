@@ -291,7 +291,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, serviceInfos[srv.Ref().Type], p.timeNow(), *dbDomain, *dbProject, srv.Ref())
+		}.Run(tx, serviceInfos[srv.Type], p.timeNow(), *dbDomain, *dbProject, srv)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

@@ -3,12 +3,6 @@
 
 package db
 
-import (
-	"cmp"
-
-	"github.com/sapcc/go-api-declarations/liquid"
-)
-
 // ServiceType identifies a backend service that can have resources or rates.
 //
 // This type is used for the service type columns that appear in the DB.
@@ -64,24 +58,3 @@ type ProjectCommitmentID int64
 // ProjectCommitmentUUID is a UUID into the project_commitments table. This typedef is
 // used to distinguish these UUIDs from UUIDs of other tables or raw string values.
 type ProjectCommitmentUUID string
-
-// ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
-type ResourceRef[I ~int64] struct {
-	ServiceID I                   `db:"service_id"`
-	Name      liquid.ResourceName `db:"name"`
-}
-
-// CompareResourceRefs is a compare function for ResourceRef (for use with slices.SortFunc etc.)
-func CompareResourceRefs[I ~int64](lhs, rhs ResourceRef[I]) int {
-	if lhs.ServiceID != rhs.ServiceID {
-		return int(rhs.ServiceID - lhs.ServiceID)
-	}
-	return cmp.Compare(lhs.Name, rhs.Name)
-}
-
-// ServiceRef identifies an individual ProjectService, DomainService or ClusterService.
-// It appears in APIs when not the entire Service record is needed.
-type ServiceRef[I ~int64] struct {
-	ID   I
-	Type ServiceType
-}

@@ -32,10 +32,6 @@ type ClusterService struct {
 	QuotaUpdateNeedsProjectMetadata bool   `db:"quota_update_needs_project_metadata"`
 }
 
-func (s ClusterService) Ref() ServiceRef[ClusterServiceID] {
-	return ServiceRef[ClusterServiceID]{ID: s.ID, Type: s.Type}
-}
-
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
 	ID        ClusterResourceID   `db:"id"`
@@ -49,11 +45,6 @@ type ClusterResource struct {
 	NeedsResourceDemand bool            `db:"needs_resource_demand"`
 	HasQuota            bool            `db:"has_quota"`
 	AttributesJSON      string          `db:"attributes_json"`
-}
-
-// Ref returns the ResourceRef for this resource.
-func (r ClusterResource) Ref() ResourceRef[ClusterServiceID] {
-	return ResourceRef[ClusterServiceID]{r.ServiceID, r.Name}
 }
 
 // ClusterAZResource contains a record from the `cluster_az_resources` table.
@@ -110,7 +101,7 @@ type ProjectServiceV2 struct {
 	Stale                 bool              `db:"stale"`
 	ScrapeDurationSecs    float64           `db:"scrape_duration_secs"`
 	ScrapeErrorMessage    string            `db:"scrape_error_message"`
-	RatesScrapeState      string            `db:"rates_scrape_state"`
+	SerializedScrapeState string            `db:"serialized_scrape_state"`
 	SerializedMetrics     string            `db:"serialized_metrics"`
 	QuotaDesyncedAt       Option[time.Time] `db:"quota_desynced_at"` // None if all quota = backend quota
 	QuotaSyncDurationSecs float64           `db:"quota_sync_duration_secs"`

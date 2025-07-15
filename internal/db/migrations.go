@@ -459,86 +459,86 @@ var sqlMigrations = map[string]string{
 	`,
 	"059_project_level_v2_artifacts.up.sql": `
 		CREATE TABLE project_services_v2 (
-			id                        BIGSERIAL  NOT NULL PRIMARY KEY,
-			project_id                BIGINT     NOT NULL REFERENCES projects ON DELETE CASCADE,
-			service_id                BIGINT     NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
-			scraped_at                TIMESTAMP  DEFAULT NULL, -- null if scraping did not happen yet
-			stale                     BOOLEAN    NOT NULL DEFAULT FALSE,
-			scrape_duration_secs      REAL       NOT NULL DEFAULT 0,
-			rates_scrape_state        TEXT       NOT NULL DEFAULT '',
-			serialized_metrics        TEXT       NOT NULL DEFAULT '',
-			checked_at                TIMESTAMP  DEFAULT NULL,
-			scrape_error_message      TEXT       NOT NULL DEFAULT '',
-			next_scrape_at            TIMESTAMP  NOT NULL DEFAULT NOW(),
-			quota_desynced_at         TIMESTAMP  DEFAULT NULL,
-			quota_sync_duration_secs  REAL       NOT NULL DEFAULT 0,
+			id								BIGSERIAL	NOT NULL PRIMARY KEY,
+			project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+			service_id						BIGINT		NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+			scraped_at						TIMESTAMPTZ	DEFAULT NULL, -- null if scraping did not happen yet
+			stale 							BOOLEAN		NOT NULL DEFAULT FALSE,
+			scrape_duration_secs 			REAL		NOT NULL DEFAULT 0,
+			serialized_scrape_state			TEXT		NOT NULL DEFAULT '',
+			serialized_metrics 				TEXT		NOT NULL DEFAULT '',
+			checked_at 						TIMESTAMPTZ	DEFAULT NULL,
+			scrape_error_message 			TEXT		NOT NULL DEFAULT '',
+			next_scrape_at 					TIMESTAMPTZ	NOT NULL DEFAULT NOW(),
+			quota_desynced_at				TIMESTAMPTZ	DEFAULT NULL,
+			quota_sync_duration_secs		REAL       	NOT NULL DEFAULT 0,
 			UNIQUE (project_id, service_id)
 		);
-		CREATE INDEX project_services_v2_stale_idx ON project_services_v2 (stale);
+		CREATE INDEX project_services_v2_stale_idx ON project_services_v2 (stale, next_scrape_at);
 		CREATE TABLE project_resources_v2 (
-			id                            BIGSERIAL  NOT NULL PRIMARY KEY,
-			project_id                    BIGINT     NOT NULL REFERENCES projects ON DELETE CASCADE,
-			resource_id                   bigint     NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
-			quota                         BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
-			backend_quota                 BIGINT     DEFAULT NULL,
-			max_quota_from_outside_admin  BIGINT     DEFAULT NULL,
-			override_quota_from_config    BIGINT     DEFAULT NULL,
-			max_quota_from_local_admin    BIGINT     DEFAULT NULL,
-			forbidden                     BOOLEAN    NOT NULL DEFAULT FALSE,
-			UNIQUE (project_id, resource_id)
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    resource_id						bigint		NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
+		    quota							BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+		    backend_quota 					BIGINT		DEFAULT NULL,
+		    max_quota_from_outside_admin	BIGINT		DEFAULT NULL,
+		    override_quota_from_config		BIGINT		DEFAULT NULL,
+		    max_quota_from_local_admin		BIGINT		DEFAULT NULL,
+		    forbidden						BOOLEAN		NOT NULL DEFAULT FALSE,
+		    UNIQUE (project_id, resource_id)
 		);
 		CREATE TABLE project_az_resources_v2 (
-			id                BIGSERIAL  NOT NULL PRIMARY KEY,
-			project_id        BIGINT     NOT NULL REFERENCES projects ON DELETE CASCADE,
-			az_resource_id    BIGINT     NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
-			quota             BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
-			usage             BIGINT     NOT NULL,
-			physical_usage    BIGINT     DEFAULT NULL,
-			subresources      TEXT       NOT NULL DEFAULT '',
-			historical_usage  TEXT       NOT NULL DEFAULT '',
-			backend_quota     BIGINT     DEFAULT NULL,
-			UNIQUE (project_id, az_resource_id)
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    az_resource_id					BIGINT		NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
+		    quota							BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+		    usage							BIGINT		NOT NULL,
+		    physical_usage					BIGINT		DEFAULT NULL,
+		    subresources					TEXT		NOT NULL DEFAULT '',
+		    historical_usage				TEXT		NOT NULL DEFAULT '',
+		    backend_quota					BIGINT		DEFAULT NULL,
+		    UNIQUE (project_id, az_resource_id)
 		);
 		CREATE TABLE project_rates_v2 (
-			id               BIGSERIAL  NOT NULL PRIMARY KEY,
-			project_id       BIGINT     NOT NULL REFERENCES projects ON DELETE CASCADE,
-			rate_id          BIGINT     NOT NULL REFERENCES cluster_rates ON DELETE CASCADE,
-			rate_limit       BIGINT     DEFAULT NULL, -- null = not rate-limited
-			window_ns        BIGINT     DEFAULT NULL, -- null = not rate-limited, unit = nanoseconds
-			usage_as_bigint  TEXT       NOT NULL, -- empty = not scraped
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+		    rate_id 						BIGINT		NOT NULL REFERENCES cluster_rates ON DELETE CASCADE,
+		    rate_limit						BIGINT		DEFAULT NULL, -- null = not rate-limited
+			window_ns						BIGINT		DEFAULT NULL, -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint					TEXT		NOT NULL,     -- empty = not scraped
 			UNIQUE (project_id, rate_id)
 		);
 		CREATE TABLE project_commitments_v2 (
-			id                       BIGSERIAL  NOT NULL PRIMARY KEY,
-			project_id               BIGINT     NOT NULL REFERENCES projects ON DELETE RESTRICT,
-			az_resource_id           BIGINT     NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
-			amount                   BIGINT     NOT NULL,
-			duration                 TEXT       NOT NULL,
-			created_at               TIMESTAMP  NOT NULL,
-			creator_uuid             TEXT       NOT NULL,
-			creator_name             TEXT       NOT NULL,
-			confirm_by               TIMESTAMP  DEFAULT NULL,
-			confirmed_at             TIMESTAMP  DEFAULT NULL,
-			expires_at               TIMESTAMP  NOT NULL,
-			superseded_at            TIMESTAMP  DEFAULT NULL,
-			transfer_status          TEXT       NOT NULL DEFAULT '',
-			transfer_token           TEXT       DEFAULT NULL UNIQUE, -- default is NULL instead of '' to enable the uniqueness constraint below
-			state                    TEXT       NOT NULL,
-			notify_on_confirm        BOOLEAN    NOT NULL DEFAULT FALSE,
-			notified_for_expiration  BOOLEAN    NOT NULL DEFAULT FALSE,
-			creation_context_json    JSONB      NOT NULL,
-			supersede_context_json   JSONB      DEFAULT NULL,
-			renew_context_json       JSONB      DEFAULT NULL,
-			uuid                     TEXT       NOT NULL DEFAULT gen_random_uuid() UNIQUE
+		    id								BIGSERIAL	NOT NULL PRIMARY KEY,
+		    uuid 							TEXT		NOT NULL UNIQUE,
+		    project_id						BIGINT		NOT NULL REFERENCES projects ON DELETE RESTRICT,
+		    az_resource_id					BIGINT		NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
+		    state							TEXT		NOT NULL,
+		    amount							BIGINT		NOT NULL,
+		    duration						TEXT		NOT NULL,
+			created_at						TIMESTAMPTZ	NOT NULL,
+			creator_uuid					TEXT		NOT NULL,
+			creator_name					TEXT		NOT NULL,
+			confirm_by						TIMESTAMPTZ	DEFAULT NULL,
+			confirmed_at					TIMESTAMPTZ	DEFAULT NULL,
+			expires_at						TIMESTAMPTZ	NOT NULL,
+		    superseded_at					TIMESTAMPTZ	DEFAULT NULL,
+		    transfer_status					TEXT		NOT NULL DEFAULT '',
+			transfer_token					TEXT		DEFAULT NULL UNIQUE, -- default is NULL instead of '' to enable the uniqueness constraint below
+		    notify_on_confirm				BOOLEAN		NOT NULL DEFAULT FALSE,
+		    notified_for_expiration			BOOLEAN		NOT NULL DEFAULT FALSE,
+		    creation_context_json			JSONB 		NOT NULL,
+		    supersede_context_json			JSONB		DEFAULT NULL,
+		    renew_context_json				JSONB		DEFAULT NULL
 		);
-		INSERT INTO project_services_v2 ( project_id, service_id, scraped_at, stale, scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, next_scrape_at, quota_desynced_at, quota_sync_duration_secs )
+		INSERT INTO project_services_v2 ( project_id, service_id, scraped_at, stale, scrape_duration_secs, serialized_scrape_state, serialized_metrics, checked_at, scrape_error_message, next_scrape_at, quota_desynced_at, quota_sync_duration_secs )
 			SELECT
 				p.id as project_id,
 				cs.id as service_id,
 				ps.scraped_at,
 				ps.stale,
 				ps.scrape_duration_secs,
-				ps.rates_scrape_state,
+				ps.rates_scrape_state as serialized_scrape_state,
 				ps.serialized_metrics,
 				ps.checked_at,
 				ps.scrape_error_message,

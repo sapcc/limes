@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
+CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
 INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', UNIX(1000), 1);
 
