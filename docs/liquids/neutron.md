@@ -39,6 +39,9 @@ Accepted resources are hardcoded in the liquid (see list below).
 | `ipsec_site_connections` | None | HasCapacity = false, HasQuota = true |
 | `ipsecpolicies`          | None | HasCapacity = false, HasQuota = true |
 | `vpnservices`            | None | HasCapacity = false, HasQuota = true |
+| `firewall_groups`        | None | HasCapacity = false, HasQuota = true |
+| `firewall_policies`      | None | HasCapacity = false, HasQuota = true |
+| `firewall_rules`         | None | HasCapacity = false, HasQuota = true |
 | `routers_flavor_$NAME`   | None | HasCapacity = false, HasQuota = true (SAP-specific extension) |
 
 If there is a `$NAME` placeholder, there will be a resource for any quota that is advertised by Neutron with a matching name.
