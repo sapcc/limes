@@ -170,7 +170,7 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments_v2 WHERE id = 1 AND transfer_token = NULL AND uuid = '00000000-0000-0000-0000-000000000001';
+		DELETE FROM project_commitments_v2 WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
 		DELETE FROM project_services_v2 WHERE id = 7 AND project_id = 4 AND service_id = 1;
 		DELETE FROM project_services_v2 WHERE id = 8 AND project_id = 4 AND service_id = 2;
 		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';

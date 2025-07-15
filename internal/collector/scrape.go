@@ -51,7 +51,7 @@ var (
 			-- timing information
 			checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3,
 			-- serialized state returned by LiquidConnection
-			serialized_metrics = $4, rates_scrape_state = $5,
+			serialized_metrics = $4, serialized_scrape_state = $5,
 			-- other
 			stale = FALSE, scrape_error_message = ''
 		WHERE id = $6
@@ -173,7 +173,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	}
 
 	// perform rate scrape
-	rateData, ratesScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.RatesScrapeState)
+	rateData, serializedScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.SerializedScrapeState)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = util.UnpackError(err)
@@ -196,7 +196,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	// that we don't scrape it again immediately afterwards
 	_, err = c.DB.Exec(writeScrapeSuccessQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
-		string(serializedMetrics), ratesScrapeState, srv.ID,
+		string(serializedMetrics), serializedScrapeState, srv.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("while updating metadata on project service: %w", err)
@@ -218,7 +218,7 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 
 	if task.Service.ScrapedAt.IsNone() {
 		// see explanation inside the called function's body
-		err := c.writeDummyResources(dbDomain, dbProject, task.ClusterService.Ref(), serviceInfo)
+		err := c.writeDummyResources(dbDomain, dbProject, task.ClusterService, serviceInfo)
 		if err != nil {
 			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
 				task.ClusterService.Type, project.UUID, err.Error(),
@@ -306,7 +306,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	_, err = datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
-	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, clusterService.Ref())
+	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, clusterService)
 	if err != nil {
 		return err
 	}
@@ -534,7 +534,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	return tx.Commit()
 }
 
-func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ClusterServiceID], serviceInfo liquid.ServiceInfo) error {
+func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ClusterService, serviceInfo liquid.ServiceInfo) error {
 	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,

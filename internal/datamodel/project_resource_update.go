@@ -30,7 +30,7 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ClusterServiceID]) ([]db.ProjectResourceV2, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ClusterService) ([]db.ProjectResourceV2, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
