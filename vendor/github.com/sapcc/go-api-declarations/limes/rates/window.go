@@ -94,7 +94,7 @@ func (w Window) MarshalJSON() ([]byte, error) {
 	if repr == "" {
 		return nil, fmt.Errorf("unrepresentable window size: %d ns", uint64(w))
 	}
-	return []byte(fmt.Sprintf("%q", repr)), nil
+	return fmt.Appendf(nil, "%q", repr), nil
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.

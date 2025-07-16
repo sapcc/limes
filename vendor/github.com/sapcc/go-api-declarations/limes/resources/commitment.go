@@ -38,7 +38,7 @@ type Commitment struct {
 	ConfirmBy *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 	// ConfirmedAt is only filled after the commitment was confirmed.
 	ConfirmedAt *limes.UnixEncodedTime `json:"confirmed_at,omitempty"`
-	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at,omitempty"`
+	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at"`
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  *string                  `json:"transfer_token,omitempty"`
@@ -109,7 +109,7 @@ var cdTokenRx = regexp.MustCompile(`^([0-9]*)\s*(second|minute|hour|day|month|ye
 // Acceptable inputs include "5 hours" and "1year,2 \t months,  3days".
 func ParseCommitmentDuration(input string) (CommitmentDuration, error) {
 	var result CommitmentDuration
-	for _, field := range strings.Split(input, ",") {
+	for field := range strings.SplitSeq(input, ",") {
 		field = strings.TrimSpace(field)
 		if field == "" {
 			continue
