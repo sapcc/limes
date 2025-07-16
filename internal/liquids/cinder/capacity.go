@@ -88,6 +88,21 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		delete(remainingPools, pool)
 	}
 
+	// match private volume types and pools
+	for pool := range remainingPools {
+		info := VolumeTypeInfo{
+			StorageProtocol: pool.Capabilities.StorageProtocol,
+			VendorName:      pool.Capabilities.VendorName,
+		}
+
+		_, exists := sortedPools[info]
+		if !exists {
+			continue
+		}
+		poolMatches[pool] = info
+		delete(remainingPools, pool)
+	}
+
 	for pool, info := range remainingPools {
 		logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
 	}
@@ -270,6 +285,7 @@ type StoragePool struct {
 		AllocatedCapacityGB liquids.Float64WithStringErrors `json:"allocated_capacity_gb"`
 		StorageProtocol     string                          `json:"storage_protocol"`
 		QualityType         string                          `json:"quality_type"`
+		VendorName          string                          `json:"vendor_name"`
 
 		// SAP Converged Cloud extension
 		CustomAttributes struct {
