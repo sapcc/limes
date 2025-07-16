@@ -323,11 +323,11 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 // and cluster_rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, timeNow time.Time, dbm *gorp.DbMap) (err error) {
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, timeNow time.Time, dbm *gorp.DbMap) (srv db.ClusterService, err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
-		return err
+		return srv, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
@@ -335,18 +335,18 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbServices []db.ClusterService
 	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE type = $1`, serviceType)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster_service %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot inspect existing cluster_service %s: %w", serviceType, err)
 	}
 	var wantedServices = []db.ServiceType{serviceType}
 
 	// do update for cluster_service (as set update, for convenience)
 	cmf, err := util.RenderMapToJSON("capacity_metric_families", serviceInfo.CapacityMetricFamilies)
 	if err != nil {
-		return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
 	}
 	umf, err := util.RenderMapToJSON("usage_metric_families", serviceInfo.UsageMetricFamilies)
 	if err != nil {
-		return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
 	}
 	serviceUpdate := db.SetUpdate[db.ClusterService, db.ServiceType]{
 		ExistingRecords: dbServices,
@@ -379,15 +379,16 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		},
 	}
 	dbServices, err = serviceUpdate.Execute(tx)
+	srv = dbServices[0]
 	if err != nil {
-		return fmt.Errorf("update cluster_services failed for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("update cluster_services failed for %s: %w", serviceType, err)
 	}
 
 	// collect existing cluster_resources and the wanted cluster_resources
 	var dbResources []db.ClusterResource
 	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, dbServices[0].ID)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster resources for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot inspect existing cluster resources for %s: %w", serviceType, err)
 	}
 	wantedResources := slices.Sorted(maps.Keys(serviceInfo.Resources))
 
@@ -428,14 +429,14 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	dbResources, err = resourceUpdate.Execute(tx)
 	if err != nil {
-		return err
+		return srv, err
 	}
 
 	// collect existing cluster_az_resources
 	var dbAZResources []db.ClusterAZResource
 	_, err = tx.Select(&dbAZResources, `SELECT car.* FROM cluster_az_resources car JOIN cluster_resources cr ON car.resource_id = cr.id WHERE cr.service_id = $1`, dbServices[0].ID)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster AZ resources for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot inspect existing cluster AZ resources for %s: %w", serviceType, err)
 	}
 	dbAZResourcesByResourceID := make(map[db.ClusterResourceID][]db.ClusterAZResource)
 	for _, azRes := range dbAZResources {
@@ -477,7 +478,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		}
 		_, err = setUpdate.Execute(tx)
 		if err != nil {
-			return err
+			return srv, err
 		}
 	}
 
@@ -485,7 +486,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbRates []db.ClusterRate
 	_, err = tx.Select(&dbRates, `SELECT * FROM cluster_rates WHERE service_id = $1`, dbServices[0].ID)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster rates for %s: %w", serviceType, err)
+		return srv, fmt.Errorf("cannot inspect existing cluster rates for %s: %w", serviceType, err)
 	}
 	wantedRates := slices.Sorted(maps.Keys(serviceInfo.Rates))
 
@@ -516,10 +517,10 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	_, err = rateUpdate.Execute(tx)
 	if err != nil {
-		return err
+		return srv, err
 	}
 
-	return tx.Commit()
+	return srv, tx.Commit()
 }
 
 // readServiceInfoFromDB reads the complete ServiceInfo from the database a) as fallback in case the Liquid

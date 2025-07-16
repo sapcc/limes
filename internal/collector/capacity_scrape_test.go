@@ -256,9 +256,9 @@ func Test_ScanCapacity(t *testing.T) {
 		DELETE FROM cluster_resources WHERE id = 3 AND service_id = 2 AND name = 'unknown';
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE);
 		DELETE FROM cluster_services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2);
+		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %d, 5, '{}', %d, 2);
 		DELETE FROM cluster_services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
-		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (2, 'unshared', %[3]d, 5, '{}', %[4]d, 2);
+		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (2, 'unshared', %d, 5, '{}', %d, 2);
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -737,7 +737,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 5 AND resource_id = 2 AND az = 'any';
-		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
@@ -751,7 +751,8 @@ func Test_ScanManualCapacity(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
-		UPDATE cluster_services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared';
+		DELETE FROM cluster_services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %d, 5, '{}', %d, 2);
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)

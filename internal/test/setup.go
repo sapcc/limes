@@ -178,7 +178,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
 	for serviceType, serviceInfo := range params.PersistedServiceInfo {
-		err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Clock.Now(), s.DB)
+		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Clock.Now(), s.DB)
 		if err != nil {
 			t.Fatal(err)
 		}

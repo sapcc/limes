@@ -864,7 +864,8 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
 		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
-		UPDATE cluster_services SET liquid_version = 2 WHERE id = 1 AND type = 'unittest';
+		DELETE FROM cluster_services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
+		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (10, 4, 'any', 0, '{"t":[1830],"v":[0]}');
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 2 AND resource_id = 1 AND az = 'az-two';
