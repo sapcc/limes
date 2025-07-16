@@ -31,8 +31,12 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	vtAccessMap := l.VolumeTypeAccess.Get()
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 	for volumeType := range l.VolumeTypes.Get() {
-		_, isAllowed := vtAccessMap[volumeType][ProjectID(projectUUID)]
-		isForbidden := !isAllowed
+		isForbidden := false
+		if _, ok := vtAccessMap[volumeType]; ok {
+			// ^ This check ensures that public volume types never set Forbidden (because they do not have an entry in `vtAccessMap`).
+			_, isAllowed := vtAccessMap[volumeType][ProjectID(projectUUID)]
+			isForbidden = !isAllowed
+		}
 		resources[volumeType.CapacityResourceName()] = data.QuotaSet[volumeType.CapacityQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
 		resources[volumeType.SnapshotsResourceName()] = data.QuotaSet[volumeType.SnapshotsQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
 		resources[volumeType.VolumesResourceName()] = data.QuotaSet[volumeType.VolumesQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
