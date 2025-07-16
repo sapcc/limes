@@ -19,6 +19,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/db"
@@ -354,6 +355,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return service.Type
 		},
 		Create: func(serviceType db.ServiceType) (db.ClusterService, error) {
+			logg.Info("SaveServiceInfoToDB: creating ClusterService %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
 			return db.ClusterService{
 				NextScrapeAt:                    timeNow,
 				Type:                            serviceType,
@@ -365,6 +367,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			}, nil
 		},
 		Update: func(service *db.ClusterService) (err error) {
+			logg.Info("SaveServiceInfoToDB: updating ClusterService %s from LiquidVersion = %d to %d", service.Type, service.LiquidVersion, serviceInfo.Version)
 			service.LiquidVersion = serviceInfo.Version
 			service.CapacityMetricFamiliesJSON = cmf
 			service.UsageMetricFamiliesJSON = umf
@@ -394,6 +397,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return resource.Name
 		},
 		Create: func(resourceName liquid.ResourceName) (db.ClusterResource, error) {
+			logg.Info("SaveServiceInfoToDB: creating ClusterResource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
 			return db.ClusterResource{
 				ServiceID:           dbServices[0].ID,
 				Name:                resourceName,
@@ -407,6 +411,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			}, nil
 		},
 		Update: func(res *db.ClusterResource) (err error) {
+			logg.Info("SaveServiceInfoToDB: updating ClusterResource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
 			res.LiquidVersion = serviceInfo.Version
 			res.Unit = serviceInfo.Resources[res.Name].Unit
 			res.Topology = serviceInfo.Resources[res.Name].Topology
