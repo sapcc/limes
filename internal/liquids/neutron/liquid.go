@@ -38,6 +38,16 @@ var neutronNameForResource = map[liquid.ResourceName]string{
 	// extensions
 	"bgpvpns": "bgpvpn",
 	"trunks":  "trunk",
+	// VPNaaS
+	"endpoint_groups":        "endpoint_group",
+	"ikepolicies":            "ikepolicy",
+	"ipsec_site_connections": "ipsec_site_connection",
+	"ipsecpolicies":          "ipsecpolicy",
+	"vpnservices":            "vpnservice",
+	// FWaaS
+	"firewall_groups":   "firewall_group",
+	"firewall_policies": "firewall_policy",
+	"firewall_rules":    "firewall_rule",
 }
 
 func getNeutronNameForResource(resourceName liquid.ResourceName) string {
