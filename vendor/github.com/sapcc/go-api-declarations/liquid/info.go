@@ -67,7 +67,7 @@ type ResourceInfo struct {
 	// Whether the liquid takes responsibility for reviewing changes to commitments for this resource.
 	// If false, Limes will handle commitments on this resource on its own without involving the liquid.
 	// If true, the liquid needs to be prepared to handle commitment-related requests for this resource.
-	HandlesCommitments bool `json:"handlesCommitments"`
+	HandlesCommitments bool `json:"handlesCommitments,omitempty"`
 
 	// Additional resource-specific attributes.
 	// For example, a resource for baremetal nodes of a certain flavor might report flavor attributes like the CPU and RAM size here, instead of on subcapacities and subresources, to avoid repetition.

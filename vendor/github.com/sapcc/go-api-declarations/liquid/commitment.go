@@ -16,7 +16,7 @@ type CommitmentChangeRequest struct {
 	// The same version number that was reported in the Version field of a GET /v1/info response.
 	// The liquid shall reject this request if the version here differs from the value in the ServiceInfo currently held by the liquid.
 	// This is used to ensure that Limes does not request commitment changes based on outdated resource metadata.
-	InfoVersion uint64 `json:"infoVersion"`
+	InfoVersion int64 `json:"infoVersion"`
 
 	// On the first level, the commitment changeset is grouped by project.
 	//
@@ -102,7 +102,7 @@ type Commitment struct {
 	ConfirmBy Option[time.Time] `json:"confirmBy,omitzero"`
 
 	// This field contains the point in time when the commitment moves into status "expired", unless it is deleted or moves into status "superseded" first.
-	ExpiresAt time.Time `json:"expiresAt,omitzero"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // CommitmentStatus is an enum containing the various lifecycle states of type Commitment.
