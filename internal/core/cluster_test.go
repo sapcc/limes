@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package test
+package core_test
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"github.com/sapcc/go-bits/errext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/test"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
 	`
 )
 
-func generateNewClusterWithPersistingServiceInfo(t *testing.T, s Setup, replacedConfig string) {
+func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, replacedConfig string) {
 	var errs errext.ErrorSet
 	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(replacedConfig, "\t", "  ")), s.Clock.Now, s.DB, true)
 	for _, err := range errs {
@@ -54,16 +55,16 @@ func TestMain(m *testing.M) {
 
 // We have to put this into the test package, because we are testing something which is baked into the Setup in a normal test.
 func Test_ClusterSaveServiceInfo(t *testing.T) {
-	srvInfoShared := DefaultLiquidServiceInfo()
-	srvInfoUnshared := DefaultLiquidServiceInfo()
-	liquidClientShared, liquidServiceTypeShared := NewMockLiquidClient(srvInfoShared)
-	_, liquidServiceTypeUnshared := NewMockLiquidClient(srvInfoUnshared)
+	srvInfoShared := test.DefaultLiquidServiceInfo()
+	srvInfoUnshared := test.DefaultLiquidServiceInfo()
+	liquidClientShared, liquidServiceTypeShared := test.NewMockLiquidClient(srvInfoShared)
+	_, liquidServiceTypeUnshared := test.NewMockLiquidClient(srvInfoUnshared)
 
 	replacedConfig := fmt.Sprintf(testConfigYAML, liquidServiceTypeShared, liquidServiceTypeUnshared)
 
-	s := NewSetup(t,
-		WithConfig(replacedConfig),
-		WithPersistedServiceInfo("shared", srvInfoShared),
+	s := test.NewSetup(t,
+		test.WithConfig(replacedConfig),
+		test.WithPersistedServiceInfo("shared", srvInfoShared),
 	)
 
 	// We now have a situation where one service is persisted into the database.
@@ -95,7 +96,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	`)
 
 	// Now, we add the "things" resource back to the shared service, it should be added again.
-	srvInfoShared = DefaultLiquidServiceInfo()
+	srvInfoShared = test.DefaultLiquidServiceInfo()
 	srvInfoShared.Version = 3
 	liquidClientShared.SetServiceInfo(srvInfoShared)
 	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
