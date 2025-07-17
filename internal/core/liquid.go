@@ -76,7 +76,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 		return fmt.Errorf("getting ServiceInfo: %w", err)
 	}
 	if apiSuccess {
-		err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
+		_, err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
 	}
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
@@ -86,27 +86,27 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (srv db.ClusterService, err error) {
 	currentVersion := l.ServiceInfo().Version
 	if infoVersion == currentVersion {
-		return nil
+		return srv, nil
 	}
 
 	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
 	_, err = l.updateServiceInfo(ctx, false)
 	if err != nil {
-		return err
+		return srv, err
 	}
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
 	newVersion := l.ServiceInfo().Version
 	if infoVersion != newVersion {
-		return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
+		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 	}
-	err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
+	srv, err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
 	if err != nil {
-		return err
+		return srv, err
 	}
-	return nil
+	return srv, nil
 }
 
 // updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
@@ -168,7 +168,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return liquid.ServiceUsageReport{}, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	_, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
@@ -185,25 +185,25 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, srv db.ClusterService, err error) {
 	req, err := BuildServiceCapacityRequest(backchannel, allAZs, l.ServiceType, l.ServiceInfo().Resources)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
+		return result, srv, err
 	}
 
 	result, err = l.LiquidClient.GetCapacityReport(ctx, req)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
+		return result, srv, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	srv, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
+		return result, srv, err
 	}
 
 	err = liquid.ValidateCapacityReport(result, req, l.ServiceInfo())
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
+		return result, srv, err
 	}
 
 	// manual capacity collection
@@ -227,12 +227,12 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 		client, err := prometheusCapaConfig.APIConfig.Connect()
 		if err != nil {
-			return liquid.ServiceCapacityReport{}, err
+			return result, srv, err
 		}
 		for resName, query := range prometheusCapaConfig.Queries {
 			azReports, err := prometheusScrapeOneResource(prometheusCapaConfig, ctx, client, query, allAZs)
 			if err != nil {
-				return liquid.ServiceCapacityReport{}, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
+				return result, srv, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
 			}
 			result.Resources[resName] = &liquid.ResourceCapacityReport{
 				PerAZ: azReports,
@@ -240,7 +240,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 	}
 
-	return result, nil
+	return result, srv, nil
 }
 
 // prometheusScrapeOneResource retrieves capacity for one resource via a prometheus client.
@@ -381,7 +381,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 		return nil, "", err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, resp.InfoVersion)
+	_, err = l.compareServiceInfoVersions(ctx, resp.InfoVersion)
 	if err != nil {
 		return nil, "", err
 	}

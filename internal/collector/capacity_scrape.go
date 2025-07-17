@@ -122,7 +122,10 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// scrape capacity data
-	capacityData, serializedMetrics, err := c.scrapeLiquidCapacity(ctx, connection)
+	capacityData, srv, serializedMetrics, err := c.scrapeLiquidCapacity(ctx, connection)
+	if srv.LiquidVersion > service.LiquidVersion {
+		service = srv
+	}
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		service.ScrapedAt = Some(task.Timing.FinishedAt)
@@ -257,16 +260,16 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (liquid.ServiceCapacityReport, []byte, error) {
-	capacityData, err := connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, srv db.ClusterService, serializedMetrics []byte, err error) {
+	capacityData, srv, err = connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, nil, err
+		return liquid.ServiceCapacityReport{}, srv, nil, err
 	}
-	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
+	serializedMetrics, err = liquidSerializeMetrics(connection.ServiceInfo().CapacityMetricFamilies, capacityData.Metrics)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, nil, err
+		return liquid.ServiceCapacityReport{}, srv, nil, err
 	}
-	return capacityData, serializedMetrics, nil
+	return capacityData, srv, serializedMetrics, nil
 }
 
 func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {

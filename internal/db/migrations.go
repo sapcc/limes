@@ -434,4 +434,20 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments
 			ALTER COLUMN uuid DROP DEFAULT;
 	`,
+	"058_ensure_liquid_metadata_integrity.down.sql": `
+		ALTER TABLE cluster_resources
+			DROP CONSTRAINT cluster_resources_service_id_liquid_version_fkey;
+		ALTER TABLE cluster_rates
+			DROP CONSTRAINT cluster_rates_service_id_liquid_version_fkey;
+		ALTER TABLE cluster_services
+			DROP CONSTRAINT cluster_services_id_liquid_version_key;
+	`,
+	"058_ensure_liquid_metadata_integrity.up.sql": `
+		ALTER TABLE cluster_services
+			ADD UNIQUE (id, liquid_version);
+		ALTER TABLE cluster_resources
+			ADD FOREIGN KEY (service_id, liquid_version) REFERENCES cluster_services (id, liquid_version) DEFERRABLE INITIALLY DEFERRED;
+		ALTER TABLE cluster_rates
+			ADD FOREIGN KEY (service_id, liquid_version) REFERENCES cluster_services (id, liquid_version) DEFERRABLE INITIALLY DEFERRED;
+	`,
 }
