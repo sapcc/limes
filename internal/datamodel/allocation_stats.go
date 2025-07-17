@@ -120,13 +120,15 @@ var (
 	`)
 
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, par.az, par.usage, par.historical_usage, COALESCE(SUM(pc.amount), 0)
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  LEFT OUTER JOIN project_commitments pc ON pc.az_resource_id = par.id AND pc.state = 'active'
-		 WHERE ps.type = $1 AND pr.name = $2 AND ($3::text IS NULL OR par.az = $3)
-		 GROUP BY pr.id, par.az, par.usage, par.historical_usage
+		SELECT pr.id, cazr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
+		  FROM cluster_services cs
+		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+		  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = pr.project_id
+		  LEFT OUTER JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id AND pc.project_id = pazr.project_id AND pc.state = 'active'
+		 WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR cazr.az = $3)
+		 GROUP BY pr.id, cazr.az, pazr.usage, pazr.historical_usage
 	`)
 )
 

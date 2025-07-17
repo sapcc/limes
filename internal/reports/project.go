@@ -28,35 +28,41 @@ import (
 // project reports (and then reclaim their memory usage) as soon as possible.
 var (
 	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, ps.type, ps.scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  JOIN project_rates pra ON pra.service_id = ps.id
-	 WHERE %s
+	SELECT p.id, cs.type, ps.scraped_at, cra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	  FROM cluster_services cs
+	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  CROSS JOIN projects p
+	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
+	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
+	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
 	 ORDER BY p.uuid
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
-	 WHERE %s
-	 ORDER BY p.uuid, par.az
+	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  CROSS JOIN projects p
+	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
+	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
+	  -- no left join, entries will only appear when there is some project level entry
+	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
+	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 ORDER BY p.uuid, cazr.az
 `)
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pr.name, par.az, pc.duration,
+	SELECT cs.type, cr.name, cazr.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'active'),  0) AS active,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'pending'), 0) AS pending,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'planned'), 0) AS planned
-	  FROM project_services ps
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	  JOIN project_az_resources par ON par.resource_id = pr.id
-	  JOIN project_commitments pc ON pc.az_resource_id = par.id
-	 WHERE ps.project_id = $1
-	 GROUP BY ps.type, pr.name, par.az, pc.duration
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr on cr.service_id = cs.id
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id
+	 WHERE pc.project_id = $1
+	 GROUP BY cs.type, cr.name, cazr.az, pc.duration
 	`)
 )
 
@@ -101,7 +107,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	// avoid collecting the potentially large subresources strings when possible
 	queryStr = projectReportResourcesQuery
 	if !filter.WithSubresources {
-		queryStr = strings.Replace(queryStr, "par.subresources", "''", 1)
+		queryStr = strings.Replace(queryStr, "pazr.subresources", "''", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))

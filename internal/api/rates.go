@@ -10,7 +10,6 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -193,48 +192,60 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
+	// get all project_rates and make them accessible quickly by ID
+	var projectRates []db.ProjectRateV2
+	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates_v2 WHERE project_id = $1`, updater.Project.ID)
+	projectRateByClusterRateID := make(map[db.ClusterRateID]db.ProjectRateV2)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	for _, rate := range projectRates {
+		projectRateByClusterRateID[rate.RateID] = rate
+	}
+
 	// check all services for resources to update
-	var services []db.ProjectService
-	_, err = tx.Select(&services,
-		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
+	var services []db.ClusterService
+	_, err = tx.Select(&services, `SELECT * FROM cluster_services ORDER BY type`)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	var ratesToUpdate []db.ProjectRate
+	var ratesToUpdate []db.ProjectRateV2
 	for _, srv := range services {
-		if rateLimitRequests, exists := updater.Requests[srv.Type]; exists {
-			// Check all rate limits.
-			var rates []db.ProjectRate
-			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
-			if respondwith.ErrorText(w, err) {
-				return
-			}
-			ratesByName := make(map[liquid.RateName]db.ProjectRate)
-			for _, rate := range rates {
-				ratesByName[rate.Name] = rate
-			}
+		rateLimitRequests, exists := updater.Requests[srv.Type]
+		if !exists {
+			continue // no rate limits for this service
+		}
+		var rates []db.ClusterRate
+		_, err = tx.Select(&rates, `SELECT * FROM cluster_rates ORDER BY NAME`)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
 
-			for rateName, req := range rateLimitRequests {
-				rate, exists := ratesByName[rateName]
-				if !exists {
-					rate = db.ProjectRate{
-						ServiceID: srv.ID,
-						Name:      rateName,
-					}
+		for _, rate := range rates {
+			rateLimitRequest, exists := rateLimitRequests[rate.Name]
+			if !exists {
+				continue // no rate limit request for this rate
+			}
+			var projectRate db.ProjectRateV2
+			if existingRate, exists := projectRateByClusterRateID[rate.ID]; exists {
+				projectRate = existingRate
+			} else {
+				projectRate = db.ProjectRateV2{
+					ProjectID: updater.Project.ID,
+					RateID:    rate.ID,
 				}
-
-				rate.Limit = Some(req.NewLimit)
-				rate.Window = Some(req.NewWindow)
-				ratesToUpdate = append(ratesToUpdate, rate)
 			}
+			projectRate.Limit = Some(rateLimitRequest.NewLimit)
+			projectRate.Window = Some(rateLimitRequest.NewWindow)
+			ratesToUpdate = append(ratesToUpdate, projectRate)
 		}
 	}
 	// update the DB with the new rate limits
-	queryStr := `INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES ($1,$2,$3,$4,'') ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
+	queryStr := `INSERT INTO project_rates_v2 (project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES ($1,$2,$3,$4,'') ON CONFLICT (project_id, rate_id) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
 	err = sqlext.WithPreparedStatement(tx, queryStr, func(stmt *sql.Stmt) error {
 		for _, rate := range ratesToUpdate {
-			_, err := stmt.Exec(rate.ServiceID, rate.Name, rate.Limit, rate.Window)
+			_, err := stmt.Exec(rate.ProjectID, rate.RateID, rate.Limit, rate.Window)
 			if err != nil {
 				return err
 			}

@@ -73,18 +73,18 @@ var (
 	// project_commitments to replace lengthy and time-dependent conditions with
 	// simple checks on the enum value in `state`.
 	updateProjectCommitmentStatesForResourceQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments
+		UPDATE project_commitments_v2
 		   SET state = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
 		                    WHEN expires_at <= $3          THEN 'expired'
 		                    WHEN confirm_by > $3           THEN 'planned'
 		                    WHEN confirmed_at IS NULL      THEN 'pending'
 		                    ELSE 'active' END
 		WHERE state NOT IN ('superseded', 'expired') AND az_resource_id IN (
-			SELECT par.id
-			  FROM project_services ps
-			  JOIN project_resources pr ON pr.service_id = ps.id
-			  JOIN project_az_resources par ON par.resource_id = pr.id
-			 WHERE ps.type = $1 AND pr.name = $2
+			SELECT cazr.id
+			  FROM cluster_services cs
+			  JOIN cluster_resources cr ON cr.service_id = cs.id
+			  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+			 WHERE cs.type = $1 AND cr.name = $2
 		)
 	`)
 )

@@ -22,39 +22,43 @@ import (
 
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
-	  SELECT az_resource_id, SUM(amount) AS amount
-	    FROM project_commitments
+	  SELECT project_id, az_resource_id, SUM(amount) AS amount
+	    FROM project_commitments_v2
 	   WHERE state = 'active'
-	   GROUP BY az_resource_id
+	   GROUP BY project_id, az_resource_id
 	)
-	SELECT ps.type, pr.name, par.az,
-	       SUM(par.usage), SUM(COALESCE(par.physical_usage, par.usage)), COUNT(par.physical_usage) > 0,
-	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
-	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0))),
-	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM project_services ps
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
-	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
-	 WHERE TRUE {{AND ps.type = $service_type}}
-	 GROUP BY ps.type, pr.name, par.az
+	SELECT cs.type, cr.name, cazr.az,
+	       SUM(pazr.usage), SUM(COALESCE(pazr.physical_usage, pazr.usage)), COUNT(pazr.physical_usage) > 0,
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
+	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))),
+	       MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN project_services_v2 ps ON ps.service_id = cs.id
+	  -- no left join, entries will only appear when there is some project level entry
+	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = ps.project_id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = pazr.project_id
+	 WHERE TRUE {{AND cs.type = $service_type}}
+	 GROUP BY cs.type, cr.name, cazr.az
 `)
 
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pr.name, SUM(pr.quota)
-	  FROM project_services ps
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	 WHERE TRUE {{AND ps.type = $service_type}}
-	 GROUP BY ps.type, pr.name
+	SELECT cs.type, cr.name, SUM(pr.quota)
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+	 WHERE TRUE {{AND cs.type = $service_type}}
+	 GROUP BY cs.type, cr.name
 `)
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
-	SELECT cs.type, cr.name, car.az, car.raw_capacity, car.usage, car.subcapacities, cs.scraped_at
+	SELECT cs.type, cr.name, cazr.az, cazr.raw_capacity, cazr.usage, cazr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  LEFT OUTER JOIN cluster_az_resources car ON car.resource_id = cr.id
+	  LEFT OUTER JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
-	 ORDER BY car.az
+	 ORDER BY cazr.az
 `)
 
 var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
@@ -63,25 +67,28 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
-	    FROM project_commitments
+	    FROM project_commitments_v2
 	   GROUP BY az_resource_id, duration
 	)
-	SELECT ps.type, pr.name, par.az,
+	SELECT cs.type, cr.name, cazr.az,
 	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM project_services ps
-	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  JOIN project_az_resources par ON par.resource_id = pr.id
-	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
-	 WHERE TRUE {{AND ps.type = $service_type}}
-	 GROUP BY ps.type, pr.name, par.az, pcs.duration
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id
+	 WHERE TRUE {{AND cs.type = $service_type}}
+	 GROUP BY cs.type, cr.name, cazr.az, pcs.duration
 `)
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM project_services ps
-	  JOIN project_rates pra ON pra.service_id = ps.id
-	 WHERE TRUE {{AND ps.type = $service_type}}
-	 GROUP BY ps.type, pra.name
+	SELECT cs.type, cra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
+	  FROM cluster_services cs
+	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  JOIN project_services_v2 ps ON ps.service_id = cs.id
+	  -- TODO: this join just reduces the result set to the rates which have been scraped - is this intentional?
+	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND ps.project_id = pra.project_id
+	 WHERE TRUE {{AND cs.type = $service_type}}
+	 GROUP BY cs.type, cra.name
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
@@ -114,7 +121,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if err != nil {
 			return err
 		}
-		if !filter.Includes[dbServiceType][dbResourceName] {
+		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
 		service, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
@@ -169,7 +176,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if err != nil {
 			return err
 		}
-		if !filter.Includes[dbServiceType][dbResourceName] {
+		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
 		_, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
@@ -189,7 +196,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	// third query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 	if !filter.WithSubcapacities {
-		queryStr = strings.Replace(queryStr, "car.subcapacities", "''", 1)
+		queryStr = strings.Replace(queryStr, "cazr.subcapacities", "''", 1)
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
@@ -206,7 +213,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if err != nil {
 			return err
 		}
-		if !filter.Includes[dbServiceType][dbResourceName] {
+		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
 		_, resource, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
@@ -292,7 +299,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if err != nil {
 				return err
 			}
-			if !filter.Includes[dbServiceType][dbResourceName] {
+			if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 				return nil
 			}
 			_, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
