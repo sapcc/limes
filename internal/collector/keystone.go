@@ -7,16 +7,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -206,6 +208,19 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	return result, nil
 }
 
+// When a new project is created, we create project_services entries for all services:
+//   - Immediate scraping of this service (next_scrape_at = NOW()) is required to create
+//     project_resources and project_az_resources entries and make the project fully functional.
+//   - Setting the stale flag prioritizes scraping of this service over the existing
+//     backlog of routine scrapes, even if the backlog is very long.
+//   - The WHERE clause is defense in depth against garbage entries in cluster_services.
+var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
+	INSERT INTO project_services_v2 (project_id, service_id, next_scrape_at, stale)
+	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
+	  FROM cluster_services
+	 WHERE type = ANY($3::TEXT[])
+`)
+
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
 func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject) error {
@@ -217,19 +232,20 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// add record to `projects` table
-	dbProject := &db.Project{
+	dbProject := db.Project{
 		DomainID:   domain.ID,
 		Name:       project.Name,
 		UUID:       project.UUID,
 		ParentUUID: project.ParentUUID,
 	}
-	err = tx.Insert(dbProject)
+	err = tx.Insert(&dbProject)
 	if err != nil {
 		return err
 	}
 
 	// add records to `project_services` table
-	err = datamodel.AddMissingProjectServices(tx, c.Cluster, *domain, *dbProject, c.MeasureTime())
+	allServiceTypes := slices.Collect(maps.Keys(c.Cluster.Config.Liquids))
+	_, err = tx.Exec(initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
 	if err != nil {
 		return err
 	}

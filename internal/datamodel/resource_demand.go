@@ -33,8 +33,7 @@ var (
 		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
 		  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id
 		  LEFT OUTER JOIN (
-		    SELECT az_resource_id,
-				   project_id,
+		    SELECT az_resource_id, project_id,
 		           SUM(amount) FILTER (WHERE state = 'active') AS active,
 		           SUM(amount) FILTER (WHERE state = 'pending') AS pending
 		      FROM project_commitments_v2
