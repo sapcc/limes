@@ -9,7 +9,6 @@ import (
 
 	"github.com/sapcc/go-bits/easypg"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -24,7 +23,8 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
-	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency-pre.sql")
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualToFile("fixtures/checkconsistency0.sql")
 
 	// check that CheckConsistency() is satisfied with the
 	// {domain,project}_services created by ScanDomains(), but adds
@@ -34,10 +34,10 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency0.sql")
+	tr.DBChanges().AssertEmpty()
 
-	// remove some *_services entries (project level done by referential integrity)
-	_, err = s.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
+	// remove some project_services entries
+	_, err = s.DB.Exec(`DELETE FROM project_services_v2 WHERE id = $1`, 2)
 	if err != nil {
 		t.Error(err)
 	}
@@ -54,25 +54,19 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency1.sql")
+	tr.DBChanges().Ignore()
 
 	// check that CheckConsistency() brings everything back into a nice state
-	// the "whatever" service will remain but is ignored by the consistency service,
-	// as that one is using the c.Cluster configuration.
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
 		t.Error(err)
 	}
-	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency2.sql")
-
-	// now we add the "whatever" service to the configuration, which will change the state of
-	// the DB after running the job again
-	s.Cluster.LiquidConnections["whatever"] = &core.LiquidConnection{}
-	s.Clock.StepBy(time.Hour)
-	err = consistencyJob.ProcessOne(s.Ctx)
-	if err != nil {
-		t.Error(err)
-	}
-	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency3.sql")
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM cluster_services WHERE id = 3 AND type = 'whatever';
+		DELETE FROM project_services_v2 WHERE id = 7 AND project_id = 1 AND service_id = 3;
+		INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
+	`,
+		s.Clock.Now().Unix(),
+	)
 }
