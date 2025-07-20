@@ -62,9 +62,8 @@ var (
 		 WHERE pc.id = $1 AND pc.project_id = $2
 	`)
 
-	// NOTE: The third output column is `resourceAllowsCommitments`.
 	findClusterAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, cazr.id, pr.forbidden IS NOT TRUE
+		SELECT cazr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments
 		  FROM cluster_az_resources cazr
 		  JOIN cluster_resources cr ON cazr.resource_id = cr.id
 		  JOIN cluster_services cs ON cr.service_id = cs.id
@@ -84,29 +83,6 @@ var (
 	`)
 	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments_v2 WHERE transfer_token = $1
-	`)
-	findTargetProjectResourceBySourceIDQuery = sqlext.SimplifyWhitespace(`
-		WITH source as (
-		SELECT pr.id AS project_resource_id, cazr.id AS az_resource_id
-		  FROM project_commitments_v2 pc
-		  JOIN cluster_az_resources cazr ON pc.az_resource_id = cazr.id
-		  JOIN project_resources_v2 pr ON pr.resource_id = cazr.resource_id AND pr.project_id = pc.project_id
-		WHERE pc.id = $1
-		)
-		SELECT s.project_resource_id, pr.id
-		  FROM cluster_az_resources cazr
-		  JOIN project_resources_v2 pr ON pr.resource_id = cazr.resource_id
-		  JOIN source s ON cazr.id = s.az_resource_id
-		 WHERE pr.project_id = $2
-	`)
-	findTargetClusterAZResourceByTargetProjectQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, cazr.id
-		  FROM project_az_resources_v2 pazr
-		  JOIN cluster_az_resources cazr ON pazr.az_resource_id = cazr.id
-		  JOIN cluster_resources cr ON cazr.resource_id = cr.id
-		  JOIN cluster_services cs ON cr.service_id = cs.id
-		  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = pazr.project_id
-		 WHERE pazr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
 	`)
 )
 
@@ -287,12 +263,11 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	var (
-		resourceID                db.ProjectResourceID
 		azResourceID              db.ClusterAZResourceID
 		resourceAllowsCommitments bool
 	)
 	err := p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
-		Scan(&resourceID, &azResourceID, &resourceAllowsCommitments)
+		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -311,7 +286,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	// check for committable capacity
-	result, err := datamodel.CanConfirmNewCommitment(*loc, resourceID, req.Amount, p.Cluster, p.DB)
+	result, err := datamodel.CanConfirmNewCommitment(*loc, dbProject.ID, req.Amount, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -339,12 +314,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	var (
-		resourceID                db.ProjectResourceID
 		azResourceID              db.ClusterAZResourceID
 		resourceAllowsCommitments bool
 	)
 	err := p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
-		Scan(&resourceID, &azResourceID, &resourceAllowsCommitments)
+		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -404,7 +378,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
-		ok, err := datamodel.CanConfirmNewCommitment(*loc, resourceID, req.Amount, p.Cluster, tx)
+		ok, err := datamodel.CanConfirmNewCommitment(*loc, dbProject.ID, req.Amount, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -1190,16 +1164,22 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// get target service and AZ resource
+	// check that the target project allows commitments at all
 	var (
-		sourceResourceID db.ProjectResourceID
-		targetResourceID db.ProjectResourceID
+		azResourceID              db.ClusterAZResourceID
+		resourceAllowsCommitments bool
 	)
-	err = p.DB.QueryRow(findTargetProjectResourceBySourceIDQuery, dbCommitment.ID, targetProject.ID).
-		Scan(&sourceResourceID, &targetResourceID)
+	err = p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, targetProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
+		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	if !resourceAllowsCommitments {
+		msg := fmt.Sprintf("resource %s/%s is not enabled in the target project", loc.ServiceType, loc.ResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	_ = azResourceID // returned by the above query, but not used in this function
 
 	// validate that we have enough committable capacity on the receiving side
 	tx, err := p.DB.Begin()
@@ -1207,7 +1187,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, sourceResourceID, targetResourceID, p.Cluster, tx)
+	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, dbCommitment.ProjectID, targetProject.ID, p.Cluster, tx)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -1446,17 +1426,22 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	var (
-		targetResourceID   db.ProjectResourceID
-		targetAZResourceID db.ClusterAZResourceID
+		targetAZResourceID        db.ClusterAZResourceID
+		resourceAllowsCommitments bool
 	)
-	err = p.DB.QueryRow(findTargetClusterAZResourceByTargetProjectQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
-		Scan(&targetResourceID, &targetAZResourceID)
+	err = p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
+		Scan(&targetAZResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 	// defense in depth. ServiceType and ResourceName of source and target are already checked. Here it's possible to explicitly check the ID's.
 	if dbCommitment.AZResourceID == targetAZResourceID {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
+		return
+	}
+	if !resourceAllowsCommitments {
+		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", targetServiceType, targetResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 	targetLoc := core.AZResourceLocation{
@@ -1467,7 +1452,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// The commitment at the source resource was already confirmed and checked.
 	// Therefore only the addition to the target resource has to be checked against.
 	if dbCommitment.ConfirmedAt.IsSome() {
-		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
+		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, dbProject.ID, conversionAmount, p.Cluster, p.DB)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

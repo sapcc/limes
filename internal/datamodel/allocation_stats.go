@@ -30,9 +30,7 @@ type clusterAZAllocationStats struct {
 	// Whether last_nonzero_raw_capacity is not NULL.
 	ObservedNonzeroCapacityBefore bool
 
-	// Using db.ProjectResourceID as a key here is only somewhat arbitrary:
-	// ProjectServiceID and ProjectID could also be used, but then we would have to use more JOINs in some queries.
-	ProjectStats map[db.ProjectResourceID]projectAZAllocationStats
+	ProjectStats map[db.ProjectID]projectAZAllocationStats
 }
 
 // Returns two separate opinions:
@@ -58,15 +56,15 @@ func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 	}
 }
 
-func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64, behavior core.CommitmentBehavior) bool {
+func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectID]uint64, behavior core.CommitmentBehavior) bool {
 	// calculate `sum_over_projects(max(committed, usage))` before and after the requested changes
 	var (
 		usedCapacityBefore = uint64(0)
 		usedCapacityAfter  = uint64(0)
 	)
-	for projectResourceID, stats := range c.ProjectStats {
+	for projectID, stats := range c.ProjectStats {
 		usedCapacityBefore += max(stats.Committed, stats.Usage)
-		committedAfter := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
+		committedAfter := saturatingSub(stats.Committed+additions[projectID], subtractions[projectID])
 		usedCapacityAfter += max(committedAfter, stats.Usage)
 	}
 
@@ -120,15 +118,14 @@ var (
 	`)
 
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, cazr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
+		SELECT pazr.project_id, cazr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
 		  FROM cluster_services cs
 		  JOIN cluster_resources cr ON cr.service_id = cs.id
 		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-		  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
-		  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = pr.project_id
+		  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id
 		  LEFT OUTER JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id AND pc.project_id = pazr.project_id AND pc.state = 'active'
 		 WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR cazr.az = $3)
-		 GROUP BY pr.id, cazr.az, pazr.usage, pazr.historical_usage
+		 GROUP BY pazr.project_id, cazr.az, pazr.usage, pazr.historical_usage
 	`)
 )
 
@@ -164,19 +161,19 @@ func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.Re
 	// get resource usage
 	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			resourceID          db.ProjectResourceID
+			projectID           db.ProjectID
 			az                  limes.AvailabilityZone
 			stats               projectAZAllocationStats
 			historicalUsageJSON string
 		)
-		err := rows.Scan(&resourceID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
+		err := rows.Scan(&projectID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
 		if err != nil {
 			return err
 		}
 		ts, err := util.ParseTimeSeries[uint64](historicalUsageJSON)
 		if err != nil {
-			return fmt.Errorf("could not parse historical usage for project resource %d in %s: %w",
-				resourceID, az, err)
+			return fmt.Errorf("could not parse historical usage of %s/%s for project %d in %s: %w",
+				serviceType, resourceName, projectID, az, err)
 		}
 		stats.MinHistoricalUsage = ts.MinOr(stats.Usage)
 		stats.MaxHistoricalUsage = ts.MaxOr(stats.Usage)
@@ -184,10 +181,10 @@ func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.Re
 		azStats := result[az].ProjectStats
 		if azStats == nil {
 			azEntry := result[az]
-			azEntry.ProjectStats = map[db.ProjectResourceID]projectAZAllocationStats{resourceID: stats}
+			azEntry.ProjectStats = map[db.ProjectID]projectAZAllocationStats{projectID: stats}
 			result[az] = azEntry
 		} else {
-			azStats[resourceID] = stats
+			azStats[projectID] = stats
 		}
 		return nil
 	})
