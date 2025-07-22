@@ -85,7 +85,8 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	  FROM cluster_services cs
 	  JOIN cluster_rates cra ON cra.service_id = cs.id
 	  JOIN project_services_v2 ps ON ps.service_id = cs.id
-	  -- TODO: this join just reduces the result set to the rates which have been scraped - is this intentional?
+	  -- TODO: this join reduces the result set to the rates which have been scraped.
+	  -- At some point, we want to have the scraped_at statistics per service - not considering rates or resources.
 	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND ps.project_id = pra.project_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cra.name

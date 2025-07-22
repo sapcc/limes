@@ -34,7 +34,7 @@ var (
 	  CROSS JOIN projects p
 	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
-	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 WHERE %s {{AND cs.type = $service_type}}
 	 ORDER BY p.uuid
 `)
 
@@ -48,7 +48,7 @@ var (
 	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
 	  -- no left join, entries will only appear when there is some project level entry
 	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
-	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 WHERE %s {{AND cs.type = $service_type}}
 	 ORDER BY p.uuid, cazr.az
 `)
 

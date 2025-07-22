@@ -47,7 +47,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
 	  LEFT OUTER JOIN project_az_sums pas ON pas.project_id = p.id AND pas.resource_id = cr.id 
-	 WHERE TRUE {{AND cs.type = $service_type}} AND %s GROUP BY p.domain_id, cs.type, cr.name
+	 WHERE %s {{AND cs.type = $service_type}} GROUP BY p.domain_id, cs.type, cr.name
 `)
 
 var domainReportQuery3 = sqlext.SimplifyWhitespace(`
@@ -69,7 +69,7 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
 	  JOIN project_az_resources_v2 pazr ON pazr.project_id = p.id AND pazr.az_resource_id = cazr.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
-	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az
 `)
 
@@ -91,7 +91,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
-	 WHERE TRUE {{AND cs.type = $service_type}} AND %s
+	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az, pcs.duration
 `)
 
