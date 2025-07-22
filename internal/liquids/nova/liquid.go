@@ -5,7 +5,9 @@ package nova
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -205,6 +208,12 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		opts[string(resName)] = req.Resources[resName].Quota
 	}
 	return quotasets.Update(ctx, l.NovaV2, projectUUID, opts).Err
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }
 
 func (l *Logic) IsIgnoredFlavor(flavorName string) bool {

@@ -99,6 +99,17 @@ func (c *Client) PutQuota(ctx context.Context, projectUUID string, req liquid.Se
 	return
 }
 
+// ChangeCommitments executes POST /v1/change-commitments.
+func (c *Client) ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error) {
+	url := c.ServiceURL("v1", "change-commitments")
+	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
+	resp, err := c.Post(ctx, url, req, nil, &opts)
+	if err == nil {
+		err = parseLiquidResponse(resp, &result)
+	}
+	return
+}
+
 // We do not use the standard response body parsing from Gophercloud
 // because we want to be strict and DisallowUnknownFields().
 func parseLiquidResponse(resp *http.Response, result any) error {

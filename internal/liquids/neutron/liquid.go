@@ -5,7 +5,9 @@ package neutron
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gophercloudext"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -98,7 +101,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	// probe default quotas to see which resources are supported by Neutron
 	url := l.NeutronV2.ServiceURL("quotas", l.OwnProjectID, "default")
 	var r gophercloud.Result
-	_, r.Header, r.Err = gophercloud.ParseResponse(l.NeutronV2.Get(ctx, url, &r.Body, nil))
+	_, r.Header, r.Err = gophercloud.ParseResponse(l.NeutronV2.Get(ctx, url, &r.Body, nil)) //nolint:bodyclose
 	var data struct {
 		Quota map[string]int `json:"quota"`
 	}
@@ -177,4 +180,10 @@ type quotaSet map[string]uint64
 // ToQuotaUpdateMap implements the neutron_quotas.UpdateOpts and octavia_quotas.UpdateOpts interfaces.
 func (q quotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota": map[string]uint64(q)}, nil
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

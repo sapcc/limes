@@ -6,7 +6,9 @@ package ironic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/liquids/nova"
 )
@@ -118,6 +121,12 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			},
 		},
 	}, nil
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }
 
 // FlavorAttributes is the Attributes payload type for an Ironic resource of the form `instances_$FLAVOR`.

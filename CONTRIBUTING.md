@@ -67,7 +67,8 @@ $ cat test-policy.json
   "liquid:get_info": "rule:readonly",
   "liquid:get_capacity": "rule:readonly",
   "liquid:get_usage": "rule:readonly",
-  "liquid:set_quota": "rule:readwrite"
+  "liquid:set_quota": "rule:readwrite",
+  "liquid:change_commitments": "rule:readwrite"
 }
 ```
 

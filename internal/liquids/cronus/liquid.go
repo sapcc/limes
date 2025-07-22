@@ -6,13 +6,16 @@ package cronus
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -146,4 +149,10 @@ func bigintPlusUint64(a *big.Int, u uint64) *big.Int {
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	// no resources with quota exist here
 	return nil
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

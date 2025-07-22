@@ -5,10 +5,13 @@ package designate
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -104,4 +107,10 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		// ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us
 		RecordsPerZone: int64(req.Resources["recordsets_per_zone"].Quota * 20), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63 / 20
 	})
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

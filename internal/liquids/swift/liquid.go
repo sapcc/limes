@@ -16,6 +16,7 @@ import (
 	"github.com/majewsky/schwift/v2/gopherschwift"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -170,4 +171,10 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		}
 	}
 	return err
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

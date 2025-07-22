@@ -22,7 +22,7 @@ func getUsage(ctx context.Context, client *gophercloud.ServiceClient, projectUUI
 	// NOTE: This API endpoint is a custom extension in SAP Converged Cloud.
 	var r gophercloud.Result
 	url := client.ServiceURL("quota_usage", projectUUID)
-	_, r.Header, r.Err = gophercloud.ParseResponse(client.Get(ctx, url, &r.Body, nil))
+	_, r.Header, r.Err = gophercloud.ParseResponse(client.Get(ctx, url, &r.Body, nil)) //nolint:bodyclose
 
 	var data struct {
 		Usage map[string]uint64 `json:"quota_usage"`
