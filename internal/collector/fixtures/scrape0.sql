@@ -9,8 +9,8 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (8, 
 
 INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 INSERT INTO cluster_rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name) VALUES (3, 1, 'otherrate');
-INSERT INTO cluster_rates (id, service_id, name) VALUES (4, 1, 'anotherrate');
+INSERT INTO cluster_rates (id, service_id, name, liquid_version) VALUES (3, 1, 'xOtherRate', 1);
+INSERT INTO cluster_rates (id, service_id, name, liquid_version) VALUES (4, 1, 'xAnotherRate', 1);
 
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (2, 1, 'things', 1, 'az-aware', TRUE);

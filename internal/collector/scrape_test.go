@@ -83,6 +83,9 @@ const (
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/capacity, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
+		rate_behavior:
+			# to check how they are merged with the ServiceInfo of the liquids
+			- { rate: unittest/xOtherRate, identity_in_v1_api: unittest/xOtherRate }
 	`
 )
 
@@ -127,16 +130,11 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
+	// cluster_rate xOtherRate comes from the rate_behavior config
 	err := s.DB.Insert(&db.ClusterRate{
-		ServiceID: 1,
-		Name:      "otherrate",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.DB.Insert(&db.ClusterRate{
-		ServiceID: 1,
-		Name:      "anotherrate",
+		ServiceID:     1,
+		Name:          "xAnotherRate",
+		LiquidVersion: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -875,13 +873,13 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
-	// note: cluster_rate 3+4 are "orphaned" - they were in the DB but never in the ServiceInfo, so the update now deletes them (incl. project references)
+	// note: cluster_rate "xAnotherRate" is orphaned - it is in the DB but not in the ServiceInfo and rate_behavior, so the update now deletes it (incl. project references)
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
-		DELETE FROM cluster_rates WHERE id = 3 AND service_id = 1 AND name = 'otherrate';
-		DELETE FROM cluster_rates WHERE id = 4 AND service_id = 1 AND name = 'anotherrate';
+		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
+		DELETE FROM cluster_rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate';
 		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
 		UPDATE cluster_services SET liquid_version = 2 WHERE id = 1 AND type = 'unittest';
@@ -895,7 +893,6 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_az_resources_v2 SET backend_quota = NULL WHERE id = 7 AND project_id = 2 AND az_resource_id = 6;
 		UPDATE project_az_resources_v2 SET backend_quota = NULL WHERE id = 8 AND project_id = 2 AND az_resource_id = 7;
 		INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, historical_usage) VALUES (9, 1, 5, 0, '{"t":[1825],"v":[0]}');
-		DELETE FROM project_rates_v2 WHERE id = 1 AND project_id = 2 AND rate_id = 3;
 		DELETE FROM project_rates_v2 WHERE id = 2 AND project_id = 1 AND rate_id = 4;
 		UPDATE project_resources_v2 SET quota = 0, backend_quota = 42 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 		UPDATE project_resources_v2 SET quota = 0, backend_quota = 42 WHERE id = 4 AND project_id = 2 AND resource_id = 2;

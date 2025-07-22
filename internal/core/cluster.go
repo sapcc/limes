@@ -74,7 +74,7 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType, config.AvailabilityZones, timeNow, dbm)
+		connection := MakeLiquidConnection(l, serviceType, config.AvailabilityZones, config.RateBehaviors, timeNow, dbm)
 		c.LiquidConnections[serviceType] = &connection
 	}
 	return c, errs
@@ -323,7 +323,7 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 // and cluster_rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, timeNow time.Time, dbm *gorp.DbMap) (srv db.ClusterService, err error) {
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateBehaviors []RateBehavior, timeNow time.Time, dbm *gorp.DbMap) (srv db.ClusterService, err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -386,7 +386,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 
 	// collect existing cluster_resources and the wanted cluster_resources
 	var dbResources []db.ClusterResource
-	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, dbServices[0].ID)
+	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, srv.ID)
 	if err != nil {
 		return srv, fmt.Errorf("cannot inspect existing cluster resources for %s: %w", serviceType, err)
 	}
@@ -402,7 +402,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		Create: func(resourceName liquid.ResourceName) (db.ClusterResource, error) {
 			logg.Info("SaveServiceInfoToDB: creating ClusterResource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
 			return db.ClusterResource{
-				ServiceID:           dbServices[0].ID,
+				ServiceID:           srv.ID,
 				Name:                resourceName,
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                serviceInfo.Resources[resourceName].Unit,
@@ -434,7 +434,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 
 	// collect existing cluster_az_resources
 	var dbAZResources []db.ClusterAZResource
-	_, err = tx.Select(&dbAZResources, `SELECT car.* FROM cluster_az_resources car JOIN cluster_resources cr ON car.resource_id = cr.id WHERE cr.service_id = $1`, dbServices[0].ID)
+	_, err = tx.Select(&dbAZResources, `SELECT car.* FROM cluster_az_resources car JOIN cluster_resources cr ON car.resource_id = cr.id WHERE cr.service_id = $1`, srv.ID)
 	if err != nil {
 		return srv, fmt.Errorf("cannot inspect existing cluster AZ resources for %s: %w", serviceType, err)
 	}
@@ -484,11 +484,19 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 
 	// collect existing cluster_rates and the wanted cluster_rates
 	var dbRates []db.ClusterRate
-	_, err = tx.Select(&dbRates, `SELECT * FROM cluster_rates WHERE service_id = $1`, dbServices[0].ID)
+	_, err = tx.Select(&dbRates, `SELECT * FROM cluster_rates WHERE service_id = $1`, srv.ID)
 	if err != nil {
 		return srv, fmt.Errorf("cannot inspect existing cluster rates for %s: %w", serviceType, err)
 	}
-	wantedRates := slices.Sorted(maps.Keys(serviceInfo.Rates))
+	wantedRates := slices.Collect(maps.Keys(serviceInfo.Rates))
+	// extend the list of wanted rates with the rates which are configured (they may not be in the serviceInfo.Rates)
+	for _, rateBehavior := range rateBehaviors {
+		if db.ServiceType(rateBehavior.IdentityInV1API.ServiceType) == srv.Type {
+			wantedRates = append(wantedRates, liquid.RateName(rateBehavior.IdentityInV1API.Name))
+		}
+	}
+	slices.Sort(wantedRates)
+	wantedRates = slices.Compact(wantedRates)
 
 	// do update for cluster_resources
 	rateUpdate := db.SetUpdate[db.ClusterRate, liquid.RateName]{
