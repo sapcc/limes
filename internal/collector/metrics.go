@@ -472,8 +472,6 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
-	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
 	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 `)

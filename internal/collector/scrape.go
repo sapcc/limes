@@ -348,8 +348,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	if err != nil {
 		return err
 	}
-	resourceNames := slices.Collect(maps.Keys(clusterResourcesByName))
-	slices.Sort(resourceNames)
+	resourceNames := slices.Sorted(maps.Keys(clusterResourcesByName))
 
 	// update project_az_resources for each resource
 	for _, resourceName := range resourceNames {
@@ -597,10 +596,9 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// stale services to cover first
 	dummyScrapedAt := time.Unix(0, 0).UTC()
 	_, err = tx.Exec(
-		`UPDATE project_services_v2 ps
+		`UPDATE project_services_v2
 			SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, quota_desynced_at = NULL
-			FROM cluster_services cs
-			WHERE ps.service_id = cs.id AND cs.id = $4 AND ps.project_id = $5`,
+			WHERE service_id = $4 AND project_id = $5`,
 		dummyScrapedAt, 0.0, false, srv.ID, dbProject.ID,
 	)
 	if err != nil {

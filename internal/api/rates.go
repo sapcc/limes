@@ -18,16 +18,6 @@ import (
 	"github.com/sapcc/limes/internal/reports"
 )
 
-type SerializableProjectRate struct {
-	ProjectID db.ProjectID     `json:"project_id"`
-	RateID    db.ClusterRateID `json:"rate_id"`
-	Limit     Option[uint64]   `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
-	Window    Option[uint64]   `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
-	// ^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
-	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
-	//  use strings throughout and cast into bigints in the scraper only.
-}
-
 // GetClusterRates handles GET /rates/v1/clusters/current.
 func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/clusters/current")
@@ -220,7 +210,15 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	var ratesToUpdate []SerializableProjectRate
+	// the db types do not have json tags, additionally the Window type serializes into a human readable format - not DB compatible.
+	type serializableProjectRate struct {
+		ProjectID db.ProjectID     `json:"project_id"`
+		RateID    db.ClusterRateID `json:"rate_id"`
+		Limit     Option[uint64]   `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
+		Window    Option[uint64]   `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
+	}
+
+	var ratesToUpdate []serializableProjectRate
 	for _, srv := range services {
 		rateLimitRequests, exists := updater.Requests[srv.Type]
 		if !exists {
@@ -237,21 +235,21 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 			if !exists {
 				continue // no rate limit request for this rate
 			}
-			var projectRate SerializableProjectRate
+			var projectRate serializableProjectRate
 			if existingRate, exists := projectRateByClusterRateID[rate.ID]; exists {
 				window, wExists := existingRate.Window.Unpack()
 				serializableWindow := None[uint64]()
 				if wExists {
 					serializableWindow = Some(uint64(window))
 				}
-				projectRate = SerializableProjectRate{
+				projectRate = serializableProjectRate{
 					ProjectID: existingRate.ProjectID,
 					RateID:    existingRate.RateID,
 					Limit:     existingRate.Limit,
 					Window:    serializableWindow,
 				}
 			} else {
-				projectRate = SerializableProjectRate{
+				projectRate = serializableProjectRate{
 					ProjectID: updater.Project.ID,
 					RateID:    rate.ID,
 				}
@@ -262,13 +260,13 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		}
 	}
 	// update the DB with the new rate limits
-	mergeStr := `
+	mergeStr := sqlext.SimplifyWhitespace(`
 		MERGE INTO project_rates_v2 pr 
 		USING json_to_recordset($1::json) src (project_id BIGINT, rate_id BIGINT, rate_limit BIGINT, window_ns BIGINT)
 		ON src.project_id = pr.project_id AND src.rate_id = pr.rate_id
 		WHEN MATCHED THEN UPDATE SET rate_limit = src.rate_limit, window_ns = src.window_ns
 		WHEN NOT MATCHED BY TARGET THEN INSERT (project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (src.project_id, src.rate_id, src.rate_limit, src.window_ns, 0)
-		WHEN NOT MATCHED BY SOURCE THEN DO NOTHING`
+		WHEN NOT MATCHED BY SOURCE THEN DO NOTHING`)
 	buf, err := json.Marshal(ratesToUpdate)
 	if respondwith.ErrorText(w, err) {
 		return

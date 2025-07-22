@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/majewsky/gg/option"
+	. "github.com/majewsky/gg/option"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -146,7 +146,7 @@ func Test_ScanDomains(t *testing.T) {
 		CreatedAt:           s.Clock.Now(),
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
-		ConfirmedAt:         option.Some(s.Clock.Now()),
+		ConfirmedAt:         Some(s.Clock.Now()),
 		ExpiresAt:           commitmentForOneDay.AddTo(s.Clock.Now()),
 		State:               db.CommitmentStateActive,
 		CreationContextJSON: buf,
