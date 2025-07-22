@@ -451,6 +451,8 @@ var sqlMigrations = map[string]string{
 			ADD FOREIGN KEY (service_id, liquid_version) REFERENCES cluster_services (id, liquid_version) DEFERRABLE INITIALLY DEFERRED;
 	`,
 	"059_project_level_v2_artifacts.down.sql": `
+		DROP TRIGGER cluster_az_resources_project_commitments_trigger ON cluster_az_resources;
+		DROP FUNCTION cluster_az_resources_project_commitments_trigger_function;
 		DROP TABLE project_services_v2;
 		DROP TABLE project_resources_v2;
 		DROP TABLE project_az_resources_v2;
@@ -531,7 +533,7 @@ var sqlMigrations = map[string]string{
 			supersede_context_json   JSONB        DEFAULT NULL,
 			renew_context_json       JSONB        DEFAULT NULL
 		);
-		CREATE OR REPLACE FUNCTION cluster_az_resources_project_commitments_trigger_function()
+		CREATE FUNCTION cluster_az_resources_project_commitments_trigger_function()
 			RETURNS trigger AS $$
 			BEGIN
 				DELETE FROM project_commitments_v2

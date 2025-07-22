@@ -63,7 +63,7 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_services WHERE id = 3 AND type = 'whatever';
+		DELETE FROM cluster_services WHERE id = 3 AND type = 'whatever' AND liquid_version = 0;
 		DELETE FROM project_services_v2 WHERE id = 7 AND project_id = 1 AND service_id = 3;
 		INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
 	`,
