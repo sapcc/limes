@@ -101,7 +101,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	// probe default quotas to see which resources are supported by Neutron
 	url := l.NeutronV2.ServiceURL("quotas", l.OwnProjectID, "default")
 	var r gophercloud.Result
-	_, r.Header, r.Err = gophercloud.ParseResponse(l.NeutronV2.Get(ctx, url, &r.Body, nil))
+	_, r.Header, r.Err = gophercloud.ParseResponse(l.NeutronV2.Get(ctx, url, &r.Body, nil)) //nolint:bodyclose
 	var data struct {
 		Quota map[string]int `json:"quota"`
 	}

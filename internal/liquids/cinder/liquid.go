@@ -190,7 +190,7 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 
 	url := l.CinderV3.ServiceURL("os-quota-sets", projectUUID)
 	opts := gophercloud.RequestOpts{OkCodes: []int{200}}
-	_, err := l.CinderV3.Put(ctx, url, requestData, nil, &opts)
+	_, err := l.CinderV3.Put(ctx, url, requestData, nil, &opts) //nolint:bodyclose
 	return err
 }
 

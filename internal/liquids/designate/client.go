@@ -34,7 +34,7 @@ func (c *Client) GetQuota(ctx context.Context, projectUUID string) (qs QuotaSet,
 	}
 
 	var r gophercloud.Result
-	_, r.Header, r.Err = gophercloud.ParseResponse(c.Get(ctx, url, &r.Body, &opts))
+	_, r.Header, r.Err = gophercloud.ParseResponse(c.Get(ctx, url, &r.Body, &opts)) //nolint:bodyclose
 	err = r.ExtractInto(&qs)
 	return
 }
@@ -45,7 +45,7 @@ func (c *Client) SetQuota(ctx context.Context, projectUUID string, qs QuotaSet) 
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
 	}
 
-	_, _, err := gophercloud.ParseResponse(c.Patch(ctx, url, qs, nil, &opts))
+	_, _, err := gophercloud.ParseResponse(c.Patch(ctx, url, qs, nil, &opts)) //nolint:bodyclose
 	return err
 }
 
@@ -81,7 +81,7 @@ func (c *Client) CountZoneRecordsets(ctx context.Context, projectUUID, zoneID st
 	}
 
 	var r gophercloud.Result
-	_, r.Header, r.Err = gophercloud.ParseResponse(c.Get(ctx, url, &r.Body, &opts))
+	_, r.Header, r.Err = gophercloud.ParseResponse(c.Get(ctx, url, &r.Body, &opts)) //nolint:bodyclose
 
 	var data struct {
 		Metadata struct {
