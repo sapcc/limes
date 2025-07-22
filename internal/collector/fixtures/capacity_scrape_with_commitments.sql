@@ -26,6 +26,11 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (10, 4, 'any', 0, 0, null);
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (11, 4, 'az-one', 23, 4, 23);
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (12, 4, 'az-two', 23, 4, 23);
+-- unused, but will be created by the collector anyways
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (13, 1, 'unknown', 0, 0, null);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (14, 2, 'unknown', 0, 0, null);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (15, 3, 'unknown', 0, 0, null);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity) VALUES (16, 4, 'unknown', 0, 0, null);
 
 -- one domain
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

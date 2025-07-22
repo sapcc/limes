@@ -379,10 +379,10 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		},
 	}
 	dbServices, err = serviceUpdate.Execute(tx)
-	srv = dbServices[0]
 	if err != nil {
 		return srv, fmt.Errorf("update cluster_services failed for %s: %w", serviceType, err)
 	}
+	srv = dbServices[0]
 
 	// collect existing cluster_resources and the wanted cluster_resources
 	var dbResources []db.ClusterResource

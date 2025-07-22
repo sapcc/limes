@@ -71,16 +71,26 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 	if err != nil {
 		return err
 	}
-	apiSuccess, err := l.updateServiceInfo(ctx, true)
+	serviceInfo, apiSuccess, err := l.retrieveServiceInfo(ctx, true)
 	if err != nil {
 		return fmt.Errorf("getting ServiceInfo: %w", err)
 	}
-	if apiSuccess {
-		_, err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
+
+	if !apiSuccess {
+		l.liquidServiceInfoMutex.Lock()
+		defer l.liquidServiceInfoMutex.Unlock()
+		l.liquidServiceInfo = serviceInfo
+		return nil
 	}
+
+	_, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.timeNow(), l.DB)
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
 	}
+
+	l.liquidServiceInfoMutex.Lock()
+	defer l.liquidServiceInfoMutex.Unlock()
+	l.liquidServiceInfo = serviceInfo
 	return nil
 }
 
@@ -93,30 +103,32 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	}
 
 	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
-	_, err = l.updateServiceInfo(ctx, false)
+	serviceInfo, _, err := l.retrieveServiceInfo(ctx, false)
 	if err != nil {
 		return srv, err
 	}
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
-	newVersion := l.ServiceInfo().Version
+	newVersion := serviceInfo.Version
 	if infoVersion != newVersion {
 		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 	}
-	srv, err = SaveServiceInfoToDB(l.ServiceType, l.ServiceInfo(), l.AvailabilityZones, l.timeNow(), l.DB)
+	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.timeNow(), l.DB)
 	if err != nil {
 		return srv, err
 	}
+
+	l.liquidServiceInfoMutex.Lock()
+	defer l.liquidServiceInfoMutex.Unlock()
+	l.liquidServiceInfo = serviceInfo
 	return srv, nil
 }
 
-// updateServiceInfo queries the backend service for the latest ServiceInfo and validates it.
+// retrieveServiceInfo queries the backend service for the latest ServiceInfo and validates it.
 // If the liquid is not reachable it can fall back to reading the ServiceInfo from the database
 // - if the dbFallback parameter is set. It is only called on init and when the InfoVersion changes.
-func (l *LiquidConnection) updateServiceInfo(ctx context.Context, dbFallback bool) (apiSuccess bool, err error) {
-	l.liquidServiceInfoMutex.Lock()
-	defer l.liquidServiceInfoMutex.Unlock()
+func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context, dbFallback bool) (result liquid.ServiceInfo, apiSuccess bool, err error) {
 	apiSuccess = true
-	result, err := l.LiquidClient.GetInfo(ctx)
+	result, err = l.LiquidClient.GetInfo(ctx)
 	// result, err := liquid.ServiceInfo{}, errors.New("some error")
 	if err != nil && dbFallback {
 		apiSuccess = false
@@ -126,14 +138,13 @@ func (l *LiquidConnection) updateServiceInfo(ctx context.Context, dbFallback boo
 		result = serviceInfos[l.ServiceType]
 	}
 	if err != nil {
-		return false, err
+		return result, false, err
 	}
 	err = liquid.ValidateServiceInfo(result)
 	if err != nil {
-		return false, err
+		return result, false, err
 	}
-	l.liquidServiceInfo = result
-	return apiSuccess, nil
+	return result, apiSuccess, nil
 }
 
 // ServiceInfo returns metadata for this liquid.

@@ -608,8 +608,9 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 	var (
-		actualLimit  uint64
-		actualWindow limesrates.Window
+		actualLimit   uint64
+		actualWindow  limesrates.Window
+		projectRateId db.ProjectRateID
 	)
 	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns
@@ -628,37 +629,40 @@ func Test_ProjectOperations(t *testing.T) {
 	rateName := "service/shared/objects:read/list"
 	expectedLimit := uint64(100)
 	expectedWindow := 1 * limesrates.WindowSeconds
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		Body: assert.JSONObject{
+	makeRequest := func(name string, limit uint64, window limesrates.Window) assert.JSONObject {
+		return assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
 					{
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"name":   rateName,
-								"limit":  expectedLimit,
-								"window": expectedWindow.String(),
+								"name":   name,
+								"limit":  limit,
+								"window": window.String(),
 							},
 						},
 					},
 				},
 			},
-		},
+		}
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
 	}.Check(t, s.Handler)
 
-	err = s.DB.QueryRow(`
-		SELECT pra.rate_limit, pra.window_ns
+	getProjectRateQuery := `
+		SELECT pra.id, pra.rate_limit, pra.window_ns
 		FROM project_rates_v2 pra
 		JOIN cluster_rates cra ON cra.id = pra.rate_id
 		JOIN cluster_services cs ON cs.id = cra.service_id
 		JOIN projects p ON p.id = pra.project_id
-		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`,
-		"berlin", "shared", rateName).Scan(&actualLimit, &actualWindow)
+		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`
+	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,6 +676,32 @@ func Test_ProjectOperations(t *testing.T) {
 		t.Errorf(
 			"rate limit %s was not updated in database: expected window %d, but got %d",
 			rateName, expectedWindow, actualWindow,
+		)
+	}
+
+	// now we check that an update of the rate limit does not create a new row
+	oldProjectRateId := projectRateId
+	expectedLimit = uint64(200)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
+	}.Check(t, s.Handler)
+	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldProjectRateId != projectRateId {
+		t.Errorf(
+			"for rate %s, a new ID was created instead of updating the existing one",
+			rateName,
+		)
+	}
+	if actualLimit != expectedLimit {
+		t.Errorf(
+			"rate limit %s was not updated in database: expected limit %d, but got %d",
+			rateName, expectedLimit, actualLimit,
 		)
 	}
 }

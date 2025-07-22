@@ -5,6 +5,7 @@ package collector
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -758,8 +760,14 @@ func Test_ScanManualCapacity(t *testing.T) {
 	)
 }
 
-func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job) {
-	srvInfo := liquid.ServiceInfo{
+func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
+	s test.Setup, scrapeJob jobloop.Job,
+	firstLiquidClient *test.MockLiquidClient, secondLiquidClient *test.MockLiquidClient,
+	firstCapacityReport liquid.ServiceCapacityReport, secondCapacityReport liquid.ServiceCapacityReport,
+	firstServiceInfo liquid.ServiceInfo, secondServiceInfo liquid.ServiceInfo,
+) {
+
+	firstServiceInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -776,7 +784,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	srvInfo2 := liquid.ServiceInfo{
+	secondServiceInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -793,8 +801,8 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
-	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
+	firstLiquidClient, liquidServiceType := test.NewMockLiquidClient(firstServiceInfo)
+	secondLiquidClient, liquidServiceType2 := test.NewMockLiquidClient(secondServiceInfo)
 	s = test.NewSetup(t,
 		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
@@ -803,7 +811,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 	c := getCollector(t, s)
 	scrapeJob = c.CapacityScrapeJob(s.Registry)
 
-	serviceCapacityReport := liquid.ServiceCapacityReport{
+	firstCapacityReport = liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -832,8 +840,8 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	mockLiquidClient.SetCapacityReport(serviceCapacityReport)
-	serviceCapacityReport2 := liquid.ServiceCapacityReport{
+	firstLiquidClient.SetCapacityReport(firstCapacityReport)
+	secondCapacityReport = liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -862,13 +870,13 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	mockLiquidClient2.SetCapacityReport(serviceCapacityReport2)
+	secondLiquidClient.SetCapacityReport(secondCapacityReport)
 
 	return
 }
 
 func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, job := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job, firstLiquidClient, secondLiquidClient, firstCapacityReport, secondCapacityReport, firstServiceInfo, secondServiceInfo := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1066,10 +1074,79 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			assert.DeepEqual(t, desc, actualDemands.PerAZ, expectedDemands)
 		}
 	}
+
+	// now we let almost all commitments expire, so that we can test the cluster_az_resources_project_commitments_trigger
+	// all are expired, 10 remains active
+	s.Clock.StepBy(9 * 24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources_v2 SET quota = 7 WHERE id = 14 AND project_id = 2 AND az_resource_id = 10;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 15 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_az_resources_v2 SET quota = 1 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		UPDATE project_az_resources_v2 SET quota = 250 WHERE id = 7 AND project_id = 1 AND az_resource_id = 6;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
+		UPDATE project_resources_v2 SET quota = 251 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		UPDATE project_resources_v2 SET quota = 10 WHERE id = 8 AND project_id = 2 AND resource_id = 4;
+	`, timestampUpdates(false))
+
+	// we remove first/capacity, which does not have any active commitments. The trigger removes the expired commitments.
+	delete(firstCapacityReport.Resources, "capacity")
+	firstCapacityReport.InfoVersion = 2
+	firstLiquidClient.SetCapacityReport(firstCapacityReport)
+	delete(firstServiceInfo.Resources, "capacity")
+	firstServiceInfo.Version = 2
+	firstLiquidClient.SetServiceInfo(firstServiceInfo)
+
+	s.Clock.StepBy(1 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	tr.DBChanges().AssertEqual(`
+		DELETE FROM cluster_az_resources WHERE id = 14 AND resource_id = 2 AND az = 'unknown';
+		DELETE FROM cluster_az_resources WHERE id = 4 AND resource_id = 2 AND az = 'any';
+		DELETE FROM cluster_az_resources WHERE id = 5 AND resource_id = 2 AND az = 'az-one';
+		DELETE FROM cluster_az_resources WHERE id = 6 AND resource_id = 2 AND az = 'az-two';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'things';
+		DELETE FROM cluster_resources WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		DELETE FROM cluster_services WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+		INSERT INTO cluster_services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'first', 1216885, 5, '{}', 1217785, 2);
+		UPDATE cluster_services SET scraped_at = 1216890, next_scrape_at = 1217790 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
+		DELETE FROM project_az_resources_v2 WHERE id = 11 AND project_id = 2 AND az_resource_id = 4;
+		DELETE FROM project_az_resources_v2 WHERE id = 12 AND project_id = 2 AND az_resource_id = 5;
+		DELETE FROM project_az_resources_v2 WHERE id = 13 AND project_id = 2 AND az_resource_id = 6;
+		DELETE FROM project_az_resources_v2 WHERE id = 5 AND project_id = 1 AND az_resource_id = 4;
+		DELETE FROM project_az_resources_v2 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
+		DELETE FROM project_az_resources_v2 WHERE id = 7 AND project_id = 1 AND az_resource_id = 6;
+		DELETE FROM project_commitments_v2 WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
+		DELETE FROM project_commitments_v2 WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		DELETE FROM project_commitments_v2 WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+		DELETE FROM project_commitments_v2 WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
+		DELETE FROM project_resources_v2 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		DELETE FROM project_resources_v2 WHERE id = 6 AND project_id = 2 AND resource_id = 2;
+	`)
+
+	// now we try to remove second/capacity, which has an active commitment. Hence, it will fail on SaveServiceInfoToDB
+	delete(secondCapacityReport.Resources, "capacity")
+	secondCapacityReport.InfoVersion = 2
+	secondLiquidClient.SetCapacityReport(secondCapacityReport)
+	delete(secondServiceInfo.Resources, "capacity")
+	secondServiceInfo.Version = 2
+	secondLiquidClient.SetServiceInfo(secondServiceInfo)
+
+	s.Clock.StepBy(1 * time.Hour)
+	mustFailT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)), errors.New(sqlext.SimplifyWhitespace(
+		`failed in iteration 2: while scraping clusterService 2: could not delete db.ClusterResource record with key capacity:
+		pq: update or delete on table "cluster_az_resources" violates foreign key constraint "project_commitments_v2_az_resource_id_fkey" on table "project_commitments_v2"
+		(additional error while updating DB: pq: update or delete on table "cluster_services" violates foreign key constraint "cluster_resources_service_id_liquid_version_fkey" on table "cluster_resources"`)))
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	s, job := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job, _, _, _, _, _, _ := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()

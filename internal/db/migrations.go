@@ -512,7 +512,7 @@ var sqlMigrations = map[string]string{
 			id                       BIGSERIAL    NOT NULL PRIMARY KEY,
 			uuid                     TEXT         NOT NULL UNIQUE,
 			project_id               BIGINT       NOT NULL REFERENCES projects ON DELETE RESTRICT,
-			az_resource_id           BIGINT       NOT NULL REFERENCES cluster_az_resources ON DELETE CASCADE,
+			az_resource_id           BIGINT       NOT NULL REFERENCES cluster_az_resources ON DELETE RESTRICT, -- we circumvent this constraint for expired/ superseded commitments by using a trigger
 			state                    TEXT         NOT NULL,
 			amount                   BIGINT       NOT NULL,
 			duration                 TEXT         NOT NULL,
@@ -531,6 +531,19 @@ var sqlMigrations = map[string]string{
 			supersede_context_json   JSONB        DEFAULT NULL,
 			renew_context_json       JSONB        DEFAULT NULL
 		);
+		CREATE OR REPLACE FUNCTION cluster_az_resources_project_commitments_trigger_function()
+			RETURNS trigger AS $$
+			BEGIN
+				DELETE FROM project_commitments_v2
+					WHERE az_resource_id = OLD.id
+					AND state IN ('expired', 'superseeded');
+				RETURN OLD;
+			END;
+			$$ LANGUAGE plpgsql;
+		CREATE TRIGGER cluster_az_resources_project_commitments_trigger 
+			BEFORE DELETE ON cluster_az_resources
+			FOR EACH ROW
+			EXECUTE FUNCTION cluster_az_resources_project_commitments_trigger_function();
 		INSERT INTO project_services_v2 ( project_id, service_id, scraped_at, stale, scrape_duration_secs, serialized_scrape_state, serialized_metrics, checked_at, scrape_error_message, next_scrape_at, quota_desynced_at, quota_sync_duration_secs )
 			SELECT
 				p.id as project_id,
