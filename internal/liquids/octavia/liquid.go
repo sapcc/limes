@@ -5,7 +5,9 @@ package octavia
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -14,6 +16,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gophercloudext"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -129,4 +132,10 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	}
 	_, err := quotas.Update(ctx, l.OctaviaV2, projectUUID, octaviaQuotas).Extract()
 	return err
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

@@ -57,9 +57,13 @@ type Logic interface {
 	//
 	// All these functions should not store long-lived state in the Logic object.
 	// Long-lived state should only be computed and updated during BuildServiceInfo().
+	//
+	// ReviewCommitmentChange() does not need to check the req.InfoVersion value.
+	// The caller will already have done so.
 	ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceCapacityReport, error)
 	ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error)
 	SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error
+	ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error)
 }
 
 // RunOpts provides configuration to func Run().
@@ -113,6 +117,7 @@ type runtime struct {
 //   - "liquid:get_capacity"
 //   - "liquid:get_usage" (object parameter "project_uuid")
 //   - "liquid:set_quota" (object parameter "project_uuid")
+//   - "liquid:change_commitments"
 //
 // Please refer to the documentation on type RunOpts for various other
 // behaviors that this function provides.
@@ -278,6 +283,7 @@ func (rt *runtime) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/v1/report-capacity").HandlerFunc(rt.handleReportCapacity)
 	r.Methods("POST").Path("/v1/projects/{project_id}/report-usage").HandlerFunc(rt.handleReportUsage)
 	r.Methods("PUT").Path("/v1/projects/{project_id}/quota").HandlerFunc(rt.handleSetQuota)
+	r.Methods("POST").Path("/v1/change-commitments").HandlerFunc(rt.handleChangeCommitments)
 }
 
 func (rt *runtime) handleGetInfo(w http.ResponseWriter, r *http.Request) {
@@ -343,6 +349,31 @@ func (rt *runtime) handleSetQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (rt *runtime) handleChangeCommitments(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/change-commitments")
+	if !rt.requireToken(w, r, "liquid:change_commitments") {
+		return
+	}
+
+	var req liquid.CommitmentChangeRequest
+	if !requireJSON(w, r, &req) {
+		return
+	}
+
+	srvInfo := rt.getServiceInfo()
+	if srvInfo.Version != req.InfoVersion {
+		msg := fmt.Sprintf("request was for InfoVersion = %d, but current ServiceInfo.Version is %d", req.InfoVersion, srvInfo.Version)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	resp, err := rt.Logic.ReviewCommitmentChange(r.Context(), req, srvInfo)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	respondwith.JSON(w, http.StatusOK, resp)
 }
 
 func (rt *runtime) requireToken(w http.ResponseWriter, r *http.Request, policyRule string) bool {

@@ -5,7 +5,9 @@ package cinder
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -14,6 +16,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/regexpext"
+	"github.com/sapcc/go-bits/respondwith"
 )
 
 type Logic struct {
@@ -189,4 +192,10 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	opts := gophercloud.RequestOpts{OkCodes: []int{200}}
 	_, err := l.CinderV3.Put(ctx, url, requestData, nil, &opts)
 	return err
+}
+
+// ReviewCommitmentChange implements the liquidapi.Logic interface.
+func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	err := errors.New("this liquid does not manage commitments")
+	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }
