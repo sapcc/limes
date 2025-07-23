@@ -35,7 +35,7 @@ var (
 
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
 		SELECT project_id, forbidden, max_quota_from_outside_admin, max_quota_from_local_admin, override_quota_from_config
-		  FROM project_resources_v2
+		  FROM project_resources
 		 WHERE resource_id = $1 AND (forbidden IS NOT NULL
 		                          OR max_quota_from_outside_admin IS NOT NULL
 		                          OR max_quota_from_local_admin IS NOT NULL
@@ -45,17 +45,17 @@ var (
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources_v2 pazr
+		UPDATE project_az_resources pazr
 		SET quota = $1
 		FROM cluster_az_resources cazr
 		WHERE pazr.az_resource_id = cazr.id AND cazr.az = $2 AND pazr.project_id = $3 AND cazr.resource_id = $4
 		AND pazr.quota IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources_v2 SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND project_id = $2 AND resource_id = $3
+		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND project_id = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services_v2 ps
+		UPDATE project_services ps
 		SET quota_desynced_at = $1
 		FROM cluster_services cs
 		WHERE ps.service_id = cs.id AND ps.project_id = $2 AND cs.type = $3

@@ -61,7 +61,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM project_services_v2 ps
+	  FROM project_services ps
 	  JOIN cluster_services cs ON cs.id = ps.service_id
 	 WHERE ps.scraped_at IS NOT NULL
 	 GROUP BY cs.type
@@ -251,7 +251,7 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	  FROM cluster_services cs
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
+	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	 WHERE ps.serialized_metrics != '' AND ps.serialized_metrics != '{}'
 `)
 
@@ -418,8 +418,8 @@ var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
-	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
+	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
+	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
 	 GROUP BY d.name, d.uuid, cs.type, cr.name
 `)
 
@@ -429,7 +429,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	         SUM(pazr.usage) AS usage,
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
-	    FROM project_az_resources_v2 pazr
+	    FROM project_az_resources pazr
 	    JOIN cluster_az_resources cazr ON cazr.id = pazr.az_resource_id
 	   GROUP BY cazr.resource_id, pazr.project_id
 	),
@@ -438,7 +438,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 		FROM cluster_services cs
 		JOIN cluster_resources cr ON cr.service_id = cs.id
 		JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-		JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
+		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
 		JOIN projects p ON p.id = pc.project_id
 		GROUP BY p.domain_id, p.id, cs.type, cr.name
 	)
@@ -450,7 +450,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
+	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
 	  JOIN project_sums psums ON psums.resource_id = cr.id AND psums.project_id = p.id
 	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND cs.type= pcmea.TYPE AND cr.name = pcmea.name
 `)
@@ -458,7 +458,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums_by_state AS (
 	  SELECT az_resource_id, project_id, state, SUM(amount) AS amount
-	    FROM project_commitments_v2
+	    FROM project_commitments
 	   WHERE state NOT IN ('superseded', 'expired')
 	   GROUP BY az_resource_id, project_id, state
 	), project_commitment_sums AS (
@@ -472,7 +472,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 `)
 
@@ -482,7 +482,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN cluster_rates cra ON cra.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND pra.project_id = p.id
+	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = p.id
 	 WHERE pra.usage_as_bigint != ''
 `)
 

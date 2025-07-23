@@ -23,7 +23,7 @@ import (
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
-	    FROM project_commitments_v2
+	    FROM project_commitments
 	   WHERE state = 'active'
 	   GROUP BY project_id, az_resource_id
 	)
@@ -35,9 +35,9 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id
+	  JOIN project_services ps ON ps.service_id = cs.id
 	  -- no left join, entries will only appear when there is some project level entry
-	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = ps.project_id
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = ps.project_id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = pazr.project_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az
@@ -47,7 +47,7 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, SUM(pr.quota)
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+	  JOIN project_resources pr ON pr.resource_id = cr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name
 `)
@@ -67,7 +67,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
 	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
-	    FROM project_commitments_v2
+	    FROM project_commitments
 	   GROUP BY az_resource_id, duration
 	)
 	SELECT cs.type, cr.name, cazr.az,
@@ -84,10 +84,10 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM cluster_services cs
 	  JOIN cluster_rates cra ON cra.service_id = cs.id
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id
+	  JOIN project_services ps ON ps.service_id = cs.id
 	  -- TODO: this join reduces the result set to the rates which have been scraped.
 	  -- At some point, we want to have the scraped_at statistics per service - not considering rates or resources.
-	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND ps.project_id = pra.project_id
+	  JOIN project_rates pra ON pra.rate_id = cra.id AND ps.project_id = pra.project_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cra.name
 `)

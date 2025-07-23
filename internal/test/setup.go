@@ -132,9 +132,9 @@ type Setup struct {
 	Handler http.Handler
 	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
 	Projects           []*db.Project
-	ProjectServices    []*db.ProjectServiceV2
-	ProjectResources   []*db.ProjectResourceV2
-	ProjectAZResources []*db.ProjectAZResourceV2
+	ProjectServices    []*db.ProjectService
+	ProjectResources   []*db.ProjectResource
+	ProjectAZResources []*db.ProjectAZResource
 }
 
 func GenerateDummyToken() string {
@@ -265,7 +265,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		mustDo(t, s.DB.SelectOne(&clusterService, `SELECT * FROM cluster_services WHERE type = $1`, serviceType))
 		for _, dbProject := range s.Projects {
 			t0 := time.Unix(0, 0).UTC()
-			dbProjectService := &db.ProjectServiceV2{
+			dbProjectService := &db.ProjectService{
 				ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
 				ProjectID: dbProject.ID,
 				ServiceID: clusterService.ID,
@@ -280,7 +280,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			var clusterResource *db.ClusterResource
 			mustDo(t, s.DB.SelectOne(&clusterResource, `SELECT * FROM cluster_resources WHERE name = $1 AND service_id = $2`, resName, clusterService.ID))
 			for _, dbProject := range s.Projects {
-				dbProjectResource := &db.ProjectResourceV2{
+				dbProjectResource := &db.ProjectResource{
 					ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
 					ProjectID:    dbProject.ID,
 					ResourceID:   clusterResource.ID,
@@ -300,7 +300,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				var clusterAZResource *db.ClusterAZResource
 				mustDo(t, s.DB.SelectOne(&clusterAZResource, `SELECT * FROM cluster_az_resources WHERE az = $1 AND resource_id = $2`, az, clusterResource.ID))
 				for _, dbProject := range s.Projects {
-					dbProjectAZResource := &db.ProjectAZResourceV2{
+					dbProjectAZResource := &db.ProjectAZResource{
 						ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
 						ProjectID:        dbProject.ID,
 						AZResourceID:     clusterAZResource.ID,
@@ -327,11 +327,11 @@ func mustDo(t *testing.T, err error) {
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments_v2", "cluster_services", "domains"),
+		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
 			"cluster_services", "cluster_resources", "cluster_rates", "cluster_az_resources",
-			"domains", "projects", "project_commitments_v2", "project_mail_notifications",
-			"project_services_v2", "project_resources_v2", "project_az_resources_v2", "project_rates_v2",
+			"domains", "projects", "project_commitments", "project_mail_notifications",
+			"project_services", "project_resources", "project_az_resources", "project_rates",
 		),
 	)
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))

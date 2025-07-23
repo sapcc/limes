@@ -32,7 +32,7 @@ type AZResourceLocation struct {
 
 // CommitmentNotification appears in type CommitmentGroupNotification.
 type CommitmentNotification struct {
-	Commitment db.ProjectCommitmentV2
+	Commitment db.ProjectCommitment
 	DateString string
 	Resource   AZResourceLocation
 }

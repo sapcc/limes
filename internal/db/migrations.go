@@ -638,4 +638,179 @@ var sqlMigrations = map[string]string{
 			JOIN cluster_resources cr ON cs.id = cr.service_id AND pr.name = cr.name
 			JOIN cluster_az_resources cazr ON cr.id = cazr.resource_id AND pazr.az = cazr.az;
 	`,
+	"060_remove_project_level_v1_artifacts.down.sql": `
+		ALTER TABLE project_services RENAME TO project_services_v2;
+		ALTER TABLE project_resources RENAME TO project_resources_v2;
+		ALTER TABLE project_az_resources RENAME TO project_az_resources_v2;
+		ALTER TABLE project_rates RENAME TO project_rates_v2;
+		ALTER TABLE project_commitments RENAME TO project_commitments_v2;
+		CREATE TABLE project_services (
+			id							BIGSERIAL	NOT NULL PRIMARY KEY,
+			project_id					BIGINT		NOT NULL REFERENCES projects ON DELETE CASCADE,
+			type						TEXT		NOT NULL,
+			scraped_at					TIMESTAMP	DEFAULT NULL, -- null if scraping did not happen yet
+			stale						BOOLEAN	NOT NULL DEFAULT FALSE,
+			scrape_duration_secs		REAL		NOT NULL DEFAULT 0,
+			rates_scrape_state			TEXT		NOT NULL DEFAULT '',
+			serialized_metrics			TEXT		NOT NULL DEFAULT '',
+			checked_at					TIMESTAMP	DEFAULT NULL,
+			scrape_error_message		TEXT		NOT NULL DEFAULT '',
+			next_scrape_at				TIMESTAMP	NOT NULL DEFAULT NOW(),
+			quota_desynced_at			TIMESTAMP	DEFAULT NULL,
+			quota_sync_duration_secs	REAL		NOT NULL DEFAULT 0,
+			UNIQUE (project_id, type)
+		);
+		CREATE INDEX project_services_stale_idx ON project_services (stale);
+		CREATE TABLE project_resources (
+			id							BIGSERIAL	NOT NULL PRIMARY KEY,
+			service_id					BIGINT		NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name						TEXT		NOT NULL,
+			quota						BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+			backend_quota				BIGINT		DEFAULT NULL,
+			max_quota_from_outside_admin		BIGINT		DEFAULT NULL,
+			max_quota_from_local_admin BIGINT DEFAULT NULL,
+			override_quota_from_config	BIGINT		DEFAULT NULL,
+			forbidden					BOOLEAN NOT NULL DEFAULT FALSE
+			UNIQUE (service_id, name)
+		);
+		CREATE TABLE project_az_resources (
+			id					BIGSERIAL	NOT NULL PRIMARY KEY,
+			resource_id			BIGINT		NOT NULL REFERENCES project_resources ON DELETE CASCADE,
+			az					TEXT		NOT NULL,
+			quota				BIGINT		DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage				BIGINT		NOT NULL,
+			physical_usage		BIGINT		DEFAULT NULL,
+			subresources		TEXT		NOT NULL DEFAULT '',
+			historical_usage	TEXT		NOT NULL DEFAULT '',
+			backend_quota		BIGINT default NULL
+			UNIQUE (resource_id, az)
+		);
+		CREATE TABLE project_rates (
+			service_id			BIGINT	NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name				TEXT	NOT NULL,
+			rate_limit			BIGINT	DEFAULT NULL, -- null = not rate-limited
+			window_ns			BIGINT	DEFAULT NULL, -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint		TEXT	NOT NULL,		-- empty = not scraped
+			PRIMARY KEY (service_id, name)
+		);
+		CREATE TABLE project_commitments (
+			id						BIGSERIAL	NOT NULL PRIMARY KEY,
+			az_resource_id			BIGINT		NOT NULL REFERENCES project_az_resources ON DELETE RESTRICT,
+			amount					BIGINT		NOT NULL,
+			duration				TEXT		NOT NULL,
+			created_at				TIMESTAMP	NOT NULL,
+			creator_uuid			TEXT		NOT NULL,
+			creator_name			TEXT		NOT NULL,
+			confirm_by				TIMESTAMP	DEFAULT NULL,
+			confirmed_at			TIMESTAMP	DEFAULT NULL,
+			expires_at				TIMESTAMP	NOT NULL,
+			superseded_at			TIMESTAMP	DEFAULT NULL,
+			transfer_status			TEXT		NOT NULL DEFAULT '',
+			transfer_token			TEXT		DEFAULT NULL UNIQUE, -- default is NULL instead of '' to enable the uniqueness constraint below
+			state					TEXT		NOT NULL,
+			notify_on_confirm		BOOLEAN		NOT NULL DEFAULT FALSE,
+			notified_for_expiration BOOLEAN		NOT NULL DEFAULT FALSE,
+			creation_context_json	JSONB		NOT NULL,
+			supersede_context_json	JSONB		DEFAULT NULL,
+			renew_context_json		JSONB		DEFAULT NULL,
+			uuid					TEXT		NOT NULL UNIQUE
+		);
+		CREATE OR REPLACE FUNCTION cluster_az_resources_project_commitments_trigger_function()
+			RETURNS trigger AS $$
+			BEGIN
+				DELETE FROM project_commitments_v2
+					WHERE az_resource_id = OLD.id
+					AND state IN ('expired', 'superseeded');
+				RETURN OLD;
+			END;
+			$$ LANGUAGE plpgsql;
+			   
+		ALTER INDEX project_services_stale_idx RENAME TO project_services_v2_stale_idx;
+		ALTER INDEX project_services_pkey RENAME TO project_services_v2_pkey;
+	  	ALTER INDEX project_services_project_id_service_id_key RENAME TO project_services_v2_project_id_service_id_key;
+		ALTER TABLE project_services RENAME CONSTRAINT project_services_project_id_fkey TO project_services_v2_project_id_fkey;
+		ALTER TABLE project_services RENAME CONSTRAINT project_services_service_id_fkey TO project_services_v2_service_id_fkey;
+		      
+		ALTER INDEX project_resources_pkey RENAME TO project_resources_v2_pkey;
+	  	ALTER INDEX project_resources_project_id_resource_id_key RENAME TO project_resources_v2_project_id_resource_id_key;
+		ALTER TABLE project_resources RENAME CONSTRAINT project_resources_project_id_fkey TO project_resources_v2_project_id_fkey;
+		ALTER TABLE project_resources RENAME CONSTRAINT project_resources_resource_id_fkey TO project_resources_v2_resource_id_fkey;
+
+		ALTER INDEX project_az_resources_pkey RENAME TO project_az_resources_v2_pkey;
+	  	ALTER INDEX project_az_resources_project_id_az_resource_id_key RENAME TO project_az_resources_v2_project_id_az_resource_id_key;
+		ALTER TABLE project_az_resources RENAME CONSTRAINT project_az_resources_project_id_fkey TO project_az_resources_v2_project_id_fkey;
+		ALTER TABLE project_az_resources RENAME CONSTRAINT project_az_resources_az_resource_id_fkey TO project_az_resources_v2_az_resource_id_fkey;
+
+		ALTER INDEX project_rates_pkey RENAME TO project_rates_v2_pkey;
+	  	ALTER INDEX project_rates_project_id_rate_id_key RENAME TO project_rates_v2_project_id_rate_id_key;
+		ALTER TABLE project_rates RENAME CONSTRAINT project_rates_project_id_fkey TO project_rates_v2_project_id_fkey;
+		ALTER TABLE project_rates RENAME CONSTRAINT project_rates_rate_id_fkey TO project_rates_v2_rate_id_fkey;
+
+		ALTER INDEX project_commitments_pkey RENAME TO project_commitments_v2_pkey;
+	  	ALTER INDEX project_commitments_transfer_token_key RENAME TO project_commitments_v2_transfer_token_key;
+	  	ALTER INDEX project_commitments_uuid_key RENAME TO project_commitments_v2_uuid_key;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_project_id_fkey TO project_commitments_v2_project_id_fkey;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_az_resource_id_fkey TO project_commitments_v2_az_resource_id_fkey;
+
+		ALTER SEQUENCE project_services_id_seq RENAME TO project_services_v2_id_seq;
+		ALTER SEQUENCE project_resources_id_seq RENAME TO project_resources_v2_id_seq;
+		ALTER SEQUENCE project_az_resources_id_seq RENAME TO project_az_resources_v2_id_seq;
+		ALTER SEQUENCE project_rates_id_seq RENAME TO project_rates_v2_id_seq;
+		ALTER SEQUENCE project_commitments_id_seq RENAME TO project_commitments_v2_id_seq;
+	`,
+	"060_remove_project_level_v1_artifacts.up.sql": `
+		DROP TABLE project_commitments;
+		DROP TABLE project_rates;
+		DROP TABLE project_az_resources;
+		DROP TABLE project_resources;
+		DROP TABLE project_services;
+		ALTER TABLE project_services_v2 RENAME TO project_services;
+		ALTER TABLE project_resources_v2 RENAME TO project_resources;
+		ALTER TABLE project_az_resources_v2 RENAME TO project_az_resources;
+		ALTER TABLE project_rates_v2 RENAME TO project_rates;
+		ALTER TABLE project_commitments_v2 RENAME TO project_commitments;
+
+		CREATE OR REPLACE FUNCTION cluster_az_resources_project_commitments_trigger_function()
+			RETURNS trigger AS $$
+			BEGIN
+				DELETE FROM project_commitments
+					WHERE az_resource_id = OLD.id
+					AND state IN ('expired', 'superseeded');
+				RETURN OLD;
+			END;
+			$$ LANGUAGE plpgsql;
+
+		ALTER INDEX project_services_v2_stale_idx RENAME TO project_services_stale_idx;
+		ALTER INDEX project_services_v2_pkey RENAME TO project_services_pkey;
+	  	ALTER INDEX project_services_v2_project_id_service_id_key RENAME TO project_services_project_id_service_id_key;
+		ALTER TABLE project_services RENAME CONSTRAINT project_services_v2_project_id_fkey TO project_services_project_id_fkey;
+		ALTER TABLE project_services RENAME CONSTRAINT project_services_v2_service_id_fkey TO project_services_service_id_fkey;
+		      
+		ALTER INDEX project_resources_v2_pkey RENAME TO project_resources_pkey;
+	  	ALTER INDEX project_resources_v2_project_id_resource_id_key RENAME TO project_resources_project_id_resource_id_key;
+		ALTER TABLE project_resources RENAME CONSTRAINT project_resources_v2_project_id_fkey TO project_resources_project_id_fkey;
+		ALTER TABLE project_resources RENAME CONSTRAINT project_resources_v2_resource_id_fkey TO project_resources_resource_id_fkey;
+
+		ALTER INDEX project_az_resources_v2_pkey RENAME TO project_az_resources_pkey;
+	  	ALTER INDEX project_az_resources_v2_project_id_az_resource_id_key RENAME TO project_az_resources_project_id_az_resource_id_key;
+		ALTER TABLE project_az_resources RENAME CONSTRAINT project_az_resources_v2_project_id_fkey TO project_az_resources_project_id_fkey;
+		ALTER TABLE project_az_resources RENAME CONSTRAINT project_az_resources_v2_az_resource_id_fkey TO project_az_resources_az_resource_id_fkey;
+
+		ALTER INDEX project_rates_v2_pkey RENAME TO project_rates_pkey;
+	  	ALTER INDEX project_rates_v2_project_id_rate_id_key RENAME TO project_rates_project_id_rate_id_key;
+		ALTER TABLE project_rates RENAME CONSTRAINT project_rates_v2_project_id_fkey TO project_rates_project_id_fkey;
+		ALTER TABLE project_rates RENAME CONSTRAINT project_rates_v2_rate_id_fkey TO project_rates_rate_id_fkey;
+
+		ALTER INDEX project_commitments_v2_pkey RENAME TO project_commitments_pkey;
+	  	ALTER INDEX project_commitments_v2_transfer_token_key RENAME TO project_commitments_transfer_token_key;
+	  	ALTER INDEX project_commitments_v2_uuid_key RENAME TO project_commitments_uuid_key;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_v2_project_id_fkey TO project_commitments_project_id_fkey;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_v2_az_resource_id_fkey TO project_commitments_az_resource_id_fkey;
+
+		ALTER SEQUENCE project_services_v2_id_seq RENAME TO project_services_id_seq;
+		ALTER SEQUENCE project_resources_v2_id_seq RENAME TO project_resources_id_seq;
+		ALTER SEQUENCE project_az_resources_v2_id_seq RENAME TO project_az_resources_id_seq;
+		ALTER SEQUENCE project_rates_v2_id_seq RENAME TO project_rates_id_seq;
+		ALTER SEQUENCE project_commitments_v2_id_seq RENAME TO project_commitments_id_seq;
+	`,
 }

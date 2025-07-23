@@ -20,13 +20,13 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'domainone', 'uuid-for-domainone
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'projectone', 'uuid-for-projectone', 'uuid-for-domainone');
 
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (1, 1, 1, UNIX(11), UNIX(11));
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (1, 1, 1, UNIX(11), UNIX(11));
 
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (1,  1, 1,   0, 0);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (2,  1, 2, 0, 0);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (1,  1, 1,   0, 0);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (2,  1, 2, 0, 0);
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (1,  1,  1, 0,    0, NULL, '');
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (2,  1,  2, 0,    0, NULL, '');
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (3,  1,  3, 0,    0, NULL, '');
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (4,  1,  4, 0,    0, NULL, '');
+INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (1,  1,  1, 0,    0, NULL, '');
+INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (2,  1,  2, 0,    0, NULL, '');
+INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (3,  1,  3, 0,    0, NULL, '');
+INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, subresources) VALUES (4,  1,  4, 0,    0, NULL, '');

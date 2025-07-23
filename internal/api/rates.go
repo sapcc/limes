@@ -193,9 +193,9 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 
 	// get all project_rates and make them accessible quickly by ID
-	var projectRates []db.ProjectRateV2
-	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates_v2 WHERE project_id = $1`, updater.Project.ID)
-	projectRateByClusterRateID := make(map[db.ClusterRateID]db.ProjectRateV2)
+	var projectRates []db.ProjectRate
+	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates WHERE project_id = $1`, updater.Project.ID)
+	projectRateByClusterRateID := make(map[db.ClusterRateID]db.ProjectRate)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -261,7 +261,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 	// update the DB with the new rate limits
 	mergeStr := sqlext.SimplifyWhitespace(`
-		MERGE INTO project_rates_v2 pr 
+		MERGE INTO project_rates pr 
 		USING json_to_recordset($1::json) src (project_id BIGINT, rate_id BIGINT, rate_limit BIGINT, window_ns BIGINT)
 		ON src.project_id = pr.project_id AND src.rate_id = pr.rate_id
 		WHEN MATCHED THEN UPDATE SET rate_limit = src.rate_limit, window_ns = src.window_ns

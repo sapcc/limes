@@ -37,7 +37,7 @@ func Test_Consistency(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// remove some project_services entries
-	_, err = s.DB.Exec(`DELETE FROM project_services_v2 WHERE id = $1`, 2)
+	_, err = s.DB.Exec(`DELETE FROM project_services WHERE id = $1`, 2)
 	if err != nil {
 		t.Error(err)
 	}
@@ -46,7 +46,7 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err = s.DB.Insert(&db.ProjectServiceV2{
+	err = s.DB.Insert(&db.ProjectService{
 		ProjectID:    1,
 		ServiceID:    3,
 		NextScrapeAt: time.Unix(0, 0).UTC(),
@@ -64,8 +64,8 @@ func Test_Consistency(t *testing.T) {
 	}
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM cluster_services WHERE id = 3 AND type = 'whatever' AND liquid_version = 0;
-		DELETE FROM project_services_v2 WHERE id = 7 AND project_id = 1 AND service_id = 3;
-		INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
+		DELETE FROM project_services WHERE id = 7 AND project_id = 1 AND service_id = 3;
+		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
 	`,
 		s.Clock.Now().Unix(),
 	)

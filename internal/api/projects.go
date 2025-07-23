@@ -151,7 +151,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// mark all project services as stale to force limes-collect to sync ASAP
-	_, err := p.DB.Exec(`UPDATE project_services_v2 SET stale = '1' WHERE project_id = $1`, dbProject.ID)
+	_, err := p.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -266,7 +266,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 
 	var services []db.ClusterService
 	_, err = tx.Select(&services,
-		`SELECT cs.* FROM cluster_services cs JOIN project_services_v2 ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
+		`SELECT cs.* FROM cluster_services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -278,7 +278,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		}
 
 		_, err := datamodel.ProjectResourceUpdate{
-			UpdateResource: func(res *db.ProjectResourceV2, resName liquid.ResourceName) error {
+			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
 				if requestedChange != nil && domainAccess {
 					requestedChange.OldValue = res.MaxQuotaFromOutsideAdmin // remember for audit event

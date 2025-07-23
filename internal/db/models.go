@@ -90,8 +90,8 @@ type Project struct {
 	ParentUUID string    `db:"parent_uuid"`
 }
 
-// ProjectServiceV2 contains a record from the `project_services_v2` table.
-type ProjectServiceV2 struct {
+// ProjectService contains a record from the `project_services` table.
+type ProjectService struct {
 	ID                    ProjectServiceID  `db:"id"`
 	ProjectID             ProjectID         `db:"project_id"`
 	ServiceID             ClusterServiceID  `db:"service_id"`
@@ -107,9 +107,9 @@ type ProjectServiceV2 struct {
 	QuotaSyncDurationSecs float64           `db:"quota_sync_duration_secs"`
 }
 
-// ProjectResourceV2 contains a record from the `project_resources_v2` table. Quota
+// ProjectResource contains a record from the `project_resources` table. Quota
 // values are NULL for resources that do not track quota.
-type ProjectResourceV2 struct {
+type ProjectResource struct {
 	ID                       ProjectResourceID `db:"id"`
 	ProjectID                ProjectID         `db:"project_id"`
 	ResourceID               ClusterResourceID `db:"resource_id"`
@@ -121,8 +121,8 @@ type ProjectResourceV2 struct {
 	OverrideQuotaFromConfig  Option[uint64]    `db:"override_quota_from_config"`
 }
 
-// ProjectAZResourceV2 contains a record from the `project_az_resources_v2` table.
-type ProjectAZResourceV2 struct {
+// ProjectAZResource contains a record from the `project_az_resources` table.
+type ProjectAZResource struct {
 	ID                  ProjectAZResourceID `db:"id"`
 	ProjectID           ProjectID           `db:"project_id"`
 	AZResourceID        ClusterAZResourceID `db:"az_resource_id"`
@@ -134,8 +134,8 @@ type ProjectAZResourceV2 struct {
 	HistoricalUsageJSON string              `db:"historical_usage"`
 }
 
-// ProjectRateV2 contains a record from the `project_rates_v2` table.
-type ProjectRateV2 struct {
+// ProjectRate contains a record from the `project_rates` table.
+type ProjectRate struct {
 	ID            ProjectRateID             `db:"id"`
 	ProjectID     ProjectID                 `db:"project_id"`
 	RateID        ClusterRateID             `db:"rate_id"`
@@ -147,8 +147,8 @@ type ProjectRateV2 struct {
 	//  use strings throughout and cast into bigints in the scraper only.
 }
 
-// ProjectCommitmentV2 contains a record from the `project_commitments_v2` table.
-type ProjectCommitmentV2 struct {
+// ProjectCommitment contains a record from the `project_commitments` table.
+type ProjectCommitment struct {
 	ID           ProjectCommitmentID               `db:"id"`
 	UUID         ProjectCommitmentUUID             `db:"uuid"`
 	ProjectID    ProjectID                         `db:"project_id"`
@@ -244,10 +244,10 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
-	db.AddTableWithName(ProjectServiceV2{}, "project_services_v2").SetKeys(true, "id")
-	db.AddTableWithName(ProjectResourceV2{}, "project_resources_v2").SetKeys(true, "id")
-	db.AddTableWithName(ProjectAZResourceV2{}, "project_az_resources_v2").SetKeys(true, "id")
-	db.AddTableWithName(ProjectRateV2{}, "project_rates_v2").SetKeys(true, "id")
-	db.AddTableWithName(ProjectCommitmentV2{}, "project_commitments_v2").SetKeys(true, "id")
+	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
+	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")
+	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
+	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(true, "id")
+	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "id")
 }

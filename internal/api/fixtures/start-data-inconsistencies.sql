@@ -25,31 +25,31 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 3, 'any', 0);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (1, 1, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (2, 1, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (3, 2, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (4, 2, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (5, 3, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services_v2 (id, project_id, service_id, scraped_at, checked_at) VALUES (6, 3, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (1, 1, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (2, 1, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (3, 2, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (4, 2, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (5, 3, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (6, 3, 2, '2018-06-13 15:06:37', '2018-06-13 15:06:37');
 
 -- project_resources contains some pathological cases
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (1, 1, 1, 30,  10);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (2, 1, 2, 100, 100);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (3, 1, 3, 10,  10);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (4, 2, 1, 14,  14);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (5, 2, 2, 60,  60);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (6, 2, 3, 5,   5);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (7, 3, 1, 30,  30);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (8, 3, 2, 62,  62);
-INSERT INTO project_resources_v2 (id, project_id, resource_id, quota, backend_quota) VALUES (9, 3, 3, 10,  10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (1, 1, 1, 30,  10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (2, 1, 2, 100, 100);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (3, 1, 3, 10,  10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (4, 2, 1, 14,  14);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (5, 2, 2, 60,  60);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (6, 2, 3, 5,   5);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (7, 3, 1, 30,  30);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (8, 3, 2, 62,  62);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (9, 3, 3, 10,  10);
 
 -- project_az_resources has everything as non-AZ-aware (the consistency checks do not really care about AZs)
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (1, 1, 1, 14, NULL);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (2, 1, 2, 88, 92);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (3, 1, 3, 5,  NULL);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (4, 2, 1, 18, NULL);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (5, 2, 2, 45, 40);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (6, 2, 3, 2,  NULL);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (7, 3, 1, 20, NULL);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (8, 3, 2, 48, 43);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage, physical_usage) VALUES (9, 3, 3, 4,  NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (1, 1, 1, 14, NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (2, 1, 2, 88, 92);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (3, 1, 3, 5,  NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (4, 2, 1, 18, NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (5, 2, 2, 45, 40);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (6, 2, 3, 2,  NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (7, 3, 1, 20, NULL);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (8, 3, 2, 48, 43);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, physical_usage) VALUES (9, 3, 3, 4,  NULL);

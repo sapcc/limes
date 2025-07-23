@@ -40,65 +40,65 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'ber
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services_v2 (id, project_id, service_id) VALUES (1, 1, 1);
-INSERT INTO project_services_v2 (id, project_id, service_id) VALUES (2, 1, 2);
-INSERT INTO project_services_v2 (id, project_id, service_id) VALUES (3, 2, 1);
-INSERT INTO project_services_v2 (id, project_id, service_id) VALUES (4, 2, 2);
+INSERT INTO project_services (id, project_id, service_id) VALUES (1, 1, 1);
+INSERT INTO project_services (id, project_id, service_id) VALUES (2, 1, 2);
+INSERT INTO project_services (id, project_id, service_id) VALUES (3, 2, 1);
+INSERT INTO project_services (id, project_id, service_id) VALUES (4, 2, 2);
 
 -- no quota set here because commitment confirmation does not care about quota
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (1,  1, 1);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (2,  1, 2);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (3,  1, 3);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (4,  1, 4);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (5,  2, 1);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (6,  2, 2);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (7, 2, 3);
-INSERT INTO project_resources_v2 (id, project_id, resource_id) VALUES (8, 2, 4);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (1,  1, 1);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (2,  1, 2);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (3,  1, 3);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (4,  1, 4);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (5,  2, 1);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (6,  2, 2);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (7, 2, 3);
+INSERT INTO project_resources (id, project_id, resource_id) VALUES (8, 2, 4);
 
 -- */things resources do not have commitments, so they are boring and we don't need to care
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (1, 1,  1,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (2, 1,  7,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (3, 2,  1,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (4, 2, 7,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (1, 1,  1,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (2, 1,  7,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (3, 2,  1,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (4, 2, 7,    0);
 
 -- part 2: */capacity resources can have commitments, so we have some large
 -- usage values here to see that these block commitments on other projects, but
 -- not on the project itself
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (5, 1, 4, 0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (6, 1, 5, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (7, 1, 6, 250);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (8, 1,  10,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (9, 1,  11, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (10, 1, 12, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (11, 2, 4,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (12, 2, 5, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (13, 2, 6, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (14, 2, 10,    0);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (15, 2, 11, 1);
-INSERT INTO project_az_resources_v2 (id, project_id, az_resource_id, usage) VALUES (16, 2, 12, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (5, 1, 4, 0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (6, 1, 5, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (7, 1, 6, 250);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (8, 1,  10,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (9, 1,  11, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (10, 1, 12, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (11, 2, 4,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (12, 2, 5, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (13, 2, 6, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (14, 2, 10,    0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (15, 2, 11, 1);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (16, 2, 12, 1);
 
 -- project_commitments has multiple testcases that invoke in the test by skipping to the respective confirm_by time
 -- (the confirm_by and expires_at timestamps are all aligned on day boundaries, i.e. T = 86400 * N for some integer N)
 
 -- day 1: just a boring commitment that easily fits in the available capacity
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 1, 5, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 1, 5, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400), 'planned', '{}'::jsonb);
 
 -- day 2: very large commitments that exceed the raw capacity; only the one on "first" works because that service has a large overcommit factor
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 1, 5, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned', '{}'::jsonb);
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 11, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 1, 5, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 11, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned', '{}'::jsonb);
 
 -- day 3: a bunch of small commitments with different timestamps, to test confirmation order in two ways:
 --
 -- 1. ID=3 does not block these commitments even though it is on the same resource and AZ
 -- 2. we cannot confirm all of these; which ones are confirmed demonstrates the order of consideration
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (4, '00000000-0000-0000-0000-000000000004', 2, 11, 10, UNIX(1), 'dummy', 'dummy', UNIX(259202), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (5, '00000000-0000-0000-0000-000000000005', 2, 11, 10, UNIX(2), 'dummy', 'dummy', UNIX(259201), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (6, '00000000-0000-0000-0000-000000000006', 2, 11, 10, UNIX(3), 'dummy', 'dummy', UNIX(259200), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (4, '00000000-0000-0000-0000-000000000004', 2, 11, 10, UNIX(1), 'dummy', 'dummy', UNIX(259202), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (5, '00000000-0000-0000-0000-000000000005', 2, 11, 10, UNIX(2), 'dummy', 'dummy', UNIX(259201), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (6, '00000000-0000-0000-0000-000000000006', 2, 11, 10, UNIX(3), 'dummy', 'dummy', UNIX(259200), '10 days', UNIX(1123200), 'planned', '{}'::jsonb);
 
 -- day 4: test confirmation that is (or is not) blocked by existing usage in other projects (on a capacity of 420, there is already 250 usage in berlin, so only berlin can confirm a commitment for amount = 300, even though dresden asked first)
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (7, '00000000-0000-0000-0000-000000000007', 2, 6, 300, UNIX(1), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned', '{}'::jsonb);
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (8, '00000000-0000-0000-0000-000000000008', 1, 6, 300, UNIX(2), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (7, '00000000-0000-0000-0000-000000000007', 2, 6, 300, UNIX(1), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (8, '00000000-0000-0000-0000-000000000008', 1, 6, 300, UNIX(2), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned', '{}'::jsonb);
 
 -- day 5: test commitments that cannot be confirmed until the previous commitment expires (ID=9 is confirmed, and then ID=10 cannot be confirmed until ID=9 expires because ID=9 blocks absolutely all available capacity in that resource and AZ)
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (9, '00000000-0000-0000-0000-000000000009',  1, 12,  22, UNIX(1), 'dummy', 'dummy', UNIX(432000), '1 hour', UNIX(435600),  'planned', '{}'::jsonb);
-INSERT INTO project_commitments_v2 (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (10, '00000000-0000-0000-0000-000000000010', 2, 12, 2, UNIX(2), 'dummy', 'dummy', UNIX(432000), '10 days', UNIX(1296000), 'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (9, '00000000-0000-0000-0000-000000000009',  1, 12,  22, UNIX(1), 'dummy', 'dummy', UNIX(432000), '1 hour', UNIX(435600),  'planned', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state, creation_context_json) VALUES (10, '00000000-0000-0000-0000-000000000010', 2, 12, 2, UNIX(2), 'dummy', 'dummy', UNIX(432000), '10 days', UNIX(1296000), 'planned', '{}'::jsonb);

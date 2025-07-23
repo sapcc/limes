@@ -29,7 +29,7 @@ var (
 		  FROM cluster_services cs
 		  JOIN cluster_resources cr ON cr.service_id = cs.id
 		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-		  JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id
+		  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 		 WHERE cs.type = $1 AND cr.name = $2 AND cazr.az = $3 AND pc.state = 'pending'
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`)
@@ -118,7 +118,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		}
 
 		// confirm the commitment
-		_, err = dbi.Exec(`UPDATE project_commitments_v2 SET confirmed_at = $1, state = $2 WHERE id = $3`,
+		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
 			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
@@ -160,8 +160,8 @@ func prepareConfirmationMail(tpl core.MailTemplate, dbi db.Interface, loc core.A
 		return db.MailNotification{}, err
 	}
 
-	var commitments []db.ProjectCommitmentV2
-	_, err = dbi.Select(&commitments, `SELECT * FROM project_commitments_v2 WHERE id = ANY($1)`, pq.Array(confirmedCommitmentIDs))
+	var commitments []db.ProjectCommitment
+	_, err = dbi.Select(&commitments, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(confirmedCommitmentIDs))
 	if err != nil {
 		return db.MailNotification{}, err
 	}

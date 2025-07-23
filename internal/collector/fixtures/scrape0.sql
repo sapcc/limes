@@ -19,11 +19,11 @@ INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, usage_me
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
-INSERT INTO project_rates_v2 (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (1, 2, 3, 10, 1000000000, '');
-INSERT INTO project_rates_v2 (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (2, 1, 4, 42, 120000000000, '');
+INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (1, 2, 3, 10, 1000000000, '');
+INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (2, 1, 4, 42, 120000000000, '');
 
-INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (1, 1, 1, TRUE, 0);
-INSERT INTO project_services_v2 (id, project_id, service_id, stale, next_scrape_at) VALUES (2, 2, 1, TRUE, 0);
+INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (1, 1, 1, TRUE, 0);
+INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (2, 2, 1, TRUE, 0);
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');

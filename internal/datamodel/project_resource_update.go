@@ -20,7 +20,7 @@ import (
 // within a single project service.
 type ProjectResourceUpdate struct {
 	// A custom callback that will be called once for each resource in the given service.
-	UpdateResource func(*db.ProjectResourceV2, liquid.ResourceName) error
+	UpdateResource func(*db.ProjectResource, liquid.ResourceName) error
 	// If nil, logg.Error is used. Unit tests should give t.Errorf here.
 	LogError func(msg string, args ...any)
 }
@@ -30,7 +30,7 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ClusterService) ([]db.ProjectResourceV2, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceInfo, now time.Time, domain db.Domain, project db.Project, srv db.ClusterService) ([]db.ProjectResource, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
@@ -40,7 +40,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	// need to write into the DB if `.Target` ends up different from `.Original`.
 	type resourceState struct {
 		Info                         *liquid.ResourceInfo
-		Original                     *db.ProjectResourceV2
+		Original                     *db.ProjectResource
 		CorrespondingClusterResource *db.ClusterResource
 	}
 
@@ -71,8 +71,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	}
 
 	// collect existing project_resources for this service
-	var dbResources []db.ProjectResourceV2
-	_, err = dbi.Select(&dbResources, `SELECT pr.* FROM project_resources_v2 pr JOIN cluster_resources cr ON pr.resource_id = cr.id WHERE cr.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
+	var dbResources []db.ProjectResource
+	_, err = dbi.Select(&dbResources, `SELECT pr.* FROM project_resources pr JOIN cluster_resources cr ON pr.resource_id = cr.id WHERE cr.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
 	}
@@ -93,7 +93,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	slices.Sort(allResourceNames)
 
 	// for each resource...
-	var result []db.ProjectResourceV2
+	var result []db.ProjectResource
 	hasBackendQuotaDrift := false
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
@@ -112,7 +112,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 		resInfo := *state.Info
 
 		// setup a copy of `state.Original` (or a new resource) that we can write into
-		res := db.ProjectResourceV2{
+		res := db.ProjectResource{
 			ProjectID:  project.ID,
 			ResourceID: state.CorrespondingClusterResource.ID,
 		}
@@ -157,7 +157,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	// if this update caused `quota != backend_quota` anywhere,
 	// request SetQuotaJob to take over (unless we already have an open request)
 	if hasBackendQuotaDrift {
-		query := `UPDATE project_services_v2 ps SET quota_desynced_at = $1 FROM cluster_services cs WHERE cs.id = ps.service_id AND cs.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
+		query := `UPDATE project_services ps SET quota_desynced_at = $1 FROM cluster_services cs WHERE cs.id = ps.service_id AND cs.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
 		_, err := dbi.Exec(query, now, srv.ID, project.ID)
 		if err != nil {
 			return nil, fmt.Errorf("while scheduling backend sync for %s quotas: %w", srv.Type, err)
@@ -168,7 +168,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(res *db.ProjectResourceV2, resInfo liquid.ResourceInfo) {
+func validateResourceConstraints(res *db.ProjectResource, resInfo liquid.ResourceInfo) {
 	if !resInfo.HasQuota || resInfo.Topology == liquid.AZSeparatedTopology {
 		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = None[uint64]()

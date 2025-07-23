@@ -97,7 +97,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitmentV2{
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000001",
 		ID:                  1,
 		ProjectID:           1,
@@ -113,7 +113,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
-	mustT(t, c.DB.Insert(&db.ProjectCommitmentV2{
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000002",
 		ID:                  2,
 		ProjectID:           1,
@@ -132,7 +132,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 	`)
 
 	// one month later, the commitment should be deleted
@@ -142,7 +142,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(30 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments_v2 WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 	`)
 
 	// test 2: simulate a commitment that was created yesterday,
@@ -157,7 +157,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitmentV2{
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                   3,
 		UUID:                 "00000000-0000-0000-0000-000000000003",
 		ProjectID:            1,
@@ -179,7 +179,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitmentV2{
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  4,
 		UUID:                "00000000-0000-0000-0000-000000000004",
 		ProjectID:           1,
@@ -198,15 +198,15 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 	`)
 
 	// when cleaning up, both commitments should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments_v2 WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
-		DELETE FROM project_commitments_v2 WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 	`)
 
 	// test 3: simulate two commitments with different expiration dates that were merged
@@ -217,7 +217,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	commitment5 := db.ProjectCommitmentV2{
+	commitment5 := db.ProjectCommitment{
 		ID:                  5,
 		UUID:                "00000000-0000-0000-0000-000000000005",
 		ProjectID:           1,
@@ -232,7 +232,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreationContextJSON: json.RawMessage(buf),
 	}
 	mustT(t, c.DB.Insert(&commitment5))
-	commitment6 := db.ProjectCommitmentV2{
+	commitment6 := db.ProjectCommitment{
 		ID:                  6,
 		UUID:                "00000000-0000-0000-0000-000000000006",
 		ProjectID:           1,
@@ -254,7 +254,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitmentV2{
+	mustT(t, c.DB.Insert(&db.ProjectCommitment{
 		ID:                  7,
 		UUID:                "00000000-0000-0000-0000-000000000007",
 		ProjectID:           1,
@@ -273,14 +273,14 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// the superseded commitments should not be touched
 	s.Clock.StepBy(5 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments_v2 SET state = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;`)
 
 	// when cleaning up, all commitments related to the merge should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments_v2 WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
-		DELETE FROM project_commitments_v2 WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
-		DELETE FROM project_commitments_v2 WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
 	`)
 }
