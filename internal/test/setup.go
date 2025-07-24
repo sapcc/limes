@@ -105,6 +105,8 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
 // records for project_services, project_resources and project_az_resources.
+// It relies on the cluster_services, cluster_resources and cluster_az_resources
+// to exist! (e.g. use WithPersistedServiceInfo)
 func WithEmptyRecordsAsNeeded(params *setupParams) {
 	params.WithEmptyRecordsAsNeeded = true
 }
@@ -130,9 +132,9 @@ type Setup struct {
 	Handler http.Handler
 	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
 	Projects           []*db.Project
-	ProjectServices    []*db.ProjectService
-	ProjectResources   []*db.ProjectResource
-	ProjectAZResources []*db.ProjectAZResource
+	ProjectServices    []*db.ProjectServiceV2
+	ProjectResources   []*db.ProjectResourceV2
+	ProjectAZResources []*db.ProjectAZResourceV2
 }
 
 func GenerateDummyToken() string {
@@ -178,7 +180,13 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
 	for serviceType, serviceInfo := range params.PersistedServiceInfo {
-		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Clock.Now(), s.DB)
+		// handle non-configured services for creation of "orphaned" db entries
+		liquidConfig, exists := s.Cluster.Config.Liquids[serviceType]
+		var rateLimits core.ServiceRateLimitConfiguration
+		if exists {
+			rateLimits = liquidConfig.RateLimits
+		}
+		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -246,57 +254,67 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	// fills all ProjectService entries (for each pair of project and service type),
 	// all ProjectResource entries (for each pair of service and resource name),
 	// all ProjectAZResource entries (for each pair of resource and AZ according to topology)
-	if params.WithEmptyRecordsAsNeeded {
-		if len(params.Projects) == 0 {
-			t.Fatal("can not create empty DB records since there are no projects")
-		}
+	if !params.WithEmptyRecordsAsNeeded {
+		return s
+	}
+	if len(params.Projects) == 0 {
+		t.Fatal("can not create empty DB records since there are no projects")
+	}
+	for serviceType := range s.Cluster.Config.Liquids {
+		var clusterService *db.ClusterService
+		mustDo(t, s.DB.SelectOne(&clusterService, `SELECT * FROM cluster_services WHERE type = $1`, serviceType))
 		for _, dbProject := range s.Projects {
-			for serviceType := range s.Cluster.Config.Liquids {
-				t0 := time.Unix(0, 0).UTC()
-				dbProjectService := &db.ProjectService{
-					ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
-					ProjectID: dbProject.ID,
-					Type:      serviceType,
-					ScrapedAt: Some(t0),
-					CheckedAt: Some(t0),
+			t0 := time.Unix(0, 0).UTC()
+			dbProjectService := &db.ProjectServiceV2{
+				ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
+				ProjectID: dbProject.ID,
+				ServiceID: clusterService.ID,
+				ScrapedAt: Some(t0),
+				CheckedAt: Some(t0),
+			}
+			mustDo(t, s.DB.Insert(dbProjectService))
+			s.ProjectServices = append(s.ProjectServices, dbProjectService)
+		}
+		resInfos := core.InfoForService(serviceInfos, serviceType).Resources
+		for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
+			var clusterResource *db.ClusterResource
+			mustDo(t, s.DB.SelectOne(&clusterResource, `SELECT * FROM cluster_resources WHERE name = $1 AND service_id = $2`, resName, clusterService.ID))
+			for _, dbProject := range s.Projects {
+				dbProjectResource := &db.ProjectResourceV2{
+					ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
+					ProjectID:    dbProject.ID,
+					ResourceID:   clusterResource.ID,
+					Quota:        Some[uint64](0),
+					BackendQuota: Some[int64](0),
 				}
-				mustDo(t, s.DB.Insert(dbProjectService))
-				s.ProjectServices = append(s.ProjectServices, dbProjectService)
-				resInfos := core.InfoForService(serviceInfos, serviceType).Resources
-				for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
-					dbProjectResource := &db.ProjectResource{
-						ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
-						ServiceID:    dbProjectService.ID,
-						Name:         resName,
-						Quota:        Some[uint64](0),
-						BackendQuota: Some[int64](0),
+				mustDo(t, s.DB.Insert(dbProjectResource))
+				s.ProjectResources = append(s.ProjectResources, dbProjectResource)
+			}
+			var allAZs []liquid.AvailabilityZone
+			if clusterResource.Topology == liquid.FlatTopology {
+				allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
+			} else {
+				allAZs = s.Cluster.Config.AvailabilityZones
+			}
+			for _, az := range allAZs {
+				var clusterAZResource *db.ClusterAZResource
+				mustDo(t, s.DB.SelectOne(&clusterAZResource, `SELECT * FROM cluster_az_resources WHERE az = $1 AND resource_id = $2`, az, clusterResource.ID))
+				for _, dbProject := range s.Projects {
+					dbProjectAZResource := &db.ProjectAZResourceV2{
+						ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
+						ProjectID:        dbProject.ID,
+						AZResourceID:     clusterAZResource.ID,
+						Quota:            Some[uint64](0),
+						Usage:            0,
+						PhysicalUsage:    None[uint64](),
+						SubresourcesJSON: "{}",
 					}
-					mustDo(t, s.DB.Insert(dbProjectResource))
-					s.ProjectResources = append(s.ProjectResources, dbProjectResource)
-					var allAZs []liquid.AvailabilityZone
-					if resInfos[resName].Topology == liquid.FlatTopology {
-						allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
-					} else {
-						allAZs = s.Cluster.Config.AvailabilityZones
-					}
-					for _, az := range allAZs {
-						dbProjectAZResource := &db.ProjectAZResource{
-							ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
-							ResourceID:       dbProjectResource.ID,
-							AvailabilityZone: az,
-							Quota:            Some[uint64](0),
-							Usage:            0,
-							PhysicalUsage:    None[uint64](),
-							SubresourcesJSON: "{}",
-						}
-						mustDo(t, s.DB.Insert(dbProjectAZResource))
-						s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
-					}
+					mustDo(t, s.DB.Insert(dbProjectAZResource))
+					s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
 				}
 			}
 		}
 	}
-
 	return s
 }
 
@@ -309,11 +327,11 @@ func mustDo(t *testing.T, err error) {
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
+		easypg.ClearTables("project_commitments_v2", "cluster_services", "domains"),
 		easypg.ResetPrimaryKeys(
 			"cluster_services", "cluster_resources", "cluster_rates", "cluster_az_resources",
-			"domains", "projects", "project_commitments", "project_mail_notifications",
-			"project_services", "project_resources", "project_az_resources",
+			"domains", "projects", "project_commitments_v2", "project_mail_notifications",
+			"project_services_v2", "project_resources_v2", "project_az_resources_v2", "project_rates_v2",
 		),
 	)
 	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))

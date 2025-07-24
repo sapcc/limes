@@ -133,7 +133,8 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared'.
-	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+	_, err := s.DB.Exec(`UPDATE project_services_v2 ps SET scrape_error_message = $1
+		FROM cluster_services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape this specific unshared service",
 		1, "unshared",
 	)
@@ -143,7 +144,8 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 
 	// Add the same scrape error to all services with type 'shared'. This will ensure that
 	// they get grouped under a dummy project.
-	_, err = s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE type = $2`,
+	_, err = s.DB.Exec(`UPDATE project_services_v2 ps SET scrape_error_message = $1
+		FROM cluster_services cs WHERE ps.service_id = cs.id AND cs.type = $2`,
 		"could not scrape shared service",
 		"shared",
 	)
@@ -176,7 +178,8 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared' that has rate data.
-	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+	_, err := s.DB.Exec(`UPDATE project_services_v2 ps SET scrape_error_message = $1
+		FROM cluster_services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape rate data for this specific unshared service",
 		1, "unshared",
 	)
@@ -186,7 +189,8 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 
 	// Add the same scrape error to both services with type 'shared' that have rate data.
 	// This will ensure that they get grouped under a dummy project.
-	_, err = s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE (id = $2 OR id = $3) AND type = $4`,
+	_, err = s.DB.Exec(`UPDATE project_services_v2 ps SET scrape_error_message = $1
+		FROM cluster_services cs WHERE ps.service_id = cs.id AND (ps.id = $2 OR ps.id = $3) AND type = $4`,
 		"could not scrape rate data for shared service",
 		2, 4, "shared",
 	)
@@ -412,7 +416,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// paris returns lowest max_quota setting
-	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=17")
+	_, dberr := s.DB.Exec("UPDATE project_resources_v2 SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=12")
 	if dberr != nil {
 		t.Fatal(dberr)
 	}
@@ -542,7 +546,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	// DiscoverProjects sets `stale` on new project_services;
 	// clear this to avoid confusion in the next test
-	_, err := s.DB.Exec(`UPDATE project_services SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
+	_, err := s.DB.Exec(`UPDATE project_services_v2 SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,14 +608,17 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 	var (
-		actualLimit  uint64
-		actualWindow limesrates.Window
+		actualLimit   uint64
+		actualWindow  limesrates.Window
+		projectRateId db.ProjectRateID
 	)
 	err = s.DB.QueryRow(`
-		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
-		JOIN project_services ps ON ps.id = pra.service_id
-		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = $1 AND ps.type = $2 AND pra.name = $3`,
+		SELECT pra.rate_limit, pra.window_ns
+		FROM project_rates_v2 pra
+		JOIN cluster_rates cra ON cra.id = pra.rate_id
+		JOIN cluster_services cs ON cs.id = cra.service_id
+		JOIN projects p ON p.id = pra.project_id
+		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`,
 		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
 	// There shouldn't be anything in the DB.
 	if err.Error() != "sql: no rows in result set" {
@@ -622,35 +629,40 @@ func Test_ProjectOperations(t *testing.T) {
 	rateName := "service/shared/objects:read/list"
 	expectedLimit := uint64(100)
 	expectedWindow := 1 * limesrates.WindowSeconds
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		Body: assert.JSONObject{
+	makeRequest := func(name string, limit uint64, window limesrates.Window) assert.JSONObject {
+		return assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
 					{
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"name":   rateName,
-								"limit":  expectedLimit,
-								"window": expectedWindow.String(),
+								"name":   name,
+								"limit":  limit,
+								"window": window.String(),
 							},
 						},
 					},
 				},
 			},
-		},
+		}
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
 	}.Check(t, s.Handler)
 
-	err = s.DB.QueryRow(`
-		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
-		JOIN project_services ps ON ps.id = pra.service_id
-		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = $1 AND ps.type = $2 AND pra.name = $3`,
-		"berlin", "shared", rateName).Scan(&actualLimit, &actualWindow)
+	getProjectRateQuery := `
+		SELECT pra.id, pra.rate_limit, pra.window_ns
+		FROM project_rates_v2 pra
+		JOIN cluster_rates cra ON cra.id = pra.rate_id
+		JOIN cluster_services cs ON cs.id = cra.service_id
+		JOIN projects p ON p.id = pra.project_id
+		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`
+	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,16 +678,43 @@ func Test_ProjectOperations(t *testing.T) {
 			rateName, expectedWindow, actualWindow,
 		)
 	}
+
+	// now we check that an update of the rate limit does not create a new row
+	oldProjectRateId := projectRateId
+	expectedLimit = uint64(200)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
+	}.Check(t, s.Handler)
+	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldProjectRateId != projectRateId {
+		t.Errorf(
+			"for rate %s, a new ID was created instead of updating the existing one",
+			rateName,
+		)
+	}
+	if actualLimit != expectedLimit {
+		t.Errorf(
+			"rate limit %s was not updated in database: expected limit %d, but got %d",
+			rateName, expectedLimit, actualLimit,
+		)
+	}
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) {
 	t.Helper()
 
 	queryStr := sqlext.SimplifyWhitespace(`
-		SELECT p.name, ps.type
-		 FROM projects p JOIN project_services ps ON ps.project_id = p.id
+		SELECT p.name, cs.type
+		 FROM projects p JOIN project_services_v2 ps ON ps.project_id = p.id
+		 JOIN cluster_services cs on ps.service_id = cs.id
 		 WHERE ps.stale
-		 ORDER BY p.name, ps.type
+		 ORDER BY p.name, cs.type
 	`)
 	var actualPairs []string
 
@@ -703,7 +742,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 func Test_EmptyProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
-	_, err := s.DB.Exec(`DELETE FROM project_commitments`)
+	_, err := s.DB.Exec(`DELETE FROM project_commitments_v2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -788,6 +827,21 @@ func Test_LargeProjectList(t *testing.T) {
 	}
 	var expectedProjectsJSON []assert.JSONObject
 
+	clusterServiceIDByType := map[db.ServiceType]db.ClusterServiceID{
+		"unshared": 1,
+		"shared":   2,
+	}
+	clusterResourceIDByNameByType := map[db.ServiceType]map[liquid.ResourceName]db.ClusterResourceID{
+		"unshared": {
+			"things":   1,
+			"capacity": 2,
+		},
+		"shared": {
+			"things":   3,
+			"capacity": 4,
+		},
+	}
+
 	// set up a large number of projects to test the behavior of the project list endpoint for large lists
 	projectCount := 100
 	for idx := 1; idx <= projectCount; idx++ {
@@ -811,9 +865,9 @@ func Test_LargeProjectList(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, serviceType := range []db.ServiceType{"shared", "unshared"} {
-			service := db.ProjectService{
+			service := db.ProjectServiceV2{
 				ProjectID: project.ID,
-				Type:      serviceType,
+				ServiceID: clusterServiceIDByType[serviceType],
 				ScrapedAt: Some(scrapedAt),
 				CheckedAt: Some(scrapedAt),
 			}
@@ -822,16 +876,17 @@ func Test_LargeProjectList(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, resourceName := range []liquid.ResourceName{"things", "capacity"} {
-				resource := db.ProjectResource{
-					ServiceID:    service.ID,
-					Name:         resourceName,
+				resource := db.ProjectResourceV2{
+					ProjectID:    project.ID,
+					ResourceID:   clusterResourceIDByNameByType[serviceType][resourceName],
 					Quota:        Some[uint64](0),
 					BackendQuota: Some[int64](0),
 				}
-				azResource := db.ProjectAZResource{
-					// ResourceID is filled in below once we have it
-					AvailabilityZone: limes.AvailabilityZoneAny,
-					Usage:            0,
+				azResource := db.ProjectAZResourceV2{
+					ProjectID: project.ID,
+					//
+					AZResourceID: db.ClusterAZResourceID(clusterResourceIDByNameByType[serviceType][resourceName]),
+					Usage:        0,
 				}
 				if serviceType == "unshared" && resourceName == "things" {
 					resource.Quota = Some(uint64(idx))
@@ -842,7 +897,6 @@ func Test_LargeProjectList(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				azResource.ResourceID = resource.ID
 				err = s.DB.Insert(&azResource)
 				if err != nil {
 					t.Fatal(err)
@@ -890,7 +944,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 3 AND service_id = 2 AND name = 'things';
+			UPDATE project_resources_v2 SET max_quota_from_outside_admin = %d WHERE id = 3 AND project_id = 1 AND resource_id = 3;
 		`, value)
 	}
 
@@ -905,7 +959,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 3 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources_v2 SET max_quota_from_outside_admin = NULL WHERE id = 3 AND project_id = 1 AND resource_id = 3;
 	`)
 
 	// happy case: set value with unit conversion
@@ -916,7 +970,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources_v2 SET max_quota_from_outside_admin = 10240 WHERE id = 4 AND project_id = 1 AND resource_id = 4;
 	`)
 
 	// happy case: set max quota with project permissions
@@ -928,7 +982,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 3 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources_v2 SET max_quota_from_local_admin = %d WHERE id = 3 AND project_id = 1 AND resource_id = 3;
 	`, 500)
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
 
@@ -962,7 +1016,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE id = 3")
+	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE id = 4")
 	if err != nil {
 		t.Error(err)
 	}
@@ -986,7 +1040,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}'  WHERE id=7 AND resource_id=4 AND az='az-one'`)
+	_, err := s.DB.Exec(`UPDATE project_az_resources_v2 SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}' WHERE id=7`)
 	if err != nil {
 		t.Fatal(err)
 	}

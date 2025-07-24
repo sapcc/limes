@@ -70,8 +70,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET override_quota_from_config = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources_v2 SET override_quota_from_config = 10 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources_v2 SET override_quota_from_config = 1000 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`)
 
 	// test changing and removing quota overrides
@@ -84,9 +84,9 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET override_quota_from_config = 15 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 2 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 3 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources_v2 SET override_quota_from_config = 15 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources_v2 SET override_quota_from_config = NULL WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		UPDATE project_resources_v2 SET override_quota_from_config = 20 WHERE id = 3 AND project_id = 2 AND resource_id = 1;
 	`)
 
 	// test quota overrides referring to nonexistent domains and projects (should be ignored without error)

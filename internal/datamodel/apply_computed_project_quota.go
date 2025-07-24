@@ -26,26 +26,40 @@ import (
 // since they represent individual steps of ApplyComputedProjectQuota.
 
 var (
+	acpqGetClusterResourceIDQuery = sqlext.SimplifyWhitespace(`
+		SELECT cr.id
+		  FROM cluster_services cs
+		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		 WHERE cs.type = $1 AND cr.name = $2
+	`)
+
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, pr.forbidden, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.override_quota_from_config
-		  FROM project_services ps
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.forbidden IS NOT NULL
-		                                       OR pr.max_quota_from_outside_admin IS NOT NULL
-		                                       OR pr.max_quota_from_local_admin IS NOT NULL
-		                                       OR pr.override_quota_from_config IS NOT NULL)
+		SELECT project_id, forbidden, max_quota_from_outside_admin, max_quota_from_local_admin, override_quota_from_config
+		  FROM project_resources_v2
+		 WHERE resource_id = $1 AND (forbidden IS NOT NULL
+		                          OR max_quota_from_outside_admin IS NOT NULL
+		                          OR max_quota_from_local_admin IS NOT NULL
+		                          OR override_quota_from_config IS NOT NULL)
 	`)
 
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
+		UPDATE project_az_resources_v2 pazr
+		SET quota = $1
+		FROM cluster_az_resources cazr
+		WHERE pazr.az_resource_id = cazr.id AND cazr.az = $2 AND pazr.project_id = $3 AND cazr.resource_id = $4
+		AND pazr.quota IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2 RETURNING service_id
+		UPDATE project_resources_v2 SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND project_id = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services SET quota_desynced_at = $1 WHERE id = $2 AND quota_desynced_at IS NULL
+		UPDATE project_services_v2 ps
+		SET quota_desynced_at = $1
+		FROM cluster_services cs
+		WHERE ps.service_id = cs.id AND ps.project_id = $2 AND cs.type = $3
+		AND quota_desynced_at IS NULL
 	`)
 )
 
@@ -101,22 +115,29 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// collect required data
+	// to avoid excessive joins, convert serviceType+resourceName into a ClusterResourceID only once
+	var clusterResourceID db.ClusterResourceID
+	err = tx.QueryRow(acpqGetClusterResourceIDQuery, serviceType, resourceName).Scan(&clusterResourceID)
+	if err != nil {
+		return fmt.Errorf("could not find cluster_resources.id: %w", err)
+	}
+
+	// collect required data (TODO: pass `clusterResourceID` into here to simplify queries over there too?)
 	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx)
 	if err != nil {
 		return err
 	}
 
-	constraints := make(map[db.ProjectResourceID]projectLocalQuotaConstraints)
-	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
+	constraints := make(map[db.ProjectID]projectLocalQuotaConstraints)
+	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{clusterResourceID}, func(rows *sql.Rows) error {
 		var (
-			resourceID               db.ProjectResourceID
+			projectID                db.ProjectID
 			forbidden                bool
 			maxQuotaFromOutsideAdmin Option[uint64]
 			maxQuotaFromLocalAdmin   Option[uint64]
 			overrideQuotaFromConfig  Option[uint64]
 		)
-		err := rows.Scan(&resourceID, &forbidden, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
+		err := rows.Scan(&projectID, &forbidden, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
@@ -130,7 +151,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		c.AddMinQuota(overrideQuotaFromConfig)
 		c.AddMaxQuota(overrideQuotaFromConfig)
 
-		constraints[resourceID] = c
+		constraints[projectID] = c
 		return nil
 	})
 	if err != nil {
@@ -154,22 +175,22 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	// write new AZ quotas to database
-	servicesWithUpdatedQuota := make(map[db.ProjectServiceID]struct{})
+	projectsWithUpdatedQuota := make(map[db.ProjectID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
-			for resourceID, projectTarget := range azTarget {
-				_, err := stmt.Exec(projectTarget.Allocated, az, resourceID)
+			for projectID, projectTarget := range azTarget {
+				result, err := stmt.Exec(projectTarget.Allocated, az, projectID, clusterResourceID)
 				if err != nil {
-					return fmt.Errorf("in AZ %s in project resource %d: %w", az, resourceID, err)
+					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
-				// AZSeparatedTopology does not update resource quota. Therefore the service desync needs to be queued right here.
-				if resourceInfo.Topology == liquid.AZSeparatedTopology {
-					var serviceID db.ProjectServiceID
-					err := tx.SelectOne(&serviceID, `SELECT service_id FROM project_resources WHERE id = $1`, resourceID)
-					if err != nil {
-						return fmt.Errorf("in project resource %d: %w", resourceID, err)
-					}
-					servicesWithUpdatedQuota[serviceID] = struct{}{}
+				rowsAffected, err := result.RowsAffected()
+				if err != nil {
+					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
+				}
+
+				// AZSeparatedTopology does not update resource quota. Therefore the desync needs to be queued right here.
+				if rowsAffected > 0 && resourceInfo.Topology == liquid.AZSeparatedTopology {
+					projectsWithUpdatedQuota[projectID] = struct{}{}
 				}
 			}
 		}
@@ -180,15 +201,15 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	// write overall project quotas to database
-	quotasByResourceID := make(map[db.ProjectResourceID]uint64)
+	quotasByProjectID := make(map[db.ProjectID]uint64)
 	for _, azTarget := range target {
-		for resourceID, projectTarget := range azTarget {
-			quotasByResourceID[resourceID] += projectTarget.Allocated
+		for projectID, projectTarget := range azTarget {
+			quotasByProjectID[projectID] += projectTarget.Allocated
 		}
 	}
 
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
-		for resourceID, quota := range quotasByResourceID {
+		for projectID, quota := range quotasByProjectID {
 			// Resources with AZSeparatedTopology will report `backendQuota == nil` during scrape.
 			// If we set anything other than nil here, this would lead to unnecessary quota syncs with the backend,
 			// because backendQuota != quota.
@@ -197,16 +218,17 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				quotaToWrite = nil
 			}
 
-			var serviceID db.ProjectServiceID
-			err := stmt.QueryRow(quotaToWrite, resourceID).Scan(&serviceID)
-			if err == sql.ErrNoRows {
-				// if quota was not actually changed, do not remember this project service as being stale
-				continue
-			}
+			result, err := stmt.Exec(quotaToWrite, projectID, clusterResourceID)
 			if err != nil {
-				return fmt.Errorf("in project resource %d: %w", resourceID, err)
+				return fmt.Errorf("in project %d: %w", projectID, err)
 			}
-			servicesWithUpdatedQuota[serviceID] = struct{}{}
+			rowsAffected, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("in project %d: %w", projectID, err)
+			}
+			if rowsAffected > 0 {
+				projectsWithUpdatedQuota[projectID] = struct{}{}
+			}
 		}
 		return nil
 	})
@@ -216,10 +238,10 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 
 	// mark project services with changed quota for SyncQuotaToBackendJob
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectServicesQuery, func(stmt *sql.Stmt) error {
-		for serviceID := range servicesWithUpdatedQuota {
-			_, err := stmt.Exec(now, serviceID)
+		for projectID := range projectsWithUpdatedQuota {
+			_, err := stmt.Exec(now, projectID, serviceType)
 			if err != nil {
-				return fmt.Errorf("in project service %d: %w", serviceID, err)
+				return fmt.Errorf("in project %d: %w", projectID, err)
 			}
 		}
 		return nil
@@ -248,7 +270,7 @@ func (t acpqProjectAZTarget) Requested() uint64 {
 }
 
 // Calculation space for all project AZ resources in a single AZ.
-type acpqAZTarget map[db.ProjectResourceID]*acpqProjectAZTarget
+type acpqAZTarget map[db.ProjectID]*acpqProjectAZTarget
 
 // SumAllocated returns how much is allocated across all projects.
 func (t acpqAZTarget) SumAllocated() (result uint64) {
@@ -259,18 +281,18 @@ func (t acpqAZTarget) SumAllocated() (result uint64) {
 }
 
 // Requested returns how much is desired, but not allocated yet, for each project.
-func (t acpqAZTarget) Requested() map[db.ProjectResourceID]uint64 {
-	result := make(map[db.ProjectResourceID]uint64, len(t))
-	for resourceID, pt := range t {
-		result[resourceID] = pt.Requested()
+func (t acpqAZTarget) Requested() map[db.ProjectID]uint64 {
+	result := make(map[db.ProjectID]uint64, len(t))
+	for projectID, pt := range t {
+		result[projectID] = pt.Requested()
 	}
 	return result
 }
 
 // AddGranted extends the allocations in this map by the granted values.
-func (t acpqAZTarget) AddGranted(granted map[db.ProjectResourceID]uint64) {
-	for resourceID, pt := range t {
-		pt.Allocated += granted[resourceID]
+func (t acpqAZTarget) AddGranted(granted map[db.ProjectID]uint64) {
+	for projectID, pt := range t {
+		pt.Allocated += granted[projectID]
 	}
 }
 
@@ -282,17 +304,17 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, resInfo liquid.ResourceInfo) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
-	// enumerate which project resource IDs and AZs are relevant
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, resInfo liquid.ResourceInfo) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
+	// enumerate which project IDs and AZs are relevant
 	// ("Relevant" AZs are all that have allocation stats available.)
-	isProjectResourceID := make(map[db.ProjectResourceID]struct{})
+	isProjectID := make(map[db.ProjectID]struct{})
 	isRelevantAZ := make(map[limes.AvailabilityZone]struct{}, len(stats))
 	var allAZsInOrder []limes.AvailabilityZone
 	for az, azStats := range stats {
 		isRelevantAZ[az] = struct{}{}
 		allAZsInOrder = append(allAZsInOrder, az)
-		for resourceID := range azStats.ProjectStats {
-			isProjectResourceID[resourceID] = struct{}{}
+		for projectID := range azStats.ProjectStats {
+			isProjectID[projectID] = struct{}{}
 		}
 	}
 	slices.Sort(allAZsInOrder)
@@ -329,10 +351,10 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	// few steps of the algorithm itself that use the same looping pattern.
 	target = make(acpqGlobalTarget, len(stats))
 	for az := range isRelevantAZ {
-		target[az] = make(acpqAZTarget, len(isProjectResourceID))
-		for resourceID := range isProjectResourceID {
-			projectAZStats := stats[az].ProjectStats[resourceID]
-			target[az][resourceID] = &acpqProjectAZTarget{
+		target[az] = make(acpqAZTarget, len(isProjectID))
+		for projectID := range isProjectID {
+			projectAZStats := stats[az].ProjectStats[projectID]
+			target[az][projectID] = &acpqProjectAZTarget{
 				// phase 1: always grant hard minimum quota
 				Allocated: max(projectAZStats.Committed, projectAZStats.Usage),
 				// phase 2: try granting soft minimum quota
@@ -340,13 +362,13 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			}
 		}
 	}
-	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectResourceID, isAZAware)
+	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
 	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 
 	// phase 3: try granting desired_quota
 	for az := range isRelevantAZ {
-		for resourceID := range isProjectResourceID {
-			projectAZStats := stats[az].ProjectStats[resourceID]
+		for projectID := range isProjectID {
+			projectAZStats := stats[az].ProjectStats[projectID]
 			growthBaseline := max(projectAZStats.Committed, projectAZStats.MinHistoricalUsage)
 			desiredQuota := uint64(float64(growthBaseline) * cfg.GrowthMultiplier)
 			if cfg.GrowthMultiplier > 1.0 && growthBaseline > 0 {
@@ -355,36 +377,36 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				growthMinimum := max(cfg.GrowthMinimum, 1)
 				desiredQuota = max(desiredQuota, growthBaseline+growthMinimum)
 			}
-			target[az][resourceID].Desired = desiredQuota
+			target[az][projectID].Desired = desiredQuota
 		}
 	}
-	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectResourceID, isAZAware)
+	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
 	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 
 	// phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
 	if cfg.ProjectBaseQuota > 0 {
-		for resourceID := range isProjectResourceID {
+		for projectID := range isProjectID {
 			sumOfLocalizedQuotas := uint64(0)
 			for az := range isRelevantAZ {
 				if az != limes.AvailabilityZoneAny {
-					sumOfLocalizedQuotas += target[az][resourceID].Allocated
+					sumOfLocalizedQuotas += target[az][projectID].Allocated
 				}
 			}
 			if sumOfLocalizedQuotas < cfg.ProjectBaseQuota {
 				// AZ separated topology receives the basequota to all available AZs
 				if resInfo.Topology == liquid.AZSeparatedTopology {
 					for az := range isRelevantAZ {
-						target[az][resourceID].Desired = cfg.ProjectBaseQuota
+						target[az][projectID].Desired = cfg.ProjectBaseQuota
 					}
 				} else {
-					target[limes.AvailabilityZoneAny][resourceID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
+					target[limes.AvailabilityZoneAny][projectID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
 				}
 			}
 		}
 		if resInfo.Topology != liquid.AZSeparatedTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
-		target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectResourceID, isAZAware)
+		target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
 		target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 	}
 
@@ -393,14 +415,14 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 // After increasing Desired, but before increasing Allocated, this decreases
 // Desired in order to fit into project-local quota constraints.
-func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZone]clusterAZAllocationStats, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectResourceID map[db.ProjectResourceID]struct{}, isAZAware bool) {
+func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZone]clusterAZAllocationStats, constraints map[db.ProjectID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectID map[db.ProjectID]struct{}, isAZAware bool) {
 	// Quota should not be assgined to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
 	resourceAZs := allAZs
 	if isAZAware {
 		resourceAZs = slices.Clone(allAZs)
 		resourceAZs = slices.DeleteFunc(resourceAZs, func(az limes.AvailabilityZone) bool { return az == limes.AvailabilityZoneAny })
 	}
-	for resourceID, c := range constraints {
+	for projectID, c := range constraints {
 		// raise Allocated as necessary to fulfil minimum quota
 		if minQuota, ok := c.MinQuota.Unpack(); ok && minQuota > 0 {
 			// phase 1: distribute quota proportionally to desire in AZs that have capacity
@@ -409,7 +431,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			totalCapacity := uint64(0)
 			totalDesire := uint64(0)
 			for _, az := range resourceAZs {
-				t := target[az][resourceID]
+				t := target[az][projectID]
 				totalAllocated += t.Allocated
 				totalCapacity += stats[az].Capacity
 				totalDesire += t.Requested()
@@ -419,7 +441,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 				if stats[az].Capacity > 0 {
 					if totalDesire > 0 {
 						// Desire is normalized to avoid uint overflows when dealing with large desire values
-						desireProportion := float64(target[az][resourceID].Requested()) / float64(totalDesire)
+						desireProportion := float64(target[az][projectID].Requested()) / float64(totalDesire)
 						desireScalePerAZ[az] = uint64(math.Ceil(float64(minQuota) * desireProportion))
 					} else {
 						desireScalePerAZ[az] = minQuota
@@ -430,7 +452,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, desireScalePerAZ)
 			for _, az := range resourceAZs {
 				extraAllocated := min(extraAllocatedPerAZ[az], stats[az].Capacity)
-				target[az][resourceID].Allocated += extraAllocated
+				target[az][projectID].Allocated += extraAllocated
 				missingQuota -= extraAllocated
 			}
 
@@ -446,7 +468,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 				}
 				extraAllocatedPerAZ := liquidapi.DistributeFairly(missingQuota, capacityScalePerAZ)
 				for _, az := range resourceAZs {
-					target[az][resourceID].Allocated += extraAllocatedPerAZ[az]
+					target[az][projectID].Allocated += extraAllocatedPerAZ[az]
 				}
 			}
 		}
@@ -457,7 +479,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			totalDesired := uint64(0)
 			extraDesiredPerAZ := make(map[limes.AvailabilityZone]uint64)
 			for _, az := range allAZs {
-				t := target[az][resourceID]
+				t := target[az][projectID]
 				totalAllocated += t.Allocated
 				totalDesired += max(t.Allocated, t.Desired)
 				extraDesiredPerAZ[az] = t.Requested()
@@ -465,7 +487,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			if totalDesired > maxQuota {
 				extraDesiredPerAZ = liquidapi.DistributeFairly(liquidapi.SaturatingSub(maxQuota, totalAllocated), extraDesiredPerAZ)
 				for _, az := range allAZs {
-					t := target[az][resourceID]
+					t := target[az][projectID]
 					t.Desired = t.Allocated + extraDesiredPerAZ[az]
 				}
 			}
