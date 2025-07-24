@@ -180,7 +180,13 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
 	for serviceType, serviceInfo := range params.PersistedServiceInfo {
-		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, s.Cluster.Config.RateBehaviors, s.Clock.Now(), s.DB)
+		// handle non-configured services for creation of "orphaned" db entries
+		liquidConfig, exists := s.Cluster.Config.Liquids[serviceType]
+		var rateLimits core.ServiceRateLimitConfiguration
+		if exists {
+			rateLimits = liquidConfig.RateLimits
+		}
+		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB)
 		if err != nil {
 			t.Fatal(err)
 		}

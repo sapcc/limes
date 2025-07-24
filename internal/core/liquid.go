@@ -37,7 +37,7 @@ type LiquidConnection struct {
 	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]
 	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration]
 	AvailabilityZones               []limes.AvailabilityZone
-	RateBehaviors                   []RateBehavior
+	RateLimits                      ServiceRateLimitConfiguration
 
 	// state
 	liquidServiceInfo      liquid.ServiceInfo
@@ -50,7 +50,7 @@ type LiquidConnection struct {
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, rateBehaviors []RateBehavior, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
 	if lc.LiquidServiceType == "" {
 		lc.LiquidServiceType = "liquid-" + string(serviceType)
 	}
@@ -60,7 +60,7 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, av
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
 		AvailabilityZones:               availabilityZones,
-		RateBehaviors:                   rateBehaviors,
+		RateLimits:                      rateLimits,
 		timeNow:                         timeNow,
 		DB:                              dbm,
 	}
@@ -85,7 +85,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 		return nil
 	}
 
-	_, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateBehaviors, l.timeNow(), l.DB)
+	_, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
 	}
@@ -114,7 +114,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	if infoVersion != newVersion {
 		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
 	}
-	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateBehaviors, l.timeNow(), l.DB)
+	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
 		return srv, err
 	}

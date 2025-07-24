@@ -74,7 +74,7 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 
 	// fill LiquidConnection map
 	for serviceType, l := range config.Liquids {
-		connection := MakeLiquidConnection(l, serviceType, config.AvailabilityZones, config.RateBehaviors, timeNow, dbm)
+		connection := MakeLiquidConnection(l, serviceType, config.AvailabilityZones, l.RateLimits, timeNow, dbm)
 		c.LiquidConnections[serviceType] = &connection
 	}
 	return c, errs
@@ -323,7 +323,7 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 // and cluster_rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateBehaviors []RateBehavior, timeNow time.Time, dbm *gorp.DbMap) (srv db.ClusterService, err error) {
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gorp.DbMap) (srv db.ClusterService, err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -490,10 +490,11 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	wantedRates := slices.Collect(maps.Keys(serviceInfo.Rates))
 	// extend the list of wanted rates with the rates which are configured (they may not be in the serviceInfo.Rates)
-	for _, rateBehavior := range rateBehaviors {
-		if db.ServiceType(rateBehavior.IdentityInV1API.ServiceType) == srv.Type {
-			wantedRates = append(wantedRates, liquid.RateName(rateBehavior.IdentityInV1API.Name))
-		}
+	for _, rateLimit := range rateLimits.Global {
+		wantedRates = append(wantedRates, rateLimit.Name)
+	}
+	for _, rateLimit := range rateLimits.ProjectDefault {
+		wantedRates = append(wantedRates, rateLimit.Name)
 	}
 	slices.Sort(wantedRates)
 	wantedRates = slices.Compact(wantedRates)
