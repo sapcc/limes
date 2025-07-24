@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -263,23 +262,26 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
+	args := []any{project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
+	result, err := tx.SelectInt(`SELECT COUNT(*) FROM project_commitments_v2 WHERE project_id = $1 AND STATE NOT IN ($2, $3)`, args...)
+	if err != nil {
+		return err
+	}
+	if result > 0 {
+		return errors.New("project has commitments which are not superseeded or expired")
+	}
+
 	// it is fine to delete a project that only has superseded and expired commitments on it
 	// (if there are commitments in any other state, the `DELETE FROM projects` below will fail
 	// and rollback the full transaction)
-	_, err = tx.Exec(
-		`DELETE FROM project_commitments_v2 WHERE project_id = $1 AND state IN ($2, $3)`,
-		project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired,
-	)
+	_, err = tx.Exec(`DELETE FROM project_commitments_v2 WHERE project_id = $1 AND state IN ($2, $3)`, args...)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.Delete(project)
-	if err == nil {
-		return tx.Commit()
+	if err != nil {
+		return err
 	}
-	if strings.Contains(err.Error(), `update or delete on table "projects" violates foreign key constraint "project_commitments_v2_project_id_fkey"`) {
-		return errors.New("project has commitments which are not superseeded or expired")
-	}
-	return err
+	return tx.Commit()
 }

@@ -79,13 +79,16 @@ const (
 			unittest:
 				area: testing
 				liquid_service_type: %[1]s
+				# to check how they are merged with the ServiceInfo of the liquids
+				rate_limits: 
+					global:
+						- name: xOtherRate
+							limit:  5000
+							window: 1s
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/capacity, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
-		rate_behavior:
-			# to check how they are merged with the ServiceInfo of the liquids
-			- { rate: unittest/xOtherRate, identity_in_v1_api: unittest/xOtherRate }
 	`
 )
 
@@ -130,7 +133,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
-	// cluster_rate xOtherRate comes from the rate_behavior config
+	// cluster_rate xOtherRate comes from the rate_limits config
 	err := s.DB.Insert(&db.ClusterRate{
 		ServiceID:     1,
 		Name:          "xAnotherRate",
@@ -873,7 +876,7 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
-	// note: cluster_rate "xAnotherRate" is orphaned - it is in the DB but not in the ServiceInfo and rate_behavior, so the update now deletes it (incl. project references)
+	// note: cluster_rate "xAnotherRate" is orphaned - it is in the DB but not in the ServiceInfo and rate_limits, so the update now deletes it (incl. project references)
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
