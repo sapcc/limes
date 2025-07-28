@@ -15,12 +15,13 @@ import (
 )
 
 var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, ps.checked_at, ps.scrape_error_message
+	SELECT d.uuid, d.name, p.uuid, p.name, cs.type, ps.checked_at, ps.scrape_error_message
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
-	  JOIN project_services ps ON ps.project_id = p.id
+	  JOIN project_services_v2 ps ON ps.project_id = p.id
+	  JOIN cluster_services cs ON cs.id = ps.service_id
 	WHERE ps.scrape_error_message != ''
-	ORDER BY d.name, p.name, ps.type, ps.scrape_error_message
+	ORDER BY d.name, p.name, cs.type, ps.scrape_error_message
 `)
 
 type ScrapeError struct {

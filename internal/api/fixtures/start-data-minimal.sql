@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
+CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
 -- two services, one shared, one unshared
 INSERT INTO cluster_services (id, type, liquid_version) VALUES (1, 'unshared', 1);
@@ -10,6 +10,12 @@ INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, h
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (4, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
 
+-- all cluster_resources have the az=any
+
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 2, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 3, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 4, 'any', 0);
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

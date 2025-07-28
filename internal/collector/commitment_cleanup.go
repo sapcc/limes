@@ -38,7 +38,7 @@ func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels
 
 	// step 1: move commitments to state "expired" if expires_at <= NOW()
 	query := fmt.Sprintf(
-		`UPDATE project_commitments SET state = '%s' WHERE state != '%s' AND expires_at <= $1`,
+		`UPDATE project_commitments_v2 SET state = '%s' WHERE state != '%s' AND expires_at <= $1`,
 		db.CommitmentStateExpired, db.CommitmentStateSuperseded)
 	_, err := c.DB.Exec(query, now)
 	if err != nil {
@@ -54,7 +54,7 @@ func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels
 	// potentially help in investigations when customers complain about
 	// commitments expiring unexpectedly.
 	query = sqlext.SimplifyWhitespace(`
-		DELETE FROM project_commitments pc WHERE expires_at + interval '1 month' <= $1
+		DELETE FROM project_commitments_v2 pc WHERE expires_at + interval '1 month' <= $1
 	`)
 	_, err = c.DB.Exec(query, now)
 	if err != nil {

@@ -60,10 +60,11 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
-	SELECT type, MIN(scraped_at), MAX(scraped_at), MIN(scraped_at), MAX(scraped_at)
-	  FROM project_services
-	 WHERE scraped_at IS NOT NULL
-	 GROUP BY type
+	SELECT cs.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
+	  FROM project_services_v2 ps
+	  JOIN cluster_services cs ON cs.id = ps.service_id
+	 WHERE ps.scraped_at IS NOT NULL
+	 GROUP BY cs.type
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -246,10 +247,11 @@ func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, ps.type, ps.serialized_metrics
-	  FROM domains d
+	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, cs.type, ps.serialized_metrics
+	  FROM cluster_services cs
+	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
+	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	 WHERE ps.serialized_metrics != '' AND ps.serialized_metrics != '{}'
 `)
 
@@ -411,70 +413,76 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, ps.type, pr.name, SUM(pr.quota)
-	  FROM domains d
+	SELECT d.name, d.uuid, cs.type, cr.name, SUM(pr.quota)
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	 GROUP BY d.name, d.uuid, ps.type, pr.name
+	  JOIN project_services_v2 ps ON ps.project_id = p.id AND ps.service_id = cs.id
+	  JOIN project_resources_v2 pr ON pr.project_id = p.id AND pr.resource_id = cr.id
+	 GROUP BY d.name, d.uuid, cs.type, cr.name
 `)
 
 var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	WITH project_sums AS (
-	  SELECT resource_id,
-	         SUM(usage) AS usage,
-	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
-	         COUNT(physical_usage) > 0 AS has_physical_usage
-	    FROM project_az_resources
-	   GROUP BY resource_id
+	  SELECT cazr.resource_id, pazr.project_id,
+	         SUM(pazr.usage) AS usage,
+	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
+	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
+	    FROM project_az_resources_v2 pazr
+	    JOIN cluster_az_resources cazr ON cazr.id = pazr.az_resource_id
+	   GROUP BY cazr.resource_id, pazr.project_id
 	),
 	project_commitment_minExpiresAt AS (
-		SELECT p.domain_id, p.id AS project_id, ps.type, pr.name, MIN(expires_at) AS project_commitment_min_expires_at
-		FROM projects p
-		JOIN project_services ps ON ps.project_id = p.id
-		JOIN project_resources pr ON pr.service_id = ps.id
-		JOIN project_az_resources par ON par.resource_id = pr.id
-		JOIN project_commitments pc ON pc.az_resource_id = par.id AND pc.state = 'active'
-		GROUP BY p.domain_id, p.id, ps.type, pr.name
+		SELECT p.domain_id, p.id AS project_id, cs.type, cr.name, MIN(expires_at) AS project_commitment_min_expires_at
+		FROM cluster_services cs
+		JOIN cluster_resources cr ON cr.service_id = cs.id
+		JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
+		JOIN projects p ON p.id = pc.project_id
+		GROUP BY p.domain_id, p.id, cs.type, cr.name
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name,
+	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name,
 	       pr.quota, pr.backend_quota, pr.override_quota_from_config,
 	       psums.usage, psums.physical_usage, psums.has_physical_usage,
 	       pcmea.project_commitment_min_expires_at
-	  FROM domains d
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	  JOIN project_sums psums ON psums.resource_id = pr.id
-	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND ps.type= pcmea.TYPE AND pr.name = pcmea.name
+	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
+	  JOIN project_sums psums ON psums.resource_id = cr.id AND psums.project_id = p.id
+	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND cs.type= pcmea.TYPE AND cr.name = pcmea.name
 `)
 
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums_by_state AS (
-	  SELECT az_resource_id, state, SUM(amount) AS amount
-	    FROM project_commitments
+	  SELECT az_resource_id, project_id, state, SUM(amount) AS amount
+	    FROM project_commitments_v2
 	   WHERE state NOT IN ('superseded', 'expired')
-	   GROUP BY az_resource_id, state
+	   GROUP BY az_resource_id, project_id, state
 	), project_commitment_sums AS (
-	  SELECT az_resource_id, JSON_OBJECT_AGG(state, amount) AS amount_by_state
+	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(state, amount) AS amount_by_state
 	    FROM project_commitment_sums_by_state
-	   GROUP BY az_resource_id
+	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, par.az, par.usage, pcs.amount_by_state
-	  FROM domains d
+	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_state
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	  JOIN project_az_resources par ON par.resource_id = pr.id
-	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
+	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 `)
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pra.name, pra.usage_as_bigint
-	  FROM domains d
+	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cra.name, pra.usage_as_bigint
+	  FROM cluster_services cs
+	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_rates pra ON pra.service_id = ps.id
+	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND pra.project_id = p.id
 	 WHERE pra.usage_as_bigint != ''
 `)
 

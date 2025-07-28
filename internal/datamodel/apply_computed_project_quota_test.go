@@ -20,7 +20,7 @@ import (
 //
 //- This suite only tests the functional core in acpqComputeQuotas().
 //  The full function is covered by the capacity scrape test.
-//- Project resource IDs are chosen in the range 400..499 to make them
+//- Project IDs are chosen in the range 400..499 to make them
 //  visually distinctive from other integer literals.
 
 func TestACPQBasicWithoutAZAwareness(t *testing.T) {
@@ -29,7 +29,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
 			Capacity: 250,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// 401 is a boring base case
 				401: constantUsage(30),
 				// 402 tests how growth multiplier follows historical usage
@@ -68,7 +68,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// 401 and 402 are boring base cases with usage only in one AZ or both AZs, respectively
 				401: constantUsage(20),
 				402: constantUsage(20),
@@ -86,7 +86,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		},
 		"az-two": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(20),
 				402: constantUsage(0),
 				403: {Usage: 20, MinHistoricalUsage: 19, MaxHistoricalUsage: 20},
@@ -99,7 +99,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 				403: {},
@@ -151,7 +151,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// 401 and 402 are boring base cases with usage only in one AZ or both AZs, respectively
 				401: constantUsage(20),
 				402: constantUsage(20),
@@ -169,7 +169,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 		},
 		"az-two": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(20),
 				402: constantUsage(0),
 				403: {Usage: 20, MinHistoricalUsage: 19, MaxHistoricalUsage: 20},
@@ -216,7 +216,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
 			Capacity: 0, // set below
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// explained below
 				401: constantUsage(20),
 				402: {Usage: 50, MinHistoricalUsage: 50, MaxHistoricalUsage: 70},
@@ -312,7 +312,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 100,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(30),
 				402: {Committed: 50, Usage: 10, MinHistoricalUsage: 10, MaxHistoricalUsage: 10},
 				403: constantUsage(5),
@@ -324,7 +324,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 				403: {},
@@ -383,14 +383,14 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 10000, // capacity is not a limiting factor here
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(20),
 				402: constantUsage(20),
 			},
 		},
 		"az-two": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {Usage: 40, MinHistoricalUsage: 20, MaxHistoricalUsage: 40},
 				402: {Usage: 40, MinHistoricalUsage: 40, MaxHistoricalUsage: 60},
 			},
@@ -398,7 +398,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
@@ -432,7 +432,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	// would require waiting for the final result and then adjusting that, but if
 	// we don't block minimum quota early on, we may not be able to fulfil it in
 	// the end if the capacity is tight and not overcommittable.
-	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](200)},
 		402: {MinQuota: Some[uint64](80)},
 	}
@@ -452,7 +452,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
-	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MaxQuota: Some[uint64](50)},
 		402: {MaxQuota: Some[uint64](70)},
 	}
@@ -472,7 +472,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MaxQuota constraints that constrain the base quota
-	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MaxQuota: Some[uint64](90)},
 		402: {MaxQuota: Some[uint64](90)},
 	}
@@ -497,7 +497,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 15,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// 401-403 have real usage in az-one and az-three
 				401: constantUsage(1),
 				402: constantUsage(0),
@@ -510,7 +510,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 		"az-two": {
 			Capacity:                      0,
 			ObservedNonzeroCapacityBefore: false,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// az-two is completely devoid of both capacity and usage
 				401: constantUsage(0),
 				402: constantUsage(0),
@@ -521,7 +521,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 		},
 		"az-three": {
 			Capacity: 14,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(0),
 				402: withCommitted(1, constantUsage(1)),
 				403: withCommitted(7, constantUsage(7)),
@@ -531,7 +531,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 				403: {},
@@ -597,7 +597,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 	input["az-two"] = clusterAZAllocationStats{
 		Capacity:                      0,
 		ObservedNonzeroCapacityBefore: true,
-		ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+		ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 			401: constantUsage(0),
 			402: constantUsage(0),
 			403: constantUsage(1),
@@ -629,21 +629,21 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 100,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(0),
 				402: constantUsage(0),
 			},
 		},
 		"az-two": {
 			Capacity: 100,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(0),
 				402: constantUsage(0),
 			},
 		},
 		"az-three": {
 			Capacity: 100,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: constantUsage(0),
 				402: constantUsage(0),
 			},
@@ -657,7 +657,7 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 
-	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
 		// all projects set ResourceUsageReport.Forbidden = true
 		401: {MaxQuota: Some[uint64](0)},
 		402: {MaxQuota: Some[uint64](0)},
@@ -687,28 +687,28 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-two": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-three": {
 			Capacity: 10, // only AZ with capacity > 0
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
@@ -718,7 +718,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 		GrowthMultiplier: 1,
 		ProjectBaseQuota: 0,
 	}
-	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](3)},
 		402: {MinQuota: Some[uint64](5)},
 	}
@@ -749,35 +749,35 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-two": {
 			Capacity: 1, // Capacity available here as well
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-three": {
 			Capacity: 10,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 	}
 
-	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](3)},
 		402: {MinQuota: Some[uint64](5)},
 	}
@@ -808,35 +808,35 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-two": {
 			Capacity: 1,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-three": {
 			Capacity: 2,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 	}
 
-	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](3)},
 		402: {MinQuota: Some[uint64](6)},
 	}
@@ -870,28 +870,28 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: val / 2, // Potential overflow due to capacity scaling
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-two": {
 			Capacity: val / 6, // Potential overflow due to capacity scaling
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"az-three": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
@@ -901,7 +901,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		GrowthMultiplier: 1,
 		ProjectBaseQuota: 0,
 	}
-	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](val)},
 	}
 
@@ -927,7 +927,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: val,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// Potential overflow due to desire scaling
 				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 2},
 				402: {},
@@ -935,7 +935,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		},
 		"az-two": {
 			Capacity: val,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// Potential overflow due to desire scaling
 				401: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: val / 6},
 				402: {},
@@ -943,21 +943,21 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		},
 		"az-three": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 		"any": {
 			Capacity: 0,
-			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
 				402: {},
 			},
 		},
 	}
 
-	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
 		401: {MinQuota: Some[uint64](val)},
 	}
 
@@ -995,7 +995,7 @@ func withCommitted(committed uint64, stats projectAZAllocationStats) projectAZAl
 	return stats
 }
 
-func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget, resourceInfo liquid.ResourceInfo) {
+func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, expected acpqGlobalTarget, resourceInfo liquid.ResourceInfo) {
 	t.Helper()
 	actual, _ := acpqComputeQuotas(input, cfg, constraints, resourceInfo)
 	// normalize away any left-over intermediate values

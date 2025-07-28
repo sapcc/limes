@@ -5,16 +5,19 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -204,6 +207,19 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	return result, nil
 }
 
+// When a new project is created, we create project_services entries for all services:
+//   - Immediate scraping of this service (next_scrape_at = NOW()) is required to create
+//     project_resources and project_az_resources entries and make the project fully functional.
+//   - Setting the stale flag prioritizes scraping of this service over the existing
+//     backlog of routine scrapes, even if the backlog is very long.
+//   - The WHERE clause is defense in depth against garbage entries in cluster_services.
+var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
+	INSERT INTO project_services_v2 (project_id, service_id, next_scrape_at, stale)
+	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
+	  FROM cluster_services
+	 WHERE type = ANY($3::TEXT[])
+`)
+
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
 func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject) error {
@@ -215,37 +231,26 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// add record to `projects` table
-	dbProject := &db.Project{
+	dbProject := db.Project{
 		DomainID:   domain.ID,
 		Name:       project.Name,
 		UUID:       project.UUID,
 		ParentUUID: project.ParentUUID,
 	}
-	err = tx.Insert(dbProject)
+	err = tx.Insert(&dbProject)
 	if err != nil {
 		return err
 	}
 
 	// add records to `project_services` table
-	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject, c.MeasureTime())
+	allServiceTypes := slices.Collect(maps.Keys(c.Cluster.Config.Liquids))
+	_, err = tx.Exec(initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
 	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
-
-var deleteCommitmentsInProjectQuery = sqlext.SimplifyWhitespace(`
-	DELETE FROM project_commitments WHERE id IN (
-		SELECT pc.id
-		  FROM projects p
-		  JOIN project_services ps ON ps.project_id = p.id
-		  JOIN project_resources pr ON pr.service_id = ps.id
-		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		 WHERE p.id = $1 AND pc.state IN ($2, $3)
-	)
-`)
 
 // Deletes a project from the DB after it was deleted in Keystone.
 // This requires special care because some constraints are "ON DELETE RESTRICT".
@@ -257,10 +262,19 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
+	args := []any{project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
+	result, err := tx.SelectInt(`SELECT COUNT(*) FROM project_commitments_v2 WHERE project_id = $1 AND STATE NOT IN ($2, $3)`, args...)
+	if err != nil {
+		return err
+	}
+	if result > 0 {
+		return errors.New("project has commitments which are not superseeded or expired")
+	}
+
 	// it is fine to delete a project that only has superseded and expired commitments on it
 	// (if there are commitments in any other state, the `DELETE FROM projects` below will fail
 	// and rollback the full transaction)
-	_, err = tx.Exec(deleteCommitmentsInProjectQuery, project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired)
+	_, err = tx.Exec(`DELETE FROM project_commitments_v2 WHERE project_id = $1 AND state IN ($2, $3)`, args...)
 	if err != nil {
 		return err
 	}
@@ -269,6 +283,5 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	if err != nil {
 		return err
 	}
-
 	return tx.Commit()
 }

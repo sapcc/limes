@@ -87,6 +87,7 @@
             "name": "capacity",
             "unit": "B",
             "quota_distribution_model": "autogrow",
+            "capacity": 0,
             "per_az": {
               "az-one": {
                 "capacity": 0,
@@ -113,6 +114,16 @@
                 "physical_usage": 3
               }
             },
+            "per_availability_zone": [
+              {
+                "name": "az-one",
+                "capacity": 0
+              },
+              {
+                "name": "az-two",
+                "capacity": 0
+              }
+            ],
             "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
