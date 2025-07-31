@@ -15,8 +15,11 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+
+	. "github.com/majewsky/gg/option"
 )
 
 const day = 24 * time.Hour
@@ -141,7 +144,7 @@ const testConvertCommitmentsYAML = `
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
@@ -193,6 +196,28 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "az-one",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								NewStatus: Some(liquid.CommitmentStatusPlanned),
+								Amount:    10,
+								ConfirmBy: Some(s.Clock.Now().Add(14 * day).UTC()),
+								ExpiresAt: s.Clock.Now().Add(14 * day).Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	// create another commitment
 	s.Clock.StepBy(1 * time.Hour)
@@ -227,6 +252,29 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "any",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"things": {
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusPlanned),
+								Amount:    20,
+								ConfirmBy: Some(s.Clock.Now().Add(14 * day).UTC()),
+								ExpiresAt: s.Clock.Now().Add(14 * day).Add(2 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	// GET now returns something
 	assert.HTTPRequest{
@@ -289,6 +337,30 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "any",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"things": {
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus: Some(liquid.CommitmentStatusPlanned),
+								NewStatus: None[liquid.CommitmentStatus](),
+								Amount:    20,
+								ConfirmBy: Some(s.Clock.Now().Add(12 * day).UTC()),
+								ExpiresAt: s.Clock.Now().Add(12 * day).Add(2 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
@@ -330,11 +402,57 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp3},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "any",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"things": {
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(3)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusPlanned),
+								Amount:    30,
+								ConfirmBy: Some(s.Clock.Now().Add(14 * day).UTC()),
+								ExpiresAt: s.Clock.Now().Add(14 * day).Add(2 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "any",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"things": {
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(3)),
+								OldStatus: Some(liquid.CommitmentStatusPlanned),
+								NewStatus: None[liquid.CommitmentStatus](),
+								Amount:    30,
+								ConfirmBy: Some(s.Clock.Now().Add(14 * day).UTC()),
+								ExpiresAt: s.Clock.Now().Add(14 * day).Add(2 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
@@ -363,6 +481,30 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "az-one",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: None[liquid.CommitmentStatus](),
+								Amount:    10,
+								ConfirmBy: Some(s.Clock.Now().Add(11 * day).Add(21 * time.Hour).UTC()),
+								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -372,7 +514,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 }
 
 func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
@@ -406,6 +548,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
+	// no request was done
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -427,6 +571,33 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check that we cannot immediately commit to more capacity than available
+	capacityResourceCommitmentChangeset := liquid.ResourceCommitmentChangeset{
+		TotalConfirmedAfter: maxCommittableCapacity,
+		Commitments: []liquid.Commitment{
+			{
+				NewStatus: Some(liquid.CommitmentStatusConfirmed),
+				Amount:    maxCommittableCapacity,
+				ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+			},
+		},
+	}
+	commitmentChangeRequest := liquid.CommitmentChangeRequest{
+		AZ:          "az-one",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": capacityResourceCommitmentChangeset,
+				},
+			},
+		},
+	}
+	dbResult, err := datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -434,6 +605,19 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+
+	// this won't work because we request too much
+	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity + 1
+	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
+	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
+	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -441,38 +625,87 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// create a commitment for some of that capacity
+	capacityResourceCommitmentChangeset.Commitments[0].Amount = committedCapacity
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = string(test.GenerateDummyCommitmentUUID(1))
+	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
+	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
+	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         request(committedCapacity),
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm can only confirm the remainder of the available capacity, not more
-	remainingCommitableCapacity := maxCommittableCapacity - committedCapacity
+	remainingCommittableCapacity := maxCommittableCapacity - committedCapacity
+	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = ""
+	capacityResourceCommitmentChangeset.TotalConfirmedBefore = committedCapacity
+	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
+	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
+	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
-		Body:         request(remainingCommitableCapacity),
+		Body:         request(remainingCommittableCapacity),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+
+	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity + 1
+	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
+	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
+	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
-		Body:         request(remainingCommitableCapacity + 1),
+		Body:         request(remainingCommittableCapacity + 1),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm ignores expired commitments
-	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
+	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
 		s.Clock.Now(), db.CommitmentStateExpired)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity
+	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
+	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
+	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
+	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -480,6 +713,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// try to create a commitment with a mail notification flag (only possible to set for planned commitments)
 	notificationReq := assert.JSONObject{
@@ -747,7 +981,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 
 func Test_StartCommitmentTransfer(t *testing.T) {
 	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
@@ -795,6 +1029,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
+	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -803,6 +1038,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
@@ -837,6 +1073,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
+	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -845,6 +1082,44 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "az-two",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						TotalConfirmedAfter:  10,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: Some(liquid.CommitmentStatusSuperseded),
+								Amount:    10,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(3)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    9,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(4)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    1,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	// Negative Test, amount = 0.
 	assert.HTTPRequest{
@@ -935,9 +1210,10 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
+// TODO: add a test for behavior of changing a commitment when being in transfer
 func Test_TransferCommitment(t *testing.T) {
 	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
@@ -1047,6 +1323,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
+	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1055,6 +1332,48 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "az-two",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						TotalConfirmedAfter:  0,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: None[liquid.CommitmentStatus](),
+								Amount:    10,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+			"uuid-for-dresden": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 0,
+						TotalConfirmedAfter:  10,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    10,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	// Split and transfer commitment.
 	assert.HTTPRequest{
@@ -1064,6 +1383,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp3},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
+	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1072,6 +1392,48 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+		AZ:          "az-two",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-dresden": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						TotalConfirmedAfter:  1,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: None[liquid.CommitmentStatus](),
+								Amount:    9,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+			"uuid-for-berlin": {
+				ProjectMetadata: None[liquid.ProjectMetadata](),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 0,
+						TotalConfirmedAfter:  9,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus: None[liquid.CommitmentStatus](),
+								NewStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    9,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 
 	var supersededCommitment db.ProjectCommitment
 	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
@@ -1107,7 +1469,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
@@ -1163,7 +1525,6 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-
 	var resp struct {
 		Commitment struct {
 			TransferToken string `json:"transfer_token"`
@@ -1174,6 +1535,51 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// check that the datamodel logic is correct
+	commitmentChangeRequest := liquid.CommitmentChangeRequest{
+		AZ:          "az-one",
+		InfoVersion: 1,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			"uuid-for-berlin": {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    10,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+			"uuid-for-dresden": {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					"capacity": {
+						TotalConfirmedBefore: 10,
+						TotalConfirmedAfter:  20,
+						Commitments: []liquid.Commitment{
+							{
+								UUID:      string(test.GenerateDummyCommitmentUUID(1)),
+								NewStatus: Some(liquid.CommitmentStatusConfirmed),
+								Amount:    10,
+								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).UTC(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	dbResult, err := datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "second", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liquidClientSecond.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
+
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
@@ -1181,6 +1587,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		ExpectBody:   assert.StringData("not enough committable capacity on the receiving side\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, commitmentChangeRequest)
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
@@ -1254,8 +1661,7 @@ func Test_convertCommitmentStateToDisplayForm(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := db.ProjectCommitment{State: tc.state}
-			got := p.convertCommitmentStateToDisplayForm(c)
+			got := p.convertCommitmentStateToDisplayForm(tc.state)
 			if got != tc.expect {
 				t.Errorf("state %q: got %q, want %q", tc.state, got, tc.expect)
 			}

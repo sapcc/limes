@@ -813,4 +813,10 @@ var sqlMigrations = map[string]string{
 		ALTER SEQUENCE project_rates_v2_id_seq RENAME TO project_rates_id_seq;
 		ALTER SEQUENCE project_commitments_v2_id_seq RENAME TO project_commitments_id_seq;
 	`,
+	"061_handles_commitments.down.sql": `
+		ALTER TABLE cluster_resources DROP COLUMN handles_commitments;
+	`,
+	"061_handles_commitments.up.sql": `
+		ALTER TABLE cluster_resources ADD COLUMN handles_commitments BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

@@ -69,6 +69,67 @@ func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourc
 	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
 }
 
+// CanMoveAndCreateCommitments returns whether the requested moves and creations
+// within the liquid.CommitmentChangeRequest can be done from capacity perspective.
+func CanMoveAndCreateCommitments(req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+	var distinctResources = make(map[liquid.ResourceName]struct{})
+	for _, projectCommitmentChangeset := range req.ByProject {
+		for resourceName := range projectCommitmentChangeset.ByResource {
+			distinctResources[resourceName] = struct{}{}
+		}
+	}
+	// internally, we only work with projectIDs, so we have to have a conversion ready
+	projectByUUID, err := db.BuildIndexOfDBResult(dbi, func(project db.Project) liquid.ProjectUUID { return liquid.ProjectUUID(project.UUID) }, `SELECT * FROM projects`)
+	if err != nil {
+		return false, fmt.Errorf("while building project index: %w", err)
+	}
+
+	for resourceName := range distinctResources {
+		additions := map[db.ProjectID]uint64{}
+		subtractions := map[db.ProjectID]uint64{}
+		additionSum := uint64(0)
+		subtractionSum := uint64(0)
+		for projectUUID, projectCommitmentChangeset := range req.ByProject {
+			project, exists := projectByUUID[projectUUID]
+			// defense in depth: technically, the request has been validated before, so this does not happen.
+			if !exists {
+				return false, fmt.Errorf("project %s not found in database", projectUUID)
+			}
+			for _, commitment := range projectCommitmentChangeset.ByResource[resourceName].Commitments {
+				if commitment.NewStatus.IsSome() && commitment.OldStatus.IsNone() {
+					additions[project.ID] += commitment.Amount
+					additionSum += commitment.Amount
+				}
+				if commitment.NewStatus.IsNone() && commitment.OldStatus.IsSome() {
+					subtractions[project.ID] += commitment.Amount
+					subtractionSum += commitment.Amount
+				}
+			}
+		}
+
+		// the request can contain 0 additions
+		if len(additions) == 0 {
+			continue
+		}
+		statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &req.AZ, cluster, dbi)
+		if err != nil {
+			return false, err
+		}
+		stats := statsByAZ[req.AZ]
+
+		behavior := cluster.CommitmentBehaviorForResource(serviceType, resourceName)
+		logg.Debug("checking additions in %s/%s/%s: overall amount %d",
+			serviceType, resourceName, req.AZ, resourceName, additionSum)
+		logg.Debug("checking subtractions in %s/%s/%s: overall amount %d",
+			serviceType, resourceName, req.AZ, resourceName, subtractionSum)
+		result := stats.CanAcceptCommitmentChanges(additions, subtractions, behavior)
+		if !result {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
