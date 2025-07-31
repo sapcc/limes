@@ -155,6 +155,20 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
+// The state in the db can be directly mapped to the liquid.CommitmentStatus.
+// However, the state "active" is named "confirmed" in the API. If the persisted
+// state cannot be mapped to liquid terms, an empty string is returned.
+func (p *v1Provider) convertCommitmentStateToDisplayForm(c db.ProjectCommitment) liquid.CommitmentStatus {
+	var status = liquid.CommitmentStatus(c.State)
+	if c.State == "active" {
+		status = liquid.CommitmentStatusConfirmed
+	}
+	if status.IsValid() {
+		return status
+	}
+	return "" // An empty state will be omitted when json serialized.
+}
+
 func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
@@ -175,6 +189,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken.AsPointer(),
+		Status:           p.convertCommitmentStateToDisplayForm(c),
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
