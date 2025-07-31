@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // Commitment is the API representation of an *existing* commitment as reported by Limes.
@@ -42,6 +43,10 @@ type Commitment struct {
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  *string                  `json:"transfer_token,omitempty"`
+	// The state can be derived from other fields, but is included for convenience.
+	// This way, API consumers won't need to follow up which combination of fields
+	// indicates which state and can use it directly for filtering, sorting, etc.
+	Status liquid.CommitmentStatus `json:"status,omitempty"`
 	// NotifyOnConfirm can only be set if ConfirmBy is filled.
 	// Used to send a mail notification at commitment confirmation.
 	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`

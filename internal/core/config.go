@@ -198,6 +198,11 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	if len(cluster.AvailabilityZones) == 0 {
 		missing("availability_zones[]")
 	}
+	for idx, az := range cluster.AvailabilityZones {
+		if !az.IsReal() {
+			errs.Addf("invalid value for availability_zones[%d]: %q is not an acceptable name for a real AZ", idx, az)
+		}
+	}
 	if len(cluster.Liquids) == 0 {
 		missing("liquids[]")
 	}
