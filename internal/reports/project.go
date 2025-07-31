@@ -32,8 +32,8 @@ var (
 	  FROM cluster_services cs
 	  JOIN cluster_rates cra ON cra.service_id = cs.id
 	  CROSS JOIN projects p
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
-	  JOIN project_rates_v2 pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
+	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
+	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 ORDER BY p.uuid
 `)
@@ -44,10 +44,10 @@ var (
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
-	  JOIN project_services_v2 ps ON ps.service_id = cs.id AND ps.project_id = p.id
-	  JOIN project_resources_v2 pr ON pr.resource_id = cr.id AND pr.project_id = p.id
+	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
+	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
 	  -- no left join, entries will only appear when there is some project level entry
-	  JOIN project_az_resources_v2 pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 ORDER BY p.uuid, cazr.az
 `)
@@ -60,7 +60,7 @@ var (
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr on cr.service_id = cs.id
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-	  JOIN project_commitments_v2 pc ON pc.az_resource_id = cazr.id
+	  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 	 WHERE pc.project_id = $1
 	 GROUP BY cs.type, cr.name, cazr.az, pc.duration
 	`)

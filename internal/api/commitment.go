@@ -39,7 +39,7 @@ import (
 var (
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
-		  FROM project_commitments_v2 pc
+		  FROM project_commitments pc
 		  JOIN cluster_az_resources cazr ON pc.az_resource_id = cazr.id
 		  JOIN cluster_resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
 		  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
@@ -49,7 +49,7 @@ var (
 
 	getClusterAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.id, cs.type, cr.name, cazr.az
-		  FROM project_az_resources_v2 pazr
+		  FROM project_az_resources pazr
 		  JOIN cluster_az_resources cazr on pazr.az_resource_id = cazr.id
 		  JOIN cluster_resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
 		  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
@@ -58,7 +58,7 @@ var (
 
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
-		  FROM project_commitments_v2 pc
+		  FROM project_commitments pc
 		 WHERE pc.id = $1 AND pc.project_id = $2
 	`)
 
@@ -67,7 +67,7 @@ var (
 		  FROM cluster_az_resources cazr
 		  JOIN cluster_resources cr ON cazr.resource_id = cr.id
 		  JOIN cluster_services cs ON cr.service_id = cs.id
-		  JOIN project_resources_v2 pr ON pr.resource_id = cr.id
+		  JOIN project_resources pr ON pr.resource_id = cr.id
 		 WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
 	`)
 
@@ -79,10 +79,10 @@ var (
 		 WHERE cazr.id = $1
 	`)
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
-		SELECT * FROM project_commitments_v2 WHERE id = $1 AND transfer_token = $2
+		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
 	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
-		SELECT * FROM project_commitments_v2 WHERE transfer_token = $1
+		SELECT * FROM project_commitments WHERE transfer_token = $1
 	`)
 )
 
@@ -133,7 +133,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	// enumerate relevant project commitments
 	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(map[string]any{"pc.project_id": dbProject.ID}, len(joinArgs))
-	var dbCommitments []db.ProjectCommitmentV2
+	var dbCommitments []db.ProjectCommitment
 	_, err = p.DB.Select(&dbCommitments, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -155,7 +155,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitmentV2, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
@@ -356,7 +356,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	dbCommitment := db.ProjectCommitmentV2{
+	dbCommitment := db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
 		AZResourceID:        azResourceID,
 		ProjectID:           dbProject.ID,
@@ -438,7 +438,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// display the possibly confirmed commitment to the user
-	err = p.DB.SelectOne(&dbCommitment, `SELECT * FROM project_commitments_v2 WHERE id = $1`, dbCommitment.ID)
+	err = p.DB.SelectOne(&dbCommitment, `SELECT * FROM project_commitments WHERE id = $1`, dbCommitment.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -474,7 +474,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Load commitments
-	dbCommitments := make([]db.ProjectCommitmentV2, len(commitmentIDs))
+	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
 	commitmentUUIDs := make([]db.ProjectCommitmentUUID, len(commitmentIDs))
 	for i, commitmentID := range commitmentIDs {
 		err := p.DB.SelectOne(&dbCommitments[i], findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
@@ -519,7 +519,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create merged template
 	now := p.timeNow()
-	dbMergedCommitment := db.ProjectCommitmentV2{
+	dbMergedCommitment := db.ProjectCommitment{
 		UUID:         p.generateProjectCommitmentUUID(),
 		ProjectID:    dbProject.ID,
 		AZResourceID: azResourceID,
@@ -637,7 +637,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Load commitment
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -693,7 +693,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	dbRenewedCommitment := db.ProjectCommitmentV2{
+	dbRenewedCommitment := db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
 		ProjectID:           dbProject.ID,
 		AZResourceID:        dbCommitment.AZResourceID,
@@ -784,7 +784,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// load commitment
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -843,7 +843,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitmentV2) bool {
+func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
 	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending || commitment.State == db.CommitmentStateActive {
 		var creationContext db.CommitmentWorkflowContext
@@ -900,7 +900,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	// load commitment
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -1017,7 +1017,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitmentV2, amount uint64) (db.ProjectCommitmentV2, error) {
+func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) (db.ProjectCommitment, error) {
 	now := p.timeNow()
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
@@ -1026,9 +1026,9 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitmentV2, a
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
-		return db.ProjectCommitmentV2{}, err
+		return db.ProjectCommitment{}, err
 	}
-	return db.ProjectCommitmentV2{
+	return db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
 		ProjectID:           dbCommitment.ProjectID,
 		AZResourceID:        dbCommitment.AZResourceID,
@@ -1045,7 +1045,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitmentV2, a
 	}, nil
 }
 
-func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitmentV2, azResourceID db.ClusterAZResourceID, amount uint64) (db.ProjectCommitmentV2, error) {
+func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ClusterAZResourceID, amount uint64) (db.ProjectCommitment, error) {
 	now := p.timeNow()
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
@@ -1054,9 +1054,9 @@ func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitmentV
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
-		return db.ProjectCommitmentV2{}, err
+		return db.ProjectCommitment{}, err
 	}
-	return db.ProjectCommitmentV2{
+	return db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
 		ProjectID:           dbCommitment.ProjectID,
 		AZResourceID:        azResourceID,
@@ -1083,7 +1083,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	transferToken := mux.Vars(r)["token"]
 
 	// The token column is a unique key, so we expect only one result.
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found.", http.StatusNotFound)
@@ -1144,7 +1144,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// find commitment by transfer_token
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, commitmentID, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found", http.StatusNotFound)
@@ -1339,7 +1339,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// section: sourceBehavior
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -1574,7 +1574,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var dbCommitment db.ProjectCommitmentV2
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)

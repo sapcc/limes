@@ -214,7 +214,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 //     backlog of routine scrapes, even if the backlog is very long.
 //   - The WHERE clause is defense in depth against garbage entries in cluster_services.
 var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
-	INSERT INTO project_services_v2 (project_id, service_id, next_scrape_at, stale)
+	INSERT INTO project_services (project_id, service_id, next_scrape_at, stale)
 	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
 	  FROM cluster_services
 	 WHERE type = ANY($3::TEXT[])
@@ -263,7 +263,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	args := []any{project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
-	result, err := tx.SelectInt(`SELECT COUNT(*) FROM project_commitments_v2 WHERE project_id = $1 AND STATE NOT IN ($2, $3)`, args...)
+	result, err := tx.SelectInt(`SELECT COUNT(*) FROM project_commitments WHERE project_id = $1 AND STATE NOT IN ($2, $3)`, args...)
 	if err != nil {
 		return err
 	}
@@ -274,7 +274,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	// it is fine to delete a project that only has superseded and expired commitments on it
 	// (if there are commitments in any other state, the `DELETE FROM projects` below will fail
 	// and rollback the full transaction)
-	_, err = tx.Exec(`DELETE FROM project_commitments_v2 WHERE project_id = $1 AND state IN ($2, $3)`, args...)
+	_, err = tx.Exec(`DELETE FROM project_commitments WHERE project_id = $1 AND state IN ($2, $3)`, args...)
 	if err != nil {
 		return err
 	}

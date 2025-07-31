@@ -73,7 +73,7 @@ var (
 	// project_commitments to replace lengthy and time-dependent conditions with
 	// simple checks on the enum value in `state`.
 	updateProjectCommitmentStatesForResourceQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments_v2
+		UPDATE project_commitments
 		   SET state = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
 		                    WHEN expires_at <= $3          THEN 'expired'
 		                    WHEN confirm_by > $3           THEN 'planned'

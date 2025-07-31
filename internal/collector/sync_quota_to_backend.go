@@ -29,7 +29,7 @@ import (
 // a target service type is specified using the
 // `jobloop.WithLabel("service_type", serviceType)` option.
 func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobloop.Job {
-	return (&jobloop.ProducerConsumerJob[db.ProjectServiceV2]{
+	return (&jobloop.ProducerConsumerJob[db.ProjectService]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "sync project quota to backend",
 			CounterOpts: prometheus.CounterOpts{
@@ -44,7 +44,7 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 }
 
 var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.* FROM project_services_v2 ps
+	SELECT ps.* FROM project_services ps
 	JOIN cluster_services cs ON ps.service_id = cs.id
 	WHERE cs.type = $1 AND ps.quota_desynced_at IS NOT NULL
 	-- order by priority (oldest requests first), then by ID for deterministic test behavior
@@ -52,17 +52,17 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	LIMIT 1
 `)
 
-func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectServiceV2, err error) {
+func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 
 	maybeServiceInfo, err := c.Cluster.InfoForService(serviceType)
 	if err != nil {
-		return db.ProjectServiceV2{}, err
+		return db.ProjectService{}, err
 	}
 
 	_, ok := maybeServiceInfo.Unpack()
 	if !ok {
-		return db.ProjectServiceV2{}, fmt.Errorf("no such service type: %q", serviceType)
+		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
@@ -70,7 +70,7 @@ func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.L
 	return
 }
 
-func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectServiceV2, labels prometheus.Labels) error {
+func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectService, labels prometheus.Labels) error {
 	serviceType := db.ServiceType(labels["service_type"])
 
 	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
@@ -90,18 +90,18 @@ var (
 	// because it would also filter out resources with AZSeparatedTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT pr.id, pr.resource_id, cr.name, pr.backend_quota, pr.quota, pr.forbidden
-		FROM project_resources_v2 pr
+		FROM project_resources pr
 		JOIN cluster_resources cr ON pr.resource_id = cr.id
 		WHERE cr.service_id = $1 AND pr.project_id = $2
 	`)
 	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.az, pazr.backend_quota, pazr.quota
-		FROM project_az_resources_v2 pazr
+		FROM project_az_resources pazr
 		JOIN cluster_az_resources cazr ON pazr.az_resource_id = cazr.id
 		WHERE cazr.resource_id = $1 AND pazr.project_id = $2 AND pazr.quota IS NOT NULL
 	`)
 	quotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources_v2 pr
+		UPDATE project_resources pr
 		SET backend_quota = quota
 		FROM cluster_resources cr
 		WHERE pr.resource_id = cr.id
@@ -109,7 +109,7 @@ var (
 		AND pr.project_id = $2
 	`)
 	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources_v2 pazr
+		UPDATE project_az_resources pazr
 		SET backend_quota = quota
 		FROM cluster_az_resources cazr
 		WHERE pazr.az_resource_id = cazr.id
@@ -117,18 +117,18 @@ var (
 		AND pazr.project_id = $2
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services_v2
+		UPDATE project_services
 		   SET quota_desynced_at = NULL, quota_sync_duration_secs = $2
 		 WHERE id = $1
 	`)
 	quotaSyncRetryWithDelayQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services_v2
+		UPDATE project_services
 		   SET quota_desynced_at = $2, quota_sync_duration_secs = $3
 		 WHERE id = $1
 	`)
 )
 
-func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectServiceV2, project db.Project, domain core.KeystoneDomain, serviceType db.ServiceType) error {
+func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService, project db.Project, domain core.KeystoneDomain, serviceType db.ServiceType) error {
 	connection := c.Cluster.LiquidConnections[serviceType]
 	if connection == nil {
 		return fmt.Errorf("no quota connection registered for service type %s", serviceType)

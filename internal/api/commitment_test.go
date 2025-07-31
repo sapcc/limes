@@ -335,7 +335,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments_v2 SET confirmed_at = $1, expires_at = $2, state = $3",
+	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, state = $3",
 		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), db.CommitmentStateActive,
 	)
 	if err != nil {
@@ -464,7 +464,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check that can-confirm ignores expired commitments
-	_, err := s.DB.Exec(`UPDATE project_commitments_v2 SET expires_at = $1, state = $2`,
+	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
 		s.Clock.Now(), db.CommitmentStateExpired)
 	if err != nil {
 		t.Fatal(err)
@@ -602,7 +602,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
-	_, err := s.DB.Exec(`UPDATE project_resources_v2 SET forbidden = TRUE`)
+	_, err := s.DB.Exec(`UPDATE project_resources SET forbidden = TRUE`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -613,7 +613,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
 	}.Check(t, s.Handler)
-	_, err = s.DB.Exec(`UPDATE project_resources_v2 SET forbidden = FALSE`)
+	_, err = s.DB.Exec(`UPDATE project_resources SET forbidden = FALSE`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1062,15 +1062,15 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
-	var supersededCommitment db.ProjectCommitmentV2
-	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments_v2 where ID = 1`)
+	var supersededCommitment db.ProjectCommitment
+	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
 
-	var splitCommitment db.ProjectCommitmentV2
-	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments_v2 where ID = 2`)
+	var splitCommitment db.ProjectCommitment
+	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1325,7 +1325,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
-	var originalCommitment db.ProjectCommitmentV2
+	var originalCommitment db.ProjectCommitment
 
 	// Conversion without remainder
 	assert.HTTPRequest{
@@ -1335,12 +1335,12 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	err := s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments_v2 where ID = 1`)
+	err := s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assert.DeepEqual(t, "commitment state", originalCommitment.State, db.CommitmentStateSuperseded)
-	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments_v2 where ID = 2`)
+	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1554,7 +1554,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 
 	// Negative: Superseded commitment
 	s.Clock.StepBy(-1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments_v2 SET state='superseded' where ID = 3")
+	_, err := s.DB.Exec("UPDATE project_commitments SET state='superseded' where ID = 3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1742,7 +1742,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Do not merge commitments with states other than "active"
 	unmergableStates := []db.CommitmentState{db.CommitmentStatePlanned, db.CommitmentStatePending, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
 	for _, state := range unmergableStates {
-		_, err := s.DB.Exec("UPDATE project_commitments_v2 SET state=$1 where ID = 2", state)
+		_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", state)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1753,7 +1753,7 @@ func Test_MergeCommitments(t *testing.T) {
 			ExpectStatus: http.StatusConflict,
 		}.Check(t, s.Handler)
 	}
-	_, err := s.DB.Exec("UPDATE project_commitments_v2 SET state=$1 where ID = 2", db.CommitmentStateActive)
+	_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", db.CommitmentStateActive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1776,8 +1776,8 @@ func Test_MergeCommitments(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
-	var supersededCommitment db.ProjectCommitmentV2
-	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments_v2 where ID = 1`)
+	var supersededCommitment db.ProjectCommitment
+	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1793,7 +1793,7 @@ func Test_MergeCommitments(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
-	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments_v2 where ID = 2`)
+	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1924,7 +1924,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	s.Clock.StepBy(-2 * time.Hour)
 	// Do not allow to renew explicit expired commitments
-	_, err := s.DB.Exec("UPDATE project_commitments_v2 SET state = $1 WHERE id = 5", db.CommitmentStateExpired)
+	_, err := s.DB.Exec("UPDATE project_commitments SET state = $1 WHERE id = 5", db.CommitmentStateExpired)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1935,7 +1935,7 @@ func Test_RenewCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Reject requests that try to renew commitments too early (more than 3 month before expiring date)
-	_, err = s.DB.Exec("UPDATE project_commitments_v2 SET duration = $1, expires_at = $2, state = $3 WHERE id = 5",
+	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, state = $3 WHERE id = 5",
 		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), db.CommitmentStateActive,
 	)
 	if err != nil {

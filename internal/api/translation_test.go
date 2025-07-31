@@ -515,7 +515,7 @@ func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType string, 
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
-	_, err := s.DB.Exec(`UPDATE project_az_resources_v2 SET subresources = $1 WHERE id = 3`,
+	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,
 		string(must.Return(json.Marshal(subresourcesInLiquidFormat))),
 	)
 	if err != nil {
