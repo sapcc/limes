@@ -93,8 +93,14 @@ func (b CommitmentBehavior) ForCluster() ScopedCommitmentBehavior {
 }
 
 // CanConfirmCommitmentsAt evaluates the MinConfirmDate field.
-func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) bool {
-	return b.MinConfirmDate.IsNoneOr(func(minConfirmDate time.Time) bool { return minConfirmDate.Before(t) })
+func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) (result bool, errorMsg string) {
+	canConfirm := b.MinConfirmDate.IsNoneOr(func(minConfirmDate time.Time) bool {
+		return minConfirmDate.Before(t)
+	})
+	if canConfirm {
+		return true, ""
+	}
+	return false, "this commitment needs a `confirm_by` timestamp at or after " + b.MinConfirmDate.UnwrapOr(time.Time{}).Format(time.RFC3339)
 }
 
 // ForAPI converts this behavior into its API representation.

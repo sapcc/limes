@@ -39,11 +39,11 @@ const (
 
 func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, replacedConfig string) {
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(replacedConfig, "\t", "  ")), s.Clock.Now, s.DB, true)
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(replacedConfig, "\t", "  ")), nil, gophercloud.EndpointOpts{}, s.Clock.Now, s.DB, true)
 	for _, err := range errs {
 		t.Fatal(err)
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	errs = s.Cluster.Connect(s.Ctx)
 	for _, err := range errs {
 		t.Fatal(err)
 	}
