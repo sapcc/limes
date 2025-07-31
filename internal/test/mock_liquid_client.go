@@ -46,13 +46,16 @@ func DefaultLiquidServiceInfo() liquid.ServiceInfo {
 
 // MockLiquidClient implements the LiquidClient interface
 type MockLiquidClient struct {
-	serviceInfo           liquid.ServiceInfo
-	serviceCapacityReport liquid.ServiceCapacityReport
-	serviceUsageReport    liquid.ServiceUsageReport
-	usageReportError      error
-	capacityReportError   error
-	quotaError            error
-	serviceInfoError      error
+	serviceInfo                 liquid.ServiceInfo
+	serviceCapacityReport       liquid.ServiceCapacityReport
+	serviceUsageReport          liquid.ServiceUsageReport
+	commitmentChangeResponse    liquid.CommitmentChangeResponse
+	usageReportError            error
+	capacityReportError         error
+	quotaError                  error
+	serviceInfoError            error
+	commitmentChangeError       error
+	LastCommitmentChangeRequest liquid.CommitmentChangeRequest
 }
 
 var mockLiquidClients = make(map[db.ServiceType]core.LiquidClient)
@@ -110,6 +113,14 @@ func (l *MockLiquidClient) SetCapacityReportError(err error) {
 	l.capacityReportError = err
 }
 
+func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
+	l.serviceCapacityReport.InfoVersion++
+}
+
+func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
+	l.serviceCapacityReport = capacityReport
+}
+
 func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
 	if l.capacityReportError != nil {
 		return liquid.ServiceCapacityReport{}, l.capacityReportError
@@ -117,16 +128,16 @@ func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.Ser
 	return cloneServiceCapacityReport(l.serviceCapacityReport), nil
 }
 
-func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
-	l.serviceCapacityReport = capacityReport
-}
-
-func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
-	l.serviceCapacityReport.InfoVersion++
-}
-
 func (l *MockLiquidClient) SetUsageReportError(err error) {
 	l.usageReportError = err
+}
+
+func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
+	l.serviceUsageReport.InfoVersion++
+}
+
+func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
+	l.serviceUsageReport = usageReport
 }
 
 func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
@@ -136,20 +147,28 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 	return cloneServiceUsageReport(l.serviceUsageReport), nil
 }
 
-func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
-	l.serviceUsageReport = usageReport
-}
-
-func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
-	l.serviceUsageReport.InfoVersion++
-}
-
 func (l *MockLiquidClient) SetQuotaError(err error) {
 	l.quotaError = err
 }
 
 func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
 	return l.quotaError
+}
+
+func (l *MockLiquidClient) SetCommitmentChangeError(err error) {
+	l.commitmentChangeError = err
+}
+
+func (l *MockLiquidClient) SetCommitmentChangeResponse(response liquid.CommitmentChangeResponse) {
+	l.commitmentChangeResponse = response
+}
+
+func (l *MockLiquidClient) ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error) {
+	l.LastCommitmentChangeRequest = req
+	if l.commitmentChangeError != nil {
+		return liquid.CommitmentChangeResponse{}, l.commitmentChangeError
+	}
+	return l.commitmentChangeResponse, nil
 }
 
 func cloneServiceUsageReport(report liquid.ServiceUsageReport) liquid.ServiceUsageReport {

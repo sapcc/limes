@@ -129,7 +129,8 @@ type Setup struct {
 	TokenValidator *mock.Validator[*PolicyEnforcer]
 	Auditor        *audittools.MockAuditor
 	// fields that are only set if their respective SetupOptions are given
-	Handler http.Handler
+	Handler                    http.Handler
+	CurrentProjectCommitmentID *uint64
 	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
 	Projects           []*db.Project
 	ProjectServices    []*db.ProjectService
@@ -152,12 +153,12 @@ func GenerateDummyCommitmentUUID(idx uint64) db.ProjectCommitmentUUID {
 	return db.ProjectCommitmentUUID(uuid)
 }
 
-func projectCommitmentUUIDGenerator() func() db.ProjectCommitmentUUID {
+func projectCommitmentUUIDGenerator() (generator func() db.ProjectCommitmentUUID, currentProjectCommitmentID *uint64) {
 	idx := uint64(0)
 	return func() db.ProjectCommitmentUUID {
 		idx++
 		return GenerateDummyCommitmentUUID(idx)
-	}
+	}, &idx
 }
 
 // NewSetup prepares most or all pieces of Limes for a test.
@@ -175,7 +176,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// we need the Cluster for the availability zones, so create it first
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), s.Clock.Now, s.DB, params.WithLiquidConnections)
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), nil, gophercloud.EndpointOpts{}, s.Clock.Now, s.DB, params.WithLiquidConnections)
 	failIfErrs(t, errs)
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
@@ -191,7 +192,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			t.Fatal(err)
 		}
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	errs = s.Cluster.Connect(s.Ctx)
 	failIfErrs(t, errs)
 
 	serviceInfos, err := s.Cluster.AllServiceInfos()
@@ -225,9 +226,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Auditor = audittools.NewMockAuditor()
 
 	if params.APIBuilder != nil {
+		generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
+		s.CurrentProjectCommitmentID = currentProjectCommitmentID
 		s.Handler = httpapi.Compose(
 			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, projectCommitmentUUIDGenerator()),
+				params.APIBuilder(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
 				httpapi.WithoutLogging(),
 			}, params.APIMiddlewares...)...,
 		)

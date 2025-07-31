@@ -447,6 +447,7 @@ type LiquidClient interface {
 	GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error)
 	GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error)
 	PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error)
+	ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error)
 }
 
 // NewLiquidClient is usually a synonym for liquidapi.NewClient().

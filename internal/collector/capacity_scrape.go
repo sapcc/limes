@@ -279,7 +279,8 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
-	if len(behavior.Durations) == 0 || !behavior.CanConfirmCommitmentsAt(now) {
+	canConfirm, _ := behavior.CanConfirmCommitmentsAt(now)
+	if len(behavior.Durations) == 0 || !canConfirm {
 		return nil
 	}
 

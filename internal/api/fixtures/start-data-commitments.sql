@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIM
 INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'first', UNIX(1000), UNIX(2000), 1);
 INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'second', UNIX(1000), UNIX(2000), 1);
 INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (3, 'third', UNIX(1000), UNIX(2000), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (4, 'fourth', UNIX(1000), UNIX(2000), 1);
 
 -- resources and az_resources have entries for the resources where commitments are enabled in the config
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, needs_resource_demand, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'first/capacity');
@@ -16,6 +17,9 @@ INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota
 INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (9, 3, 'capacity2_c144', 1, 'flat', TRUE, 'third/capacity2_c144');
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path) VALUES (10, 2, 'other', 1, 'B', 'az-aware', 'second/other');
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path) VALUES (11, 1, 'other', 1, 'B', 'az-aware', 'first/other');
+-- only used for conversion tests
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, handles_commitments) VALUES (12, 4, 'capacity_a', 1, 'B', 'az-aware', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, handles_commitments) VALUES (13, 4, 'capacity_b', 1, 'B', 'az-aware', TRUE);
 
 
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 0, 0, '', 0, 'first/capacity/any');
@@ -37,6 +41,14 @@ INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacitie
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (17, 11, 'any', 0, 0, '', 0, 'first/other/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (18, 11, 'az-one', 0, 0, '', 0, 'first/other/az-one');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (19, 11, 'az-two', 0, 0, '', 0, 'first/other/az-two');
+-- only used for conversion tests
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (20, 12, 'any', 0, 0, '', 0);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (21, 12, 'az-one', 10, 6, '', 10);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (22, 12, 'az-two', 20, 6, '', 20);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (23, 13, 'any', 0, 0, '', 0);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (24, 13, 'az-one', 30, 6, '', 30);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (25, 13, 'az-two', 40, 6, '', 40);
+
 
 -- two domains (default setup for StaticDiscoveryPlugin)
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
@@ -54,6 +66,9 @@ INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at
 INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (4, 2, 2, UNIX(44), UNIX(44));
 INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (5, 3, 1,  UNIX(55), UNIX(55));
 INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (6, 3, 2, UNIX(66), UNIX(66));
+-- only used for conversion tests
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (7, 1, 4,  UNIX(77), UNIX(77));
+INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (8, 2, 4,  UNIX(88), UNIX(88));
 
 -- project_resources contains only boring placeholder values
 -- berlin
@@ -77,6 +92,13 @@ INSERT INTO project_resources (id, project_id, resource_id) VALUES (15,  3, 11);
 INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (16,  3, 4,   10, 10);
 INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (17,  3, 2, 10, 10);
 INSERT INTO project_resources (id, project_id, resource_id) VALUES (18,  3, 10);
+-- only used for conversion tests
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (19,  1, 12, 10, 10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (20,  1, 13, 10, 10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (21,  2, 12, 10, 10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (22,  2, 13, 10, 10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (23,  3, 12, 10, 10);
+INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (24,  3, 13, 10, 10);
 
 -- project_az_resources has "things" as non-AZ-aware and "capacity" as AZ-aware with an even split
 -- NOTE: AZ-aware resources also have an entry for AZ "any" with 0 usage
@@ -123,5 +145,23 @@ INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES 
 INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (40, 3,  14,  0);
 INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (41, 3,  15,  1);
 INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (42, 3,  16,  1);
-
+-- only used for conversion tests
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (43 ,1,  20,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (44 ,1,  21,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (45 ,1,  22,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (46 ,1,  23,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (47 ,1,  24,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (48 ,1,  25,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (49 ,2,  20,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (50 ,2,  21,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (51 ,2,  22,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (52 ,2,  23,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (53 ,2,  24,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (54 ,2,  25,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (55 ,3,  20,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (56 ,3,  21,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (57 ,3,  22,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (58 ,3,  23,   0);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (59 ,3,  24,   2);
+INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (60 ,3,  25,   2);
 -- project_rates is empty: no rates configured
