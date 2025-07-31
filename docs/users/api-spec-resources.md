@@ -482,7 +482,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "duration": "2 years",
       "requested_at": 1696604400,
       "confirmed_at": 1696636800,
-      "expires_at": 1759795200
+      "expires_at": 1759795200,
+      "status": "confirmed"
     }
   ]
 }
@@ -505,8 +506,9 @@ The following fields can appear in the response body:
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
 | `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Note that the duration counts from `confirm_by` (or from `created_at` for immediately-confirmed commitments) and is calculated at creation time, so this is also shown on unconfirmed commitments. |
 | `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
+| `commitments[].status` | string | The current status of this commitment. If provided, one of "planned", "pending", "guaranteed", "confirmed", "superseded", or "expired". |
 | `commitments[].notify_on_confirm` | boolean | Whether a mail notification should be sent if a created commitment is confirmed. Can only be set if the commitment contains a `confirm_by` value. |
- 
+
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
 
 Creates a new commitment within the given project. Requires a project-admin token, and a request body that is a JSON document like:
@@ -608,7 +610,7 @@ Requires a transfer token in the request header:
 This endpoint receives the target project ID, but the commitment ID from the source project.
 Requires a generated token from the API: `/v1/domains/:id/projects/:id/commitments/:id/start-transfer`.
 On success the API clears the `transfer_token` and `transfer_status` from the commitment.
-After that, it returns the commitment as a JSON document.  
+After that, it returns the commitment as a JSON document.
 
 ### GET /v1/commitments/:token
 To ensure that a commitment can be checked for its `resource` type or `availability zone` before it gets transferred to a target project, this endpoint fetches the target commitment by its respective token.
@@ -618,7 +620,7 @@ To ensure that a commitment can be checked for its `resource` type or `availabil
 
 Checks if a commitment could be converted to a resource of a different type.
 
-Returns 200 (OK) on success, and a JSON document like: 
+Returns 200 (OK) on success, and a JSON document like:
 
 ```json
 {

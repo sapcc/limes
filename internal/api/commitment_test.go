@@ -184,6 +184,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"confirm_by":        req1["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
 		"notify_on_confirm": true,
+		"status":            "planned",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -217,6 +218,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        req2["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
+		"status":            "planned",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -319,6 +321,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        req3["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
+		"status":            "planned",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -345,6 +348,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	// check that the confirmation shows up on GET
 	resp1["confirmed_at"] = s.Clock.Now().Unix()
 	resp1["expires_at"] = s.Clock.Now().Add(2 * time.Hour).Unix()
+	resp1["status"] = "confirmed"
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -782,6 +786,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
+		"status":            "confirmed",
 	}
 
 	assert.HTTPRequest{
@@ -823,6 +828,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"expires_at":        3600,
 		"transfer_status":   "public",
 		"transfer_token":    transferToken,
+		"status":            "confirmed",
 	}
 
 	assert.HTTPRequest{
@@ -895,6 +901,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
+		"status":            "confirmed",
 	}
 
 	assert.HTTPRequest{
@@ -965,6 +972,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
+		"status":            "confirmed",
 	}
 
 	resp2 := assert.JSONObject{
@@ -982,6 +990,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
+		"status":            "confirmed",
 	}
 
 	// Split commitment
@@ -1002,6 +1011,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
+		"status":            "confirmed",
 	}
 	resp4 := assert.JSONObject{
 		"id":                2,
@@ -1018,6 +1028,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
+		"status":            "confirmed",
 	}
 
 	// Transfer Commitment to target AZ_RESOURCE_ID (SOURCE_ID=3 TARGET_ID=17)
@@ -1225,6 +1236,33 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
+func Test_convertCommitmentStateToDisplayForm(t *testing.T) {
+	p := &v1Provider{}
+
+	tests := []struct {
+		name   string
+		state  db.CommitmentState
+		expect liquid.CommitmentStatus
+	}{
+		{"planned maps to planned", db.CommitmentStatePlanned, liquid.CommitmentStatusPlanned},
+		{"pending maps to pending", db.CommitmentStatePending, liquid.CommitmentStatusPending},
+		{"active maps to confirmed", db.CommitmentStateActive, liquid.CommitmentStatusConfirmed},
+		{"expired maps to expired", db.CommitmentStateExpired, liquid.CommitmentStatusExpired},
+		{"superseded maps to superseded", db.CommitmentStateSuperseded, liquid.CommitmentStatusSuperseded},
+		{"unknown maps to empty string", "foobar", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := db.ProjectCommitment{State: tc.state}
+			got := p.convertCommitmentStateToDisplayForm(c)
+			if got != tc.expect {
+				t.Errorf("state %q: got %q, want %q", tc.state, got, tc.expect)
+			}
+		})
+	}
+}
+
 func Test_ConvertCommitments(t *testing.T) {
 	srvInfoThird := test.DefaultLiquidServiceInfo()
 	srvInfoThird.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
@@ -1270,6 +1308,7 @@ func Test_ConvertCommitments(t *testing.T) {
 			"can_be_deleted":    true,
 			"confirmed_at":      s.Clock.Now().Unix(),
 			"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+			"status":            "confirmed",
 		}
 	}
 	respWithConfirmBy := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
@@ -1288,6 +1327,7 @@ func Test_ConvertCommitments(t *testing.T) {
 			"can_be_deleted":    true,
 			"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 			"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
+			"status":            "planned",
 		}
 	}
 
@@ -1464,6 +1504,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 			"can_be_deleted":    true,
 			"confirmed_at":      s.Clock.Now().Add(-1 * time.Hour).Unix(),
 			"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+			"status":            "confirmed",
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
@@ -1504,6 +1545,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 			"can_be_deleted":    true,
 			"confirm_by":        s.Clock.Now().Add(1 * day).Unix(),
 			"expires_at":        s.Clock.Now().Add(3*time.Hour + 1*day).Unix(),
+			"status":            "planned",
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
@@ -1626,6 +1668,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"status":            "confirmed",
 	}
 	resp4 := assert.JSONObject{
 		"id":                4,
@@ -1642,6 +1685,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"status":            "confirmed",
 	}
 	// Merged commitment
 	resp5 := assert.JSONObject{
@@ -1659,6 +1703,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"status":            "confirmed",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1859,6 +1904,7 @@ func Test_RenewCommitments(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        s.Clock.Now().Add(1 * time.Hour).Unix(),
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"status":            "planned",
 	}
 	resp2 := assert.JSONObject{
 		"id":                4,
@@ -1875,6 +1921,7 @@ func Test_RenewCommitments(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirm_by":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		"expires_at":        s.Clock.Now().Add(4 * time.Hour).Unix(),
+		"status":            "planned",
 	}
 
 	// Renew applicable commitments successfully
