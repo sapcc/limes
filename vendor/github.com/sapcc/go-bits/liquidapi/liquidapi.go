@@ -197,7 +197,11 @@ func Run(ctx context.Context, logic Logic, opts RunOpts) error {
 	muxer.Handle("/", httpapi.Compose(
 		rt,
 		httpapi.HealthCheckAPI{SkipRequestLog: true},
-		httpapi.WithGlobalMiddleware(limitRequestsMiddleware(opts.MaxConcurrentRequests)),
+		// The motivation for limiting the number of concurrent requests is that I want
+		// to run liquids with severely restricted memory limits to keep resource usage
+		// under control. Resource usage mostly scales with the amount of concurrency,
+		// so this should allow for keeping resource usage graphs nice and flat.
+		httpapi.WithGlobalMiddleware(httpext.LimitConcurrentRequestsMiddleware(opts.MaxConcurrentRequests)),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 	))
 	muxer.Handle("/metrics", promhttp.Handler())
@@ -254,27 +258,6 @@ func (rt *runtime) getServiceInfo() liquid.ServiceInfo {
 	rt.ServiceInfoMutex.RLock()
 	defer rt.ServiceInfoMutex.RUnlock()
 	return rt.ServiceInfo
-}
-
-// The motivation for limiting the number of concurrent requests is that I want
-// to run liquids with severely restricted memory limits to keep resource usage
-// under control. Resource usage mostly scales with the amount of concurrency,
-// so this should allow for keeping resource usage graphs nice and flat.
-func limitRequestsMiddleware(maxRequests int) func(http.Handler) http.Handler {
-	return func(inner http.Handler) http.Handler {
-		if maxRequests == 0 {
-			// no limit
-			return inner
-		}
-
-		// Source for this semaphore pattern: <https://eli.thegreenplace.net/2019/on-concurrency-in-go-http-servers/>
-		semaphore := make(chan struct{}, maxRequests)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			inner.ServeHTTP(w, r)
-		})
-	}
 }
 
 // AddTo implements the httpapi.API interface.
