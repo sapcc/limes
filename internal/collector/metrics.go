@@ -292,7 +292,7 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 
 	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().UsageMetricFamilies,
 		[]string{"domain_id", "project_id"},
-		[]string{instance.Project.Domain.UUID, instance.Project.UUID},
+		[]string{instance.Project.Domain.UUID, string(instance.Project.UUID)},
 	)
 	successAsFloat := 1.0
 	if err != nil {
@@ -305,7 +305,7 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 	ch <- prometheus.MustNewConstMetric(
 		collectionMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID,
+		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, string(instance.Project.UUID),
 		string(instance.ServiceType), string(instance.ServiceType),
 	)
 }

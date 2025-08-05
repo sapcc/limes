@@ -11,6 +11,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/db"
@@ -20,7 +21,7 @@ import (
 type maxQuotaEventTarget struct {
 	DomainID        string
 	DomainName      string
-	ProjectID       string
+	ProjectID       liquid.ProjectUUID
 	ProjectName     string
 	ServiceType     limes.ServiceType
 	ResourceName    limesresources.ResourceName
@@ -36,10 +37,10 @@ type maxQuotaChange struct {
 func (t maxQuotaEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
-		ID:          t.ProjectID,
+		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
-		ProjectID:   t.ProjectID,
+		ProjectID:   string(t.ProjectID),
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
 			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
@@ -52,7 +53,7 @@ func (t maxQuotaEventTarget) Render() cadf.Resource {
 type rateLimitEventTarget struct {
 	DomainID    string
 	DomainName  string
-	ProjectID   string
+	ProjectID   liquid.ProjectUUID
 	ProjectName string
 	ServiceType limes.ServiceType
 	Name        limesrates.RateName
@@ -73,10 +74,10 @@ type rateLimitChange struct {
 func (t rateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
-		ID:          t.ProjectID,
+		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
-		ProjectID:   t.ProjectID,
+		ProjectID:   string(t.ProjectID),
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
 			must.Return(cadf.NewJSONAttachment("payload", t.Payload)),
@@ -89,7 +90,7 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 type commitmentEventTarget struct {
 	DomainID        string
 	DomainName      string
-	ProjectID       string
+	ProjectID       liquid.ProjectUUID
 	ProjectName     string
 	Commitments     []limesresources.Commitment // must have at least one entry
 	WorkflowContext Option[db.CommitmentWorkflowContext]
@@ -105,7 +106,7 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		ID:          t.Commitments[0].UUID,
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
-		ProjectID:   t.ProjectID,
+		ProjectID:   string(t.ProjectID),
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{},
 	}

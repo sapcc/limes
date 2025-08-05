@@ -176,7 +176,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return liquid.ServiceUsageReport{}, err
 	}
 
-	result, err = l.LiquidClient.GetUsageReport(ctx, project.UUID, req)
+	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
@@ -358,7 +358,7 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
-	return l.LiquidClient.PutQuota(ctx, project.UUID, req)
+	return l.LiquidClient.PutQuota(ctx, string(project.UUID), req)
 }
 
 // ScrapeRates queries the backend service for the usage data of all rates.
@@ -389,7 +389,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
-	resp, err := l.LiquidClient.GetUsageReport(ctx, project.UUID, req)
+	resp, err := l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
 		return nil, "", err
 	}
