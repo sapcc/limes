@@ -317,8 +317,8 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
-	canConfirm, _ := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
-	if !canConfirm {
+	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
+	if canConfirmErrMsg != "" {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
@@ -416,9 +416,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
-	canConfirm, msg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
-	if !canConfirm {
-		http.Error(w, msg, http.StatusUnprocessableEntity)
+	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
+	if canConfirmErrMsg != "" {
+		http.Error(w, canConfirmErrMsg, http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -2203,7 +2203,7 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 	}
 
 	// check local
-	canAcceptLocally, err := datamodel.CanMoveAndCreateCommitments(localCommitmentChanges, serviceType, p.Cluster, dbi)
+	canAcceptLocally, err := datamodel.CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, p.Cluster, dbi)
 	if err != nil {
 		return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
 	}

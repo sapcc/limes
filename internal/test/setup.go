@@ -176,7 +176,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// we need the Cluster for the availability zones, so create it first
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), nil, gophercloud.EndpointOpts{}, s.Clock.Now, s.DB, params.WithLiquidConnections)
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), s.Clock.Now, s.DB, params.WithLiquidConnections)
 	failIfErrs(t, errs)
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
@@ -192,7 +192,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			t.Fatal(err)
 		}
 	}
-	errs = s.Cluster.Connect(s.Ctx)
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
 	failIfErrs(t, errs)
 
 	serviceInfos, err := s.Cluster.AllServiceInfos()

@@ -38,20 +38,18 @@ type Cluster struct {
 	LiquidConnections map[db.ServiceType]*LiquidConnection
 	// reference of the DB is necessary to delete leftover LiquidConnections
 	DB *gorp.DbMap
-	// save to generate LiquidClients without LiquidConnections
+	// used to generate LiquidClients without LiquidConnections
 	Provider *gophercloud.ProviderClient
 	EO       gophercloud.EndpointOpts
 }
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections - if configured.
 // Errors will be logged when the requested DiscoveryPlugin cannot be found.
-func NewCluster(config ClusterConfiguration, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:            config,
 		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
 		DB:                dbm,
-		Provider:          provider,
-		EO:                eo,
 	}
 
 	// instantiate discovery plugin
@@ -92,7 +90,11 @@ func NewCluster(config ClusterConfiguration, provider *gophercloud.ProviderClien
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all LiquidConnections.
-func (c *Cluster) Connect(ctx context.Context) (errs errext.ErrorSet) {
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
+	// save provider and eo for possible later use
+	c.Provider = provider
+	c.EO = eo
+
 	// initialize discovery plugin
 	err := c.DiscoveryPlugin.Init(ctx, c.Provider, c.EO)
 	if err != nil {

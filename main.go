@@ -130,9 +130,9 @@ func main() {
 
 	// load configuration and connect to cluster
 	dbm := db.InitORM(must.Return(db.Init()))
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), provider, eo, time.Now, dbm, taskName == "collect")
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
 	errs.LogFatalIfError()
-	errs = cluster.Connect(ctx)
+	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
 
 	// select task

@@ -37,47 +37,11 @@ var (
 	`)
 )
 
-// CanConfirmNewCommitment returns whether the given commitment request can be
-// confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(loc core.AZResourceLocation, projectID db.ProjectID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
-	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
-	if err != nil {
-		return false, err
-	}
-	stats := statsByAZ[loc.AvailabilityZone]
-
-	additions := map[db.ProjectID]uint64{projectID: amount}
-	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
-	logg.Debug("checking CanConfirmNewCommitment in %s/%s/%s: projectID = %d, amount = %d",
-		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, projectID, amount)
-	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
-}
-
-// CanMoveExistingCommitment returns whether a commitment of the given amount
-// at the given AZ resource location can be moved from one project to another.
-// The projects are identified by their resource IDs.
-func CanMoveExistingCommitment(amount uint64, loc core.AZResourceLocation, sourceProjectID, targetProjectID db.ProjectID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
-	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
-	if err != nil {
-		return false, err
-	}
-	stats := statsByAZ[loc.AvailabilityZone]
-
-	additions := map[db.ProjectID]uint64{targetProjectID: amount}
-	subtractions := map[db.ProjectID]uint64{sourceProjectID: amount}
-	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
-	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: projectID = %d -> %d, amount = %d",
-		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, sourceProjectID, targetProjectID, amount)
-	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
-}
-
-// CanMoveAndCreateCommitments returns whether the requested moves and creations
+// CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
-func CanMoveAndCreateCommitments(req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	var distinctResources = make(map[liquid.ResourceName]struct{})
-	var distinctProjectsUUIDs = make(map[liquid.ProjectUUID]struct{})
-	for projectUUID, projectCommitmentChangeset := range req.ByProject {
-		distinctProjectsUUIDs[projectUUID] = struct{}{}
+	for _, projectCommitmentChangeset := range req.ByProject {
 		for resourceName := range projectCommitmentChangeset.ByResource {
 			distinctResources[resourceName] = struct{}{}
 		}
@@ -87,7 +51,7 @@ func CanMoveAndCreateCommitments(req liquid.CommitmentChangeRequest, serviceType
 		dbi,
 		func(project db.Project) liquid.ProjectUUID { return liquid.ProjectUUID(project.UUID) },
 		`SELECT * FROM projects WHERE uuid = ANY($1)`,
-		pq.Array(slices.Collect(maps.Keys(distinctProjectsUUIDs))))
+		pq.Array(slices.Collect(maps.Keys(req.ByProject))))
 	if err != nil {
 		return false, fmt.Errorf("while building project index: %w", err)
 	}
@@ -104,12 +68,13 @@ func CanMoveAndCreateCommitments(req liquid.CommitmentChangeRequest, serviceType
 				return false, fmt.Errorf("project %s not found in database", projectUUID)
 			}
 			for _, commitment := range projectCommitmentChangeset.ByResource[resourceName].Commitments {
-				if commitment.NewStatus.IsSome() && commitment.OldStatus.IsNone() {
+				newStatus, newExists := commitment.NewStatus.Unpack()
+				oldStatus, oldExists := commitment.OldStatus.Unpack()
+				if newExists && newStatus == liquid.CommitmentStatusConfirmed && (!oldExists || oldStatus != liquid.CommitmentStatusConfirmed) {
 					additions[project.ID] += commitment.Amount
 					additionSum += commitment.Amount
 				}
-				newStatus, newStatusExists := commitment.NewStatus.Unpack()
-				if !newStatusExists || slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, newStatus) && commitment.OldStatus.IsSome() {
+				if oldExists && oldStatus == liquid.CommitmentStatusConfirmed && (!newExists || newStatus != liquid.CommitmentStatusConfirmed) {
 					subtractions[project.ID] += commitment.Amount
 					subtractionSum += commitment.Amount
 				}
