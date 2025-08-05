@@ -77,10 +77,10 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 3, 'az-one', 0, 'unshared/capacity/az-one');
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'az-two', 0, 'unshared/capacity/az-two');
 		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'unknown', 0, 'unshared/capacity/unknown');
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware'%[1]s%[1]s%[1]s, 'unshared/capacity');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
 		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things');
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', 0, 1);
-	`, ", TRUE")
+	`)
 
 	// Now, we update the serviceInfo of the shared service, updates should be done
 	srvInfoShared.Version = 2
