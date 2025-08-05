@@ -578,8 +578,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -597,8 +597,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity + 1
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,8 +618,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = string(test.GenerateDummyCommitmentUUID(1))
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -640,8 +640,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = committedCapacity
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,8 +658,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity + 1
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -685,8 +685,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "first", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1550,8 +1550,8 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "second", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "second", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1771,8 +1771,8 @@ func Test_ConvertCommitments(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, false)
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1811,8 +1811,8 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.Commitments[0].UUID = string(test.GenerateDummyCommitmentUUID(3))
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1909,8 +1909,8 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
-	dbResult, err = datamodel.CanMoveAndCreateCommitments(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
-	assert.DeepEqual(t, "CanMoveAndCreateCommitments", dbResult, true)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
 	}
