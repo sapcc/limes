@@ -14,20 +14,20 @@ INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_u
 INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (8, 2, 'service/shared/objects:read/list', 1, 'flat', TRUE);
 
 -- all services have the resources "things" and "capacity"
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'flat', TRUE);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (3, 2, 'things', 1, 'flat', TRUE);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (4, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, 'unshared/things');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (3, 2, 'things', 1, 'flat', TRUE, 'shared/things');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (4, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity');
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 2, 'any', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 2, 'az-one', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 2, 'az-two', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (5, 3, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]', 246);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 4, 'any', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (7, 4, 'az-one', 90, 12, '', 90);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (8, 4, 'az-two', 95, 15, '', 95);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139, 'unshared/things/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 2, 'any', 0, 'unshared/capacity/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 2, 'az-one', 0, 'unshared/capacity/az-one');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 2, 'az-two', 0, 'unshared/capacity/az-two');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (5, 3, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]', 246, 'shared/things/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 4, 'any', 0, 'shared/capacity/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (7, 4, 'az-one', 90, 12, '', 90, 'shared/capacity/az-one');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (8, 4, 'az-two', 95, 15, '', 95, 'shared/capacity/az-two');
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
@@ -131,5 +131,5 @@ INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage
 -- insert some bullshit data that should be filtered out by the internal/reports/ logic
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
 INSERT INTO cluster_services (id, type, liquid_version) VALUES (101, 'weird', 1);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version) VALUES (101, 101, 'things', 1);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 101, 'any', 2, 1, '');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, path) VALUES (101, 101, 'things', 1, 'weird/things');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (101, 101, 'any', 2, 1, '', 'weird/things/any');

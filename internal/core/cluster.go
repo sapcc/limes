@@ -404,6 +404,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return db.ClusterResource{
 				ServiceID:           srv.ID,
 				Name:                resourceName,
+				Path:                fmt.Sprintf("%s/%s", serviceType, resourceName),
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                serviceInfo.Resources[resourceName].Unit,
 				Topology:            serviceInfo.Resources[resourceName].Topology,
@@ -469,6 +470,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				return db.ClusterAZResource{
 					ResourceID:       res.ID,
 					AvailabilityZone: az,
+					Path:             fmt.Sprintf("%s/%s", res.Path, az),
 				}, nil
 			},
 			Update: func(azRes *db.ClusterAZResource) error {

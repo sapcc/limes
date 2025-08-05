@@ -72,13 +72,13 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	tr, _ := easypg.NewTracker(t, s.DB.Db)
 	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (10, 4, 'any', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (6, 3, 'any', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (7, 3, 'az-one', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (8, 3, 'az-two', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (9, 3, 'unknown', 0);
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware'%[1]s%[1]s%[1]s);
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (4, 2, 'things', 1, 'flat', TRUE);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (10, 4, 'any', 0, 'unshared/things/any');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 3, 'any', 0, 'unshared/capacity/any');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 3, 'az-one', 0, 'unshared/capacity/az-one');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'az-two', 0, 'unshared/capacity/az-two');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'unknown', 0, 'unshared/capacity/unknown');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware'%[1]s%[1]s%[1]s, 'unshared/capacity');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things');
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', 0, 1);
 	`, ", TRUE")
 
@@ -88,9 +88,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	liquidClientShared.SetServiceInfo(srvInfoShared)
 	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
 	tr.DBChanges().AssertEqual(`
-		DELETE FROM cluster_az_resources WHERE id = 5 AND resource_id = 2 AND az = 'any';
-		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		DELETE FROM cluster_resources WHERE id = 2 AND service_id = 1 AND name = 'things';
+		DELETE FROM cluster_az_resources WHERE id = 5 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		DELETE FROM cluster_resources WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM cluster_services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 2);
 	`)
@@ -101,9 +101,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	liquidClientShared.SetServiceInfo(srvInfoShared)
 	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
 	tr.DBChanges().AssertEqual(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (11, 5, 'any', 0);
-		UPDATE cluster_resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (5, 1, 'things', 3, 'flat', TRUE);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (11, 5, 'any', 0, 'shared/things/any');
+		UPDATE cluster_resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (5, 1, 'things', 3, 'flat', TRUE, 'shared/things');
 		DELETE FROM cluster_services WHERE id = 1 AND type = 'shared' AND liquid_version = 2;
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 3);
 	`)
@@ -113,8 +113,8 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	liquidClientShared.SetServiceInfo(srvInfoShared)
 	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
 	tr.DBChanges().AssertEqual(`
-		UPDATE cluster_resources SET liquid_version = 4 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE cluster_resources SET liquid_version = 4 WHERE id = 5 AND service_id = 1 AND name = 'things';
+		UPDATE cluster_resources SET liquid_version = 4 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		UPDATE cluster_resources SET liquid_version = 4 WHERE id = 5 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM cluster_services WHERE id = 1 AND type = 'shared' AND liquid_version = 3;
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 4);
 	`)

@@ -37,6 +37,9 @@ type ClusterResource struct {
 	ID        ClusterResourceID   `db:"id"`
 	ServiceID ClusterServiceID    `db:"service_id"`
 	Name      liquid.ResourceName `db:"name"`
+	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
+	Path string `db:"path"`
+
 	// following fields get filled from liquid.ServiceInfo
 	LiquidVersion       int64           `db:"liquid_version"`
 	Unit                liquid.Unit     `db:"unit"`
@@ -49,12 +52,15 @@ type ClusterResource struct {
 
 // ClusterAZResource contains a record from the `cluster_az_resources` table.
 type ClusterAZResource struct {
-	ID                ClusterAZResourceID    `db:"id"`
-	ResourceID        ClusterResourceID      `db:"resource_id"`
-	AvailabilityZone  limes.AvailabilityZone `db:"az"`
-	RawCapacity       uint64                 `db:"raw_capacity"`
-	Usage             Option[uint64]         `db:"usage"`
-	SubcapacitiesJSON string                 `db:"subcapacities"`
+	ID               ClusterAZResourceID    `db:"id"`
+	ResourceID       ClusterResourceID      `db:"resource_id"`
+	AvailabilityZone limes.AvailabilityZone `db:"az"`
+	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
+	Path string `db:"path"`
+
+	RawCapacity       uint64         `db:"raw_capacity"`
+	Usage             Option[uint64] `db:"usage"`
+	SubcapacitiesJSON string         `db:"subcapacities"`
 
 	// LastNonzeroRawCapacity is None initially, and gets filled whenever capacity scrape sees a non-zero capacity value.
 	// We use this as a signal for ACPQ to distinguish new AZs in buildup that should be ignored for the purposes of base quota overcommit,

@@ -2,10 +2,10 @@ CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIM
 
 INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', UNIX(1000), 1);
 
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_quota) VALUES (1, 1, 'capacity_az_separated', 1, 'B', 'az-separated', TRUE);
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_quota, path) VALUES (1, 1, 'capacity_az_separated', 1, 'B', 'az-separated', TRUE, 'shared/capacity_az_separated');
 
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'az-one', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-two', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'az-one', 0, 'shared/capacity_az_separated/az-one');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-two', 0, 'shared/capacity_az_separated/az-two');
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
