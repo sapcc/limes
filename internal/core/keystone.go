@@ -33,10 +33,10 @@ func KeystoneDomainFromDB(dbDomain db.Domain) KeystoneDomain {
 
 // KeystoneProject describes the basic attributes of a Keystone project.
 type KeystoneProject struct {
-	UUID       string         `json:"id" yaml:"id"`
-	Name       string         `json:"name" yaml:"name"`
-	ParentUUID string         `json:"parent_id,omitempty" yaml:"parent_id,omitempty"`
-	Domain     KeystoneDomain `json:"domain" yaml:"domain"`
+	UUID       liquid.ProjectUUID `json:"id" yaml:"id"`
+	Name       string             `json:"name" yaml:"name"`
+	ParentUUID string             `json:"parent_id,omitempty" yaml:"parent_id,omitempty"`
+	Domain     KeystoneDomain     `json:"domain" yaml:"domain"`
 }
 
 // KeystoneProjectFromDB converts a db.Project into a KeystoneProject.
@@ -52,7 +52,7 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 // ForLiquid casts this KeystoneProject into the format used in LIQUID requests.
 func (p KeystoneProject) ForLiquid() liquid.ProjectMetadata {
 	return liquid.ProjectMetadata{
-		UUID: p.UUID,
+		UUID: string(p.UUID),
 		Name: p.Name,
 		Domain: liquid.DomainMetadata{
 			UUID: p.Domain.UUID,
@@ -134,7 +134,7 @@ func (p *listDiscoveryPlugin) ListProjects(ctx context.Context, domain KeystoneD
 	var result []KeystoneProject
 	for _, p := range allProjects {
 		result = append(result, KeystoneProject{
-			UUID:       p.ID,
+			UUID:       liquid.ProjectUUID(p.ID),
 			Name:       p.Name,
 			ParentUUID: p.ParentID,
 			Domain:     domain,

@@ -97,7 +97,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		allProjectReports[project.ID] = &limesresources.ProjectReport{
 			ProjectInfo: limes.ProjectInfo{
 				Name:       project.Name,
-				UUID:       project.UUID,
+				UUID:       string(project.UUID),
 				ParentUUID: project.ParentUUID,
 			},
 			Services: make(limesresources.ProjectServiceReports),
@@ -431,7 +431,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	for _, project := range allProjects {
 		allProjectInfos[project.ID] = limes.ProjectInfo{
 			Name:       project.Name,
-			UUID:       project.UUID,
+			UUID:       string(project.UUID),
 			ParentUUID: project.ParentUUID,
 		}
 	}

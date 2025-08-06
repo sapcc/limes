@@ -13,6 +13,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -142,7 +143,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	if err != nil {
 		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, util.UnpackError(err))
 	}
-	isProjectUUID := make(map[string]bool)
+	isProjectUUID := make(map[liquid.ProjectUUID]bool)
 	for _, project := range projects {
 		isProjectUUID[project.UUID] = true
 	}
@@ -150,7 +151,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	// when a project has been deleted in Keystone, remove it from our database,
 	// too (the deletion from the `projects` table includes the projects' resource
 	// records through `ON DELETE CASCADE`)
-	existingProjectsByUUID := make(map[string]*db.Project)
+	existingProjectsByUUID := make(map[liquid.ProjectUUID]*db.Project)
 	var dbProjects []*db.Project
 	_, err = c.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
 	if err != nil {
@@ -201,7 +202,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 		if err != nil {
 			return result, err
 		}
-		result = append(result, project.UUID)
+		result = append(result, string(project.UUID))
 	}
 
 	return result, nil

@@ -772,7 +772,7 @@ func Test_LargeProjectList(t *testing.T) {
 	}
 
 	// template for how a single project will look in the output JSON
-	makeProjectJSON := func(idx int, projectName, projectUUID string) assert.JSONObject {
+	makeProjectJSON := func(idx int, projectName string, projectUUID liquid.ProjectUUID) assert.JSONObject {
 		return assert.JSONObject{
 			"id":        projectUUID,
 			"name":      projectName,
@@ -850,7 +850,7 @@ func Test_LargeProjectList(t *testing.T) {
 			t.Fatal(err)
 		}
 		projectName := fmt.Sprintf("test-project%04d", idx)
-		projectUUID := projectUUIDGen.String()
+		projectUUID := liquid.ProjectUUID(projectUUIDGen.String())
 		scrapedAt := time.Unix(int64(idx), 0).UTC()
 		expectedProjectsJSON = append(expectedProjectsJSON, makeProjectJSON(idx, projectName, projectUUID))
 
@@ -908,7 +908,7 @@ func Test_LargeProjectList(t *testing.T) {
 	sort.Slice(expectedProjectsJSON, func(i, j int) bool {
 		left := expectedProjectsJSON[i]
 		right := expectedProjectsJSON[j]
-		return left["id"].(string) < right["id"].(string)
+		return left["id"].(liquid.ProjectUUID) < right["id"].(liquid.ProjectUUID)
 	})
 	assert.HTTPRequest{
 		Method:       "GET",
