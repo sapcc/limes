@@ -336,7 +336,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -466,7 +466,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -719,7 +719,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -895,7 +895,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -1017,7 +1017,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -1209,7 +1209,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			AZ:          loc.AvailabilityZone,
 			InfoVersion: serviceInfo.Version,
 			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-				liquid.ProjectUUID(dbProject.UUID): {
+				dbProject.UUID: {
 					ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 						loc.ResourceName: {
@@ -1504,7 +1504,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(sourceProject.UUID): {
+			sourceProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -1526,7 +1526,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 					},
 				},
 			},
-			liquid.ProjectUUID(targetProject.UUID): {
+			targetProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -1854,7 +1854,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		AZ:          sourceLoc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					sourceLoc.ResourceName: {
@@ -2063,7 +2063,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			liquid.ProjectUUID(dbProject.UUID): {
+			dbProject.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
@@ -2222,7 +2222,7 @@ func LiquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, 
 		return None[liquid.ProjectMetadata]()
 	}
 	return Some(liquid.ProjectMetadata{
-		UUID: dbProject.UUID,
+		UUID: string(dbProject.UUID),
 		Name: dbProject.Name,
 		Domain: liquid.DomainMetadata{
 			UUID: domain.UUID,

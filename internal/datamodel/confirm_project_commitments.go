@@ -49,7 +49,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 	// internally, we only work with projectIDs, so we have to have a conversion ready
 	projectByUUID, err := db.BuildIndexOfDBResult(
 		dbi,
-		func(project db.Project) liquid.ProjectUUID { return liquid.ProjectUUID(project.UUID) },
+		func(project db.Project) liquid.ProjectUUID { return project.UUID },
 		`SELECT * FROM projects WHERE uuid = ANY($1)`,
 		pq.Array(slices.Collect(maps.Keys(req.ByProject))))
 	if err != nil {
