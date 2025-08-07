@@ -15,14 +15,14 @@ INSERT INTO cluster_services (id, type, liquid_version) VALUES (1, 'shared', 1);
 INSERT INTO cluster_services (id, type, liquid_version) VALUES (2, 'unshared', 1);
 
 -- all cluster_resources for the respective project-resources
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, unit) VALUES (1, 1, 'capacity', 1, 'flat', 'B');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (2, 1, 'things', 1, 'flat');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology) VALUES (3, 2, 'things', 1, 'flat');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, unit, path) VALUES (1, 1, 'capacity', 1, 'flat', 'B', 'shared/capacity');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, path) VALUES (2, 1, 'things', 1, 'flat', 'shared/things');
+INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, path) VALUES (3, 2, 'things', 1, 'flat', 'unshared/things');
 
 -- all cluster_az_resources for the respective project_az_resources
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 2, 'any', 0);
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 3, 'any', 0);
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/capacity/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 2, 'any', 0, 'shared/things/any');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 3, 'any', 0, 'unshared/things/any');
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
 INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at) VALUES (1, 1, 1, '2018-06-13 15:06:37', '2018-06-13 15:06:37');

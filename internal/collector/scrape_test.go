@@ -756,11 +756,11 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (1, 1, 'any', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (2, 1, 'az-one', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (3, 1, 'az-two', 0);
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity) VALUES (4, 1, 'unknown', 0);
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota) VALUES (1, 1, 'things', 1, 'az-aware', TRUE);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'noop/things/any');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'noop/things/az-one');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'noop/things/az-two');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'unknown', 0, 'noop/things/unknown');
+		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (1, 1, 1, 0);
@@ -878,13 +878,13 @@ func Test_TopologyScrapes(t *testing.T) {
 	checkedAt2 := s.Clock.Now()
 	// note: cluster_rate "xAnotherRate" is orphaned - it is in the DB but not in the ServiceInfo and rate_limits, so the update now deletes it (incl. project references)
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'unittest/capacity/any';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
 		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
 		DELETE FROM cluster_rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate';
-		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things';
+		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
+		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM cluster_services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
 		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 1 AND project_id = 1 AND az_resource_id = 2;

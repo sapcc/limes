@@ -813,4 +813,76 @@ var sqlMigrations = map[string]string{
 		ALTER SEQUENCE project_rates_v2_id_seq RENAME TO project_rates_id_seq;
 		ALTER SEQUENCE project_commitments_v2_id_seq RENAME TO project_commitments_id_seq;
 	`,
+	"061_add_cluster_level_paths.down.sql": `
+		DROP TRIGGER cluster_services_check_path_values_trigger ON cluster_services;
+		DROP TRIGGER cluster_resources_check_path_values_trigger ON cluster_resources;
+		DROP TRIGGER cluster_az_resources_check_path_values_trigger ON cluster_az_resources;
+		DROP FUNCTION check_path_values_trigger_function;
+		ALTER TABLE cluster_resources
+			DROP COLUMN path;
+		ALTER TABLE cluster_az_resources
+			DROP COLUMN path;
+	`,
+	"061_add_cluster_level_paths.up.sql": `
+		ALTER TABLE cluster_resources
+			ADD COLUMN path TEXT NOT NULL DEFAULT '';
+		UPDATE cluster_resources cr
+			SET path = CONCAT(cs.type, '/', cr.name)
+			FROM cluster_services cs WHERE cr.service_id = cs.id;
+		ALTER TABLE cluster_resources
+			ALTER COLUMN path DROP DEFAULT;
+		ALTER TABLE cluster_resources
+			ADD UNIQUE (path);
+
+		ALTER TABLE cluster_az_resources
+			ADD COLUMN path TEXT NOT NULL DEFAULT '';
+		UPDATE cluster_az_resources cazr
+			SET path = CONCAT(cr.path, '/', cazr.az)
+			FROM cluster_resources cr WHERE cazr.resource_id = cr.id;
+		ALTER TABLE cluster_az_resources
+			ALTER COLUMN path DROP DEFAULT;
+		ALTER TABLE cluster_az_resources
+			ADD UNIQUE (path);
+
+		CREATE OR REPLACE FUNCTION check_path_values_trigger_function()
+			RETURNS trigger AS $$
+			DECLARE
+				problem RECORD;
+			BEGIN
+				FOR problem IN
+					SELECT cr.id AS id, cr.path AS actual, CONCAT(cs.type, '/', cr.name) AS expected
+					FROM cluster_resources cr JOIN cluster_services cs ON cr.service_id = cs.id
+					WHERE cr.path != CONCAT(cs.type, '/', cr.name)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for cluster_resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				FOR problem IN
+					SELECT cazr.id AS id, cazr.path AS actual, CONCAT(cr.path, '/', cazr.az) AS expected
+					FROM cluster_az_resources cazr JOIN cluster_resources cr ON cazr.resource_id = cr.id
+					WHERE cazr.path != CONCAT(cr.path, '/', cazr.az)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for cluster_az_resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql;
+
+		CREATE CONSTRAINT TRIGGER cluster_services_check_path_values_trigger
+			AFTER INSERT OR UPDATE ON cluster_services
+			DEFERRABLE INITIALLY DEFERRED
+			FOR EACH ROW
+			EXECUTE FUNCTION check_path_values_trigger_function();
+		CREATE CONSTRAINT TRIGGER cluster_resources_check_path_values_trigger
+			AFTER INSERT OR UPDATE ON cluster_resources
+			DEFERRABLE INITIALLY DEFERRED
+			FOR EACH ROW
+			EXECUTE FUNCTION check_path_values_trigger_function();
+		CREATE CONSTRAINT TRIGGER cluster_az_resources_check_path_values_trigger
+			AFTER INSERT OR UPDATE ON cluster_az_resources
+			DEFERRABLE INITIALLY DEFERRED
+			FOR EACH ROW
+			EXECUTE FUNCTION check_path_values_trigger_function();
+	`,
 }
