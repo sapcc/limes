@@ -39,7 +39,7 @@ var (
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
+	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.forbid_autogrowth, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
@@ -125,6 +125,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			quota                    *uint64
 			maxQuotaFromOutsideAdmin *uint64
 			MaxQuotaFromLocalAdmin   *uint64
+			ForbidAutogrowth         bool
 			az                       *limes.AvailabilityZone
 			azQuota                  *uint64
 			azUsage                  *uint64
@@ -135,7 +136,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		)
 		err := rows.Scan(
 			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&quota, &maxQuotaFromOutsideAdmin, &MaxQuotaFromLocalAdmin,
+			&quota, &maxQuotaFromOutsideAdmin, &MaxQuotaFromLocalAdmin, &ForbidAutogrowth,
 			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
@@ -216,6 +217,9 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 					resReport.UsableQuota = quota
 					if maxQuotaFromOutsideAdmin != nil && MaxQuotaFromLocalAdmin == nil {
 						resReport.MaxQuota = maxQuotaFromOutsideAdmin
+					}
+					if ForbidAutogrowth {
+						resReport.ForbidAutogrowth = ForbidAutogrowth
 					}
 					if MaxQuotaFromLocalAdmin != nil && maxQuotaFromOutsideAdmin == nil {
 						resReport.MaxQuota = MaxQuotaFromLocalAdmin

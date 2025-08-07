@@ -427,6 +427,18 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
+	// paris has forbid_autogrowth setting
+	_, dberr = s.DB.Exec("UPDATE project_resources SET forbid_autogrowth=true where id=12")
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-forbid-autogrowth.json"),
+	}.Check(t, s.Handler)
+
 	// check GetProjectRates
 	assert.HTTPRequest{
 		Method:       "GET",
