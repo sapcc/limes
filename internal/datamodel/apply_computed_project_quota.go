@@ -39,7 +39,7 @@ var (
 		 WHERE resource_id = $1 AND (forbidden IS NOT NULL
 		                          OR max_quota_from_outside_admin IS NOT NULL
 		                          OR max_quota_from_local_admin IS NOT NULL
-								  OR forbid_autogrowth IS NOT NULL
+		                          OR forbid_autogrowth IS NOT NULL
 		                          OR override_quota_from_config IS NOT NULL)
 	`)
 
