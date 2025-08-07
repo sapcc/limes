@@ -19,18 +19,23 @@ import (
 
 // maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
 type maxQuotaEventTarget struct {
-	DomainID        string
-	DomainName      string
-	ProjectID       liquid.ProjectUUID
-	ProjectName     string
-	ServiceType     limes.ServiceType
-	ResourceName    limesresources.ResourceName
-	RequestedChange maxQuotaChange
+	DomainID         string
+	DomainName       string
+	ProjectID        liquid.ProjectUUID
+	ProjectName      string
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
+	RequestedChange  maxQuotaChange
+	AutogrowthChange autogrowthChange
 }
 
 type maxQuotaChange struct {
 	OldValue Option[uint64] `json:"oldMaxQuota"`
 	NewValue Option[uint64] `json:"newMaxQuota"`
+}
+
+type autogrowthChange struct {
+	ForbidAutogrowth bool `json:"forbid_autogrowth"`
 }
 
 // Render implements the audittools.Target interface.
