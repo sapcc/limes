@@ -218,9 +218,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 					if maxQuotaFromOutsideAdmin != nil && MaxQuotaFromLocalAdmin == nil {
 						resReport.MaxQuota = maxQuotaFromOutsideAdmin
 					}
-					if ForbidAutogrowth {
-						resReport.ForbidAutogrowth = ForbidAutogrowth
-					}
 					if MaxQuotaFromLocalAdmin != nil && maxQuotaFromOutsideAdmin == nil {
 						resReport.MaxQuota = MaxQuotaFromLocalAdmin
 					}
@@ -231,6 +228,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
 						resReport.BackendQuota = backendQuota
 					}
+					resReport.ForbidAutogrowth = ForbidAutogrowth
 				}
 			}
 
