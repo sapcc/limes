@@ -1068,7 +1068,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 	}
 
 	// happy case: enable autogrowth twice, only update the database once.
-	for _, value := range []bool{true, true} {
+	for range 2 {
 		assert.HTTPRequest{
 			Method:       "PUT",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
