@@ -33,4 +33,10 @@ var sqlMigrations = map[string]string{
 		DROP TABLE cluster_resources;
 		DROP TABLE cluster_services;
 	`,
+	"062_handles_commitments.down.sql": `
+		ALTER TABLE cluster_resources DROP COLUMN handles_commitments;
+	`,
+	"062_handles_commitments.up.sql": `
+		ALTER TABLE cluster_resources ADD COLUMN handles_commitments BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }
