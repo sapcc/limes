@@ -380,7 +380,8 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
-			if resRequest.ForbidAutogrowth == nil {
+			forbidAutogrowth, isSome := resRequest.ForbidAutogrowth.Unpack()
+			if !isSome {
 				msg := fmt.Sprintf("malformed request body for resource: %s/%s", srvRequest.Type, resRequest.Name)
 				http.Error(w, msg, http.StatusUnprocessableEntity)
 				return
@@ -398,7 +399,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				requested[dbServiceType] = make(map[liquid.ResourceName]*autogrowthChange)
 			}
 
-			requested[dbServiceType][dbResourceName] = &autogrowthChange{ForbidAutogrowth: *resRequest.ForbidAutogrowth}
+			requested[dbServiceType][dbResourceName] = &autogrowthChange{ForbidAutogrowth: forbidAutogrowth}
 		}
 	}
 
