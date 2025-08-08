@@ -350,7 +350,7 @@ const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricsBySeries, err := d.collectMetricsBySeries()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
