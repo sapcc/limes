@@ -1141,7 +1141,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE id = 4")
+	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 	if err != nil {
 		t.Error(err)
 	}
