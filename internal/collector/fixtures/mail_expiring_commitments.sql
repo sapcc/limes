@@ -5,18 +5,18 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
 
-INSERT INTO cluster_services (id, type) VALUES (1, 'first');
+INSERT INTO services (id, type) VALUES (1, 'first');
 
 INSERT INTO project_services (id, project_id, service_id) VALUES (1, 1, 1);
 INSERT INTO project_services (id, project_id, service_id) VALUES (2, 2, 1);
 
-INSERT INTO cluster_resources (id, service_id, name, path) VALUES (1, 1, 'things', 'first/things');
+INSERT INTO resources (id, service_id, name, path) VALUES (1, 1, 'things', 'first/things');
 
 INSERT INTO project_resources (id, project_id, resource_id) VALUES (1,  1, 1);
 INSERT INTO project_resources (id, project_id, resource_id) VALUES (2,  2, 1);
 
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1,  'az-one', 0, 'first/things/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1,  'az-two', 0, 'first/things/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1,  'az-one', 0, 'first/things/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1,  'az-two', 0, 'first/things/az-two');
 
 INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (1, 1,  1, 0);
 INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (2, 1,  2, 0);

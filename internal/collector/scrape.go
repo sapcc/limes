@@ -35,7 +35,7 @@ var (
 	// find the next project that needs to have resources scraped
 	findProjectForScrapeQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.* FROM project_services ps
-		JOIN cluster_services cs ON ps.service_id = cs.id
+		JOIN services cs ON ps.service_id = cs.id
 		-- filter by service type
 		WHERE cs.type = $1
 		-- filter by need to be updated (because of user request, or because of scheduled scrape)
@@ -97,8 +97,8 @@ func (c *Collector) ScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 // task type allows us to reuse timing information from the discover step.
 type projectScrapeTask struct {
 	// data loaded during discoverScrapeTask
-	Service        db.ProjectService
-	ClusterService db.ClusterService
+	ProjectService db.ProjectService
+	Service        db.Service
 	// timing information
 	Timing TaskTiming
 	// error reporting
@@ -119,11 +119,11 @@ func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labe
 	}
 
 	task.Timing.StartedAt = c.MeasureTime()
-	err = c.DB.SelectOne(&task.Service, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
+	err = c.DB.SelectOne(&task.ProjectService, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
 	if err != nil {
 		return projectScrapeTask{}, err
 	}
-	err = c.DB.SelectOne(&task.ClusterService, `SELECT * FROM cluster_services WHERE id = $1`, task.Service.ServiceID)
+	err = c.DB.SelectOne(&task.Service, `SELECT * FROM services WHERE id = $1`, task.ProjectService.ServiceID)
 	return task, err
 }
 
@@ -144,24 +144,24 @@ func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProjec
 }
 
 func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
-	srv := task.Service
-	clusterSrv := task.ClusterService
-	connection := c.Cluster.LiquidConnections[clusterSrv.Type] // NOTE: discoverScrapeTask already verified that this exists
+	projectService := task.ProjectService
+	service := task.Service
+	connection := c.Cluster.LiquidConnections[service.Type] // NOTE: discoverScrapeTask already verified that this exists
 
 	// collect additional DB records
-	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
+	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(projectService)
 	if err != nil {
 		return err
 	}
-	logg.Debug("scraping %s resources for %s/%s", clusterSrv.Type, dbDomain.Name, dbProject.Name)
+	logg.Debug("scraping %s resources for %s/%s", service.Type, dbDomain.Name, dbProject.Name)
 
-	maybeServiceInfo, err := c.Cluster.InfoForService(clusterSrv.Type)
+	maybeServiceInfo, err := c.Cluster.InfoForService(service.Type)
 	if err != nil {
 		task.Err = fmt.Errorf("while getting ServiceInfos: %w", err)
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
 	if !ok {
-		task.Err = fmt.Errorf("no such service type: %q", clusterSrv.Type)
+		task.Err = fmt.Errorf("no such service type: %q", service.Type)
 	}
 
 	// perform resource scrape
@@ -173,7 +173,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	}
 
 	// perform rate scrape
-	rateData, serializedScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, srv.SerializedScrapeState)
+	rateData, serializedScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = util.UnpackError(err)
@@ -196,7 +196,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	// that we don't scrape it again immediately afterwards
 	_, err = c.DB.Exec(writeScrapeSuccessQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
-		string(serializedMetrics), serializedScrapeState, srv.ID,
+		string(serializedMetrics), serializedScrapeState, projectService.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("while updating metadata on project service: %w", err)
@@ -208,20 +208,20 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 	_, err := c.DB.Exec(
 		writeScrapeErrorQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
-		task.Err.Error(), task.Service.ID,
+		task.Err.Error(), task.ProjectService.ID,
 	)
 	if err != nil {
 		c.LogError("additional DB error while writing resource scrape error for service %s in project %s: %s",
-			task.ClusterService.Type, project.UUID, err.Error(),
+			task.Service.Type, project.UUID, err.Error(),
 		)
 	}
 
-	if task.Service.ScrapedAt.IsNone() {
+	if task.ProjectService.ScrapedAt.IsNone() {
 		// see explanation inside the called function's body
-		err := c.writeDummyResources(dbDomain, dbProject, task.ClusterService, serviceInfo)
+		err := c.writeDummyResources(dbDomain, dbProject, task.Service, serviceInfo)
 		if err != nil {
 			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
-				task.ClusterService.Type, project.UUID, err.Error(),
+				task.Service.Type, project.UUID, err.Error(),
 			)
 		}
 	}
@@ -241,7 +241,7 @@ func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidCon
 }
 
 func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serviceInfo liquid.ServiceInfo) error {
-	clusterService := task.ClusterService
+	service := task.Service
 
 	for resName, resData := range resourceData.Resources {
 		resInfo := core.InfoForResource(serviceInfo, resName)
@@ -306,78 +306,78 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	_, err = datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
-	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, clusterService)
+	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, service)
 	if err != nil {
 		return err
 	}
 
 	// For inserting the project_az_resources, we need to translate the datasets resource.Name and azResource.AZ
-	clusterResourcesByName, err := db.BuildIndexOfDBResult(
+	resourcesByName, err := db.BuildIndexOfDBResult(
 		tx,
-		func(res db.ClusterResource) liquid.ResourceName { return res.Name },
-		`SELECT * FROM cluster_resources WHERE service_id = $1`,
-		clusterService.ID,
+		func(res db.Resource) liquid.ResourceName { return res.Name },
+		`SELECT * FROM resources WHERE service_id = $1`,
+		service.ID,
 	)
 	if err != nil {
 		return err
 	}
-	clusterAZResourcesByResourceID, err := db.BuildArrayIndexOfDBResult(
+	azResourcesByResourceID, err := db.BuildArrayIndexOfDBResult(
 		tx,
-		func(azRes db.ClusterAZResource) db.ClusterResourceID { return azRes.ResourceID },
-		`SELECT cazr.* FROM cluster_az_resources cazr JOIN cluster_resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1`,
-		clusterService.ID,
+		func(azRes db.AZResource) db.ResourceID { return azRes.ResourceID },
+		`SELECT cazr.* FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1`,
+		service.ID,
 	)
 	if err != nil {
 		return err
 	}
-	clusterAZResourceIDByAZByResourceName := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]db.ClusterAZResourceID, len(clusterResourcesByName))
-	clusterAZResourcesByID := make(map[db.ClusterAZResourceID]db.ClusterAZResource, len(clusterAZResourcesByResourceID))
-	for _, clusterResource := range clusterResourcesByName {
-		clusterAZResourceIDByAZByResourceName[clusterResource.Name] = make(map[liquid.AvailabilityZone]db.ClusterAZResourceID, len(clusterAZResourcesByResourceID[clusterResource.ID]))
-		for _, clusterAZResource := range clusterAZResourcesByResourceID[clusterResource.ID] {
-			clusterAZResourceIDByAZByResourceName[clusterResource.Name][clusterAZResource.AvailabilityZone] = clusterAZResource.ID
-			clusterAZResourcesByID[clusterAZResource.ID] = clusterAZResource
+	azResourceIDByAZByResourceName := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResourceID, len(resourcesByName))
+	azResourcesByID := make(map[db.AZResourceID]db.AZResource, len(azResourcesByResourceID))
+	for _, resource := range resourcesByName {
+		azResourceIDByAZByResourceName[resource.Name] = make(map[liquid.AvailabilityZone]db.AZResourceID, len(azResourcesByResourceID[resource.ID]))
+		for _, azResource := range azResourcesByResourceID[resource.ID] {
+			azResourceIDByAZByResourceName[resource.Name][azResource.AvailabilityZone] = azResource.ID
+			azResourcesByID[azResource.ID] = azResource
 		}
 	}
 	projectAZResourcesByAZResourceID, err := db.BuildIndexOfDBResult(
 		tx,
-		func(pAZRes db.ProjectAZResource) db.ClusterAZResourceID { return pAZRes.AZResourceID },
-		`SELECT pazr.* FROM project_az_resources pazr JOIN cluster_az_resources cazr ON PAZR.az_resource_id = cazr.id JOIN cluster_resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1 AND pazr.project_id = $2`,
-		clusterService.ID, dbProject.ID,
+		func(pAZRes db.ProjectAZResource) db.AZResourceID { return pAZRes.AZResourceID },
+		`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources cazr ON PAZR.az_resource_id = cazr.id JOIN resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1 AND pazr.project_id = $2`,
+		service.ID, dbProject.ID,
 	)
 	if err != nil {
 		return err
 	}
-	resourceNames := slices.Sorted(maps.Keys(clusterResourcesByName))
+	resourceNames := slices.Sorted(maps.Keys(resourcesByName))
 
 	// update project_az_resources for each resource
 	for _, resourceName := range resourceNames {
-		clusterResource := clusterResourcesByName[resourceName]
+		resource := resourcesByName[resourceName]
 		usageData := resourceData.Resources[resourceName].PerAZ
-		clusterAZResources := clusterAZResourcesByResourceID[clusterResource.ID]
-		projectAZResources := make([]db.ProjectAZResource, 0, len(clusterAZResources))
-		for _, clusterAZResource := range clusterAZResources {
-			projectAZResources = append(projectAZResources, projectAZResourcesByAZResourceID[clusterAZResource.ID])
+		azResources := azResourcesByResourceID[resource.ID]
+		projectAZResources := make([]db.ProjectAZResource, 0, len(azResources))
+		for _, azResource := range azResources {
+			projectAZResources = append(projectAZResources, projectAZResourcesByAZResourceID[azResource.ID])
 		}
-		wantedKeys := make([]db.ClusterAZResourceID, 0, len(usageData))
+		wantedKeys := make([]db.AZResourceID, 0, len(usageData))
 		for _, az := range slices.Sorted(maps.Keys(usageData)) {
-			wantedKeys = append(wantedKeys, clusterAZResourceIDByAZByResourceName[resourceName][az])
+			wantedKeys = append(wantedKeys, azResourceIDByAZByResourceName[resourceName][az])
 		}
 
-		setUpdate := db.SetUpdate[db.ProjectAZResource, db.ClusterAZResourceID]{
+		setUpdate := db.SetUpdate[db.ProjectAZResource, db.AZResourceID]{
 			ExistingRecords: projectAZResources,
 			WantedKeys:      wantedKeys,
-			KeyForRecord: func(azRes db.ProjectAZResource) db.ClusterAZResourceID {
+			KeyForRecord: func(azRes db.ProjectAZResource) db.AZResourceID {
 				return azRes.AZResourceID
 			},
-			Create: func(id db.ClusterAZResourceID) (db.ProjectAZResource, error) {
+			Create: func(id db.AZResourceID) (db.ProjectAZResource, error) {
 				return db.ProjectAZResource{
 					ProjectID:    dbProject.ID,
 					AZResourceID: id,
 				}, nil
 			},
 			Update: func(azRes *db.ProjectAZResource) (err error) {
-				az := clusterAZResourcesByID[azRes.AZResourceID].AvailabilityZone
+				az := azResourcesByID[azRes.AZResourceID].AvailabilityZone
 				data := usageData[az]
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
@@ -393,7 +393,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				// warn when the backend is inconsistent with itself
 				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
 					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
-						dbProject.UUID, clusterService.Type, resourceName, az,
+						dbProject.UUID, service.Type, resourceName, az,
 						data.Usage, len(data.Subresources),
 					)
 				}
@@ -404,7 +404,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				}
 
 				// track historical usage if required (only required for AutogrowQuotaDistribution)
-				autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(clusterService.Type, resourceName).Autogrow.Unpack()
+				autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(service.Type, resourceName).Autogrow.Unpack()
 				if ok {
 					ts, err := util.ParseTimeSeries[uint64](azRes.HistoricalUsageJSON)
 					if err != nil {
@@ -438,16 +438,16 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	}
 
 	if task.Timing.Duration() > 5*time.Minute {
-		logg.Info("scrape of %s in project %s has taken excessively long (%s)", clusterService.Type, dbProject.UUID, task.Timing.Duration().String())
+		logg.Info("scrape of %s in project %s has taken excessively long (%s)", service.Type, dbProject.UUID, task.Timing.Duration().String())
 	}
 
 	return nil
 }
 
 func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[liquid.RateName]*big.Int) error {
-	clusterService := task.ClusterService
-	projectService := task.Service
-	connection := c.Cluster.LiquidConnections[clusterService.Type] // NOTE: discoverScrapeTask already verified that this exists
+	service := task.Service
+	projectService := task.ProjectService
+	connection := c.Cluster.LiquidConnections[service.Type] // NOTE: discoverScrapeTask already verified that this exists
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -456,24 +456,24 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// For inserting the project_az_resources, we need to translate the datasets rate.Name
-	clusterRatesByName, err := db.BuildIndexOfDBResult(
+	ratesByName, err := db.BuildIndexOfDBResult(
 		tx,
-		func(cr db.ClusterRate) liquid.RateName { return cr.Name },
-		`SELECT * FROM cluster_rates WHERE service_id = $1`,
-		task.ClusterService.ID,
+		func(cr db.Rate) liquid.RateName { return cr.Name },
+		`SELECT * FROM rates WHERE service_id = $1`,
+		task.Service.ID,
 	)
 	if err != nil {
 		return err
 	}
-	clusterRatesByID := make(map[db.ClusterRateID]db.ClusterRate, len(clusterRatesByName))
-	for _, clusterRate := range clusterRatesByName {
-		clusterRatesByID[clusterRate.ID] = clusterRate
+	ratesByID := make(map[db.RateID]db.Rate, len(ratesByName))
+	for _, rate := range ratesByName {
+		ratesByID[rate.ID] = rate
 	}
 
 	// update existing project_rates entries
 	rateExists := make(map[liquid.RateName]bool)
 	var rates []db.ProjectRate
-	_, err = tx.Select(&rates, `SELECT pra.* FROM project_rates pra JOIN cluster_rates cra ON pra.rate_id = cra.id WHERE cra.service_id = $1 AND pra.project_id = $2 ORDER BY cra.name`, clusterService.ID, projectService.ProjectID)
+	_, err = tx.Select(&rates, `SELECT pra.* FROM project_rates pra JOIN rates cra ON pra.rate_id = cra.id WHERE cra.service_id = $1 AND pra.project_id = $2 ORDER BY cra.name`, service.ID, projectService.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -486,7 +486,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 		defer stmt.Close()
 
 		for _, rate := range rates {
-			rateName := clusterRatesByID[rate.RateID].Name
+			rateName := ratesByID[rate.RateID].Name
 			rateExists[rateName] = true
 
 			usageData, exists := rateData[rateName]
@@ -518,7 +518,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 
 		rate := &db.ProjectRate{
 			ProjectID: projectService.ProjectID,
-			RateID:    clusterRatesByName[rateName].ID,
+			RateID:    ratesByName[rateName].ID,
 		}
 		if usageData != nil {
 			rate.UsageAsBigint = usageData.String()
@@ -533,7 +533,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	return tx.Commit()
 }
 
-func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ClusterService, serviceInfo liquid.ServiceInfo) error {
+func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.Service, serviceInfo liquid.ServiceInfo) error {
 	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,
@@ -570,13 +570,13 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// NOTE: We do not do ApplyBackendQuota here: This function is only
 	// called after scraping errors, so ApplyBackendQuota will likely fail, too.
 
-	// create dummy project_az_resources; for this, we need the cluster_az_resources
-	var clusterAZResources []db.ClusterAZResource
-	_, err = tx.Select(&clusterAZResources, `SELECT * FROM cluster_az_resources WHERE resource_id IN (SELECT id FROM cluster_resources WHERE service_id = $1) AND az = $2`, srv.ID, liquid.AvailabilityZoneAny)
+	// create dummy project_az_resources; for this, we need the az_resources
+	var azResources []db.AZResource
+	_, err = tx.Select(&azResources, `SELECT * FROM az_resources WHERE resource_id IN (SELECT id FROM resources WHERE service_id = $1) AND az = $2`, srv.ID, liquid.AvailabilityZoneAny)
 	if err != nil {
 		return err
 	}
-	for _, res := range clusterAZResources {
+	for _, res := range azResources {
 		err := tx.Insert(&db.ProjectAZResource{
 			ProjectID:    dbProject.ID,
 			AZResourceID: res.ID,

@@ -19,7 +19,7 @@ var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN cluster_services cs ON cs.id = ps.service_id
+	  JOIN services cs ON cs.id = ps.service_id
 	WHERE ps.scrape_error_message != ''
 	ORDER BY d.name, p.name, cs.type, ps.scrape_error_message
 `)

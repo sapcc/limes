@@ -45,9 +45,9 @@ var (
 	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments WHERE expires_at <= $1 AND state = 'active' AND renew_context_json IS NULL AND NOT notified_for_expiration`
 	locateExpiringCommitmentsQuery   = sqlext.SimplifyWhitespace(`
 		SELECT pc.project_id, cs.type, cr.name, cazr.az, pc.id
-		  FROM cluster_services cs
-		  JOIN cluster_resources cr ON cr.service_id = cs.id
-		  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		  FROM services cs
+		  JOIN resources cr ON cr.service_id = cs.id
+		  JOIN az_resources cazr ON cazr.resource_id = cr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 		WHERE pc.id = ANY($1)
 		ORDER BY cs.type, cr.name, cazr.az ASC, pc.amount DESC

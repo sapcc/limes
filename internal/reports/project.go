@@ -29,8 +29,8 @@ import (
 var (
 	projectRateReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.id, cs.type, ps.scraped_at, cra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
-	  FROM cluster_services cs
-	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  FROM services cs
+	  JOIN rates cra ON cra.service_id = cs.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
@@ -40,9 +40,9 @@ var (
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
@@ -57,9 +57,9 @@ var (
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'active'),  0) AS active,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'pending'), 0) AS pending,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'planned'), 0) AS planned
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr on cr.service_id = cs.id
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr on cr.service_id = cs.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 	 WHERE pc.project_id = $1
 	 GROUP BY cs.type, cr.name, cazr.az, pc.duration

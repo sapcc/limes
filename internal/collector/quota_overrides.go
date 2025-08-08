@@ -91,13 +91,13 @@ var (
 		  FROM domains d
 		  JOIN projects p ON p.domain_id = d.id
 		  JOIN project_services ps ON ps.project_id = p.id
-		  JOIN cluster_services cs ON cs.id = ps.service_id
+		  JOIN services cs ON cs.id = ps.service_id
 		 WHERE d.name = $1 AND p.name = $2 AND cs.type = $3
 	`)
 	aqoUpdateOverrideQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources pr
 		   SET override_quota_from_config = $1
-		 FROM cluster_resources cr
+		 FROM resources cr
 		 JOIN project_services ps ON ps.service_id = cr.service_id
 		 WHERE cr.id = pr.resource_id AND ps.project_id = pr.project_id
 		 AND ps.id = $2 AND cr.name = $3
@@ -107,8 +107,8 @@ var (
 		  FROM domains d
 		  JOIN projects p ON p.domain_id = d.id
 		  JOIN project_resources pr ON pr.project_id = p.id
-		  JOIN cluster_resources cr ON cr.id = pr.resource_id
-		  JOIN cluster_services cs ON cs.id = cr.service_id
+		  JOIN resources cr ON cr.id = pr.resource_id
+		  JOIN services cs ON cs.id = cr.service_id
 		 WHERE pr.override_quota_from_config IS NOT NULL
 	`)
 	aqoClearOverrideQuery = sqlext.SimplifyWhitespace(`

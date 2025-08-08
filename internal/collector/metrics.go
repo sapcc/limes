@@ -62,7 +62,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
-	  JOIN cluster_services cs ON cs.id = ps.service_id
+	  JOIN services cs ON cs.id = ps.service_id
 	 WHERE ps.scraped_at IS NOT NULL
 	 GROUP BY cs.type
 `)
@@ -159,7 +159,7 @@ func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc
 
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT type, serialized_metrics
-	  FROM cluster_services
+	  FROM services
 	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
 
@@ -248,7 +248,7 @@ func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, cs.type, ps.serialized_metrics
-	  FROM cluster_services cs
+	  FROM services cs
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
@@ -406,16 +406,16 @@ func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seri
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, JSON_OBJECT_AGG(car.az, car.raw_capacity), JSON_OBJECT_AGG(car.az, car.usage)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	  JOIN cluster_az_resources car ON car.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
+	  JOIN az_resources car ON car.resource_id = cr.id
 	 GROUP BY cs.type, cr.name
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, cs.type, cr.name, SUM(pr.quota)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
@@ -430,14 +430,14 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources pazr
-	    JOIN cluster_az_resources cazr ON cazr.id = pazr.az_resource_id
+	    JOIN az_resources cazr ON cazr.id = pazr.az_resource_id
 	   GROUP BY cazr.resource_id, pazr.project_id
 	),
 	project_commitment_minExpiresAt AS (
 		SELECT p.domain_id, p.id AS project_id, cs.type, cr.name, MIN(expires_at) AS project_commitment_min_expires_at
-		FROM cluster_services cs
-		JOIN cluster_resources cr ON cr.service_id = cs.id
-		JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+		FROM services cs
+		JOIN resources cr ON cr.service_id = cs.id
+		JOIN az_resources cazr ON cazr.resource_id = cr.id
 		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
 		JOIN projects p ON p.id = pc.project_id
 		GROUP BY p.domain_id, p.id, cs.type, cr.name
@@ -446,8 +446,8 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	       pr.quota, pr.backend_quota, pr.override_quota_from_config,
 	       psums.usage, psums.physical_usage, psums.has_physical_usage,
 	       pcmea.project_commitment_min_expires_at
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
@@ -467,9 +467,9 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	   GROUP BY az_resource_id, project_id
 	)
 	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_state
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
@@ -478,8 +478,8 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cra.name, pra.usage_as_bigint
-	  FROM cluster_services cs
-	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  FROM services cs
+	  JOIN rates cra ON cra.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = p.id

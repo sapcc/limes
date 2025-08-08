@@ -213,11 +213,11 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 //     project_resources and project_az_resources entries and make the project fully functional.
 //   - Setting the stale flag prioritizes scraping of this service over the existing
 //     backlog of routine scrapes, even if the backlog is very long.
-//   - The WHERE clause is defense in depth against garbage entries in cluster_services.
+//   - The WHERE clause is defense in depth against garbage entries in services.
 var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
 	INSERT INTO project_services (project_id, service_id, next_scrape_at, stale)
 	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
-	  FROM cluster_services
+	  FROM services
 	 WHERE type = ANY($3::TEXT[])
 `)
 

@@ -52,9 +52,9 @@ var ospqReportQuery = sqlext.SimplifyWhitespace(`
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_resources pr ON pr.project_id = p.id
-	  JOIN cluster_resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
+	  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = pr.project_id
 	 GROUP BY d.uuid, d.name, p.uuid, p.name, cs.type, cr.name, pr.quota
 	HAVING SUM(pazr.usage) > pr.quota
@@ -66,8 +66,8 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(`
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_resources pr ON pr.project_id = p.id 
-	  JOIN cluster_resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+	  JOIN resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
+	  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
 	WHERE pr.backend_quota != pr.quota
 	ORDER BY d.name, p.name, cs.type, cr.name
 `)

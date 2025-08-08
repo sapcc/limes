@@ -98,7 +98,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.Provide
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (srv db.ClusterService, err error) {
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (srv db.Service, err error) {
 	currentVersion := l.ServiceInfo().Version
 	if infoVersion == currentVersion {
 		return srv, nil
@@ -198,7 +198,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, srv db.ClusterService, err error) {
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, srv db.Service, err error) {
 	req, err := BuildServiceCapacityRequest(backchannel, allAZs, l.ServiceType, l.ServiceInfo().Resources)
 	if err != nil {
 		return result, srv, err

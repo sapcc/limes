@@ -195,7 +195,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	// get all project_rates and make them accessible quickly by ID
 	var projectRates []db.ProjectRate
 	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates WHERE project_id = $1`, updater.Project.ID)
-	projectRateByClusterRateID := make(map[db.ClusterRateID]db.ProjectRate)
+	projectRateByClusterRateID := make(map[db.RateID]db.ProjectRate)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -204,18 +204,18 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 
 	// check all services for resources to update
-	var services []db.ClusterService
-	_, err = tx.Select(&services, `SELECT * FROM cluster_services ORDER BY type`)
+	var services []db.Service
+	_, err = tx.Select(&services, `SELECT * FROM services ORDER BY type`)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// the db types do not have json tags, additionally the Window type serializes into a human readable format - not DB compatible.
 	type serializableProjectRate struct {
-		ProjectID db.ProjectID     `json:"project_id"`
-		RateID    db.ClusterRateID `json:"rate_id"`
-		Limit     Option[uint64]   `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
-		Window    Option[uint64]   `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
+		ProjectID db.ProjectID   `json:"project_id"`
+		RateID    db.RateID      `json:"rate_id"`
+		Limit     Option[uint64] `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
+		Window    Option[uint64] `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
 	}
 
 	var ratesToUpdate []serializableProjectRate
@@ -224,8 +224,8 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		if !exists {
 			continue // no rate limits for this service
 		}
-		var rates []db.ClusterRate
-		_, err = tx.Select(&rates, `SELECT * FROM cluster_rates ORDER BY NAME`)
+		var rates []db.Rate
+		_, err = tx.Select(&rates, `SELECT * FROM rates ORDER BY NAME`)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

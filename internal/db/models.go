@@ -15,9 +15,9 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// ClusterService contains a record from the `cluster_services` table.
-type ClusterService struct {
-	ID                 ClusterServiceID  `db:"id"`
+// Service contains a record from the `services` table.
+type Service struct {
+	ID                 ServiceID         `db:"id"`
 	Type               ServiceType       `db:"type"`
 	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
@@ -32,10 +32,10 @@ type ClusterService struct {
 	QuotaUpdateNeedsProjectMetadata bool   `db:"quota_update_needs_project_metadata"`
 }
 
-// ClusterResource contains a record from the `cluster_resources` table.
-type ClusterResource struct {
-	ID        ClusterResourceID   `db:"id"`
-	ServiceID ClusterServiceID    `db:"service_id"`
+// Resource contains a record from the `resources` table.
+type Resource struct {
+	ID        ResourceID          `db:"id"`
+	ServiceID ServiceID           `db:"service_id"`
 	Name      liquid.ResourceName `db:"name"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
 	Path string `db:"path"`
@@ -50,10 +50,10 @@ type ClusterResource struct {
 	AttributesJSON      string          `db:"attributes_json"`
 }
 
-// ClusterAZResource contains a record from the `cluster_az_resources` table.
-type ClusterAZResource struct {
-	ID               ClusterAZResourceID    `db:"id"`
-	ResourceID       ClusterResourceID      `db:"resource_id"`
+// AZResource contains a record from the `az_resources` table.
+type AZResource struct {
+	ID               AZResourceID           `db:"id"`
+	ResourceID       ResourceID             `db:"resource_id"`
 	AvailabilityZone limes.AvailabilityZone `db:"az"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
 	Path string `db:"path"`
@@ -68,11 +68,11 @@ type ClusterAZResource struct {
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
 }
 
-// ClusterRate contains a record from the `cluster_rates` table.
-type ClusterRate struct {
-	ID        ClusterRateID    `db:"id"`
-	ServiceID ClusterServiceID `db:"service_id"`
-	Name      liquid.RateName  `db:"name"`
+// Rate contains a record from the `rates` table.
+type Rate struct {
+	ID        RateID          `db:"id"`
+	ServiceID ServiceID       `db:"service_id"`
+	Name      liquid.RateName `db:"name"`
 	// following fields get filled from liquid.ServiceInfo
 	LiquidVersion int64           `db:"liquid_version"`
 	Unit          liquid.Unit     `db:"unit"`
@@ -100,7 +100,7 @@ type Project struct {
 type ProjectService struct {
 	ID                    ProjectServiceID  `db:"id"`
 	ProjectID             ProjectID         `db:"project_id"`
-	ServiceID             ClusterServiceID  `db:"service_id"`
+	ServiceID             ServiceID         `db:"service_id"`
 	ScrapedAt             Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	CheckedAt             Option[time.Time] `db:"checked_at"`
 	NextScrapeAt          time.Time         `db:"next_scrape_at"`
@@ -118,7 +118,7 @@ type ProjectService struct {
 type ProjectResource struct {
 	ID                       ProjectResourceID `db:"id"`
 	ProjectID                ProjectID         `db:"project_id"`
-	ResourceID               ClusterResourceID `db:"resource_id"`
+	ResourceID               ResourceID        `db:"resource_id"`
 	Quota                    Option[uint64]    `db:"quota"`
 	BackendQuota             Option[int64]     `db:"backend_quota"`
 	Forbidden                bool              `db:"forbidden"`
@@ -131,7 +131,7 @@ type ProjectResource struct {
 type ProjectAZResource struct {
 	ID                  ProjectAZResourceID `db:"id"`
 	ProjectID           ProjectID           `db:"project_id"`
-	AZResourceID        ClusterAZResourceID `db:"az_resource_id"`
+	AZResourceID        AZResourceID        `db:"az_resource_id"`
 	Quota               Option[uint64]      `db:"quota"`
 	BackendQuota        Option[int64]       `db:"backend_quota"`
 	Usage               uint64              `db:"usage"`
@@ -144,7 +144,7 @@ type ProjectAZResource struct {
 type ProjectRate struct {
 	ID            ProjectRateID             `db:"id"`
 	ProjectID     ProjectID                 `db:"project_id"`
-	RateID        ClusterRateID             `db:"rate_id"`
+	RateID        RateID                    `db:"rate_id"`
 	Limit         Option[uint64]            `db:"rate_limit"`      // None for rates that don't have a limit (just a usage)
 	Window        Option[limesrates.Window] `db:"window_ns"`       // None for rates that don't have a limit (just a usage)
 	UsageAsBigint string                    `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
@@ -158,7 +158,7 @@ type ProjectCommitment struct {
 	ID           ProjectCommitmentID               `db:"id"`
 	UUID         ProjectCommitmentUUID             `db:"uuid"`
 	ProjectID    ProjectID                         `db:"project_id"`
-	AZResourceID ClusterAZResourceID               `db:"az_resource_id"`
+	AZResourceID AZResourceID                      `db:"az_resource_id"`
 	Amount       uint64                            `db:"amount"`
 	Duration     limesresources.CommitmentDuration `db:"duration"`
 	CreatedAt    time.Time                         `db:"created_at"`
@@ -244,10 +244,10 @@ type MailNotification struct {
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
-	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
-	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
-	db.AddTableWithName(ClusterRate{}, "cluster_rates").SetKeys(true, "id")
-	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
+	db.AddTableWithName(Service{}, "services").SetKeys(true, "id")
+	db.AddTableWithName(Resource{}, "resources").SetKeys(true, "id")
+	db.AddTableWithName(Rate{}, "rates").SetKeys(true, "id")
+	db.AddTableWithName(AZResource{}, "az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")

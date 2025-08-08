@@ -370,8 +370,8 @@ within the same service: (Replace service types and resource names as necessary.
    interference in the next step.
 2. Update the `name` columns in the resources tables of the DB:
    ```sql
-   UPDATE cluster_resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
-      AND service_id IN (SELECT id FROM cluster_services WHERE type = 'compute');
+   UPDATE resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
+      AND service_id IN (SELECT id FROM services WHERE type = 'compute');
    UPDATE project_resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
       AND service_id IN (SELECT id FROM project_services WHERE type = 'compute');
    ```
@@ -387,7 +387,7 @@ with the following sequence:
 
 1. If not done yet, ensure that service records exist for the target service type:
    ```sql
-   INSERT INTO cluster_services (type) VALUES ('neutron')
+   INSERT INTO services (type) VALUES ('neutron')
        ON CONFLICT DO NOTHING;
    INSERT INTO project_services (project_id, type, next_scrape_at, rates_next_scrape_at)
        SELECT id, 'neutron', NOW(), NOW() FROM projects
@@ -395,9 +395,9 @@ with the following sequence:
    ```
 2. Attach the existing resource records to the new service records:
    ```sql
-   UPDATE cluster_resources
-       SET service_id = (SELECT id FROM cluster_services WHERE type = 'neutron')
-       WHERE name = 'routers' AND service_id = (SELECT id FROM cluster_services WHERE type = 'network');
+   UPDATE resources
+       SET service_id = (SELECT id FROM services WHERE type = 'neutron')
+       WHERE name = 'routers' AND service_id = (SELECT id FROM services WHERE type = 'network');
 
    UPDATE project_resources res SET service_id = (
        SELECT new.id FROM project_services new JOIN project_services old ON old.project_id = new.project_id
@@ -409,7 +409,7 @@ with the following sequence:
    `WHERE name = 'routers'` by a list match, e.g. `WHERE name IN ('routers','floating_ips','networks')`.
 3. If this was the last resource in the old service type, clean up the old service type:
    ```sql
-   DELETE FROM cluster_services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM cluster_resources);
+   DELETE FROM services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM resources);
    DELETE FROM project_services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM project_resources);
    ```
 
@@ -418,7 +418,7 @@ database update process can be substituted instead: (This example renames servic
 
 1. Update the `type` columns in the services tables of the DB:
    ```sql
-   UPDATE cluster_services SET type = 'swift' WHERE type = 'object-store';
+   UPDATE services SET type = 'swift' WHERE type = 'object-store';
    UPDATE project_services SET type = 'swift' WHERE type = 'object-store';
    ```
 

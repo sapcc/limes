@@ -11,21 +11,21 @@ package db
 // API-level and DB-level identifiers.
 type ServiceType string
 
-// ClusterServiceID is an ID into the cluster_services table. This typedef is
+// ServiceID is an ID into the services table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
-type ClusterServiceID int64
+type ServiceID int64
 
-// ClusterResourceID is an ID into the cluster_resources table. This typedef is
+// ResourceID is an ID into the resources table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
-type ClusterResourceID int64
+type ResourceID int64
 
-// ClusterAZResourceID is an ID into the cluster_az_resources table. This typedef is
+// AZResourceID is an ID into the az_resources table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
-type ClusterAZResourceID int64
+type AZResourceID int64
 
-// ClusterRateID is an ID into the cluster_rates table. This typedef is
+// RateID is an ID into the rates table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
-type ClusterRateID int64
+type RateID int64
 
 // DomainID is an ID into the domains table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
