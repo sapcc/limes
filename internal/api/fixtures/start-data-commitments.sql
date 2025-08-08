@@ -6,20 +6,20 @@ INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALU
 INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (4, 'fourth', UNIX(1000), UNIX(2000), 1);
 
 -- resources and az_resources have entries for the resources where commitments are enabled in the config
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, needs_resource_demand, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'first/capacity');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, needs_resource_demand, path) VALUES (2, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'second/capacity');
-INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (3, 1, 'things', 1, 'flat', TRUE, 'first/things');
-INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'second/things');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path) VALUES (5, 3, 'capacity_c32', 1, 'B', 'flat', TRUE, 'third/capacity_c32');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path) VALUES (6, 3, 'capacity_c48', 1, 'B', 'flat', TRUE, 'third/capacity_c48');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path) VALUES (7, 3, 'capacity_c96', 1, 'B', 'flat', TRUE, 'third/capacity_c96');
-INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (8, 3, 'capacity_c120', 1, 'flat', TRUE, 'third/capacity_c120');
-INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (9, 3, 'capacity2_c144', 1, 'flat', TRUE, 'third/capacity2_c144');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path) VALUES (10, 2, 'other', 1, 'B', 'az-aware', 'second/other');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path) VALUES (11, 1, 'other', 1, 'B', 'az-aware', 'first/other');
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, needs_resource_demand, path, handles_commitments) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'first/capacity', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, needs_resource_demand, path, handles_commitments) VALUES (2, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'second/capacity', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, handles_commitments) VALUES (3, 1, 'things', 1, 'flat', TRUE, 'first/things', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, handles_commitments) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'second/things', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, handles_commitments) VALUES (5, 3, 'capacity_c32', 1, 'B', 'flat', TRUE, 'third/capacity_c32', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, handles_commitments) VALUES (6, 3, 'capacity_c48', 1, 'B', 'flat', TRUE, 'third/capacity_c48', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, handles_commitments) VALUES (7, 3, 'capacity_c96', 1, 'B', 'flat', TRUE, 'third/capacity_c96', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, handles_commitments) VALUES (8, 3, 'capacity_c120', 1, 'flat', TRUE, 'third/capacity_c120', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, handles_commitments) VALUES (9, 3, 'capacity2_c144', 1, 'flat', TRUE, 'third/capacity2_c144', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path, handles_commitments) VALUES (10, 2, 'other', 1, 'B', 'az-aware', 'second/other', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path, handles_commitments) VALUES (11, 1, 'other', 1, 'B', 'az-aware', 'first/other', TRUE);
 -- only used for conversion tests
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, handles_commitments) VALUES (12, 4, 'capacity_a', 1, 'B', 'az-aware', TRUE);
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, handles_commitments) VALUES (13, 4, 'capacity_b', 1, 'B', 'az-aware', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path, handles_commitments) VALUES (12, 4, 'capacity_a', 1, 'B', 'az-aware', 'fourth/capacity_a', TRUE);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, path, handles_commitments) VALUES (13, 4, 'capacity_b', 1, 'B', 'az-aware', 'fourth/capacity_b', TRUE);
 
 
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 0, 0, '', 0, 'first/capacity/any');
@@ -42,12 +42,12 @@ INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacitie
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (18, 11, 'az-one', 0, 0, '', 0, 'first/other/az-one');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (19, 11, 'az-two', 0, 0, '', 0, 'first/other/az-two');
 -- only used for conversion tests
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (20, 12, 'any', 0, 0, '', 0);
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (21, 12, 'az-one', 10, 6, '', 10);
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (22, 12, 'az-two', 20, 6, '', 20);
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (23, 13, 'any', 0, 0, '', 0);
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (24, 13, 'az-one', 30, 6, '', 30);
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity) VALUES (25, 13, 'az-two', 40, 6, '', 40);
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (20, 12, 'any', 0, 0, '', 0, 'fourth/capacity_a/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (21, 12, 'az-one', 10, 6, '', 10, 'fourth/capacity_a/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (22, 12, 'az-two', 20, 6, '', 20, 'fourth/capacity_a/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (23, 13, 'any', 0, 0, '', 0, 'fourth/capacity_b/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (24, 13, 'az-one', 30, 6, '', 30, 'fourth/capacity_b/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (25, 13, 'az-two', 40, 6, '', 40, 'fourth/capacity_b/az-two');
 
 
 -- two domains (default setup for StaticDiscoveryPlugin)
