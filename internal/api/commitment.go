@@ -477,7 +477,6 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								// TODO: the type of UUID is db.ProjectCommitmentUUID. Why does the liquid use simple string?
 								UUID:      string(dbCommitment.UUID),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
@@ -507,8 +506,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.State = db.CommitmentStateActive
 	} else {
-		// TODO: I don't yet understand how the interface should work with guaranteed.
-		// Does cortex decide whether something becomes guaranteed or do we try with "guaranteed" and accept "planned" when it does not work?
+		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
+		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
+		// resubmit it and get a planned commitment, which might never get confirmed.
 		dbCommitment.State = db.CommitmentStatePlanned
 	}
 
@@ -1012,7 +1012,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		totalConfirmedAfter -= dbCommitment.Amount
 	}
 
-	// TODO: this should be informational in CommitmentChangeRequest.RequiresConfirmation() but is not right now - fix?
 	_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
@@ -1801,7 +1800,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	// TODO: validate that the conversion rules are within the same serviceType's only (there is no overlap in the naming)
 	targetLoc := core.AZResourceLocation{
 		ServiceType:      sourceLoc.ServiceType,
 		ResourceName:     targetResourceName,
@@ -1849,7 +1847,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		targetTotalConfirmedAfter += req.TargetAmount
 	}
 
-	// TODO: check the conditions whether an already confirmed commitment is deemed
 	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          sourceLoc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
@@ -2074,8 +2071,6 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								// TODO: is this case properly documented in the API or should we add a comment somewhere?
-								// It feels a bit implicit as there is no "oldExpiresAt/newExpiresAt" field.
 								UUID:      string(dbCommitment.UUID),
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
@@ -2136,17 +2131,16 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 	}
 	for projectUUID, projectCommitmentChangeset := range req.ByProject {
 		for resourceName, resourceCommitmentChangeset := range projectCommitmentChangeset.ByResource {
-			// TODO: this is just to make the tests deterministic. Technically we can handle local time here
-			// but the implementation of the time package is BS, as you cannot convert Location=local to the IANA.
-			// when a date comes from a db.ProjectCommitment, it will have the IANA location.😒
+			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
 			for i, commitment := range resourceCommitmentChangeset.Commitments {
-				commitment.ExpiresAt = commitment.ExpiresAt.UTC()
+				commitment.ExpiresAt = commitment.ExpiresAt.Local()
 				confirmBy, exists := commitment.ConfirmBy.Unpack()
 				if exists {
-					commitment.ConfirmBy = Some(confirmBy.UTC())
+					commitment.ConfirmBy = Some(confirmBy.Local())
 				}
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
+
 			if serviceInfo.Resources[resourceName].HandlesCommitments {
 				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
 				if !exists {

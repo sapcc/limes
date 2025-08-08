@@ -33,7 +33,7 @@ type CommitmentBehavior struct {
 //
 // The `path` argument denotes the location of this behavior in the
 // configuration file, and will be used when generating error messages.
-func (b CommitmentBehavior) Validate(path string) (errs errext.ErrorSet) {
+func (b CommitmentBehavior) Validate(path string, occupiedConversionIdentifiers []string) (errs errext.ErrorSet, identifier string) {
 	if percent, ok := b.UntilPercent.Unpack(); ok {
 		if percent < 0 {
 			errs.Addf("invalid value: %s.until_percent may not be smaller than 0", path)
@@ -42,8 +42,14 @@ func (b CommitmentBehavior) Validate(path string) (errs errext.ErrorSet) {
 			errs.Addf("invalid value: %s.until_percent may not be bigger than 100", path)
 		}
 	}
+	if conversionRule, ok := b.ConversionRule.Unpack(); ok {
+		identifier = conversionRule.Identifier
+		if slices.Contains(occupiedConversionIdentifiers, conversionRule.Identifier) {
+			errs.Addf("invalid value: %s.conversion_rule.identifier must be unique, but %q is already used by another serviceType", path, conversionRule.Identifier)
+		}
+	}
 
-	return errs
+	return errs, identifier
 }
 
 // ScopedCommitmentBehavior is a CommitmentBehavior that applies only to a certain scope (usually a specific domain).
