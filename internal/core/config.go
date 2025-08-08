@@ -208,13 +208,22 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	}
 
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
+	occupiedConversionIdentifiers := make([]string, 0)
 	for serviceType, l := range cluster.Liquids {
 		if l.Area == "" {
 			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))
 		}
+		serviceIdentifiers := make([]string, 0, len(l.CommitmentBehaviorPerResource))
 		for idx2, behavior := range l.CommitmentBehaviorPerResource {
-			errs.Append(behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2)))
+			var (
+				validationErrs    errext.ErrorSet
+				serviceIdentifier string
+			)
+			validationErrs, serviceIdentifier = behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2), occupiedConversionIdentifiers)
+			errs.Append(validationErrs)
+			serviceIdentifiers = append(serviceIdentifiers, serviceIdentifier)
 		}
+		occupiedConversionIdentifiers = append(occupiedConversionIdentifiers, serviceIdentifiers...)
 	}
 
 	for idx, behavior := range cluster.ResourceBehaviors {
