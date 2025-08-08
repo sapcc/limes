@@ -40,8 +40,8 @@ func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloo
 }
 
 var (
-	deleteSuperfluousClusterServicesQuery = sqlext.SimplifyWhitespace(`
-		DELETE FROM cluster_services WHERE type != ALL($1::TEXT[])
+	deleteSuperfluousServicesQuery = sqlext.SimplifyWhitespace(`
+		DELETE FROM services WHERE type != ALL($1::TEXT[])
 		RETURNING type
 	`)
 
@@ -49,7 +49,7 @@ var (
 	insertMissingProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		INSERT INTO project_services (project_id, service_id, next_scrape_at, stale)
 		SELECT p.id, cs.id, $1::TIMESTAMPTZ, TRUE
-		  FROM cluster_services cs
+		  FROM services cs
 		  JOIN projects p ON TRUE -- this is intentionally a full cross join between "cs" and "p"
 		  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 		 WHERE ps.id IS NULL
@@ -62,25 +62,25 @@ func (c *Collector) checkConsistency(_ context.Context, _ prometheus.Labels) err
 	// (this is also done by core.SaveServiceInfoToDB() on startup, so this is
 	// only defense in depth against garbage entries entering the DB somehow)
 	knownServiceTypes := slices.Sorted(maps.Keys(c.Cluster.Config.Liquids))
-	err := sqlext.ForeachRow(c.DB, deleteSuperfluousClusterServicesQuery, []any{pq.Array(knownServiceTypes)}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, deleteSuperfluousServicesQuery, []any{pq.Array(knownServiceTypes)}, func(rows *sql.Rows) error {
 		var serviceType db.ServiceType
 		err := rows.Scan(&serviceType)
 		if err == nil {
-			logg.Info("cleaned up cluster_services entry with type = %q (no such type configured)", serviceType)
+			logg.Info("cleaned up services entry with type = %q (no such type configured)", serviceType)
 		}
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("while cleaning up cluster_services: %w", err)
+		return fmt.Errorf("while cleaning up services: %w", err)
 	}
 
-	// ensure that `project_services` matches the fully populated cross product of `projects` and `cluster_services`
-	// (this is usually only relevant when core.SaveServiceInfoToDB() created a new `cluster_services` entry;
+	// ensure that `project_services` matches the fully populated cross product of `projects` and `services`
+	// (this is usually only relevant when core.SaveServiceInfoToDB() created a new `services` entry;
 	// for new `projects` entries, initProject() will already have created the respective `project_services` records)
 	err = sqlext.ForeachRow(c.DB, insertMissingProjectServicesQuery, []any{c.MeasureTime()}, func(rows *sql.Rows) error {
 		var (
 			projectID db.ProjectID
-			serviceID db.ClusterServiceID
+			serviceID db.ServiceID
 		)
 		err := rows.Scan(&projectID, &serviceID)
 		if err == nil {

@@ -28,7 +28,7 @@ func Test_Consistency(t *testing.T) {
 
 	// check that CheckConsistency() is satisfied with the
 	// {domain,project}_services created by ScanDomains(), but adds
-	// cluster_services entries
+	// services entries
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
@@ -42,7 +42,7 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	// add some useless *_services entries
-	err = s.DB.Insert(&db.ClusterService{Type: "whatever", NextScrapeAt: s.Clock.Now()})
+	err = s.DB.Insert(&db.Service{Type: "whatever", NextScrapeAt: s.Clock.Now()})
 	if err != nil {
 		t.Error(err)
 	}
@@ -63,9 +63,9 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_services WHERE id = 3 AND type = 'whatever' AND liquid_version = 0;
 		DELETE FROM project_services WHERE id = 7 AND project_id = 1 AND service_id = 3;
 		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
+		DELETE FROM services WHERE id = 3 AND type = 'whatever' AND liquid_version = 0;
 	`,
 		s.Clock.Now().Unix(),
 	)

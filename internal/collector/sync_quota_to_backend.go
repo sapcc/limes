@@ -45,7 +45,7 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 
 var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.* FROM project_services ps
-	JOIN cluster_services cs ON ps.service_id = cs.id
+	JOIN services cs ON ps.service_id = cs.id
 	WHERE cs.type = $1 AND ps.quota_desynced_at IS NOT NULL
 	-- order by priority (oldest requests first), then by ID for deterministic test behavior
 	ORDER BY ps.quota_desynced_at ASC, ps.id ASC
@@ -91,19 +91,19 @@ var (
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT pr.id, pr.resource_id, cr.name, pr.backend_quota, pr.quota, pr.forbidden
 		FROM project_resources pr
-		JOIN cluster_resources cr ON pr.resource_id = cr.id
+		JOIN resources cr ON pr.resource_id = cr.id
 		WHERE cr.service_id = $1 AND pr.project_id = $2
 	`)
 	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.az, pazr.backend_quota, pazr.quota
 		FROM project_az_resources pazr
-		JOIN cluster_az_resources cazr ON pazr.az_resource_id = cazr.id
+		JOIN az_resources cazr ON pazr.az_resource_id = cazr.id
 		WHERE cazr.resource_id = $1 AND pazr.project_id = $2 AND pazr.quota IS NOT NULL
 	`)
 	quotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources pr
 		SET backend_quota = quota
-		FROM cluster_resources cr
+		FROM resources cr
 		WHERE pr.resource_id = cr.id
 		AND cr.service_id = $1
 		AND pr.project_id = $2
@@ -111,7 +111,7 @@ var (
 	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources pazr
 		SET backend_quota = quota
-		FROM cluster_az_resources cazr
+		FROM az_resources cazr
 		WHERE pazr.az_resource_id = cazr.id
 		AND cazr.resource_id = ANY($1)
 		AND pazr.project_id = $2
@@ -149,17 +149,17 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	azSeparatedNeedsApply := false
-	var azSeparatedClusterResourceIDs []db.ClusterResourceID
+	var azSeparatedResourceIDs []db.ResourceID
 	err = sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ServiceID, project.ID}, func(rows *sql.Rows) error {
 		var (
-			resourceID        db.ProjectResourceID
-			clusterResourceID db.ClusterResourceID
+			projectResourceID db.ProjectResourceID
+			resourceID        db.ResourceID
 			resourceName      liquid.ResourceName
 			currentQuotaPtr   Option[int64]
 			targetQuotaPtr    Option[uint64]
 			forbidden         bool
 		)
-		err := rows.Scan(&resourceID, &clusterResourceID, &resourceName, &currentQuotaPtr, &targetQuotaPtr, &forbidden)
+		err := rows.Scan(&projectResourceID, &resourceID, &resourceName, &currentQuotaPtr, &targetQuotaPtr, &forbidden)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			// for AZSeparatedTopology, project_resources.quota is effectively empty (always set to zero)
 			// and `targetQuota` needs to be computed by summing over project_az_resources.quota
 			targetQuota = 0
-			err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{clusterResourceID, project.ID}, func(rows *sql.Rows) error {
+			err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{resourceID, project.ID}, func(rows *sql.Rows) error {
 				var (
 					availabilityZone liquid.AvailabilityZone
 					currentAZQuota   *int64
@@ -192,7 +192,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 				if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
 					return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
 				}
-				azSeparatedClusterResourceIDs = append(azSeparatedClusterResourceIDs, clusterResourceID)
+				azSeparatedResourceIDs = append(azSeparatedResourceIDs, resourceID)
 				if targetAZQuotasInDB[resourceName] == nil {
 					targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 				}
@@ -211,7 +211,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			var ok bool
 			targetQuota, ok = targetQuotaPtr.Unpack()
 			if !ok {
-				return fmt.Errorf("found unexpected NULL value in project_resources.quota for id = %d", resourceID)
+				return fmt.Errorf("found unexpected NULL value in project_resources.quota for id = %d", projectResourceID)
 			}
 		}
 
@@ -254,7 +254,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 		if azSeparatedNeedsApply {
-			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, pq.Array(azSeparatedClusterResourceIDs), project.ID)
+			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, pq.Array(azSeparatedResourceIDs), project.ID)
 			if err != nil {
 				return err
 			}

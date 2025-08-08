@@ -33,16 +33,16 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources as pazr
-		JOIN cluster_az_resources as cazr ON cazr.id = pazr.az_resource_id
-		JOIN cluster_resources as cr ON cr.id = cazr.resource_id
+		JOIN az_resources as cazr ON cazr.id = pazr.az_resource_id
+		JOIN resources as cr ON cr.id = cazr.resource_id
 	   GROUP BY pazr.project_id, cr.id
 	)
 	SELECT p.domain_id, cs.type, cr.name, SUM(pr.quota), SUM(pas.usage),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
@@ -61,9 +61,9 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	       SUM(pazr.quota), SUM(pazr.usage),
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0)))
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
@@ -84,9 +84,9 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	)
 	SELECT p.domain_id, cs.type, cr.name, cazr.az,
 	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
