@@ -425,7 +425,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 		_, err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
-				if requestedChange != nil && requestedChange.ForbidAutogrowth != res.ForbidAutogrowth {
+				if requestedChange != nil {
 					res.ForbidAutogrowth = requestedChange.ForbidAutogrowth
 					return nil
 				}
