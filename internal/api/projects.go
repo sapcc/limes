@@ -354,7 +354,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				Type      limes.ServiceType `json:"type"`
 				Resources []struct {
 					Name             limesresources.ResourceName `json:"name"`
-					ForbidAutogrowth *bool                       `json:"forbid_autogrowth"`
+					ForbidAutogrowth Option[bool]                `json:"forbid_autogrowth"`
 				} `json:"resources"`
 			} `json:"services"`
 		} `json:"project"`
