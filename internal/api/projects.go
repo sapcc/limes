@@ -454,7 +454,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 					User:       token,
 					ReasonCode: http.StatusAccepted,
 					Action:     cadf.UpdateAction,
-					Target: maxQuotaEventTarget{
+					Target: autogrowthEventTarget{
 						DomainID:         dbDomain.UUID,
 						DomainName:       dbDomain.Name,
 						ProjectID:        dbProject.UUID,
