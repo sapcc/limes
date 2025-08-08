@@ -1072,7 +1072,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		assert.HTTPRequest{
 			Method:       "PUT",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": value}),
+			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 	}
