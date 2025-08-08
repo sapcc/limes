@@ -1,0 +1,72 @@
+{
+  "project": {
+    "id": "uuid-for-paris",
+    "name": "paris",
+    "parent_id": "uuid-for-france",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "autogrow",
+            "commitment_config": {
+              "durations": [
+                "1 hour",
+                "2 hours"
+              ],
+              "min_confirm_by": 604800
+            },
+            "quota": 10,
+            "usable_quota": 10,
+            "max_quota": 200,
+            "forbid_autogrowth": true,
+            "usage": 2,
+            "physical_usage": 1
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "autogrow",
+            "commitment_config": {
+              "durations": [
+                "1 hour",
+                "2 hours"
+              ],
+              "min_confirm_by": 604800
+            },
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2
+          }
+        ],
+        "scraped_at": 66
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "autogrow",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2,
+            "physical_usage": 1
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "autogrow",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2,
+            "backend_quota": -1
+          }
+        ],
+        "scraped_at": 55
+      }
+    ]
+  }
+}
