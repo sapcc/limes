@@ -331,8 +331,8 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		totalConfirmedAfter += req.Amount
 	}
 
-	// TODO: For this to work, we might need an indicator for the API that this request is a simulation?
 	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+		DryRun:      true,
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -347,7 +347,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								// TODO: how to handle UUID when "simulating"?
+								UUID:      liquid.CommitmentUUID(p.generateProjectCommitmentUUID()),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
 								Amount:    req.Amount,
@@ -365,9 +365,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 	result := true
 	if commitmentChangeResponse.RejectionReason != "" {
-		if retryAt, exists := commitmentChangeResponse.RetryAt.Unpack(); exists {
-			w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
-		}
+		EvaluateRetryHeader(commitmentChangeResponse, w)
 		result = false
 	}
 	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
@@ -477,7 +475,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
 								Amount:    req.Amount,
@@ -497,9 +495,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if confirmBy.IsNone() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeResponse.RejectionReason != "" {
-			if retryAt, exists := commitmentChangeResponse.RetryAt.Unpack(); exists {
-				w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
-			}
+			EvaluateRetryHeader(commitmentChangeResponse, w)
 			http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
 			return
 		}
@@ -517,6 +513,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+
+	err = tx.Commit()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
 	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
 	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
@@ -602,10 +604,10 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	var (
-		loc core.AZResourceLocation
+		loc            core.AZResourceLocation
 		totalConfirmed uint64
 	)
-	err := p.DB.QueryRow(findAZResourceLocationByIDQuery, azResourceID).
+	err := p.DB.QueryRow(findAZResourceLocationByIDQuery, azResourceID, dbProject.ID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone, &totalConfirmed)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -697,7 +699,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	liquidCommitments := make([]liquid.Commitment, 1, len(dbCommitments)+1)
 	// new
 	liquidCommitments[0] = liquid.Commitment{
-		UUID:      string(dbMergedCommitment.UUID),
+		UUID:      liquid.CommitmentUUID(dbMergedCommitment.UUID),
 		OldStatus: None[liquid.CommitmentStatus](),
 		NewStatus: Some(liquid.CommitmentStatusConfirmed),
 		Amount:    dbMergedCommitment.Amount,
@@ -707,7 +709,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	// old
 	for _, dbCommitment := range dbCommitments {
 		liquidCommitments = append(liquidCommitments, liquid.Commitment{
-			UUID:      string(dbCommitment.UUID),
+			UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 			OldStatus: Some(liquid.CommitmentStatusConfirmed),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    dbCommitment.Amount,
@@ -906,7 +908,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbRenewedCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbRenewedCommitment.UUID),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    dbRenewedCommitment.Amount,
@@ -1027,7 +1029,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
@@ -1220,7 +1222,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 							Commitments: []liquid.Commitment{
 								// old
 								{
-									UUID:      string(dbCommitment.UUID),
+									UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 									OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 									NewStatus: Some(liquid.CommitmentStatusSuperseded),
 									Amount:    dbCommitment.Amount,
@@ -1229,7 +1231,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 								},
 								// new
 								{
-									UUID:      string(transferCommitment.UUID),
+									UUID:      liquid.CommitmentUUID(transferCommitment.UUID),
 									OldStatus: None[liquid.CommitmentStatus](),
 									NewStatus: Some(p.convertCommitmentStateToDisplayForm(transferCommitment.State)),
 									Amount:    transferCommitment.Amount,
@@ -1237,7 +1239,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 									ExpiresAt: transferCommitment.ExpiresAt,
 								},
 								{
-									UUID:      string(remainingCommitment.UUID),
+									UUID:      liquid.CommitmentUUID(remainingCommitment.UUID),
 									OldStatus: None[liquid.CommitmentStatus](),
 									NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
 									Amount:    remainingCommitment.Amount,
@@ -1514,7 +1516,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
@@ -1536,7 +1538,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								Amount:    dbCommitment.Amount,
@@ -1553,6 +1555,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if commitmentChangeResponse.RejectionReason != "" {
+		EvaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
 		return
 	}
@@ -1812,7 +1815,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// old commitment is always superseded
 	sourceCommitments := []liquid.Commitment{
 		{
-			UUID:      string(dbCommitment.UUID),
+			UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 			OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    dbCommitment.Amount,
@@ -1827,7 +1830,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sourceCommitments = append(sourceCommitments, liquid.Commitment{
-			UUID:      string(remainingCommitment.UUID),
+			UUID:      liquid.CommitmentUUID(remainingCommitment.UUID),
 			OldStatus: None[liquid.CommitmentStatus](),
 			NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
 			Amount:    remainingCommitment.Amount,
@@ -1870,7 +1873,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(convertedCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(convertedCommitment.UUID),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(convertedCommitment.State)),
 								Amount:    convertedCommitment.Amount,
@@ -1883,12 +1886,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}, sourceLoc.ServiceType, serviceInfo, tx)
-	if respondwith.ObfuscatedErrorText(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
 	if dbCommitment.ConfirmedAt.IsSome() && commitmentChangeResponse.RejectionReason != "" {
+		EvaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
 		return
 	}
@@ -2055,8 +2059,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// TODO: Should it be possible for the liquid to refuse this case?
-	_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	// might only reject in the remote-case, locally we accept extensions as limes does not know future capacity
+	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2071,7 +2075,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      string(dbCommitment.UUID),
+								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								Amount:    dbCommitment.Amount,
@@ -2085,6 +2089,12 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		},
 	}, loc.ServiceType, serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	if commitmentChangeResponse.RejectionReason != "" {
+		EvaluateRetryHeader(commitmentChangeResponse, w)
+		http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
 		return
 	}
 
@@ -2120,11 +2130,13 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 // double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
 func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
 	localCommitmentChanges := liquid.CommitmentChangeRequest{
+		DryRun:      req.DryRun,
 		AZ:          req.AZ,
 		InfoVersion: req.InfoVersion,
 		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
 	}
 	remoteCommitmentChanges := liquid.CommitmentChangeRequest{
+		DryRun:      req.DryRun,
 		AZ:          req.AZ,
 		InfoVersion: req.InfoVersion,
 		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
@@ -2223,4 +2235,10 @@ func LiquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, 
 			Name: domain.Name,
 		},
 	})
+}
+
+func EvaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.ResponseWriter) {
+	if retryAt, exists := response.RetryAt.Unpack(); exists && response.RejectionReason != "" {
+		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
+	}
 }

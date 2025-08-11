@@ -258,6 +258,5 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
 	}
-
 	return errs
 }

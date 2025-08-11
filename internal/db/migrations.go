@@ -162,9 +162,9 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_mail_notifications ALTER COLUMN next_submission_at TYPE TIMESTAMP USING next_submission_at AT TIME ZONE 'UTC';
 	`,
 	"064_handles_commitments.down.sql": `
-		ALTER TABLE cluster_resources DROP COLUMN handles_commitments;
+		ALTER TABLE resources DROP COLUMN handles_commitments;
 	`,
 	"064_handles_commitments.up.sql": `
-		ALTER TABLE cluster_resources ADD COLUMN handles_commitments BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE resources ADD COLUMN handles_commitments BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
 }
