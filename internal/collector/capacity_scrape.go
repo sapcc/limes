@@ -30,7 +30,7 @@ const (
 	capacityScrapeErrorInterval = 3 * time.Minute
 )
 
-// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one ProjectService entry.
+// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one Service entry.
 // Resources and AZResources are managed indirectly by this job, because a bump of the InfoVersion
 // on Liquid side causes a reconciliation against the DB. Extraneous Services are only deleted on startup
 // of the Collector, by Cluster.Connect.

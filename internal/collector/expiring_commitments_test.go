@@ -40,7 +40,7 @@ const (
 			templates:
 				expiring_commitments:
 					subject: "Information about expiring commitments"
-					body: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} ProjectService:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+					body: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
 `
 )
 
@@ -64,8 +64,8 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = NULL;
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date:1970-01-01 ProjectService:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 ProjectService:service Resource:resource AZ:az-two', %[1]d);
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date:1970-01-27 ProjectService:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-27 ProjectService:service Resource:resource AZ:az-two', %[1]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-two', %[1]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-two', %[1]d);
 	`, c.MeasureTime().Unix())
 
 	// mail queue with an empty template should fail
@@ -91,6 +91,6 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 99 AND uuid = '00000000-0000-0000-0000-000000000099' AND transfer_token = NULL;
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 ProjectService:service Resource:resource AZ:az-one', %d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one', %d);
 	`, c.MeasureTime().Unix())
 }
