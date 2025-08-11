@@ -33,4 +33,10 @@ var sqlMigrations = map[string]string{
 		DROP TABLE cluster_resources;
 		DROP TABLE cluster_services;
 	`,
+	"062_forbid_autogrowth.down.sql": `
+		ALTER TABLE project_resources DROP COLUMN forbid_autogrowth;
+	`,
+	"062_forbid_autogrowth.up.sql": `
+		ALTER TABLE project_resources ADD COLUMN forbid_autogrowth BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

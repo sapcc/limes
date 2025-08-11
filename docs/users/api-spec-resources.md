@@ -434,6 +434,56 @@ Returns 200 (OK) on success and a JSON document with a similar structure as the 
 /v1/domains/:domain_id/projects` endpoint. Instead of a list of objects in the top-level field `projects`, only a single
 such object with identical substructure will be returned in the top-level field `project`.
 
+### PUT /v1/domains/:domain\_id/projects/:project_id/max-quota
+Sets the maximum quota growth for the provided resources to the specified max-quota value. 
+This endpoint does not override the current resource quotas; it only restricts their growth based on the specified limits.
+
+Returns 202 (Accepted) on success. Requires a JSON document like:
+```
+{
+  "project": {
+    "services": [
+      {
+        "type": "compute",
+        "resources": [
+          {
+            "name": "RAM",
+            "max_quota": 1024,
+            "unit": "MiB"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### PUT /v1/domains/:domain\_id/projects/:project_id/forbid-autogrowth
+Disables or enables the autogrowth feature for the provided resources.
+This endpoint does not override the current resource quotas; it only toggles the capability of resources to automatically grow their quota.
+The following values are accepted:
+- forbid_autogrowth: true - Disables quota autogrowth.
+- forbid_autogrowth: false - Enables quota autogrowth.
+
+Returns 202 (Accepted) on success. Requires a JSON document like:
+```
+{
+  "project": {
+    "services": [
+      {
+        "type": "compute",
+        "resources": [
+          {
+            "name": "RAM",
+            "forbid_autogrowth": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ### PUT /v1/domains/:domain\_id/projects/:project\_id
 
 **Deprecated.** Always returns 405 (Method Not Allowed) because support for setting quotas manually has been removed from Limes.
