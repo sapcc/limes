@@ -31,14 +31,15 @@ type ProjectResourceReport struct {
 	QuotaDistributionModel QuotaDistributionModel   `json:"quota_distribution_model,omitempty"`
 	CommitmentConfig       *CommitmentConfiguration `json:"commitment_config,omitempty"`
 	// PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
-	PerAZ         ProjectAZResourceReports `json:"per_az,omitempty"`
-	Quota         *uint64                  `json:"quota,omitempty"`
-	UsableQuota   *uint64                  `json:"usable_quota,omitempty"`
-	MaxQuota      *uint64                  `json:"max_quota,omitempty"` // refers to max_quota constraint maintained via API
-	Usage         uint64                   `json:"usage"`
-	PhysicalUsage *uint64                  `json:"physical_usage,omitempty"`
-	BackendQuota  *int64                   `json:"backend_quota,omitempty"`
-	Subresources  json.RawMessage          `json:"subresources,omitempty"`
+	PerAZ            ProjectAZResourceReports `json:"per_az,omitempty"`
+	Quota            *uint64                  `json:"quota,omitempty"`
+	UsableQuota      *uint64                  `json:"usable_quota,omitempty"`
+	MaxQuota         *uint64                  `json:"max_quota,omitempty"` // refers to max_quota constraint maintained via API
+	ForbidAutogrowth bool                     `json:"forbid_autogrowth,omitempty"`
+	Usage            uint64                   `json:"usage"`
+	PhysicalUsage    *uint64                  `json:"physical_usage,omitempty"`
+	BackendQuota     *int64                   `json:"backend_quota,omitempty"`
+	Subresources     json.RawMessage          `json:"subresources,omitempty"`
 }
 
 // ProjectAZResourceReport is a substructure of ProjectResourceReport containing
