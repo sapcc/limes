@@ -105,7 +105,7 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
 // records for project_services, project_resources and project_az_resources.
-// It relies on the cluster_services, cluster_resources and cluster_az_resources
+// It relies on the services, resources and az_resources
 // to exist! (e.g. use WithPersistedServiceInfo)
 func WithEmptyRecordsAsNeeded(params *setupParams) {
 	params.WithEmptyRecordsAsNeeded = true
@@ -261,14 +261,14 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		t.Fatal("can not create empty DB records since there are no projects")
 	}
 	for serviceType := range s.Cluster.Config.Liquids {
-		var clusterService *db.ClusterService
-		mustDo(t, s.DB.SelectOne(&clusterService, `SELECT * FROM cluster_services WHERE type = $1`, serviceType))
+		var service *db.Service
+		mustDo(t, s.DB.SelectOne(&service, `SELECT * FROM services WHERE type = $1`, serviceType))
 		for _, dbProject := range s.Projects {
 			t0 := time.Unix(0, 0).UTC()
 			dbProjectService := &db.ProjectService{
 				ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
 				ProjectID: dbProject.ID,
-				ServiceID: clusterService.ID,
+				ServiceID: service.ID,
 				ScrapedAt: Some(t0),
 				CheckedAt: Some(t0),
 			}
@@ -277,13 +277,13 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 		resInfos := core.InfoForService(serviceInfos, serviceType).Resources
 		for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
-			var clusterResource *db.ClusterResource
-			mustDo(t, s.DB.SelectOne(&clusterResource, `SELECT * FROM cluster_resources WHERE name = $1 AND service_id = $2`, resName, clusterService.ID))
+			var resource *db.Resource
+			mustDo(t, s.DB.SelectOne(&resource, `SELECT * FROM resources WHERE name = $1 AND service_id = $2`, resName, service.ID))
 			for _, dbProject := range s.Projects {
 				dbProjectResource := &db.ProjectResource{
 					ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
 					ProjectID:    dbProject.ID,
-					ResourceID:   clusterResource.ID,
+					ResourceID:   resource.ID,
 					Quota:        Some[uint64](0),
 					BackendQuota: Some[int64](0),
 				}
@@ -291,19 +291,19 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				s.ProjectResources = append(s.ProjectResources, dbProjectResource)
 			}
 			var allAZs []liquid.AvailabilityZone
-			if clusterResource.Topology == liquid.FlatTopology {
+			if resource.Topology == liquid.FlatTopology {
 				allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 			} else {
 				allAZs = s.Cluster.Config.AvailabilityZones
 			}
 			for _, az := range allAZs {
-				var clusterAZResource *db.ClusterAZResource
-				mustDo(t, s.DB.SelectOne(&clusterAZResource, `SELECT * FROM cluster_az_resources WHERE az = $1 AND resource_id = $2`, az, clusterResource.ID))
+				var azResource *db.AZResource
+				mustDo(t, s.DB.SelectOne(&azResource, `SELECT * FROM az_resources WHERE az = $1 AND resource_id = $2`, az, resource.ID))
 				for _, dbProject := range s.Projects {
 					dbProjectAZResource := &db.ProjectAZResource{
 						ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
 						ProjectID:        dbProject.ID,
-						AZResourceID:     clusterAZResource.ID,
+						AZResourceID:     azResource.ID,
 						Quota:            Some[uint64](0),
 						Usage:            0,
 						PhysicalUsage:    None[uint64](),
@@ -327,9 +327,9 @@ func mustDo(t *testing.T, err error) {
 
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments", "cluster_services", "domains"),
+		easypg.ClearTables("project_commitments", "services", "domains"),
 		easypg.ResetPrimaryKeys(
-			"cluster_services", "cluster_resources", "cluster_rates", "cluster_az_resources",
+			"services", "resources", "rates", "az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",
 			"project_services", "project_resources", "project_az_resources", "project_rates",
 		),

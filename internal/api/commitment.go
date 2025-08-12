@@ -40,19 +40,19 @@ var (
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		  JOIN cluster_az_resources cazr ON pc.az_resource_id = cazr.id
-		  JOIN cluster_resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
-		  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
+		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
+		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
 		 WHERE %s AND pc.state NOT IN ('superseded', 'expired')
 		 ORDER BY pc.id
 	`)
 
-	getClusterAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
+	getAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.id, cs.type, cr.name, cazr.az
 		  FROM project_az_resources pazr
-		  JOIN cluster_az_resources cazr on pazr.az_resource_id = cazr.id
-		  JOIN cluster_resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
-		  JOIN cluster_services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+		  JOIN az_resources cazr on pazr.az_resource_id = cazr.id
+		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
+		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
 		 WHERE %s
 	`)
 
@@ -62,20 +62,20 @@ var (
 		 WHERE pc.id = $1 AND pc.project_id = $2
 	`)
 
-	findClusterAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
+	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments
-		  FROM cluster_az_resources cazr
-		  JOIN cluster_resources cr ON cazr.resource_id = cr.id
-		  JOIN cluster_services cs ON cr.service_id = cs.id
+		  FROM az_resources cazr
+		  JOIN resources cr ON cazr.resource_id = cr.id
+		  JOIN services cs ON cr.service_id = cs.id
 		  JOIN project_resources pr ON pr.resource_id = cr.id
 		 WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
 	`)
 
-	findClusterAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(`
+	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT cs.type, cr.name, cazr.az
-		  FROM cluster_az_resources cazr
-		  JOIN cluster_resources cr ON cazr.resource_id = cr.id
-		  JOIN cluster_services cs ON cr.service_id = cs.id
+		  FROM az_resources cazr
+		  JOIN resources cr ON cazr.resource_id = cr.id
+		  JOIN services cs ON cr.service_id = cs.id
 		 WHERE cazr.id = $1
 	`)
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
@@ -108,12 +108,12 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 
 	// enumerate project AZ resources
 	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
-	queryStr, joinArgs := filter.PrepareQuery(getClusterAZResourceLocationsQuery)
+	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"pazr.project_id": dbProject.ID}, len(joinArgs))
-	azResourceLocationsByID := make(map[db.ClusterAZResourceID]core.AZResourceLocation)
+	azResourceLocationsByID := make(map[db.AZResourceID]core.AZResourceLocation)
 	err = sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			id  db.ClusterAZResourceID
+			id  db.AZResourceID
 			loc core.AZResourceLocation
 		)
 		err := rows.Scan(&id, &loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
@@ -278,10 +278,10 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	var (
-		azResourceID              db.ClusterAZResourceID
+		azResourceID              db.AZResourceID
 		resourceAllowsCommitments bool
 	)
-	err := p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
+	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -329,10 +329,10 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	var (
-		azResourceID              db.ClusterAZResourceID
+		azResourceID              db.AZResourceID
 		resourceAllowsCommitments bool
 	)
-	err := p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
+	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -446,7 +446,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt.IsSome() {
-		_, err := p.DB.Exec(`UPDATE cluster_services SET next_scrape_at = $1 WHERE type = $2`, now, loc.ServiceType)
+		_, err := p.DB.Exec(`UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, loc.ServiceType)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -516,7 +516,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	var loc core.AZResourceLocation
-	err := p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, azResourceID).
+	err := p.DB.QueryRow(findAZResourceLocationByIDQuery, azResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -690,7 +690,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -808,7 +808,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
@@ -991,7 +991,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
@@ -1060,7 +1060,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 	}, nil
 }
 
-func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ClusterAZResourceID, amount uint64) (db.ProjectCommitment, error) {
+func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.AZResourceID, amount uint64) (db.ProjectCommitment, error) {
 	now := p.timeNow()
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
@@ -1108,7 +1108,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	}
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
@@ -1169,7 +1169,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
@@ -1181,10 +1181,10 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// check that the target project allows commitments at all
 	var (
-		azResourceID              db.ClusterAZResourceID
+		azResourceID              db.AZResourceID
 		resourceAllowsCommitments bool
 	)
-	err = p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, targetProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
+	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, targetProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1363,7 +1363,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var sourceLoc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&sourceLoc.ServiceType, &sourceLoc.ResourceName, &sourceLoc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
@@ -1441,10 +1441,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	var (
-		targetAZResourceID        db.ClusterAZResourceID
+		targetAZResourceID        db.AZResourceID
 		resourceAllowsCommitments bool
 	)
-	err = p.DB.QueryRow(findClusterAZResourceIDByLocationQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
+	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
 		Scan(&targetAZResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1611,7 +1611,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	var loc core.AZResourceLocation
-	err = p.DB.QueryRow(findClusterAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints

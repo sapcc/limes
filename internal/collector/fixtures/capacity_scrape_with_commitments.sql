@@ -4,33 +4,33 @@ CREATE OR REPLACE FUNCTION UNIXUTC(i integer) RETURNS timestamp AS $$ SELECT TO_
 CREATE OR REPLACE FUNCTION UNIX(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
 -- capacity scrape needs these as a baseline (these are usually created by the CheckConsistencyJob)
-INSERT INTO cluster_services (id, type, next_scrape_at, scrape_duration_secs) VALUES (1, 'first',  UNIXUTC(0), 5);
-INSERT INTO cluster_services (id, type, next_scrape_at, scrape_duration_secs) VALUES (2, 'second', UNIXUTC(0), 5);
+INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (1, 'first',  UNIXUTC(0), 5);
+INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (2, 'second', UNIXUTC(0), 5);
 
--- capacity scrape would fill cluster_resources and cluster_az_resources
+-- capacity scrape would fill resources and az_resources
 -- on its own, but we do it here to minimize the inline diffs in the test code
-INSERT INTO cluster_resources (id, service_id, name, path) VALUES (1, 1, 'things', 'first/things');
-INSERT INTO cluster_resources (id, service_id, name, path) VALUES (2, 1, 'capacity', 'first/capacity');
-INSERT INTO cluster_resources (id, service_id, name, path) VALUES (3, 2, 'things', 'second/things');
-INSERT INTO cluster_resources (id, service_id, name, path) VALUES (4, 2, 'capacity', 'second/capacity');
+INSERT INTO resources (id, service_id, name, path) VALUES (1, 1, 'things', 'first/things');
+INSERT INTO resources (id, service_id, name, path) VALUES (2, 1, 'capacity', 'first/capacity');
+INSERT INTO resources (id, service_id, name, path) VALUES (3, 2, 'things', 'second/things');
+INSERT INTO resources (id, service_id, name, path) VALUES (4, 2, 'capacity', 'second/capacity');
 
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 0, 0, null, 'first/things/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (2, 1, 'az-one', 42, 8, 42, 'first/things/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (3, 1, 'az-two', 42, 8, 42, 'first/things/az-two');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (4, 2, 'any', 0, 0, null, 'first/capacity/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (5, 2, 'az-one', 42, 8, 42, 'first/capacity/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (6, 2, 'az-two', 42, 8, 42, 'first/capacity/az-two');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (7, 3, 'any', 0, 0, null, 'second/things/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (8, 3, 'az-one', 23, 4, 23, 'second/things/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (9, 3, 'az-two', 23, 4, 23, 'second/things/az-two');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (10, 4, 'any', 0, 0, null, 'second/capacity/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (11, 4, 'az-one', 23, 4, 23, 'second/capacity/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (12, 4, 'az-two', 23, 4, 23, 'second/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 0, 0, null, 'first/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (2, 1, 'az-one', 42, 8, 42, 'first/things/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (3, 1, 'az-two', 42, 8, 42, 'first/things/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (4, 2, 'any', 0, 0, null, 'first/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (5, 2, 'az-one', 42, 8, 42, 'first/capacity/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (6, 2, 'az-two', 42, 8, 42, 'first/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (7, 3, 'any', 0, 0, null, 'second/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (8, 3, 'az-one', 23, 4, 23, 'second/things/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (9, 3, 'az-two', 23, 4, 23, 'second/things/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (10, 4, 'any', 0, 0, null, 'second/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (11, 4, 'az-one', 23, 4, 23, 'second/capacity/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (12, 4, 'az-two', 23, 4, 23, 'second/capacity/az-two');
 -- unused, but will be created by the collector anyways
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (13, 1, 'unknown', 0, 0, null, 'first/things/unknown');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (14, 2, 'unknown', 0, 0, null, 'first/capacity/unknown');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (15, 3, 'unknown', 0, 0, null, 'second/things/unknown');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (16, 4, 'unknown', 0, 0, null, 'second/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (13, 1, 'unknown', 0, 0, null, 'first/things/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (14, 2, 'unknown', 0, 0, null, 'first/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (15, 3, 'unknown', 0, 0, null, 'second/things/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (16, 4, 'unknown', 0, 0, null, 'second/capacity/unknown');
 
 -- one domain
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
