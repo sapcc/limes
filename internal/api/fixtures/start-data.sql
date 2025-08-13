@@ -1,8 +1,7 @@
-CREATE OR REPLACE FUNCTION UNIXUTC(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION UNIX(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
-INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'unshared', UNIXUTC(1000), UNIXUTC(2000), 1);
-INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared', UNIXUTC(1100), UNIXUTC(2100), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'unshared', UNIX(1000), UNIX(2000), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared', UNIX(1100), UNIX(2100), 1);
 
 INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'service/unshared/instances:create', 1, 'flat', TRUE);
 INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (2, 1, 'service/unshared/instances:delete', 1, 'flat', TRUE);

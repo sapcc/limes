@@ -1,11 +1,10 @@
 -- This DB forms the baseline for Test_ScanCapacityWithCommitments.
 
-CREATE OR REPLACE FUNCTION UNIXUTC(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION UNIX(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
 -- capacity scrape needs these as a baseline (these are usually created by the CheckConsistencyJob)
-INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (1, 'first',  UNIXUTC(0), 5);
-INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (2, 'second', UNIXUTC(0), 5);
+INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (1, 'first',  UNIX(0), 5);
+INSERT INTO services (id, type, next_scrape_at, scrape_duration_secs) VALUES (2, 'second', UNIX(0), 5);
 
 -- capacity scrape would fill resources and az_resources
 -- on its own, but we do it here to minimize the inline diffs in the test code
