@@ -47,7 +47,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	defer p.listProjectsMutex.Unlock()
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -73,12 +73,12 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"project": project})
@@ -98,7 +98,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 
 	c := collector.NewCollector(p.Cluster)
 	newProjectUUIDs, err := c.ScanProjects(r.Context(), dbDomain)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -133,7 +133,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		c := collector.NewCollector(p.Cluster)
 		newProjectUUIDs, err := c.ScanProjects(r.Context(), dbDomain)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		projectUUID := mux.Vars(r)["project_id"]
@@ -152,7 +152,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 
 	// mark all project services as stale to force limes-collect to sync ASAP
 	_, err := p.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -208,7 +208,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -259,7 +259,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 
 	// write requested values to DB
 	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
@@ -267,7 +267,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	var services []db.Service
 	_, err = tx.Select(&services,
 		`SELECT cs.* FROM services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -292,13 +292,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				return nil
 			},
 		}.Run(tx, serviceInfos[srv.Type], p.timeNow(), *dbDomain, *dbProject, srv)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 	}
 
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 

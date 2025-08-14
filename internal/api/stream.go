@@ -98,7 +98,7 @@ func (s *JSONListStream[T]) FinalizeDocument(err error) {
 			logg.Error("late error during GET %s: %s", s.Request.URL.String(), err.Error())
 		} else {
 			// the callback was never called, so we can properly report the error to the client
-			respondwith.ErrorText(s.ResponseWriter, err)
+			respondwith.ObfuscatedErrorText(s.ResponseWriter, err)
 		}
 	}
 }
