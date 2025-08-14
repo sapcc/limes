@@ -310,26 +310,21 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 	_ = azResourceID // returned by the above query, but not used in this function
 
-	// commitments can never be confirmed immediately if we are before the min_confirm_date
+	// this api should always check CanConfirm at now()
 	now := p.timeNow()
-	if req.ConfirmBy != nil && req.ConfirmBy.Before(now) {
-		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
+	if req.ConfirmBy != nil {
+		http.Error(w, "this API can only check whether a commitment can be confirmed immediately", http.StatusUnprocessableEntity)
 		return
 	}
-	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
-	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
+	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(now)
 	if canConfirmErrMsg != "" {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
 
 	// check for committable capacity
-	newStatus := liquid.CommitmentStatusPlanned
-	totalConfirmedAfter := totalConfirmed
-	if confirmBy.IsNone() {
-		newStatus = liquid.CommitmentStatusConfirmed
-		totalConfirmedAfter += req.Amount
-	}
+	newStatus := liquid.CommitmentStatusConfirmed
+	totalConfirmedAfter := totalConfirmed + req.Amount
 
 	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
 		DryRun:      true,
@@ -351,8 +346,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
 								Amount:    req.Amount,
-								ConfirmBy: confirmBy,
-								ExpiresAt: req.Duration.AddTo(confirmBy.UnwrapOr(now)),
+								ExpiresAt: req.Duration.AddTo(now),
 							},
 						},
 					},
@@ -460,7 +454,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		newStatus = liquid.CommitmentStatusConfirmed
 		totalConfirmedAfter += req.Amount
 	}
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	commitmentChangeRequest := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -487,12 +481,13 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		},
-	}, loc.ServiceType, *serviceInfo, p.DB)
+	}
+	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), commitmentChangeRequest, loc.ServiceType, *serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
-	if confirmBy.IsNone() {
+	if commitmentChangeRequest.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeResponse.RejectionReason != "" {
 			EvaluateRetryHeader(commitmentChangeResponse, w)
@@ -1850,7 +1845,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		targetTotalConfirmedAfter += req.TargetAmount
 	}
 
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	commitmentChangeRequest := liquid.CommitmentChangeRequest{
 		AZ:          sourceLoc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1885,13 +1880,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		},
-	}, sourceLoc.ServiceType, serviceInfo, tx)
+	}
+	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), commitmentChangeRequest, sourceLoc.ServiceType, serviceInfo, tx)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
-	if dbCommitment.ConfirmedAt.IsSome() && commitmentChangeResponse.RejectionReason != "" {
+	if commitmentChangeRequest.RequiresConfirmation() && commitmentChangeResponse.RejectionReason != "" {
 		EvaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
 		return

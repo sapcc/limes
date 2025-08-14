@@ -17,6 +17,8 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+
+	. "github.com/majewsky/gg/option"
 )
 
 var (
@@ -68,13 +70,11 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 				return false, fmt.Errorf("project %s not found in database", projectUUID)
 			}
 			for _, commitment := range projectCommitmentChangeset.ByResource[resourceName].Commitments {
-				newStatus, newExists := commitment.NewStatus.Unpack()
-				oldStatus, oldExists := commitment.OldStatus.Unpack()
-				if newExists && newStatus == liquid.CommitmentStatusConfirmed && (!oldExists || oldStatus != liquid.CommitmentStatusConfirmed) {
+				if commitment.NewStatus == Some(liquid.CommitmentStatusConfirmed) && (commitment.OldStatus != Some(liquid.CommitmentStatusConfirmed)) {
 					additions[project.ID] += commitment.Amount
 					additionSum += commitment.Amount
 				}
-				if oldExists && oldStatus == liquid.CommitmentStatusConfirmed && (!newExists || newStatus != liquid.CommitmentStatusConfirmed) {
+				if commitment.OldStatus == Some(liquid.CommitmentStatusConfirmed) && (commitment.NewStatus != Some(liquid.CommitmentStatusConfirmed)) {
 					subtractions[project.ID] += commitment.Amount
 					subtractionSum += commitment.Amount
 				}

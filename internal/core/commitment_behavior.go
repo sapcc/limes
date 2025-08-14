@@ -45,7 +45,7 @@ func (b CommitmentBehavior) Validate(path string, occupiedConversionIdentifiers 
 	if conversionRule, ok := b.ConversionRule.Unpack(); ok {
 		identifier = conversionRule.Identifier
 		if slices.Contains(occupiedConversionIdentifiers, conversionRule.Identifier) {
-			errs.Addf("invalid value: %s.conversion_rule.identifier must be unique, but %q is already used by another serviceType", path, conversionRule.Identifier)
+			errs.Addf("invalid value: %s.conversion_rule.identifier values must be restricted to a single serviceType, but %q is already used by another serviceType", path, conversionRule.Identifier)
 		}
 	}
 

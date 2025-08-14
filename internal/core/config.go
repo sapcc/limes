@@ -208,7 +208,7 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	}
 
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
-	occupiedConversionIdentifiers := make([]string, 0)
+	var occupiedConversionIdentifiers []string
 	for serviceType, l := range cluster.Liquids {
 		if l.Area == "" {
 			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))

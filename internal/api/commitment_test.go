@@ -1587,7 +1587,7 @@ func Test_CheckCommitmentConversionConfigOverlap(t *testing.T) {
 	badConfig = fmt.Sprintf(badConfig, liquidServiceTypeFirst, liquidServiceTypeSecond)
 	dbm := db.InitORM(easypg.ConnectForTest(t, db.Configuration()))
 	_, errs := core.NewClusterFromYAML([]byte(badConfig), time.Now, dbm, false)
-	assert.DeepEqual(t, "ConfigValidationErrs", errs[0], errors.New(`invalid value: liquids.fourth.commitment_behavior_per_resource[0].conversion_rule.identifier must be unique, but "flavor2" is already used by another serviceType`))
+	assert.DeepEqual(t, "ConfigValidationErrs", errs[0], errors.New(`invalid value: liquids.fourth.commitment_behavior_per_resource[0].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`))
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
