@@ -151,4 +151,14 @@ var sqlMigrations = map[string]string{
 			END;
 			$$ LANGUAGE plpgsql;
 	`,
+	`063_localize_cluster_level_timestamps.up.sql`: `
+		ALTER TABLE services ALTER COLUMN scraped_at TYPE TIMESTAMPTZ USING scraped_at AT TIME ZONE 'UTC';
+		ALTER TABLE services ALTER COLUMN next_scrape_at TYPE TIMESTAMPTZ USING next_scrape_at AT TIME ZONE 'UTC';
+		ALTER TABLE project_mail_notifications ALTER COLUMN next_submission_at TYPE TIMESTAMPTZ USING next_submission_at AT TIME ZONE 'UTC';
+	`,
+	`063_localize_cluster_level_timestamps.down.sql`: `
+		ALTER TABLE services ALTER COLUMN scraped_at TYPE TIMESTAMP USING scraped_at AT TIME ZONE 'UTC';
+		ALTER TABLE services ALTER COLUMN next_scrape_at TYPE TIMESTAMP USING next_scrape_at AT TIME ZONE 'UTC';
+		ALTER TABLE project_mail_notifications ALTER COLUMN next_submission_at TYPE TIMESTAMP USING next_submission_at AT TIME ZONE 'UTC';
+	`,
 }
