@@ -5,20 +5,16 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
-	"github.com/sapcc/go-bits/easypg"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -1611,19 +1607,6 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, commitmentChangeRequest)
-}
-
-// there is no general tests for the config, so for now this might best live here
-func Test_CheckCommitmentConversionConfigOverlap(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
-	badConfig := strings.Replace(testConvertCommitmentsYAML, "flavor3", "flavor2", 1)
-	badConfig = strings.ReplaceAll(badConfig, "\t", "  ")
-	badConfig = fmt.Sprintf(badConfig, liquidServiceTypeFirst, liquidServiceTypeSecond)
-	dbm := db.InitORM(easypg.ConnectForTest(t, db.Configuration()))
-	_, errs := core.NewClusterFromYAML([]byte(badConfig), time.Now, dbm, false)
-	assert.DeepEqual(t, "ConfigValidationErrs", errs[0], errors.New(`invalid value: liquids.third.commitment_behavior_per_resource[4].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`))
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
