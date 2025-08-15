@@ -157,7 +157,7 @@ type ProjectRate struct {
 // ProjectCommitment contains a record from the `project_commitments` table.
 type ProjectCommitment struct {
 	ID           ProjectCommitmentID               `db:"id"`
-	UUID         ProjectCommitmentUUID             `db:"uuid"`
+	UUID         liquid.CommitmentUUID             `db:"uuid"`
 	ProjectID    ProjectID                         `db:"project_id"`
 	AZResourceID AZResourceID                      `db:"az_resource_id"`
 	Amount       uint64                            `db:"amount"`
@@ -220,7 +220,7 @@ const (
 type CommitmentWorkflowContext struct {
 	Reason                 CommitmentReason        `json:"reason"`
 	RelatedCommitmentIDs   []ProjectCommitmentID   `json:"related_ids,omitempty"` // TODO: remove when v1 API is removed (v2 API uses only UUIDs to refer to commitments)
-	RelatedCommitmentUUIDs []ProjectCommitmentUUID `json:"related_uuids,omitempty"`
+	RelatedCommitmentUUIDs []liquid.CommitmentUUID `json:"related_uuids,omitempty"`
 }
 
 // CommitmentReason is an enum. It appears in type CommitmentWorkflowContext.

@@ -342,7 +342,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(p.generateProjectCommitmentUUID()),
+								UUID:      p.generateProjectCommitmentUUID(),
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
 								Amount:    req.Amount,
@@ -469,7 +469,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+								UUID:      dbCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(newStatus),
 								Amount:    req.Amount,
@@ -573,7 +573,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Load commitments
 	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
-	commitmentUUIDs := make([]db.ProjectCommitmentUUID, len(commitmentIDs))
+	commitmentUUIDs := make([]liquid.CommitmentUUID, len(commitmentIDs))
 	for i, commitmentID := range commitmentIDs {
 		err := p.DB.SelectOne(&dbCommitments[i], findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -665,7 +665,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	supersedeContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbMergedCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbMergedCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbMergedCommitment.UUID},
 	}
 	buf, err = json.Marshal(supersedeContext)
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -694,7 +694,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	liquidCommitments := make([]liquid.Commitment, 1, len(dbCommitments)+1)
 	// new
 	liquidCommitments[0] = liquid.Commitment{
-		UUID:      liquid.CommitmentUUID(dbMergedCommitment.UUID),
+		UUID:      dbMergedCommitment.UUID,
 		OldStatus: None[liquid.CommitmentStatus](),
 		NewStatus: Some(liquid.CommitmentStatusConfirmed),
 		Amount:    dbMergedCommitment.Amount,
@@ -704,7 +704,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	// old
 	for _, dbCommitment := range dbCommitments {
 		liquidCommitments = append(liquidCommitments, liquid.Commitment{
-			UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+			UUID:      dbCommitment.UUID,
 			OldStatus: Some(liquid.CommitmentStatusConfirmed),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    dbCommitment.Amount,
@@ -835,7 +835,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonRenew,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -864,7 +864,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	renewContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonRenew,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbRenewedCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbRenewedCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbRenewedCommitment.UUID},
 	}
 	buf, err = json.Marshal(renewContext)
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -903,7 +903,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbRenewedCommitment.UUID),
+								UUID:      dbRenewedCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    dbRenewedCommitment.Amount,
@@ -1024,7 +1024,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+								UUID:      dbCommitment.UUID,
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
@@ -1217,7 +1217,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 							Commitments: []liquid.Commitment{
 								// old
 								{
-									UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+									UUID:      dbCommitment.UUID,
 									OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 									NewStatus: Some(liquid.CommitmentStatusSuperseded),
 									Amount:    dbCommitment.Amount,
@@ -1226,7 +1226,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 								},
 								// new
 								{
-									UUID:      liquid.CommitmentUUID(transferCommitment.UUID),
+									UUID:      transferCommitment.UUID,
 									OldStatus: None[liquid.CommitmentStatus](),
 									NewStatus: Some(p.convertCommitmentStateToDisplayForm(transferCommitment.State)),
 									Amount:    transferCommitment.Amount,
@@ -1234,7 +1234,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 									ExpiresAt: transferCommitment.ExpiresAt,
 								},
 								{
-									UUID:      liquid.CommitmentUUID(remainingCommitment.UUID),
+									UUID:      remainingCommitment.UUID,
 									OldStatus: None[liquid.CommitmentStatus](),
 									NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
 									Amount:    remainingCommitment.Amount,
@@ -1254,7 +1254,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		supersedeContext := db.CommitmentWorkflowContext{
 			Reason:                 db.CommitmentReasonSplit,
 			RelatedCommitmentIDs:   []db.ProjectCommitmentID{transferCommitment.ID, remainingCommitment.ID},
-			RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
+			RelatedCommitmentUUIDs: []liquid.CommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
 		}
 		buf, err := json.Marshal(supersedeContext)
 		if respondwith.ObfuscatedErrorText(w, err) {
@@ -1299,7 +1299,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
@@ -1327,7 +1327,7 @@ func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment,
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
 	}
 	buf, err := json.Marshal(creationContext)
 	if err != nil {
@@ -1518,7 +1518,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+								UUID:      dbCommitment.UUID,
 								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
@@ -1540,7 +1540,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+								UUID:      dbCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								Amount:    dbCommitment.Amount,
@@ -1817,7 +1817,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// old commitment is always superseded
 	sourceCommitments := []liquid.Commitment{
 		{
-			UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
+			UUID:      dbCommitment.UUID,
 			OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    dbCommitment.Amount,
@@ -1832,7 +1832,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sourceCommitments = append(sourceCommitments, liquid.Commitment{
-			UUID:      liquid.CommitmentUUID(remainingCommitment.UUID),
+			UUID:      remainingCommitment.UUID,
 			OldStatus: None[liquid.CommitmentStatus](),
 			NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
 			Amount:    remainingCommitment.Amount,
@@ -1875,7 +1875,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(convertedCommitment.UUID),
+								UUID:      convertedCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
 								NewStatus: Some(p.convertCommitmentStateToDisplayForm(convertedCommitment.State)),
 								Amount:    convertedCommitment.Amount,
@@ -1909,7 +1909,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		relatedCommitmentIDs   []db.ProjectCommitmentID
-		relatedCommitmentUUIDs []db.ProjectCommitmentUUID
+		relatedCommitmentUUIDs []liquid.CommitmentUUID
 	)
 	resourceInfo := core.InfoForResource(serviceInfo, sourceLoc.ResourceName)
 	if remainingAmount > 0 {
@@ -1960,7 +1960,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{dbCommitment.UUID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
 	})
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
@@ -2076,7 +2076,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:         liquid.CommitmentUUID(dbCommitment.UUID),
+								UUID:         dbCommitment.UUID,
 								OldStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								NewStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
 								Amount:       dbCommitment.Amount,

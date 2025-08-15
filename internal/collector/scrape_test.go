@@ -444,7 +444,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	mustT(t, err)
 	for idx, amount := range []uint64{7, 8} {
 		mustT(t, s.DB.Insert(&db.ProjectCommitment{
-			UUID:                db.ProjectCommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
+			UUID:                liquid.CommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			ProjectID:           1,
 			AZResourceID:        2,
 			Amount:              amount,

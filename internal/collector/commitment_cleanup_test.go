@@ -153,7 +153,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	supersedeContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{4},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000004"},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000004"},
 	}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
@@ -175,7 +175,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{3},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000003"},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000003"},
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
@@ -213,7 +213,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{7},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000007"},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000007"},
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
@@ -250,7 +250,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5, 6},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{"00000000-0000-0000-0000-000000000005", "00000000-0000-0000-0000-000000000006"},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000005", "00000000-0000-0000-0000-000000000006"},
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
