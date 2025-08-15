@@ -185,15 +185,17 @@ type ProjectCommitment struct {
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
 	TransferToken  Option[string]                          `db:"transfer_token"`
 
-	// This column is technically redundant, since the state can be derived from
-	// the values of other fields. But having this field simplifies lots of
-	// queries significantly because we do not need to carry a NOW() argument into
-	// the query, and complex conditions like `WHERE superseded_at IS NULL AND
-	// expires_at > $now AND confirmed_at IS NULL AND confirm_by < $now` become
-	// simple readable conditions like `WHERE state = 'pending'`.
+	// To a certain extent, this column is technically redundant, since the
+	// status can often be derived from the values of other fields. For example,
+	// a commitment is in status "superseded" iff `SupersededAt.IsSome()`.
+	//
+	// However, having this field simplifies lots of queries significantly
+	// because we do not need to carry a NOW() argument into the query,
+	// and complex conditions like `WHERE superseded_at IS NULL AND expires_at > $now AND confirmed_at IS NULL AND confirm_by < $now`
+	// become simple readable conditions like `WHERE status IN ('pending', 'guaranteed')`.
 	//
 	// This field is updated by the CapacityScrapeJob.
-	State CommitmentState `db:"state"`
+	Status liquid.CommitmentStatus `db:"status"`
 
 	// During commitment planning, a user can specify
 	// if a mail should be sent after the commitments confirmation.
@@ -203,17 +205,6 @@ type ProjectCommitment struct {
 	// This attribute helps to identify commitments that are already queued.
 	NotifiedForExpiration bool `db:"notified_for_expiration"`
 }
-
-// CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
-type CommitmentState string
-
-const (
-	CommitmentStatePlanned    CommitmentState = "planned"
-	CommitmentStatePending    CommitmentState = "pending"
-	CommitmentStateActive     CommitmentState = "active"
-	CommitmentStateSuperseded CommitmentState = "superseded"
-	CommitmentStateExpired    CommitmentState = "expired"
-)
 
 // CommitmentWorkflowContext is the type definition for the JSON payload in the
 // CreationContextJSON and SupersedeContextJSON fields of type ProjectCommitment.

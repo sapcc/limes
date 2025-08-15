@@ -66,20 +66,20 @@ var (
 		LIMIT 1
 	`)
 
-	// This query updates `project_commitments.state` on all rows that have not
-	// reached one of the final states ("superseded" and "expired").
+	// This query updates `project_commitments.status` on all rows that have not
+	// reached one of the final statuses ("superseded" and "expired").
 	//
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
-	// simple checks on the enum value in `state`.
-	updateProjectCommitmentStatesForResourceQuery = sqlext.SimplifyWhitespace(`
+	// simple checks on the enum value in `status`.
+	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_commitments
-		   SET state = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
-		                    WHEN expires_at <= $3          THEN 'expired'
-		                    WHEN confirm_by > $3           THEN 'planned'
-		                    WHEN confirmed_at IS NULL      THEN 'pending'
-		                    ELSE 'active' END
-		WHERE state NOT IN ('superseded', 'expired') AND az_resource_id IN (
+		   SET status = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
+		                     WHEN expires_at <= $3          THEN 'expired'
+		                     WHEN confirm_by > $3           THEN 'planned'
+		                     WHEN confirmed_at IS NULL      THEN 'pending'
+		                     ELSE 'confirmed' END
+		WHERE status NOT IN ('superseded', 'expired') AND az_resource_id IN (
 			SELECT cazr.id
 			  FROM services cs
 			  JOIN resources cr ON cr.service_id = cs.id
@@ -229,12 +229,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		return err
 	}
 
-	// for all resources thus updated, sync commitment states with reality
+	// for all resources thus updated, sync commitment status with reality
 	for _, res := range dbResources {
 		now := c.MeasureTime()
-		_, err := c.DB.Exec(updateProjectCommitmentStatesForResourceQuery, service.Type, res.Name, now)
+		_, err := c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, service.Type, res.Name, now)
 		if err != nil {
-			return fmt.Errorf("while updating project_commitments.state for %s/%s: %w", service.Type, res.Name, err)
+			return fmt.Errorf("while updating project_commitments.status for %s/%s: %w", service.Type, res.Name, err)
 		}
 	}
 

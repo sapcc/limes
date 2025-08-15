@@ -107,7 +107,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreatedAt:           s.Clock.Now(),
 		ConfirmedAt:         Some(s.Clock.Now()),
 		ExpiresAt:           commitmentForThreeYears.AddTo(s.Clock.Now()),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
 	}))
 
@@ -123,7 +123,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreatedAt:           s.Clock.Now().Add(-oneDay),
 		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
@@ -132,7 +132,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments SET state = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 	`)
 
 	// one month later, the commitment should be deleted
@@ -168,7 +168,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:          Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:            s.Clock.Now(),
 		SupersededAt:         Some(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
-		State:                db.CommitmentStateSuperseded,
+		Status:               liquid.CommitmentStatusSuperseded,
 		CreationContextJSON:  json.RawMessage(buf),
 		SupersedeContextJSON: Some(json.RawMessage(supersedeBuf)),
 	}))
@@ -189,16 +189,16 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
 		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
 
-	// the commitment in state "superseded" should not be touched when moving to state "expired"
+	// the commitment in status "superseded" should not be touched when moving to status "expired"
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments SET state = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 	`)
 
 	// when cleaning up, both commitments should be deleted simultaneously
@@ -228,7 +228,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:           s.Clock.Now(),
 		SupersededAt:        Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
-		State:               db.CommitmentStateSuperseded,
+		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: json.RawMessage(buf),
 	}
 	mustT(t, c.DB.Insert(&commitment5))
@@ -243,7 +243,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
 		SupersededAt:        Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
-		State:               db.CommitmentStateSuperseded,
+		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: buf,
 	}
 	mustT(t, c.DB.Insert(&commitment6))
@@ -264,16 +264,16 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		CreatedAt:           s.Clock.Now().Add(-oneDay).Add(10 * time.Minute),
 		ConfirmedAt:         Some(s.Clock.Now().Add(-oneDay).Add(10 * time.Minute)),
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
 	}))
 	tr.DBChanges().Ignore()
 
-	// only the merged commitment should be set to state expired,
+	// only the merged commitment should be set to status expired,
 	// the superseded commitments should not be touched
 	s.Clock.StepBy(5 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET status = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;`)
 
 	// when cleaning up, all commitments related to the merge should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)

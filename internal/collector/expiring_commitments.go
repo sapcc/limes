@@ -6,6 +6,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -42,8 +43,11 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 var (
-	discoverExpiringCommitmentsQuery = `SELECT * FROM project_commitments WHERE expires_at <= $1 AND state = 'active' AND renew_context_json IS NULL AND NOT notified_for_expiration`
-	locateExpiringCommitmentsQuery   = sqlext.SimplifyWhitespace(`
+	discoverExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+		SELECT * FROM project_commitments
+		 WHERE expires_at <= $1 AND status = '%s' AND renew_context_json IS NULL AND NOT notified_for_expiration
+	`, liquid.CommitmentStatusConfirmed))
+	locateExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.project_id, cs.type, cr.name, cazr.az, pc.id
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id

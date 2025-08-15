@@ -40,15 +40,15 @@ import (
 )
 
 var (
-	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
+	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
 		SELECT pc.*
 		  FROM project_commitments pc
 		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
 		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
 		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
-		 WHERE %s AND pc.state NOT IN ('superseded', 'expired')
+		 WHERE %%s AND pc.status NOT IN ('%s', '%s')
 		 ORDER BY pc.id
-	`)
+	`, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired))
 
 	getAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.id, cs.type, cr.name, cazr.az
@@ -77,10 +77,10 @@ var (
 			JOIN resources cr ON cazr.resource_id = cr.id
 			JOIN services cs ON cr.service_id = cs.id
 			JOIN project_commitments pc ON cazr.id = pc.az_resource_id
-			WHERE pc.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4 AND state = '%s'
+			WHERE pc.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4 AND status = '%s'
 		) pc ON 1=1
 		WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
-	`, db.CommitmentStateActive))
+	`, liquid.CommitmentStatusConfirmed))
 
 	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
 		SELECT cs.type, cr.name, cazr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
@@ -90,10 +90,10 @@ var (
 		LEFT JOIN (
 				SELECT SUM(amount) as total_confirmed
 				FROM project_commitments pc
-				WHERE az_resource_id = $1 AND project_id = $2 AND state = '%s'
+				WHERE az_resource_id = $1 AND project_id = $2 AND status = '%s'
 		) pc ON 1=1
 		WHERE cazr.id = $1;
-	`, db.CommitmentStateActive))
+	`, liquid.CommitmentStatusConfirmed))
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
@@ -171,20 +171,6 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-// The state in the db can be directly mapped to the liquid.CommitmentStatus.
-// However, the state "active" is named "confirmed" in the API. If the persisted
-// state cannot be mapped to liquid terms, an empty string is returned.
-func (p *v1Provider) convertCommitmentStateToDisplayForm(state db.CommitmentState) liquid.CommitmentStatus {
-	var status = liquid.CommitmentStatus(state)
-	if state == "active" {
-		status = liquid.CommitmentStatusConfirmed
-	}
-	if status.IsValid() {
-		return status
-	}
-	return "" // An empty state will be omitted when json serialized.
-}
-
 func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
 	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
@@ -205,7 +191,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken.AsPointer(),
-		Status:           p.convertCommitmentStateToDisplayForm(c.State),
+		Status:           c.Status,
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
@@ -495,12 +481,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		dbCommitment.ConfirmedAt = Some(now)
-		dbCommitment.State = db.CommitmentStateActive
+		dbCommitment.Status = liquid.CommitmentStatusConfirmed
 	} else {
 		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
 		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
 		// resubmit it and get a planned commitment, which might never get confirmed.
-		dbCommitment.State = db.CommitmentStatePlanned
+		dbCommitment.Status = liquid.CommitmentStatusPlanned
 	}
 
 	// create commitment
@@ -585,15 +571,15 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		commitmentUUIDs[i] = dbCommitments[i].UUID
 	}
 
-	// Verify that all commitments agree on resource and AZ and are active
+	// Verify that all commitments agree on resource and AZ and are confirmed
 	azResourceID := dbCommitments[0].AZResourceID
 	for _, dbCommitment := range dbCommitments {
 		if dbCommitment.AZResourceID != azResourceID {
 			http.Error(w, "all commitments must be on the same resource and AZ", http.StatusConflict)
 			return
 		}
-		if dbCommitment.State != db.CommitmentStateActive {
-			http.Error(w, "only active commitments may be merged", http.StatusConflict)
+		if dbCommitment.Status != liquid.CommitmentStatusConfirmed {
+			http.Error(w, "only confirmed commitments may be merged", http.StatusConflict)
 			return
 		}
 	}
@@ -631,7 +617,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmedAt:  Some(now),
 		ExpiresAt:    time.Time{}, // overwritten below
-		State:        db.CommitmentStateActive,
+		Status:       liquid.CommitmentStatusConfirmed,
 	}
 
 	// Fill amount and latest expiration date
@@ -674,7 +660,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	for _, dbCommitment := range dbCommitments {
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
-		dbCommitment.State = db.CommitmentStateSuperseded
+		dbCommitment.Status = liquid.CommitmentStatusSuperseded
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -794,10 +780,10 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Check if commitment can be renewed
 	var errs errext.ErrorSet
-	if dbCommitment.State != db.CommitmentStateActive {
-		errs.Addf("invalid state %q", dbCommitment.State)
+	if dbCommitment.Status != liquid.CommitmentStatusConfirmed {
+		errs.Addf("invalid status %q", dbCommitment.Status)
 	} else if now.After(dbCommitment.ExpiresAt) {
-		errs.Addf("invalid state %q", db.CommitmentStateExpired)
+		errs.Addf("invalid status %q", liquid.CommitmentStatusExpired)
 	}
 	if now.Before(dbCommitment.ExpiresAt.Add(-commitmentRenewalPeriod)) {
 		errs.Addf("renewal attempt too early")
@@ -852,7 +838,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:           Some(dbCommitment.ExpiresAt),
 		ExpiresAt:           dbCommitment.Duration.AddTo(dbCommitment.ExpiresAt),
-		State:               db.CommitmentStatePlanned,
+		Status:              liquid.CommitmentStatusPlanned,
 		CreationContextJSON: json.RawMessage(buf),
 	}
 
@@ -1005,7 +991,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	totalConfirmedAfter := totalConfirmed
-	if dbCommitment.State == db.CommitmentStateActive {
+	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
 		totalConfirmedAfter -= dbCommitment.Amount
 	}
 
@@ -1025,7 +1011,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 						Commitments: []liquid.Commitment{
 							{
 								UUID:      dbCommitment.UUID,
-								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								OldStatus: Some(dbCommitment.Status),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
 								ConfirmBy: dbCommitment.ConfirmBy,
@@ -1069,7 +1055,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
-	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending || commitment.State == db.CommitmentStateActive {
+	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
 		var creationContext db.CommitmentWorkflowContext
 		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
 		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
@@ -1218,7 +1204,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 								// old
 								{
 									UUID:      dbCommitment.UUID,
-									OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+									OldStatus: Some(dbCommitment.Status),
 									NewStatus: Some(liquid.CommitmentStatusSuperseded),
 									Amount:    dbCommitment.Amount,
 									ConfirmBy: dbCommitment.ConfirmBy,
@@ -1228,7 +1214,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 								{
 									UUID:      transferCommitment.UUID,
 									OldStatus: None[liquid.CommitmentStatus](),
-									NewStatus: Some(p.convertCommitmentStateToDisplayForm(transferCommitment.State)),
+									NewStatus: Some(transferCommitment.Status),
 									Amount:    transferCommitment.Amount,
 									ConfirmBy: transferCommitment.ConfirmBy,
 									ExpiresAt: transferCommitment.ExpiresAt,
@@ -1236,7 +1222,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 								{
 									UUID:      remainingCommitment.UUID,
 									OldStatus: None[liquid.CommitmentStatus](),
-									NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
+									NewStatus: Some(remainingCommitment.Status),
 									Amount:    remainingCommitment.Amount,
 									ConfirmBy: remainingCommitment.ConfirmBy,
 									ExpiresAt: remainingCommitment.ExpiresAt,
@@ -1260,7 +1246,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
-		dbCommitment.State = db.CommitmentStateSuperseded
+		dbCommitment.Status = liquid.CommitmentStatusSuperseded
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		_, err = tx.Update(&dbCommitment)
@@ -1318,7 +1304,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		ConfirmedAt:         dbCommitment.ConfirmedAt,
 		ExpiresAt:           dbCommitment.ExpiresAt,
 		CreationContextJSON: json.RawMessage(buf),
-		State:               dbCommitment.State,
+		Status:              dbCommitment.Status,
 	}, nil
 }
 
@@ -1346,7 +1332,7 @@ func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment,
 		ConfirmedAt:         dbCommitment.ConfirmedAt,
 		ExpiresAt:           dbCommitment.ExpiresAt,
 		CreationContextJSON: json.RawMessage(buf),
-		State:               dbCommitment.State,
+		Status:              dbCommitment.Status,
 	}, nil
 }
 
@@ -1497,7 +1483,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	sourceTotalConfirmedAfter := sourceTotalConfirmed
 	targetTotalConfirmedAfter := targetTotalConfirmed
-	if dbCommitment.State == db.CommitmentStateActive {
+	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
 		sourceTotalConfirmedAfter -= dbCommitment.Amount
 		targetTotalConfirmedAfter += dbCommitment.Amount
 	}
@@ -1519,7 +1505,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 						Commitments: []liquid.Commitment{
 							{
 								UUID:      dbCommitment.UUID,
-								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								OldStatus: Some(dbCommitment.Status),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    dbCommitment.Amount,
 								ConfirmBy: dbCommitment.ConfirmBy,
@@ -1542,7 +1528,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 							{
 								UUID:      dbCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
-								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								NewStatus: Some(dbCommitment.Status),
 								Amount:    dbCommitment.Amount,
 								ConfirmBy: dbCommitment.ConfirmBy,
 								ExpiresAt: dbCommitment.ExpiresAt,
@@ -1818,7 +1804,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	sourceCommitments := []liquid.Commitment{
 		{
 			UUID:      dbCommitment.UUID,
-			OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+			OldStatus: Some(dbCommitment.Status),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    dbCommitment.Amount,
 			ConfirmBy: dbCommitment.ConfirmBy,
@@ -1834,7 +1820,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		sourceCommitments = append(sourceCommitments, liquid.Commitment{
 			UUID:      remainingCommitment.UUID,
 			OldStatus: None[liquid.CommitmentStatus](),
-			NewStatus: Some(p.convertCommitmentStateToDisplayForm(remainingCommitment.State)),
+			NewStatus: Some(remainingCommitment.Status),
 			Amount:    remainingCommitment.Amount,
 			ConfirmBy: remainingCommitment.ConfirmBy,
 			ExpiresAt: remainingCommitment.ExpiresAt,
@@ -1877,7 +1863,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 							{
 								UUID:      convertedCommitment.UUID,
 								OldStatus: None[liquid.CommitmentStatus](),
-								NewStatus: Some(p.convertCommitmentStateToDisplayForm(convertedCommitment.State)),
+								NewStatus: Some(convertedCommitment.Status),
 								Amount:    convertedCommitment.Amount,
 								ConfirmBy: convertedCommitment.ConfirmBy,
 								ExpiresAt: convertedCommitment.ExpiresAt,
@@ -1942,7 +1928,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	dbCommitment.State = db.CommitmentStateSuperseded
+	dbCommitment.Status = liquid.CommitmentStatusSuperseded
 	dbCommitment.SupersededAt = Some(now)
 	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
@@ -2017,8 +2003,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if dbCommitment.State == db.CommitmentStateSuperseded {
-		msg := fmt.Sprintf("unable to operate on commitment with a state of %s", dbCommitment.State)
+	if dbCommitment.Status == liquid.CommitmentStatusSuperseded {
+		msg := fmt.Sprintf("unable to operate on commitment with a status of %s", dbCommitment.Status)
 		http.Error(w, msg, http.StatusForbidden)
 		return
 	}
@@ -2077,8 +2063,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 						Commitments: []liquid.Commitment{
 							{
 								UUID:         dbCommitment.UUID,
-								OldStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
-								NewStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								OldStatus:    Some(dbCommitment.Status),
+								NewStatus:    Some(dbCommitment.Status),
 								Amount:       dbCommitment.Amount,
 								ConfirmBy:    dbCommitment.ConfirmBy,
 								ExpiresAt:    newExpiresAt,

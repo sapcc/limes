@@ -54,9 +54,9 @@ var (
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cazr.az, pc.duration,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'active'),  0) AS active,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'pending'), 0) AS pending,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'planned'), 0) AS planned
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'confirmed'), 0) AS confirmed,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'pending'), 0) AS pending,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'planned'), 0) AS planned
 	  FROM services cs
 	  JOIN resources cr on cr.service_id = cs.id
 	  JOIN az_resources cazr ON cazr.resource_id = cr.id
@@ -328,18 +328,18 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
 	if filter.WithAZBreakdown {
-		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
+		// if `per_az` is shown, we need to compute the sum of all relevant commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
 			var (
-				dbServiceType  db.ServiceType
-				dbResourceName liquid.ResourceName
-				az             limes.AvailabilityZone
-				duration       limesresources.CommitmentDuration
-				activeAmount   uint64
-				pendingAmount  uint64
-				plannedAmount  uint64
+				dbServiceType   db.ServiceType
+				dbResourceName  liquid.ResourceName
+				az              limes.AvailabilityZone
+				duration        limesresources.CommitmentDuration
+				confirmedAmount uint64
+				pendingAmount   uint64
+				plannedAmount   uint64
 			)
-			err := rows.Scan(&dbServiceType, &dbResourceName, &az, &duration, &activeAmount, &pendingAmount, &plannedAmount)
+			err := rows.Scan(&dbServiceType, &dbResourceName, &az, &duration, &confirmedAmount, &pendingAmount, &plannedAmount)
 			if err != nil {
 				return err
 			}
@@ -360,11 +360,11 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 				return nil
 			}
 
-			if activeAmount > 0 {
+			if confirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = activeAmount
+				azReport.Committed[duration.String()] = confirmedAmount
 			}
 			if pendingAmount > 0 {
 				if azReport.PendingCommitments == nil {
