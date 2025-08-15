@@ -97,7 +97,7 @@ github.com/json-iterator/go
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
-# github.com/majewsky/gg v1.1.0
+# github.com/majewsky/gg v1.3.0
 ## explicit; go 1.24
 github.com/majewsky/gg/option
 github.com/majewsky/gg/options
@@ -155,7 +155,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20250814121725-04e492184b75
+# github.com/sapcc/go-bits v0.0.0-20250815083328-9eefdef740e1
 ## explicit; go 1.24
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
