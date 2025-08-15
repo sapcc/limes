@@ -438,7 +438,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 		FROM services cs
 		JOIN resources cr ON cr.service_id = cs.id
 		JOIN az_resources cazr ON cazr.resource_id = cr.id
-		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
+		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.status = 'confirmed'
 		JOIN projects p ON p.id = pc.project_id
 		GROUP BY p.domain_id, p.id, cs.type, cr.name
 	)
@@ -456,17 +456,17 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
-	WITH project_commitment_sums_by_state AS (
-	  SELECT az_resource_id, project_id, state, SUM(amount) AS amount
+	WITH project_commitment_sums_by_status AS (
+	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE state NOT IN ('superseded', 'expired')
-	   GROUP BY az_resource_id, project_id, state
+	   WHERE status NOT IN ('superseded', 'expired')
+	   GROUP BY az_resource_id, project_id, status
 	), project_commitment_sums AS (
-	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(state, amount) AS amount_by_state
-	    FROM project_commitment_sums_by_state
+	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status
+	    FROM project_commitment_sums_by_status
 	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_state
+	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_status
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id
 	  JOIN az_resources cazr ON cazr.resource_id = cr.id
@@ -687,18 +687,18 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch values for project AZ level (usage/commitments)
 	err = sqlext.ForeachRow(d.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName        string
-			domainUUID        string
-			projectName       string
-			projectUUID       string
-			dbServiceType     db.ServiceType
-			dbResourceName    liquid.ResourceName
-			az                liquid.AvailabilityZone
-			usage             uint64
-			amountByStateJSON *string
+			domainName         string
+			domainUUID         string
+			projectName        string
+			projectUUID        string
+			dbServiceType      db.ServiceType
+			dbResourceName     liquid.ResourceName
+			az                 liquid.AvailabilityZone
+			usage              uint64
+			amountByStatusJSON *string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&az, &usage, &amountByStateJSON)
+			&az, &usage, &amountByStatusJSON)
 		if err != nil {
 			return err
 		}
@@ -715,14 +715,18 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			result["limes_project_usage_per_az"] = append(result["limes_project_usage_per_az"], metric)
 		}
 		committed := uint64(0)
-		if amountByStateJSON != nil {
-			var amountByState map[db.CommitmentState]uint64
-			err = json.Unmarshal([]byte(*amountByStateJSON), &amountByState)
+		if amountByStatusJSON != nil {
+			var amountByStatus map[liquid.CommitmentStatus]uint64
+			err = json.Unmarshal([]byte(*amountByStatusJSON), &amountByStatus)
 			if err != nil {
-				return fmt.Errorf("while unmarshalling amount_by_state: %w (input was %q)", err, *amountByStateJSON)
+				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *amountByStatusJSON)
 			}
-			committed = amountByState[db.CommitmentStateActive]
-			for state, amount := range amountByState {
+			committed = amountByStatus[liquid.CommitmentStatusConfirmed]
+			for status, amount := range amountByStatus {
+				state := string(status)
+				if status == liquid.CommitmentStatusConfirmed {
+					state = "active" // backwards compatibility with old db.ProjectCommitmentState enum (TODO: use liquid.CommitmentStatus values in v2 metrics)
+				}
 				labelsWithState := fmt.Sprintf(`%s,state=%q`, labels, state)
 				metric := dataMetric{Labels: labelsWithState, Value: float64(amount)}
 				result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)

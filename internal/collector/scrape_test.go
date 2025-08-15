@@ -438,13 +438,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 	commitmentForOneYear, err := limesresources.ParseCommitmentDuration("1 year")
 	mustT(t, err)
 	now := s.Clock.Now()
-	// AZResourceID = 2 has two commitments in state "active" to test summing by state
+	// AZResourceID = 2 has two commitments in status "confirmed" to test summing by status
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
 	for idx, amount := range []uint64{7, 8} {
 		mustT(t, s.DB.Insert(&db.ProjectCommitment{
-			UUID:                db.ProjectCommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
+			UUID:                liquid.CommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			ProjectID:           1,
 			AZResourceID:        2,
 			Amount:              amount,
@@ -454,11 +454,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 			CreatorName:         "dummy",
 			ConfirmedAt:         Some(now),
 			ExpiresAt:           commitmentForOneYear.AddTo(now),
-			State:               db.CommitmentStateActive,
+			Status:              liquid.CommitmentStatusConfirmed,
 			CreationContextJSON: buf,
 		}))
 	}
-	// AZResourceID = 8 has two commitments in different states to test aggregation over different states
+	// AZResourceID = 8 has two commitments in different statuses to test aggregation over different statuses
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000003",
 		ProjectID:           2,
@@ -470,7 +470,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatorName:         "dummy",
 		ConfirmedAt:         Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: buf,
 	}))
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
@@ -484,7 +484,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatorName:         "dummy",
 		ConfirmBy:           Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
-		State:               db.CommitmentStatePending,
+		Status:              liquid.CommitmentStatusPending,
 		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()

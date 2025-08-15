@@ -10,9 +10,8 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
-
-	"github.com/sapcc/limes/internal/db"
 )
 
 func intoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
@@ -35,8 +34,8 @@ func GenerateTransferToken() string {
 }
 
 // GenerateProjectCommitmentUUID generates a random ProjectCommitmentUUID.
-func GenerateProjectCommitmentUUID() db.ProjectCommitmentUUID {
+func GenerateProjectCommitmentUUID() liquid.CommitmentUUID {
 	// UUID generation will only raise an error if reading from /dev/urandom fails,
 	// which is a wildly unexpected OS-level error and thus fine as a fatal error
-	return db.ProjectCommitmentUUID(must.Return(uuid.NewV4()).String())
+	return liquid.CommitmentUUID(must.Return(uuid.NewV4()).String())
 }

@@ -58,13 +58,13 @@ type v1Provider struct {
 	// slots for test doubles
 	timeNow                       func() time.Time
 	generateTransferToken         func() string
-	generateProjectCommitmentUUID func() db.ProjectCommitmentUUID
+	generateProjectCommitmentUUID func() liquid.CommitmentUUID
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() db.ProjectCommitmentUUID) httpapi.API {
+func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID) httpapi.API {
 	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",

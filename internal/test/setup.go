@@ -38,7 +38,7 @@ type setupParams struct {
 	DBSetupOptions           []easypg.TestSetupOption
 	DBFixtureFile            string
 	ConfigYAML               string
-	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() db.ProjectCommitmentUUID) httpapi.API
+	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
@@ -70,7 +70,7 @@ func WithConfig(yamlStr string) SetupOption {
 // Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
 // directly call this function because that would create an import cycle, so it
 // must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() db.ProjectCommitmentUUID) httpapi.API, middlewares ...httpapi.API) SetupOption {
+func WithAPIHandler(apiBuilder func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API, middlewares ...httpapi.API) SetupOption {
 	return func(params *setupParams) {
 		params.APIBuilder = apiBuilder
 		params.APIMiddlewares = middlewares
@@ -143,19 +143,19 @@ func GenerateDummyToken() string {
 }
 
 // GenerateDummyCommitmentUUID generates a deterministic UUID from the given ID.
-func GenerateDummyCommitmentUUID(idx uint64) db.ProjectCommitmentUUID {
+func GenerateDummyCommitmentUUID(idx uint64) liquid.CommitmentUUID {
 	// e.g. idx = 5
 	//   -> str = hex(sha256("5")) = "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
 	//   -> uuid = "ef2d127d-e37b-4942-baad-06145e54b0c6"
 	buf := sha256.Sum256([]byte(strconv.FormatUint(idx, 10)))
 	str := hex.EncodeToString(buf[:])
 	uuid := fmt.Sprintf("%s-%s-4%s-%s-%s", str[0:8], str[8:12], str[13:16], str[16:20], str[20:32])
-	return db.ProjectCommitmentUUID(uuid)
+	return liquid.CommitmentUUID(uuid)
 }
 
-func projectCommitmentUUIDGenerator() (generator func() db.ProjectCommitmentUUID, currentProjectCommitmentID *uint64) {
+func projectCommitmentUUIDGenerator() (generator func() liquid.CommitmentUUID, currentProjectCommitmentID *uint64) {
 	idx := uint64(0)
-	return func() db.ProjectCommitmentUUID {
+	return func() liquid.CommitmentUUID {
 		idx++
 		return GenerateDummyCommitmentUUID(idx)
 	}, &idx

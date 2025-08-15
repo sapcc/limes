@@ -203,7 +203,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"capacity": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    10,
 								ConfirmBy: Some(s.Clock.Now().Add(14 * day).Local()),
@@ -258,7 +258,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    20,
 								ConfirmBy: Some(s.Clock.Now().Add(14 * day).Local()),
@@ -341,7 +341,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								OldStatus: Some(liquid.CommitmentStatusPlanned),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    20,
@@ -405,7 +405,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3)),
+								UUID:      test.GenerateDummyCommitmentUUID(3),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    30,
 								ConfirmBy: Some(s.Clock.Now().Add(14 * day).Local()),
@@ -431,7 +431,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3)),
+								UUID:      test.GenerateDummyCommitmentUUID(3),
 								OldStatus: Some(liquid.CommitmentStatusPlanned),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    30,
@@ -447,8 +447,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, state = $3",
-		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), db.CommitmentStateActive,
+	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, status = $3",
+		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -482,7 +482,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 						TotalConfirmedBefore: 10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    10,
@@ -565,7 +565,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		TotalConfirmedAfter: maxCommittableCapacity,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+				UUID:      test.GenerateDummyCommitmentUUID(2),
 				NewStatus: Some(liquid.CommitmentStatusConfirmed),
 				Amount:    maxCommittableCapacity,
 				ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -601,7 +601,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 
 	// this won't work because we request too much
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity + 1
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3))
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
@@ -622,7 +622,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 
 	// create a commitment for some of that capacity
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = committedCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(4))
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(4)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
@@ -644,7 +644,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	// check that can-confirm can only confirm the remainder of the available capacity, not more
 	remainingCommittableCapacity := maxCommittableCapacity - committedCapacity
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(5))
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(5)
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = committedCapacity
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
@@ -665,7 +665,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity + 1
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(6))
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(6)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
@@ -685,14 +685,14 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm ignores expired commitments
-	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
-		s.Clock.Now(), db.CommitmentStateExpired)
+	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
+		s.Clock.Now(), liquid.CommitmentStatusExpired)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(7))
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(7)
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
@@ -1126,20 +1126,20 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 							},
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3)),
+								UUID:      test.GenerateDummyCommitmentUUID(3),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    9,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 							},
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(4)),
+								UUID:      test.GenerateDummyCommitmentUUID(4),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    1,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1372,7 +1372,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    10,
@@ -1389,7 +1389,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1429,7 +1429,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  1,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    9,
@@ -1446,7 +1446,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  9,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    9,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1463,14 +1463,14 @@ func Test_TransferCommitment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
+	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 
 	var splitCommitment db.ProjectCommitment
 	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.DeepEqual(t, "commitment state", splitCommitment.State, db.CommitmentStateActive)
+	assert.DeepEqual(t, "commitment state", splitCommitment.Status, liquid.CommitmentStatusConfirmed)
 
 	// wrong token
 	assert.HTTPRequest{
@@ -1569,7 +1569,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 						TotalConfirmedBefore: 10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1585,7 +1585,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 						TotalConfirmedAfter:  20,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1683,32 +1683,6 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-func Test_convertCommitmentStateToDisplayForm(t *testing.T) {
-	p := &v1Provider{}
-
-	tests := []struct {
-		name   string
-		state  db.CommitmentState
-		expect liquid.CommitmentStatus
-	}{
-		{"planned maps to planned", db.CommitmentStatePlanned, liquid.CommitmentStatusPlanned},
-		{"pending maps to pending", db.CommitmentStatePending, liquid.CommitmentStatusPending},
-		{"active maps to confirmed", db.CommitmentStateActive, liquid.CommitmentStatusConfirmed},
-		{"expired maps to expired", db.CommitmentStateExpired, liquid.CommitmentStatusExpired},
-		{"superseded maps to superseded", db.CommitmentStateSuperseded, liquid.CommitmentStatusSuperseded},
-		{"unknown maps to empty string", "foobar", ""},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := p.convertCommitmentStateToDisplayForm(tc.state)
-			if got != tc.expect {
-				t.Errorf("state %q: got %q, want %q", tc.state, got, tc.expect)
-			}
-		})
-	}
-}
-
 func Test_ConvertCommitments(t *testing.T) {
 	srvInfoThird := test.DefaultLiquidServiceInfo()
 	srvInfoThird.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
@@ -1803,7 +1777,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		TotalConfirmedBefore: 21,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+				UUID:      test.GenerateDummyCommitmentUUID(1),
 				OldStatus: Some(liquid.CommitmentStatusConfirmed),
 				NewStatus: Some(liquid.CommitmentStatusSuperseded),
 				Amount:    21,
@@ -1815,7 +1789,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		TotalConfirmedAfter: 14,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+				UUID:      test.GenerateDummyCommitmentUUID(2),
 				NewStatus: Some(liquid.CommitmentStatusConfirmed),
 				Amount:    14,
 				ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1864,14 +1838,14 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityBCommitmentChangeset.TotalConfirmedBefore = 21
 	capacityBCommitmentChangeset.TotalConfirmedAfter = 18
 	capacityBCommitmentChangeset.Commitments = append(capacityBCommitmentChangeset.Commitments, liquid.Commitment{
-		UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+		UUID:      test.GenerateDummyCommitmentUUID(2),
 		NewStatus: Some(liquid.CommitmentStatusConfirmed),
 		Amount:    18,
 		ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 	})
 	capacityACommitmentChangeset.TotalConfirmedAfter = 2
 	capacityACommitmentChangeset.Commitments[0].Amount = 2
-	capacityACommitmentChangeset.Commitments[0].UUID = liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3))
+	capacityACommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
@@ -1896,7 +1870,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.DeepEqual(t, "commitment state", commitmentToCheck.State, db.CommitmentStateSuperseded)
+	assert.DeepEqual(t, "commitment state", commitmentToCheck.Status, liquid.CommitmentStatusSuperseded)
 	// remainder
 	err = s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
@@ -1953,7 +1927,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.TotalConfirmedBefore = 2
 	capacityACommitmentChangeset.TotalConfirmedAfter = 2
 	capacityACommitmentChangeset.Commitments[0] = liquid.Commitment{
-		UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(5)),
+		UUID:      test.GenerateDummyCommitmentUUID(5),
 		NewStatus: Some(liquid.CommitmentStatusPlanned),
 		Amount:    2,
 		ExpiresAt: s.Clock.Now().Add(14 * day).Add(1 * time.Hour).Local(),
@@ -1962,7 +1936,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityBCommitmentChangeset.TotalConfirmedBefore = 18
 	capacityBCommitmentChangeset.Commitments = []liquid.Commitment{
 		{
-			UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(4)),
+			UUID:      test.GenerateDummyCommitmentUUID(4),
 			OldStatus: Some(liquid.CommitmentStatusPlanned),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    3,
@@ -2066,7 +2040,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:         liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:         test.GenerateDummyCommitmentUUID(1),
 								OldStatus:    Some(liquid.CommitmentStatusConfirmed),
 								NewStatus:    Some(liquid.CommitmentStatusConfirmed),
 								Amount:       10,
@@ -2131,7 +2105,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:         liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:         test.GenerateDummyCommitmentUUID(2),
 								OldStatus:    Some(liquid.CommitmentStatusPlanned),
 								NewStatus:    Some(liquid.CommitmentStatusPlanned),
 								Amount:       10,
@@ -2202,7 +2176,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 
 	// Negative: Superseded commitment
 	s.Clock.StepBy(-1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET state='superseded' where ID = 3")
+	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2210,7 +2184,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
 		Body:         assert.JSONObject{"duration": "2 hours"},
-		ExpectBody:   assert.StringData("unable to operate on commitment with a state of superseded\n"),
+		ExpectBody:   assert.StringData("unable to operate on commitment with a status of superseded\n"),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 }
@@ -2390,10 +2364,10 @@ func Test_MergeCommitments(t *testing.T) {
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
-	// Do not merge commitments with states other than "active"
-	unmergableStates := []db.CommitmentState{db.CommitmentStatePlanned, db.CommitmentStatePending, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
-	for _, state := range unmergableStates {
-		_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", state)
+	// Do not merge commitments with statuses other than "active"
+	unmergableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
+	for _, status := range unmergableStatuses {
+		_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2404,7 +2378,7 @@ func Test_MergeCommitments(t *testing.T) {
 			ExpectStatus: http.StatusConflict,
 		}.Check(t, s.Handler)
 	}
-	_, err := s.DB.Exec("UPDATE project_commitments SET state=$1 where ID = 2", db.CommitmentStateActive)
+	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", liquid.CommitmentStatusConfirmed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2429,20 +2403,20 @@ func Test_MergeCommitments(t *testing.T) {
 						TotalConfirmedAfter:  15,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(5)),
+								UUID:      test.GenerateDummyCommitmentUUID(5),
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    15,
 								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).Local(),
 							},
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								UUID:      test.GenerateDummyCommitmentUUID(1),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 							},
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								UUID:      test.GenerateDummyCommitmentUUID(2),
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    5,
@@ -2469,11 +2443,11 @@ func Test_MergeCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
+	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	expectedContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5},
-		RelatedCommitmentUUIDs: []db.ProjectCommitmentUUID{test.GenerateDummyCommitmentUUID(5)},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{test.GenerateDummyCommitmentUUID(5)},
 	}
 	var supersedeContext db.CommitmentWorkflowContext
 	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
@@ -2485,7 +2459,7 @@ func Test_MergeCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
+	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
 	if err != nil {
 		t.Fatal(err)
@@ -2585,7 +2559,7 @@ func Test_RenewCommitments(t *testing.T) {
 						TotalConfirmedAfter:  2,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(3)),
+								UUID:      test.GenerateDummyCommitmentUUID(3),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    2,
 								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).Local(),
@@ -2614,7 +2588,7 @@ func Test_RenewCommitments(t *testing.T) {
 						TotalConfirmedAfter:  1,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(4)),
+								UUID:      test.GenerateDummyCommitmentUUID(4),
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    1,
 								ExpiresAt: s.Clock.Now().Add(4 * time.Hour).Local(),
@@ -2660,7 +2634,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	s.Clock.StepBy(-2 * time.Hour)
 	// Do not allow to renew explicit expired commitments
-	_, err := s.DB.Exec("UPDATE project_commitments SET state = $1 WHERE id = 5", db.CommitmentStateExpired)
+	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2671,8 +2645,8 @@ func Test_RenewCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Reject requests that try to renew commitments too early (more than 3 month before expiring date)
-	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, state = $3 WHERE id = 5",
-		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), db.CommitmentStateActive,
+	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
+		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -24,7 +24,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE state = 'active'
+	   WHERE status = 'confirmed'
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT cs.type, cr.name, cazr.az,
@@ -64,14 +64,14 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE status = 'confirmed'), 0) AS confirmed,
+	         COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE status = 'planned'), 0) AS planned
 	    FROM project_commitments
 	   GROUP BY az_resource_id, duration
 	)
 	SELECT cs.type, cr.name, cazr.az,
-	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
+	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  JOIN az_resources cazr ON cazr.resource_id = cr.id
@@ -285,17 +285,17 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				dbServiceType  db.ServiceType
-				dbResourceName liquid.ResourceName
-				az             limes.AvailabilityZone
-				duration       limesresources.CommitmentDuration
-				activeAmount   uint64
-				pendingAmount  uint64
-				plannedAmount  uint64
+				dbServiceType   db.ServiceType
+				dbResourceName  liquid.ResourceName
+				az              limes.AvailabilityZone
+				duration        limesresources.CommitmentDuration
+				confirmedAmount uint64
+				pendingAmount   uint64
+				plannedAmount   uint64
 			)
 			err := rows.Scan(
 				&dbServiceType, &dbResourceName, &az,
-				&duration, &activeAmount, &pendingAmount, &plannedAmount,
+				&duration, &confirmedAmount, &pendingAmount, &plannedAmount,
 			)
 			if err != nil {
 				return err
@@ -310,11 +310,11 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				return nil
 			}
 
-			if activeAmount > 0 {
+			if confirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = activeAmount
+				azReport.Committed[duration.String()] = confirmedAmount
 			}
 			if pendingAmount > 0 {
 				if azReport.PendingCommitments == nil {

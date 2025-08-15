@@ -456,7 +456,6 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	for _, res := range dbResources {
 		// depending on the topology, we can construct the various necessary AZs
 		var wantedKeys []limes.AvailabilityZone
-		// rewrite to switch statement
 		switch res.Topology {
 		case liquid.FlatTopology:
 			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
