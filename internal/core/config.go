@@ -5,6 +5,8 @@ package core
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -208,13 +210,24 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	}
 
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
-	for serviceType, l := range cluster.Liquids {
+	var occupiedConversionIdentifiers []string
+	// sorted f
+	for _, serviceType := range slices.Sorted(maps.Keys(cluster.Liquids)) {
+		l := cluster.Liquids[serviceType]
 		if l.Area == "" {
 			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))
 		}
+		serviceIdentifiers := make([]string, 0, len(l.CommitmentBehaviorPerResource))
 		for idx2, behavior := range l.CommitmentBehaviorPerResource {
-			errs.Append(behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2)))
+			var (
+				validationErrs    errext.ErrorSet
+				serviceIdentifier string
+			)
+			validationErrs, serviceIdentifier = behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2), occupiedConversionIdentifiers)
+			errs.Append(validationErrs)
+			serviceIdentifiers = append(serviceIdentifiers, serviceIdentifier)
 		}
+		occupiedConversionIdentifiers = append(occupiedConversionIdentifiers, serviceIdentifiers...)
 	}
 
 	for idx, behavior := range cluster.ResourceBehaviors {
@@ -249,6 +262,5 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
 	}
-
 	return errs
 }

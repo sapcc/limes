@@ -48,6 +48,7 @@ type Resource struct {
 	NeedsResourceDemand bool            `db:"needs_resource_demand"`
 	HasQuota            bool            `db:"has_quota"`
 	AttributesJSON      string          `db:"attributes_json"`
+	HandlesCommitments  bool            `db:"handles_commitments"`
 }
 
 // AZResource contains a record from the `az_resources` table.

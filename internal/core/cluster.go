@@ -38,6 +38,9 @@ type Cluster struct {
 	LiquidConnections map[db.ServiceType]*LiquidConnection
 	// reference of the DB is necessary to delete leftover LiquidConnections
 	DB *gorp.DbMap
+	// used to generate LiquidClients without LiquidConnections
+	Provider *gophercloud.ProviderClient
+	EO       gophercloud.EndpointOpts
 }
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections - if configured.
@@ -88,8 +91,12 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all LiquidConnections.
 func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
+	// save provider and eo for possible later use
+	c.Provider = provider
+	c.EO = eo
+
 	// initialize discovery plugin
-	err := c.DiscoveryPlugin.Init(ctx, provider, eo)
+	err := c.DiscoveryPlugin.Init(ctx, c.Provider, c.EO)
 	if err != nil {
 		errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}
@@ -102,7 +109,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	serviceTypes := slices.Sorted(maps.Keys(c.LiquidConnections))
 	for _, serviceType := range serviceTypes {
 		conn := c.LiquidConnections[serviceType]
-		err := conn.Init(ctx, provider, eo)
+		err := conn.Init(ctx, c.Provider, c.EO)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
 		}
@@ -412,6 +419,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				NeedsResourceDemand: serviceInfo.Resources[resourceName].NeedsResourceDemand,
 				HasQuota:            serviceInfo.Resources[resourceName].HasQuota,
 				AttributesJSON:      string(serviceInfo.Resources[resourceName].Attributes),
+				HandlesCommitments:  serviceInfo.Resources[resourceName].HandlesCommitments,
 			}, nil
 		},
 		Update: func(res *db.Resource) (err error) {
@@ -425,6 +433,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			res.NeedsResourceDemand = serviceInfo.Resources[res.Name].NeedsResourceDemand
 			res.HasQuota = serviceInfo.Resources[res.Name].HasQuota
 			res.AttributesJSON = string(serviceInfo.Resources[res.Name].Attributes)
+			res.HandlesCommitments = serviceInfo.Resources[res.Name].HandlesCommitments
 			return nil
 		},
 	}
@@ -616,6 +625,7 @@ func readServiceInfoFromDB(dbm *gorp.DbMap, serviceTypeOpt Option[db.ServiceType
 			NeedsResourceDemand: dbResource.NeedsResourceDemand,
 			HasQuota:            dbResource.HasQuota,
 			Attributes:          []byte(dbResource.AttributesJSON),
+			HandlesCommitments:  dbResource.HandlesCommitments,
 		}
 	}
 	for _, dbRate := range dbRates {

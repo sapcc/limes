@@ -161,4 +161,10 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE services ALTER COLUMN next_scrape_at TYPE TIMESTAMP USING next_scrape_at AT TIME ZONE 'UTC';
 		ALTER TABLE project_mail_notifications ALTER COLUMN next_submission_at TYPE TIMESTAMP USING next_submission_at AT TIME ZONE 'UTC';
 	`,
+	"064_handles_commitments.down.sql": `
+		ALTER TABLE resources DROP COLUMN handles_commitments;
+	`,
+	"064_handles_commitments.up.sql": `
+		ALTER TABLE resources ADD COLUMN handles_commitments BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }
