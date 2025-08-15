@@ -332,7 +332,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -359,7 +359,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 	result := true
 	if commitmentChangeResponse.RejectionReason != "" {
-		EvaluateRetryHeader(commitmentChangeResponse, w)
+		evaluateRetryHeader(commitmentChangeResponse, w)
 		result = false
 	}
 	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
@@ -459,7 +459,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -490,7 +490,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if commitmentChangeRequest.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeResponse.RejectionReason != "" {
-			EvaluateRetryHeader(commitmentChangeResponse, w)
+			evaluateRetryHeader(commitmentChangeResponse, w)
 			http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
 			return
 		}
@@ -717,7 +717,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -893,7 +893,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1014,7 +1014,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1043,7 +1043,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// perform deletion
 	_, err = p.DB.Delete(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1149,12 +1149,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
-	} else if respondwith.ErrorText(w, err) {
+	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
@@ -1206,7 +1206,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			InfoVersion: serviceInfo.Version,
 			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 				dbProject.UUID: {
-					ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+					ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 						loc.ResourceName: {
 							TotalConfirmedBefore: totalConfirmed,
@@ -1271,7 +1271,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment = transferCommitment
 	}
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1451,12 +1451,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	// get old project additionally
 	var sourceProject db.Project
 	err = p.DB.SelectOne(&sourceProject, `SELECT * FROM projects WHERE id = $1`, dbCommitment.ProjectID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	var sourceDomain db.Domain
 	err = p.DB.SelectOne(&sourceDomain, `SELECT * FROM domains WHERE id = $1`, sourceProject.DomainID)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1495,17 +1495,24 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	sourceTotalConfirmedAfter := sourceTotalConfirmed
+	targetTotalConfirmedAfter := targetTotalConfirmed
+	if dbCommitment.State == db.CommitmentStateActive {
+		sourceTotalConfirmedAfter -= dbCommitment.Amount
+		targetTotalConfirmedAfter += dbCommitment.Amount
+	}
+
 	// check move is allowed
 	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			sourceProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
-						TotalConfirmedAfter:  sourceTotalConfirmed - dbCommitment.Amount,
+						TotalConfirmedAfter:  sourceTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
 						TotalGuaranteedAfter:  0,
@@ -1523,11 +1530,11 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				},
 			},
 			targetProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: targetTotalConfirmed,
-						TotalConfirmedAfter:  targetTotalConfirmed + dbCommitment.Amount,
+						TotalConfirmedAfter:  targetTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
 						TotalGuaranteedAfter:  0,
@@ -1546,11 +1553,11 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 			},
 		},
 	}, loc.ServiceType, serviceInfo, tx)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	if commitmentChangeResponse.RejectionReason != "" {
-		EvaluateRetryHeader(commitmentChangeResponse, w)
+		evaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
 		return
 	}
@@ -1563,7 +1570,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1821,7 +1828,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// when there is a remaining amount, we must request to add this
 	if remainingAmount > 0 {
 		remainingCommitment, err = p.buildSplitCommitment(dbCommitment, remainingAmount)
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		sourceCommitments = append(sourceCommitments, liquid.Commitment{
@@ -1834,7 +1841,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	convertedCommitment, err := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -1850,7 +1857,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					sourceLoc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
@@ -1882,13 +1889,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), commitmentChangeRequest, sourceLoc.ServiceType, serviceInfo, tx)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
 	if commitmentChangeRequest.RequiresConfirmation() && commitmentChangeResponse.RejectionReason != "" {
-		EvaluateRetryHeader(commitmentChangeResponse, w)
+		evaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
 		return
 	}
@@ -2042,8 +2049,6 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusForbidden)
 		return
 	}
-	dbCommitment.Duration = req.Duration
-	dbCommitment.ExpiresAt = newExpiresAt
 
 	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -2061,7 +2066,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -2071,12 +2076,13 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 						TotalGuaranteedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(dbCommitment.UUID),
-								OldStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
-								NewStatus: Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
-								Amount:    dbCommitment.Amount,
-								ConfirmBy: dbCommitment.ConfirmBy,
-								ExpiresAt: dbCommitment.ExpiresAt,
+								UUID:         liquid.CommitmentUUID(dbCommitment.UUID),
+								OldStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								NewStatus:    Some(p.convertCommitmentStateToDisplayForm(dbCommitment.State)),
+								Amount:       dbCommitment.Amount,
+								ConfirmBy:    dbCommitment.ConfirmBy,
+								ExpiresAt:    newExpiresAt,
+								OldExpiresAt: Some(dbCommitment.ExpiresAt.Local()),
 							},
 						},
 					},
@@ -2088,8 +2094,10 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	dbCommitment.Duration = req.Duration
+	dbCommitment.ExpiresAt = newExpiresAt
 	if commitmentChangeResponse.RejectionReason != "" {
-		EvaluateRetryHeader(commitmentChangeResponse, w)
+		evaluateRetryHeader(commitmentChangeResponse, w)
 		http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
 		return
 	}
@@ -2119,7 +2127,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
 }
 
-// DelegateCommitmentCheck decides whether LiquidClient.ChangeCommitments() should be called,
+// DelegateChangeCommitments decides whether LiquidClient.ChangeCommitments() should be called,
 // depending on the setting of liquid.ResourceInfo.HandlesCommitments. If not, it routes the
 // operation to be performed locally on the database. In case the LiquidConnection is not filled,
 // a LiquidClient is instantiated on the fly to perform the operation. It utilizes a given ServiceInfo so that no
@@ -2142,10 +2150,7 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
 			for i, commitment := range resourceCommitmentChangeset.Commitments {
 				commitment.ExpiresAt = commitment.ExpiresAt.Local()
-				confirmBy, exists := commitment.ConfirmBy.Unpack()
-				if exists {
-					commitment.ConfirmBy = Some(confirmBy.Local())
-				}
+				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.Local)
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
 
@@ -2184,56 +2189,53 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 	}
 
 	// check remote
-	var liquidClient core.LiquidClient
-	c := p.Cluster
-	if len(c.LiquidConnections) == 0 {
-		// find the right ServiceType
-		liquidServiceType := c.Config.Liquids[serviceType].LiquidServiceType
-		liquidClient, err = core.NewLiquidClient(c.Provider, c.EO, liquidapi.ClientOpts{ServiceType: liquidServiceType})
-		if err != nil {
-			return result, fmt.Errorf("failed to create LiquidClient for service %s: %w", liquidServiceType, err)
+	if len(remoteCommitmentChanges.ByProject) != 0 {
+		var liquidClient core.LiquidClient
+		c := p.Cluster
+		if len(c.LiquidConnections) == 0 {
+			// find the right ServiceType
+			liquidServiceType := c.Config.Liquids[serviceType].LiquidServiceType
+			liquidClient, err = core.NewLiquidClient(c.Provider, c.EO, liquidapi.ClientOpts{ServiceType: liquidServiceType})
+			if err != nil {
+				return result, fmt.Errorf("failed to create LiquidClient for service %s: %w", liquidServiceType, err)
+			}
+		} else {
+			liquidClient = c.LiquidConnections[serviceType].LiquidClient
 		}
-	} else {
-		liquidClient = c.LiquidConnections[serviceType].LiquidClient
-	}
-	commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
-	if err != nil {
-		return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
-	}
-	if commitmentChangeResponse.RejectionReason != "" {
-		return commitmentChangeResponse, nil
+		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
+		if err != nil {
+			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
+		}
+		if commitmentChangeResponse.RejectionReason != "" {
+			return commitmentChangeResponse, nil
+		}
 	}
 
 	// check local
-	canAcceptLocally, err := datamodel.CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, p.Cluster, dbi)
-	if err != nil {
-		return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
-	}
-	if !canAcceptLocally {
-		return liquid.CommitmentChangeResponse{
-			RejectionReason: "not enough capacity!",
-			RetryAt:         None[time.Time](),
-		}, nil
+	if len(localCommitmentChanges.ByProject) != 0 {
+		canAcceptLocally, err := datamodel.CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, p.Cluster, dbi)
+		if err != nil {
+			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
+		}
+		if !canAcceptLocally {
+			return liquid.CommitmentChangeResponse{
+				RejectionReason: "not enough capacity!",
+				RetryAt:         None[time.Time](),
+			}, nil
+		}
 	}
 
 	return result, nil
 }
 
-func LiquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, serviceInfo liquid.ServiceInfo) Option[liquid.ProjectMetadata] {
+func liquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, serviceInfo liquid.ServiceInfo) Option[liquid.ProjectMetadata] {
 	if !serviceInfo.CommitmentHandlingNeedsProjectMetadata {
 		return None[liquid.ProjectMetadata]()
 	}
-	return Some(liquid.ProjectMetadata{
-		UUID: string(dbProject.UUID),
-		Name: dbProject.Name,
-		Domain: liquid.DomainMetadata{
-			UUID: domain.UUID,
-			Name: domain.Name,
-		},
-	})
+	return Some(core.KeystoneProjectFromDB(dbProject, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid())
 }
 
-func EvaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.ResponseWriter) {
+func evaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.ResponseWriter) {
 	if retryAt, exists := response.RetryAt.Unpack(); exists && response.RejectionReason != "" {
 		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
 	}

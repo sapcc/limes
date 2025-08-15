@@ -5,6 +5,8 @@ package core
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -209,7 +211,9 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
 	var occupiedConversionIdentifiers []string
-	for serviceType, l := range cluster.Liquids {
+	// sorted f
+	for _, serviceType := range slices.Sorted(maps.Keys(cluster.Liquids)) {
+		l := cluster.Liquids[serviceType]
 		if l.Area == "" {
 			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))
 		}

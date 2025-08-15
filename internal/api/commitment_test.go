@@ -730,6 +730,42 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
+func TestCommitmentDelegationToDB(t *testing.T) {
+	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
+	_, err := s.DB.Exec(`UPDATE resources SET handles_commitments = FALSE;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Clock.StepBy(10 * 24 * time.Hour)
+	req := assert.JSONObject{
+		"commitment": assert.JSONObject{
+			"service_type":      "first",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            1,
+			"duration":          "1 hour",
+		},
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         req,
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+	if liquidClientFirst.LastCommitmentChangeRequest.InfoVersion != 0 {
+		t.Fatal("expected no commitment change request to be sent to Liquid")
+	}
+}
+
 func TestGetCommitmentsErrorCases(t *testing.T) {
 	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
@@ -1587,7 +1623,7 @@ func Test_CheckCommitmentConversionConfigOverlap(t *testing.T) {
 	badConfig = fmt.Sprintf(badConfig, liquidServiceTypeFirst, liquidServiceTypeSecond)
 	dbm := db.InitORM(easypg.ConnectForTest(t, db.Configuration()))
 	_, errs := core.NewClusterFromYAML([]byte(badConfig), time.Now, dbm, false)
-	assert.DeepEqual(t, "ConfigValidationErrs", errs[0], errors.New(`invalid value: liquids.fourth.commitment_behavior_per_resource[0].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`))
+	assert.DeepEqual(t, "ConfigValidationErrs", errs[0], errors.New(`invalid value: liquids.third.commitment_behavior_per_resource[4].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`))
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
@@ -2030,11 +2066,12 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
-								OldStatus: Some(liquid.CommitmentStatusConfirmed),
-								NewStatus: Some(liquid.CommitmentStatusConfirmed),
-								Amount:    10,
-								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).Local(),
+								UUID:         liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(1)),
+								OldStatus:    Some(liquid.CommitmentStatusConfirmed),
+								NewStatus:    Some(liquid.CommitmentStatusConfirmed),
+								Amount:       10,
+								ExpiresAt:    s.Clock.Now().Add(2 * time.Hour).Local(),
+								OldExpiresAt: Some(s.Clock.Now().Add(1 * time.Hour).Local()),
 							},
 						},
 					},
@@ -2094,12 +2131,13 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
-								OldStatus: Some(liquid.CommitmentStatusPlanned),
-								NewStatus: Some(liquid.CommitmentStatusPlanned),
-								Amount:    10,
-								ExpiresAt: s.Clock.Now().Add(3*time.Hour + 1*day).Local(),
-								ConfirmBy: Some(s.Clock.Now().Add(1 * day).Local()),
+								UUID:         liquid.CommitmentUUID(test.GenerateDummyCommitmentUUID(2)),
+								OldStatus:    Some(liquid.CommitmentStatusPlanned),
+								NewStatus:    Some(liquid.CommitmentStatusPlanned),
+								Amount:       10,
+								ExpiresAt:    s.Clock.Now().Add(3*time.Hour + 1*day).Local(),
+								OldExpiresAt: Some(s.Clock.Now().Add(1*time.Hour + 1*day).Local()),
+								ConfirmBy:    Some(s.Clock.Now().Add(1 * day).Local()),
 							},
 						},
 					},
