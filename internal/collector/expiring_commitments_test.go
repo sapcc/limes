@@ -4,7 +4,6 @@
 package collector
 
 import (
-	"fmt"
 	"html/template"
 	"testing"
 
@@ -32,7 +31,6 @@ const (
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/things
 			identity_in_v1_api: service/resource
@@ -46,9 +44,9 @@ const (
 
 func Test_ExpiringCommitmentNotification(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testMailNoopWithTemplateYAML, liquidServiceType)),
+		test.WithConfig(testMailNoopWithTemplateYAML),
 		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"))
 	c := getCollector(t, s)
 

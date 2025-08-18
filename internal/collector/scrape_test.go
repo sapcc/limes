@@ -78,7 +78,6 @@ const (
 		liquids:
 			unittest:
 				area: testing
-				liquid_service_type: %[1]s
 				# to check how they are merged with the ServiceInfo of the liquids
 				rate_limits: 
 					global:
@@ -119,9 +118,9 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			"limes_unittest_things_usage":   {Type: liquid.MetricTypeGauge},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient = test.NewMockLiquidClient(srvInfo, "unittest")
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithConfig(testScrapeBasicConfigYAML),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
@@ -682,7 +681,6 @@ const (
 		liquids:
 			noop:
 				area: testing
-				liquid_service_type: %[1]s
 	`
 )
 
@@ -691,9 +689,9 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		Version:   1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "noop")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
@@ -733,9 +731,9 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 			"things": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "noop")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)

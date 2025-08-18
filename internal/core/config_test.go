@@ -49,7 +49,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 	`, "\t", "  ")), time.Now, nil, true)
 	assert.DeepEqual(t, "errs", errs.Join(","), "invalid value for availability_zones[0]: \"\" is not an acceptable name for a real AZ,invalid value for availability_zones[1]: \"any\" is not an acceptable name for a real AZ")
 
@@ -58,7 +57,6 @@ func TestConfigValidation(t *testing.T) {
 		availability_zones: [ foo ]
 		liquids:
 			shared:
-				liquid_service_type: shared
 	`, "\t", "  ")), time.Now, nil, true)
 	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: liquids.shared.area")
 
@@ -68,7 +66,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 		resource_behavior:
 			- resource:
 		rate_behavior:
@@ -82,7 +79,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 		quota_distribution_configs:
 			- { resource: '', model: invalid, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
 	`, "\t", "  ")), time.Now, nil, true)
@@ -94,7 +90,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 		quota_distribution_configs:
 			- { resource: unittest/capacity, model: autogrow }
 	`, "\t", "  ")), time.Now, nil, true)
@@ -106,7 +101,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 		quota_distribution_configs:
 			- { resource: shared/capacity, model: autogrow, autogrow: { growth_multiplier: -5.0, usage_data_retention_period: 0h } }
 	`, "\t", "  ")), time.Now, nil, true)
@@ -118,7 +112,6 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			first:
 				area: first
-				liquid_service_type: foo
 				commitment_behavior_per_resource:
 					- key: capacity_c32
 						value:
@@ -130,7 +123,6 @@ func TestConfigValidation(t *testing.T) {
 							conversion_rule: { identifier: flavor2, weight: 144 }
 			second:
 				area: second
-				liquid_service_type: bar
 				commitment_behavior_per_resource:
 					- key: capacity_a
 						value:
@@ -147,10 +139,8 @@ func TestConfigValidation(t *testing.T) {
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: shared
 			unshared:
 				area: testing
-				liquid_service_type: unshared
 		resource_behavior:
 			- { resource: shared/capacity, overcommit_factor: 10.0 }
 			- resource: unshared/capacity

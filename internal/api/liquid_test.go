@@ -4,7 +4,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -33,18 +32,17 @@ const (
 		liquids:
 			unittest:
 				area: testing
-				liquid_service_type: %[1]s
 		resource_behavior:
 		- { resource: unittest/capacity, overcommit_factor: 1.5 }
 	`
 )
 
 func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Setup) {
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(srvInfo, "unittest")
 
 	t.Helper()
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(liquidCapacityTestConfigYAML, liquidServiceType)),
+		test.WithConfig(liquidCapacityTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
 		test.WithProject(core.KeystoneProject{
 			Name: "project-1",

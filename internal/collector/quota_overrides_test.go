@@ -4,7 +4,6 @@
 package collector
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,9 +19,9 @@ import (
 func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "unittest")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithConfig(testScrapeBasicConfigYAML),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)

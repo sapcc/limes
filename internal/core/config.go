@@ -88,8 +88,6 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 // It holds configurations for how to deal with the service on project level (quota, usage, commitment) as well as cluster level (capacity).
 type LiquidConfiguration struct {
 	Area string `yaml:"area"`
-	// LiquidServiceType is the service type under which the liquid is registered in the Keystone catalog.
-	LiquidServiceType string `yaml:"liquid_service_type"`
 
 	// FixedCapacityConfiguration and PrometheusCapacityConfiguration are additional means of providing capacity for this
 	// service_type besides the liquid.ServiceCapacityReport. All means are not exclusive and can be combined, as long as

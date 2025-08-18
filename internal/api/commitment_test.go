@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"net/http"
 	"testing"
@@ -41,7 +40,6 @@ const testCommitmentsYAML = `
 	liquids:
 		first:
 			area: first
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -49,7 +47,6 @@ const testCommitmentsYAML = `
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		second:
 			area: second
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource: []
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
@@ -69,11 +66,9 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	liquids:
 		first:
 			area: first
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource: []
 		second:
 			area: second
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -97,7 +92,6 @@ const testConvertCommitmentsYAML = `
 	liquids:
 		third:
 			area: third
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: capacity_c32
 					value:
@@ -123,7 +117,6 @@ const testConvertCommitmentsYAML = `
 					value: { durations_per_domain: *durations }
 		fourth:
 			area: fourth
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: capacity_a
 					value:
@@ -138,11 +131,11 @@ const testConvertCommitmentsYAML = `
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -500,11 +493,11 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 }
 
 func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -727,11 +720,11 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	liquidClientFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -763,11 +756,11 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -794,11 +787,11 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 }
 
 func TestPutCommitmentErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -955,11 +948,11 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 }
 
 func TestDeleteCommitmentErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1009,11 +1002,11 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 }
 
 func Test_StartCommitmentTransfer(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1167,11 +1160,11 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 }
 
 func Test_GetCommitmentByToken(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1237,11 +1230,11 @@ func Test_GetCommitmentByToken(t *testing.T) {
 }
 
 func Test_TransferCommitment(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1487,11 +1480,11 @@ func Test_TransferCommitment(t *testing.T) {
 }
 
 func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1610,12 +1603,12 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeThird := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "third")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testConvertCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond, liquidServiceTypeThird)),
+		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1680,11 +1673,11 @@ func Test_ConvertCommitments(t *testing.T) {
 		"capacity_a": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
 		"capacity_b": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
 	}
-	_, liquidServiceTypeThird := test.NewMockLiquidClient(srvInfoThird)
-	liquidClientFourth, liquidServiceTypeFourth := test.NewMockLiquidClient(srvInfoFourth)
+	test.NewMockLiquidClient(srvInfoThird, "third")
+	liquidClientFourth := test.NewMockLiquidClient(srvInfoFourth, "fourth")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testConvertCommitmentsYAML, liquidServiceTypeThird, liquidServiceTypeFourth)),
+		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1962,11 +1955,11 @@ func Test_ConvertCommitments(t *testing.T) {
 }
 
 func Test_UpdateCommitmentDuration(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -2173,11 +2166,11 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 }
 
 func Test_MergeCommitments(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -2451,11 +2444,11 @@ func Test_MergeCommitments(t *testing.T) {
 }
 
 func Test_RenewCommitments(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
+	liquidClientSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "second")
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 

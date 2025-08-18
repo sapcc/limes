@@ -9,11 +9,9 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
-	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -69,14 +67,9 @@ var mockLiquidClients = make(map[db.ServiceType]core.LiquidClient)
 // Additionally, the client is put into an internal registry under the returned
 // service type string. This value shall be put into the cluster configuration
 // to allow the core.Cluster object to find your mock client.
-func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClient, serviceType db.ServiceType) {
-	// We use a randomly-generated service type here, in order to allow for
-	// multiple tests to proceed in parallel without interfering with each other
-	// (once we deem this actually safe to do).
-	serviceType = db.ServiceType(must.Return(uuid.NewV4()).String())
-
+func NewMockLiquidClient(serviceInfo liquid.ServiceInfo, serviceType db.ServiceType) (client *MockLiquidClient) {
 	client = &MockLiquidClient{serviceInfo: serviceInfo}
-	mockLiquidClients[serviceType] = client
+	mockLiquidClients["liquid-"+serviceType] = client
 	return
 }
 

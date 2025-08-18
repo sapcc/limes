@@ -45,10 +45,8 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 			unshared:
 				area: unshared
-				liquid_service_type: %[2]s
 	`
 
 	testScanCapacitySingleLiquidConfigYAML = `
@@ -68,7 +66,6 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 	`
 
 	testScanCapacityWithCommitmentsConfigYAML = `
@@ -85,14 +82,12 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			second:
 				area: second
-				liquid_service_type: %[2]s
 				commitment_behavior_per_resource: *commitment-on-capacity
 		resource_behavior:
 			# test that overcommit factor is considered when confirming commitments
@@ -133,10 +128,10 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
-	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
+	mockLiquidClient2 := test.NewMockLiquidClient(srvInfo2, "unshared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(testScanCapacityConfigYAML),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -294,9 +289,9 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 			"limes_unittest_capacity_larger_half":  {Type: liquid.MetricTypeGauge},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -436,9 +431,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -526,9 +521,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 func TestScanCapacityReportsZeroValues(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -623,9 +618,9 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 
 func Test_ScanCapacityButNoResources(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -700,9 +695,9 @@ func Test_ScanManualCapacity(t *testing.T) {
 	testScanCapacityManualConfigYAML := testScanCapacitySingleLiquidConfigYAML + `
 				fixed_capacity_values:
 					things: 1000000`
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacityManualConfigYAML),
 		test.WithLiquidConnections,
 	)
 
@@ -801,10 +796,10 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 		},
 	}
-	firstLiquidClient, liquidServiceType := test.NewMockLiquidClient(firstServiceInfo)
-	secondLiquidClient, liquidServiceType2 := test.NewMockLiquidClient(secondServiceInfo)
+	firstLiquidClient = test.NewMockLiquidClient(firstServiceInfo, "first")
+	secondLiquidClient = test.NewMockLiquidClient(secondServiceInfo, "second")
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
 		test.WithLiquidConnections,
 	)

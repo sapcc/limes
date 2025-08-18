@@ -2180,10 +2180,9 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 		c := p.Cluster
 		if len(c.LiquidConnections) == 0 {
 			// find the right ServiceType
-			liquidServiceType := c.Config.Liquids[serviceType].LiquidServiceType
-			liquidClient, err = core.NewLiquidClient(c.Provider, c.EO, liquidapi.ClientOpts{ServiceType: liquidServiceType})
+			liquidClient, err = core.NewLiquidClient(c.Provider, c.EO, liquidapi.ClientOpts{ServiceType: "liquid-" + string(serviceType)})
 			if err != nil {
-				return result, fmt.Errorf("failed to create LiquidClient for service %s: %w", liquidServiceType, err)
+				return result, fmt.Errorf("failed to create LiquidClient for service %s: %w", serviceType, err)
 			}
 		} else {
 			liquidClient = c.LiquidConnections[serviceType].LiquidClient

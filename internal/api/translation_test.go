@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -34,7 +33,6 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 	`
 )
 
@@ -42,7 +40,7 @@ const (
 // subcapacity translation
 
 func TestTranslateManilaSubcapacities(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
@@ -81,7 +79,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
@@ -96,7 +94,7 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = json.RawMessage(buf)
 	srvInfo.Resources["capacity"] = resInfo
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -146,11 +144,11 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "ironic-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubcapacityTranslation(t, "ironic-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -192,13 +190,13 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
 	opts = append([]test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
+		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	}, opts...)
 	s := test.NewSetup(t,
@@ -259,7 +257,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, 
 // subresource translation
 
 func TestTranslateCinderVolumeSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -297,11 +295,11 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -325,7 +323,7 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
@@ -341,7 +339,7 @@ func TestTranslateIronicSubresources(t *testing.T) {
 	srvInfo.Resources["capacity"] = resInfo
 
 	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -395,11 +393,11 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "ironic-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubresourceTranslation(t, "ironic-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -497,13 +495,13 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
 	localOpts := []test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
+		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	}
 	opts = append(localOpts, opts...)

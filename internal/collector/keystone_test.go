@@ -5,7 +5,6 @@ package collector
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -39,18 +38,17 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 			unshared:
 				area: unshared
-				liquid_service_type: %[1]s
 	`
 )
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(srvInfo, "shared")
+	test.NewMockLiquidClient(srvInfo, "unshared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testKeystoneConfigYAML, liquidServiceType)),
+		test.WithConfig(testKeystoneConfigYAML),
 		// the functions called from the tests of this setup run in collect task, so we use the LiquidConnections
 		test.WithLiquidConnections,
 	)

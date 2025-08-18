@@ -56,7 +56,6 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -83,7 +82,6 @@ const (
 
 			unshared:
 				area: unshared
-				liquid_service_type: %[2]s
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -117,13 +115,13 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
-	_, liquidServiceTypeShared := test.NewMockLiquidClient(srvInfoShared)
-	_, liquidServiceTypeUnshared := test.NewMockLiquidClient(srvInfoUnshared)
+	test.NewMockLiquidClient(srvInfoShared, "shared")
+	test.NewMockLiquidClient(srvInfoUnshared, "unshared")
 
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
-		test.WithConfig(fmt.Sprintf(testConfigYAML, liquidServiceTypeShared, liquidServiceTypeUnshared)),
+		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 	return

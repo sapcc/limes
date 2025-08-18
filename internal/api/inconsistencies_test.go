@@ -4,7 +4,6 @@
 package api
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
@@ -30,20 +29,18 @@ const (
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: %[1]s
 			unshared:
 				area: testing
-				liquid_service_type: %[2]s
 	`
 )
 
 func TestFullInconsistencyReport(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceType2 := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "shared")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "unshared")
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-inconsistencies.sql"),
-		test.WithConfig(fmt.Sprintf(inconsistenciesTestConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(inconsistenciesTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -56,11 +53,11 @@ func TestFullInconsistencyReport(t *testing.T) {
 }
 
 func TestEmptyInconsistencyReport(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceType2 := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "shared")
+	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "unshared")
 	t.Helper()
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(inconsistenciesTestConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(inconsistenciesTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 

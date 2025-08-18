@@ -6,7 +6,6 @@ package collector
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -34,7 +33,6 @@ const (
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: %[1]s
 `
 )
 
@@ -61,9 +59,9 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 
 func Test_MailDelivery(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
+	test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testMailNoopYAML, liquidServiceType)),
+		test.WithConfig(testMailNoopYAML),
 		test.WithDBFixtureFile("fixtures/mail_delivery.sql"))
 	c := getCollector(t, s)
 
