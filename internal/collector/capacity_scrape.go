@@ -72,21 +72,21 @@ var (
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
 	// simple checks on the enum value in `status`.
-	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(`
+	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		UPDATE project_commitments
-		   SET status = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
-		                     WHEN expires_at <= $3          THEN 'expired'
-		                     WHEN confirm_by > $3           THEN 'planned'
-		                     WHEN confirmed_at IS NULL      THEN 'pending'
-		                     ELSE 'confirmed' END
-		WHERE status NOT IN ('superseded', 'expired') AND az_resource_id IN (
+		   SET status = CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
+		                     WHEN expires_at <= $3          THEN {{liquid.CommitmentStatusExpired}}
+		                     WHEN confirm_by > $3           THEN {{liquid.CommitmentStatusPlanned}}
+		                     WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
+		                     ELSE {{liquid.CommitmentStatusConfirmed}} END
+		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) AND az_resource_id IN (
 			SELECT cazr.id
 			  FROM services cs
 			  JOIN resources cr ON cr.service_id = cs.id
 			  JOIN az_resources cazr ON cazr.resource_id = cr.id
 			 WHERE cs.type = $1 AND cr.name = $2
 		)
-	`)
+	`))
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {

@@ -40,15 +40,15 @@ import (
 )
 
 var (
-	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT pc.*
 		  FROM project_commitments pc
 		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
 		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
 		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
-		 WHERE %%s AND pc.status NOT IN ('%s', '%s')
+		 WHERE %s AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
 		 ORDER BY pc.id
-	`, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired))
+	`))
 
 	getAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
 		SELECT cazr.id, cs.type, cr.name, cazr.az
@@ -65,7 +65,7 @@ var (
 		 WHERE pc.id = $1 AND pc.project_id = $2
 	`)
 
-	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT cazr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments, COALESCE(total_confirmed, 0) as total_confirmed
 		FROM az_resources cazr
 		JOIN resources cr ON cazr.resource_id = cr.id
@@ -77,12 +77,12 @@ var (
 			JOIN resources cr ON cazr.resource_id = cr.id
 			JOIN services cs ON cr.service_id = cs.id
 			JOIN project_commitments pc ON cazr.id = pc.az_resource_id
-			WHERE pc.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4 AND status = '%s'
+			WHERE pc.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4 AND status = {{liquid.CommitmentStatusConfirmed}}
 		) pc ON 1=1
 		WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
-	`, liquid.CommitmentStatusConfirmed))
+	`))
 
-	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT cs.type, cr.name, cazr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
 		FROM az_resources cazr
 		JOIN resources cr ON cazr.resource_id = cr.id
@@ -90,10 +90,10 @@ var (
 		LEFT JOIN (
 				SELECT SUM(amount) as total_confirmed
 				FROM project_commitments pc
-				WHERE az_resource_id = $1 AND project_id = $2 AND status = '%s'
+				WHERE az_resource_id = $1 AND project_id = $2 AND status = {{liquid.CommitmentStatusConfirmed}}
 		) pc ON 1=1
 		WHERE cazr.id = $1;
-	`, liquid.CommitmentStatusConfirmed))
+	`))
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)

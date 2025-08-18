@@ -28,15 +28,15 @@ var (
 	// waiting for commitments.
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
-	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT pc.project_id, pc.id, pc.amount, pc.notify_on_confirm
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id
 		  JOIN az_resources cazr ON cazr.resource_id = cr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
-		 WHERE cs.type = $1 AND cr.name = $2 AND cazr.az = $3 AND pc.status = '%s'
+		 WHERE cs.type = $1 AND cr.name = $2 AND cazr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
-	`, liquid.CommitmentStatusPending))
+	`))
 )
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations

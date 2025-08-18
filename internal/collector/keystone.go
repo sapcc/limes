@@ -254,14 +254,14 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 }
 
 var (
-	deleteProjectCheckBlockingCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	deleteProjectCheckBlockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT COUNT(*) FROM project_commitments
-		 WHERE project_id = $1 AND status NOT IN ('%s','%s')
-	`, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired))
-	deleteProjectRemoveNonblockingCommitmentsQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+		 WHERE project_id = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	`))
+	deleteProjectRemoveNonblockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		DELETE FROM project_commitments
-		 WHERE project_id = $1 AND status IN ('%s','%s')
-	`, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired))
+		 WHERE project_id = $1 AND status IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	`))
 )
 
 // Deletes a project from the DB after it was deleted in Keystone.

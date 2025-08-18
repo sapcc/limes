@@ -26,7 +26,7 @@ type capacityScrapeBackchannelImpl struct {
 }
 
 var (
-	getResourceDemandQuery = sqlext.SimplifyWhitespace(`
+	getResourceDemandQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		SELECT cazr.az, pazr.usage, COALESCE(pc_view.confirmed, 0), COALESCE(pc_view.pending, 0)
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id
@@ -34,13 +34,13 @@ var (
 		  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id
 		  LEFT OUTER JOIN (
 		    SELECT az_resource_id, project_id,
-		           SUM(amount) FILTER (WHERE status = 'confirmed') AS confirmed,
-		           SUM(amount) FILTER (WHERE status = 'pending') AS pending
+		           SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}) AS confirmed,
+		           SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPending}}) AS pending
 		      FROM project_commitments
 		     GROUP BY az_resource_id, project_id
 		  ) pc_view ON pc_view.az_resource_id = cazr.id AND pc_view.project_id = pazr.project_id
 		 WHERE cs.type = $1 AND cr.name = $2
-	`)
+	`))
 )
 
 // GetResourceDemand implements the CapacityScrapeBackchannel interface.

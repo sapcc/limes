@@ -50,11 +50,11 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	 WHERE %s {{AND cs.type = $service_type}} GROUP BY p.domain_id, cs.type, cr.name
 `)
 
-var domainReportQuery3 = sqlext.SimplifyWhitespace(`
+var domainReportQuery3 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE status = 'confirmed'
+	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT p.domain_id, cs.type, cr.name, cazr.az,
@@ -71,14 +71,14 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az
-`)
+`))
 
-var domainReportQuery4 = sqlext.SimplifyWhitespace(`
+var domainReportQuery4 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'confirmed'), 0) AS confirmed,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'planned'), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	    FROM project_commitments
 	   GROUP BY project_id, az_resource_id, duration
 	)
@@ -93,7 +93,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az, pcs.duration
-`)
+`))
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.

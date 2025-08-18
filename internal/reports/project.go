@@ -52,18 +52,18 @@ var (
 	 ORDER BY p.uuid, cazr.az
 `)
 
-	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
+	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	SELECT cs.type, cr.name, cazr.az, pc.duration,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'confirmed'), 0) AS confirmed,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'pending'), 0) AS pending,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = 'planned'), 0) AS planned
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	  FROM services cs
 	  JOIN resources cr on cr.service_id = cs.id
 	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 	 WHERE pc.project_id = $1
 	 GROUP BY cs.type, cr.name, cazr.az, pc.duration
-	`)
+	`))
 )
 
 // GetProjectResources returns limes.ProjectReport reports for all projects in

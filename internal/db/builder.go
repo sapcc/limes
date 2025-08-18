@@ -5,7 +5,10 @@ package db
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
+
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // BuildSimpleWhereClause constructs a WHERE clause of the form "field1 = val1 AND
@@ -55,4 +58,41 @@ func makePlaceholderList(count, offset int) string {
 		placeholders[idx] = fmt.Sprintf("$%d", offset+idx)
 	}
 	return strings.Join(placeholders, ",")
+}
+
+var (
+	enumValuesPlaceholderRx = regexp.MustCompile(`{{[a-zA-Z][a-zA-Z0-9\.]*}}`)
+	enumValues              = map[string]string{
+		"{{liquid.CommitmentStatusPlanned}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPlanned),
+		"{{liquid.CommitmentStatusPending}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPending),
+		"{{liquid.CommitmentStatusGuaranteed}}": enumValueToSQLLiteral(liquid.CommitmentStatusGuaranteed),
+		"{{liquid.CommitmentStatusConfirmed}}":  enumValueToSQLLiteral(liquid.CommitmentStatusConfirmed),
+		"{{liquid.CommitmentStatusSuperseded}}": enumValueToSQLLiteral(liquid.CommitmentStatusSuperseded),
+		"{{liquid.CommitmentStatusExpired}}":    enumValueToSQLLiteral(liquid.CommitmentStatusExpired),
+	}
+)
+
+// FillEnumValues takes an SQL query literal from the source code and
+// replaces placeholders {{like.This}} with SQL string literals 'like-this'.
+// The placeholder must refer to an enum variant one of the following types:
+//   - liquid.CommitmentStatus
+//
+// Canonical usage looks like this:
+//
+//	var query = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+//		...
+//	`))
+func FillEnumValues(query string) string {
+	return enumValuesPlaceholderRx.ReplaceAllStringFunc(query, func(match string) string {
+		expansion, exists := enumValues[match]
+		if exists {
+			return expansion
+		} else {
+			return match // do not replace unknown placeholders
+		}
+	})
+}
+
+func enumValueToSQLLiteral[S ~string](value S) string {
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(string(value), "'", "''"))
 }

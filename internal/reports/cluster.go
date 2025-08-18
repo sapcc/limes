@@ -20,11 +20,11 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE status = 'confirmed'
+	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT cs.type, cr.name, cazr.az,
@@ -41,7 +41,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = pazr.project_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az
-`)
+`))
 
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, SUM(pr.quota)
@@ -61,12 +61,12 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	 ORDER BY cazr.az
 `)
 
-var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'confirmed'), 0) AS confirmed,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE status = 'planned'), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	    FROM project_commitments
 	   GROUP BY az_resource_id, duration
 	)
@@ -78,7 +78,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az, pcs.duration
-`)
+`))
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)

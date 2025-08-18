@@ -12,6 +12,8 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 // CleanupOldCommitmentsJob is a jobloop.CronJob.
@@ -33,11 +35,11 @@ func (c *Collector) CleanupOldCommitmentsJob(registerer prometheus.Registerer) j
 }
 
 var (
-	expiredCommitmentsUpdateStatusQuery = sqlext.SimplifyWhitespace(fmt.Sprintf(`
+	expiredCommitmentsUpdateStatusQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 		UPDATE project_commitments
-		   SET status = '%s'
-		 WHERE status != '%s' AND expires_at <= $1
-	`, liquid.CommitmentStatusExpired, liquid.CommitmentStatusSuperseded))
+		   SET status = {{liquid.CommitmentStatusExpired}}
+		 WHERE status != {{liquid.CommitmentStatusSuperseded}} AND expires_at <= $1
+	`))
 	expiredCommitmentsCleanupQuery = sqlext.SimplifyWhitespace(`
 		DELETE FROM project_commitments pc
 		 WHERE expires_at + interval '1 month' <= $1
