@@ -28,15 +28,15 @@ var (
 	// waiting for commitments.
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
-	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
+	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.project_id, pc.id, pc.amount, pc.notify_on_confirm
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id
 		  JOIN az_resources cazr ON cazr.resource_id = cr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
-		 WHERE cs.type = $1 AND cr.name = $2 AND cazr.az = $3 AND pc.state = 'pending'
+		 WHERE cs.type = $1 AND cr.name = $2 AND cazr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
-	`)
+	`))
 )
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
@@ -153,8 +153,8 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		}
 
 		// confirm the commitment
-		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
-			now, db.CommitmentStateActive, c.CommitmentID)
+		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, status = $2 WHERE id = $3`,
+			now, liquid.CommitmentStatusConfirmed, c.CommitmentID)
 		if err != nil {
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 		}
