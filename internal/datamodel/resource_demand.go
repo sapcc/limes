@@ -26,7 +26,7 @@ type capacityScrapeBackchannelImpl struct {
 }
 
 var (
-	getResourceDemandQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	getResourceDemandQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT cazr.az, pazr.usage, COALESCE(pc_view.confirmed, 0), COALESCE(pc_view.pending, 0)
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id

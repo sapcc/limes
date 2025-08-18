@@ -117,7 +117,7 @@ var (
 		  WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR car.az = $3)
 	`)
 
-	getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pazr.project_id, cazr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id

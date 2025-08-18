@@ -50,7 +50,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	 WHERE %s {{AND cs.type = $service_type}} GROUP BY p.domain_id, cs.type, cr.name
 `)
 
-var domainReportQuery3 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
@@ -73,7 +73,7 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az
 `))
 
-var domainReportQuery4 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, duration,
 	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,

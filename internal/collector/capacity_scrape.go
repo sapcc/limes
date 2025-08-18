@@ -72,7 +72,7 @@ var (
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
 	// simple checks on the enum value in `status`.
-	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		UPDATE project_commitments
 		   SET status = CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
 		                     WHEN expires_at <= $3          THEN {{liquid.CommitmentStatusExpired}}

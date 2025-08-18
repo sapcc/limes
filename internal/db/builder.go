@@ -61,8 +61,8 @@ func makePlaceholderList(count, offset int) string {
 }
 
 var (
-	enumValuesPlaceholderRx = regexp.MustCompile(`{{[a-zA-Z][a-zA-Z0-9\.]*}}`)
-	enumValues              = map[string]string{
+	enumPlaceholderRx = regexp.MustCompile(`{{[a-zA-Z][a-zA-Z0-9\.]*}}`)
+	enumPlaceholders  = map[string]string{
 		"{{liquid.CommitmentStatusPlanned}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPlanned),
 		"{{liquid.CommitmentStatusPending}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPending),
 		"{{liquid.CommitmentStatusGuaranteed}}": enumValueToSQLLiteral(liquid.CommitmentStatusGuaranteed),
@@ -72,19 +72,19 @@ var (
 	}
 )
 
-// FillEnumValues takes an SQL query literal from the source code and
+// ExpandEnumPlaceholders takes an SQL query literal from the source code and
 // replaces placeholders {{like.This}} with SQL string literals 'like-this'.
 // The placeholder must refer to an enum variant one of the following types:
 //   - liquid.CommitmentStatus
 //
 // Canonical usage looks like this:
 //
-//	var query = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+//	var query = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 //		...
 //	`))
-func FillEnumValues(query string) string {
-	return enumValuesPlaceholderRx.ReplaceAllStringFunc(query, func(match string) string {
-		expansion, exists := enumValues[match]
+func ExpandEnumPlaceholders(query string) string {
+	return enumPlaceholderRx.ReplaceAllStringFunc(query, func(match string) string {
+		expansion, exists := enumPlaceholders[match]
 		if exists {
 			return expansion
 		} else {

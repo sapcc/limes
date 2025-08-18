@@ -52,7 +52,7 @@ var (
 	 ORDER BY p.uuid, cazr.az
 `)
 
-	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT cs.type, cr.name, cazr.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPending}}), 0) AS pending,

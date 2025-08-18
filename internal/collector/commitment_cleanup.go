@@ -35,7 +35,7 @@ func (c *Collector) CleanupOldCommitmentsJob(registerer prometheus.Registerer) j
 }
 
 var (
-	expiredCommitmentsUpdateStatusQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	expiredCommitmentsUpdateStatusQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		UPDATE project_commitments
 		   SET status = {{liquid.CommitmentStatusExpired}}
 		 WHERE status != {{liquid.CommitmentStatusSuperseded}} AND expires_at <= $1

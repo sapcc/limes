@@ -28,7 +28,7 @@ var (
 	// waiting for commitments.
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
-	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.project_id, pc.id, pc.amount, pc.notify_on_confirm
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id

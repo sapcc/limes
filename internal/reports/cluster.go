@@ -20,7 +20,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
@@ -61,7 +61,7 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	 ORDER BY cazr.az
 `)
 
-var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
 	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,

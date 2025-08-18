@@ -42,7 +42,7 @@ func (c *Collector) ExpiringCommitmentNotificationJob(registerer prometheus.Regi
 }
 
 var (
-	discoverExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	discoverExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT * FROM project_commitments
 		 WHERE expires_at <= $1 AND status = {{liquid.CommitmentStatusConfirmed}} AND renew_context_json IS NULL AND NOT notified_for_expiration
 	`))

@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
 		  FROM project_commitments pc
 		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
@@ -65,7 +65,7 @@ var (
 		 WHERE pc.id = $1 AND pc.project_id = $2
 	`)
 
-	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT cazr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments, COALESCE(total_confirmed, 0) as total_confirmed
 		FROM az_resources cazr
 		JOIN resources cr ON cazr.resource_id = cr.id
@@ -82,7 +82,7 @@ var (
 		WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
 	`))
 
-	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.FillEnumValues(`
+	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT cs.type, cr.name, cazr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
 		FROM az_resources cazr
 		JOIN resources cr ON cazr.resource_id = cr.id
