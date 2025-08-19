@@ -413,8 +413,21 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
+	// get ID of a ProjectResource that we will be manipulating below
+	var parisSharedCapacityID db.ProjectResourceID
+	dberr := s.DB.QueryRow(`
+			SELECT id FROM project_resources
+			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
+			AND resource_id = (SELECT id FROM resources WHERE path = $2)
+		`,
+		"paris", "shared/capacity",
+	).Scan(&parisSharedCapacityID)
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+
 	// paris returns lowest max_quota setting
-	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=12")
+	_, dberr = s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=$1", parisSharedCapacityID)
 	if dberr != nil {
 		t.Fatal(dberr)
 	}
@@ -426,7 +439,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// paris has forbid_autogrowth setting
-	_, dberr = s.DB.Exec("UPDATE project_resources SET forbid_autogrowth=true where id=12")
+	_, dberr = s.DB.Exec("UPDATE project_resources SET forbid_autogrowth=true where id=$1", parisSharedCapacityID)
 	if dberr != nil {
 		t.Fatal(dberr)
 	}
@@ -1026,7 +1039,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE id = 4")
+	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 	if err != nil {
 		t.Error(err)
 	}
@@ -1155,7 +1168,23 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}' WHERE id=7`)
+
+	var berlinSharedCapacityOneID db.ProjectAZResourceID
+	dberr := s.DB.QueryRow(`
+			SELECT id FROM project_az_resources
+			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
+			AND az_resource_id = (SELECT id FROM az_resources WHERE path = $2)
+		`,
+		"berlin", "shared/capacity/az-one",
+	).Scan(&berlinSharedCapacityOneID)
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+
+	_, err := s.DB.Exec(
+		`UPDATE project_az_resources SET usage=2, historical_usage=$1 WHERE id=$2`,
+		`{"t":[1719399600, 1719486000],"v":[1, 5]}`, berlinSharedCapacityOneID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
