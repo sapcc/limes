@@ -45,10 +45,8 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 			unshared:
 				area: unshared
-				liquid_service_type: %[2]s
 	`
 
 	testScanCapacitySingleLiquidConfigYAML = `
@@ -68,7 +66,6 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 	`
 
 	testScanCapacityWithCommitmentsConfigYAML = `
@@ -85,14 +82,12 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 				commitment_behavior_per_resource: &commitment-on-capacity
 					- key: capacity
 						value:
 							durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ] }]
 			second:
 				area: second
-				liquid_service_type: %[2]s
 				commitment_behavior_per_resource: *commitment-on-capacity
 		resource_behavior:
 			# test that overcommit factor is considered when confirming commitments
@@ -133,10 +128,10 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
-	mockLiquidClient2, liquidServiceType2 := test.NewMockLiquidClient(srvInfo2)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(testScanCapacityConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithMockLiquidClient("unshared", srvInfo2),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -158,7 +153,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient.SetCapacityReport(capacityReport)
+	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
 	capacityReport2 := liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
@@ -172,7 +167,7 @@ func Test_ScanCapacity(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient2.SetCapacityReport(capacityReport2)
+	s.LiquidClients["unshared"].SetCapacityReport(capacityReport2)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -244,10 +239,10 @@ func Test_ScanCapacity(t *testing.T) {
 	)
 
 	// now we bump the version, so that the services and resources are reconciled
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementCapacityReportInfoVersion()
-	mockLiquidClient2.IncrementServiceInfoVersion()
-	mockLiquidClient2.IncrementCapacityReportInfoVersion()
+	s.LiquidClients["shared"].IncrementServiceInfoVersion()
+	s.LiquidClients["shared"].IncrementCapacityReportInfoVersion()
+	s.LiquidClients["unshared"].IncrementServiceInfoVersion()
+	s.LiquidClients["unshared"].IncrementCapacityReportInfoVersion()
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
@@ -294,9 +289,9 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 			"limes_unittest_capacity_larger_half":  {Type: liquid.MetricTypeGauge},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -353,7 +348,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 			"limes_unittest_capacity_larger_half":  {{Value: 7}},
 		},
 	}
-	mockLiquidClient.SetCapacityReport(capacityReport)
+	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -390,7 +385,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 			Attributes: json.RawMessage(buf2),
 		},
 	}
-	mockLiquidClient.SetCapacityReport(capacityReport)
+	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
@@ -436,9 +431,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -474,7 +469,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient.SetCapacityReport(capacityReport)
+	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -526,9 +521,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 func TestScanCapacityReportsZeroValues(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -557,7 +552,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 			},
 		},
 	}
-	mockLiquidClient.SetCapacityReport(zeroReport)
+	s.LiquidClients["shared"].SetCapacityReport(zeroReport)
 
 	// ...scrape will record those values faithfully and not set "last_nonzero_raw_capacity"
 	setClusterCapacitorsStale(t, s)
@@ -572,7 +567,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 
 	// when the capacity report shows non-zero capacity and usage...
-	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -600,7 +595,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 
 	// when the capacity report once again shows zero capacity and usage afterwards...
-	mockLiquidClient.SetCapacityReport(zeroReport)
+	s.LiquidClients["shared"].SetCapacityReport(zeroReport)
 
 	// ...scrape will record those values and, once again, leave "last_nonzero_raw_capacity" untouched
 	setClusterCapacitorsStale(t, s)
@@ -623,9 +618,9 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 
 func Test_ScanCapacityButNoResources(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacitySingleLiquidConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -653,7 +648,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	res := srvInfo.Resources["capacity"]
 	res.HasCapacity = false
 	srvInfo.Resources["capacity"] = res
-	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 	})
 
@@ -680,8 +675,8 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	)
 
 	// now we bump the version, so that the services and resources are reconciled
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementCapacityReportInfoVersion()
+	s.LiquidClients["shared"].IncrementServiceInfoVersion()
+	s.LiquidClients["shared"].IncrementCapacityReportInfoVersion()
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 
@@ -700,9 +695,9 @@ func Test_ScanManualCapacity(t *testing.T) {
 	testScanCapacityManualConfigYAML := testScanCapacitySingleLiquidConfigYAML + `
 				fixed_capacity_values:
 					things: 1000000`
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityManualConfigYAML, liquidServiceType)),
+		test.WithConfig(testScanCapacityManualConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
 		test.WithLiquidConnections,
 	)
 
@@ -729,7 +724,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	res := srvInfo.Resources["capacity"]
 	res.HasCapacity = false
 	srvInfo.Resources["capacity"] = res
-	mockLiquidClient.SetCapacityReport(liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 	})
 
@@ -745,8 +740,8 @@ func Test_ScanManualCapacity(t *testing.T) {
 	)
 
 	// now we bump the version, so that the services and resources are reconciled
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementCapacityReportInfoVersion()
+	s.LiquidClients["shared"].IncrementServiceInfoVersion()
+	s.LiquidClients["shared"].IncrementCapacityReportInfoVersion()
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 
@@ -762,7 +757,6 @@ func Test_ScanManualCapacity(t *testing.T) {
 
 func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 	s test.Setup, scrapeJob jobloop.Job,
-	firstLiquidClient *test.MockLiquidClient, secondLiquidClient *test.MockLiquidClient,
 	firstCapacityReport liquid.ServiceCapacityReport, secondCapacityReport liquid.ServiceCapacityReport,
 	firstServiceInfo liquid.ServiceInfo, secondServiceInfo liquid.ServiceInfo,
 ) {
@@ -801,11 +795,11 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 		},
 	}
-	firstLiquidClient, liquidServiceType := test.NewMockLiquidClient(firstServiceInfo)
-	secondLiquidClient, liquidServiceType2 := test.NewMockLiquidClient(secondServiceInfo)
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScanCapacityWithCommitmentsConfigYAML, liquidServiceType, liquidServiceType2)),
+		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
 		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+		test.WithMockLiquidClient("first", firstServiceInfo),
+		test.WithMockLiquidClient("second", secondServiceInfo),
 		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
@@ -840,7 +834,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 		},
 	}
-	firstLiquidClient.SetCapacityReport(firstCapacityReport)
+	s.LiquidClients["first"].SetCapacityReport(firstCapacityReport)
 	secondCapacityReport = liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
@@ -870,13 +864,13 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 		},
 	}
-	secondLiquidClient.SetCapacityReport(secondCapacityReport)
+	s.LiquidClients["second"].SetCapacityReport(secondCapacityReport)
 
 	return
 }
 
 func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, job, firstLiquidClient, secondLiquidClient, firstCapacityReport, secondCapacityReport, firstServiceInfo, secondServiceInfo := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job, firstCapacityReport, secondCapacityReport, firstServiceInfo, secondServiceInfo := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1107,10 +1101,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// we remove first/capacity, which does not have any active commitments. The trigger removes the expired commitments.
 	delete(firstCapacityReport.Resources, "capacity")
 	firstCapacityReport.InfoVersion = 2
-	firstLiquidClient.SetCapacityReport(firstCapacityReport)
+	s.LiquidClients["first"].SetCapacityReport(firstCapacityReport)
 	delete(firstServiceInfo.Resources, "capacity")
 	firstServiceInfo.Version = 2
-	firstLiquidClient.SetServiceInfo(firstServiceInfo)
+	s.LiquidClients["first"].SetServiceInfo(firstServiceInfo)
 
 	s.Clock.StepBy(1 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1141,10 +1135,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// now we try to remove second/capacity, which has an active commitment. Hence, it will fail on SaveServiceInfoToDB
 	delete(secondCapacityReport.Resources, "capacity")
 	secondCapacityReport.InfoVersion = 2
-	secondLiquidClient.SetCapacityReport(secondCapacityReport)
+	s.LiquidClients["second"].SetCapacityReport(secondCapacityReport)
 	delete(secondServiceInfo.Resources, "capacity")
 	secondServiceInfo.Version = 2
-	secondLiquidClient.SetServiceInfo(secondServiceInfo)
+	s.LiquidClients["second"].SetServiceInfo(secondServiceInfo)
 
 	s.Clock.StepBy(1 * time.Hour)
 	mustFailT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)), errors.New(sqlext.SimplifyWhitespace(
@@ -1154,7 +1148,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	s, job, _, _, _, _, _, _ := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job, _, _, _, _ := CommonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()

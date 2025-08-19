@@ -166,7 +166,6 @@ The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`
 liquids:
   nova:
     area: compute
-    liquid_service_type: liquid-nova
     commitment_behavior_per_resource:
     - key: 'cores|ram'
       value:
@@ -191,7 +190,7 @@ exposes data of a corresponding OpenStack Service. There is no possibility to co
 liquid. For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md). Each
 `liquids[]` section of the configuration file must contain the fields `service_type` (how the service is identified) and `area`
 (a grouping of services, e.g. `network, compute, storage`). The liquid endpoint will be located in the Keystone service catalog at
-service type `liquid-$SERVICE_TYPE`, unless this default is overridden by `liquid_service_type` (to be deprecated soon).
+service type `liquid-$SERVICE_TYPE`.
 
 The data from the `liquids[]` config section is read by the collector service on startup and used to instantiate connections to the liquids.
 The connection is used to query the`ServiceInfo` objects, which are then persisted in the database. When a liquid is not accessible on collector
@@ -248,7 +247,6 @@ allows to track capacity values along with other configuration in a Git reposito
 liquids:
 nova:
   area: compute
-  liquid_service_type: liquid-nova
   capacity_values_from_prometheus:
      api:
         url: https://prometheus.example.com

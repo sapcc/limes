@@ -5,7 +5,6 @@ package collector
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -37,7 +36,6 @@ const (
 		liquids:
 			unittest:
 				area: testing
-				liquid_service_type: %[1]s
 				commitment_behavior_per_resource:
 					- key: capacity
 						value:
@@ -47,15 +45,15 @@ const (
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testCleanupOldCommitmentsConfigYAML, liquidServiceType)),
+		test.WithConfig(testCleanupOldCommitmentsConfigYAML),
+		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{
+	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

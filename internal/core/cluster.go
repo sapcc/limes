@@ -39,8 +39,7 @@ type Cluster struct {
 	// reference of the DB is necessary to delete leftover LiquidConnections
 	DB *gorp.DbMap
 	// used to generate LiquidClients without LiquidConnections
-	Provider *gophercloud.ProviderClient
-	EO       gophercloud.EndpointOpts
+	LiquidClientFactory func(db.ServiceType) (LiquidClient, error)
 }
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections - if configured.
@@ -90,13 +89,12 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all LiquidConnections.
-func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
-	// save provider and eo for possible later use
-	c.Provider = provider
-	c.EO = eo
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error)) (errs errext.ErrorSet) {
+	// save factory for possible later use
+	c.LiquidClientFactory = liquidClientFactory
 
 	// initialize discovery plugin
-	err := c.DiscoveryPlugin.Init(ctx, c.Provider, c.EO)
+	err := c.DiscoveryPlugin.Init(ctx, provider, eo)
 	if err != nil {
 		errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}
@@ -109,7 +107,12 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	serviceTypes := slices.Sorted(maps.Keys(c.LiquidConnections))
 	for _, serviceType := range serviceTypes {
 		conn := c.LiquidConnections[serviceType]
-		err := conn.Init(ctx, c.Provider, c.EO)
+		client, err := liquidClientFactory(serviceType)
+		if err != nil {
+			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
+			continue
+		}
+		err = conn.Init(ctx, client)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
 		}

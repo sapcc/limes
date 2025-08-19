@@ -4,7 +4,6 @@
 package core_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -30,20 +29,19 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 			unshared:
 				area: unshared
-				liquid_service_type: %[2]s
 	`
 )
 
-func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, replacedConfig string) {
+func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup) {
+	liquidClientFactory := s.Cluster.LiquidClientFactory
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(replacedConfig, "\t", "  ")), s.Clock.Now, s.DB, true)
+	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(testConfigYAML, "\t", "  ")), s.Clock.Now, s.DB, true)
 	for _, err := range errs {
 		t.Fatal(err)
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
 	for _, err := range errs {
 		t.Fatal(err)
 	}
@@ -57,20 +55,18 @@ func TestMain(m *testing.M) {
 func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
-	liquidClientShared, liquidServiceTypeShared := test.NewMockLiquidClient(srvInfoShared)
-	_, liquidServiceTypeUnshared := test.NewMockLiquidClient(srvInfoUnshared)
-
-	replacedConfig := fmt.Sprintf(testConfigYAML, liquidServiceTypeShared, liquidServiceTypeUnshared)
 
 	s := test.NewSetup(t,
-		test.WithConfig(replacedConfig),
+		test.WithConfig(testConfigYAML),
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
+		test.WithMockLiquidClient("shared", srvInfoShared),
+		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 	)
 
 	// We now have a situation where one service is persisted into the database.
 	// First, check that on a new cluster with LiquidConnections (collect task) the second service is saved correctly.
 	tr, _ := easypg.NewTracker(t, s.DB.Db)
-	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
+	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (10, 4, 'any', 0, 'unshared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 3, 'any', 0, 'unshared/capacity/any');
@@ -85,8 +81,8 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	// Now, we update the serviceInfo of the shared service, updates should be done
 	srvInfoShared.Version = 2
 	delete(srvInfoShared.Resources, "things") // remove things resource
-	liquidClientShared.SetServiceInfo(srvInfoShared)
-	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
+	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		DELETE FROM az_resources WHERE id = 5 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE resources SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
@@ -98,8 +94,8 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	// Now, we add the "things" resource back to the shared service, it should be added again.
 	srvInfoShared = test.DefaultLiquidServiceInfo()
 	srvInfoShared.Version = 3
-	liquidClientShared.SetServiceInfo(srvInfoShared)
-	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
+	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (11, 5, 'any', 0, 'shared/things/any');
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
@@ -110,8 +106,8 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 
 	// just an increase of the LiquidVersion
 	srvInfoShared.Version = 4
-	liquidClientShared.SetServiceInfo(srvInfoShared)
-	generateNewClusterWithPersistingServiceInfo(t, s, replacedConfig)
+	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		UPDATE resources SET liquid_version = 4 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
 		UPDATE resources SET liquid_version = 4 WHERE id = 5 AND service_id = 1 AND name = 'things' AND path = 'shared/things';

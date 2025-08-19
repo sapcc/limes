@@ -4,7 +4,6 @@
 package datamodel
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -37,10 +36,8 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 			second:
 				area: second
-				liquid_service_type: %[1]s
 	`
 
 	testQuotaOverridesWithRenamingConfigYAML = `
@@ -60,10 +57,8 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 			second:
 				area: second
-				liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
@@ -108,9 +103,10 @@ var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid
 func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-no-renaming.json")
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testQuotaOverridesNoRenamingConfigYAML, liquidServiceType)),
+		test.WithConfig(testQuotaOverridesNoRenamingConfigYAML),
+		test.WithMockLiquidClient("first", srvInfo),
+		test.WithMockLiquidClient("second", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)
@@ -124,9 +120,10 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-with-renaming.json")
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testQuotaOverridesWithRenamingConfigYAML, liquidServiceType)),
+		test.WithConfig(testQuotaOverridesWithRenamingConfigYAML),
+		test.WithMockLiquidClient("first", srvInfo),
+		test.WithMockLiquidClient("second", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)

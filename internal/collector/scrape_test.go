@@ -78,7 +78,6 @@ const (
 		liquids:
 			unittest:
 				area: testing
-				liquid_service_type: %[1]s
 				# to check how they are merged with the ServiceInfo of the liquids
 				rate_limits: 
 					global:
@@ -92,7 +91,7 @@ const (
 	`
 )
 
-func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, srvInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport, mockLiquidClient *test.MockLiquidClient) {
+func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, srvInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
 	srvInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
@@ -119,9 +118,9 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			"limes_unittest_things_usage":   {Type: liquid.MetricTypeGauge},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
@@ -231,12 +230,12 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		},
 		SerializedState: []byte(`{"firstrate":1024,"secondrate":2048}`),
 	}
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 	return
 }
 
 func Test_ScrapeSuccess(t *testing.T) {
-	s, job, withLabel, syncJob, _, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, syncJob, _, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -364,7 +363,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// test SyncQuotaToBackendJob running and failing (this checks that it does
 	// not get stuck on a failing project service and moves on to the other one
 	// in the second attempt)
-	mockLiquidClient.SetQuotaError(errors.New("SetQuota failed as requested"))
+	s.LiquidClients["unittest"].SetQuotaError(errors.New("SetQuota failed as requested"))
 	expectedErrorRx := regexp.MustCompile(`SetQuota failed as requested$`)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -379,7 +378,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// test SyncQuotaToBackendJob running successfully
-	mockLiquidClient.SetQuotaError(nil)
+	s.LiquidClients["unittest"].SetQuotaError(nil)
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
@@ -493,7 +492,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(2048))
 	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
 	serviceUsageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -501,7 +500,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
 	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(8192))
 	serviceUsageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -558,7 +557,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	s, job, withLabel, _, _, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, _, _, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^during scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
@@ -573,7 +572,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
-	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -613,8 +612,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	// once the backend starts working, we start to see plausible data again
 	s.Clock.StepBy(scrapeInterval)
 
-	mockLiquidClient.SetUsageReportError(nil)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReportError(nil)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
@@ -653,7 +652,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// touch neither scraped_at nor the existing resources (this also tests that a
 	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	s.Clock.StepBy(scrapeInterval)
-	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -682,7 +681,6 @@ const (
 		liquids:
 			noop:
 				area: testing
-				liquid_service_type: %[1]s
 	`
 )
 
@@ -691,16 +689,16 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		Version:   1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
+		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ScrapeJob(s.Registry)
@@ -733,16 +731,16 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 			"things": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
+		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ScrapeJob(s.Registry)
@@ -773,7 +771,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 }
 
 func Test_TopologyScrapes(t *testing.T) {
-	s, job, withLabel, syncJob, srvInfo, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, syncJob, srvInfo, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// use AZSeperated topology and adjust quota reporting accordingly
 	resInfoCap := srvInfo.Resources["capacity"]
@@ -868,8 +866,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	resThings.PerAZ["az-one"].Quota = None[int64]()
 	resThings.PerAZ["az-two"].Quota = None[int64]()
 	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report return
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementUsageReportInfoVersion()
+	s.LiquidClients["unittest"].IncrementServiceInfoVersion()
+	s.LiquidClients["unittest"].IncrementUsageReportInfoVersion()
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -912,8 +910,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	resInfoCap.Topology = "invalidAZ1"
 	srvInfo.Resources["capacity"] = resInfoCap
 	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report returns
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementUsageReportInfoVersion()
+	s.LiquidClients["unittest"].IncrementServiceInfoVersion()
+	s.LiquidClients["unittest"].IncrementUsageReportInfoVersion()
 
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 

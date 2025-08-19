@@ -32,7 +32,6 @@ import (
 // in case of configuration changes.
 type LiquidConnection struct {
 	// configuration
-	LiquidServiceType               string
 	ServiceType                     db.ServiceType
 	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]
 	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration]
@@ -51,11 +50,7 @@ type LiquidConnection struct {
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
 func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
-	if lc.LiquidServiceType == "" {
-		lc.LiquidServiceType = "liquid-" + string(serviceType)
-	}
 	return LiquidConnection{
-		LiquidServiceType:               lc.LiquidServiceType,
 		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
@@ -68,11 +63,8 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, av
 
 // Init is called before any other interface methods, and allows the LiquidConnection to
 // perform first-time initialization.
-func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	l.LiquidClient, err = NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: l.LiquidServiceType})
-	if err != nil {
-		return err
-	}
+func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient) (err error) {
+	l.LiquidClient = client
 	serviceInfo, apiSuccess, err := l.retrieveServiceInfo(ctx, true)
 	if err != nil {
 		return fmt.Errorf("getting ServiceInfo: %w", err)
@@ -104,7 +96,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 		return srv, nil
 	}
 
-	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.LiquidServiceType, currentVersion, infoVersion)
+	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.ServiceType, currentVersion, infoVersion)
 	serviceInfo, _, err := l.retrieveServiceInfo(ctx, false)
 	if err != nil {
 		return srv, err
@@ -112,7 +104,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
 	newVersion := serviceInfo.Version
 	if infoVersion != newVersion {
-		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.LiquidServiceType, newVersion, infoVersion)
+		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
 	}
 	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
@@ -134,7 +126,7 @@ func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context, dbFallback b
 	// result, err := liquid.ServiceInfo{}, errors.New("some error")
 	if err != nil && dbFallback {
 		apiSuccess = false
-		logg.Info("request to Liquid failed for %s, falling back to DB: %w", l.LiquidServiceType, err)
+		logg.Info("request to Liquid failed for %s, falling back to DB: %w", l.ServiceType, err)
 		var serviceInfos map[db.ServiceType]liquid.ServiceInfo
 		serviceInfos, err = readServiceInfoFromDB(l.DB, Some(l.ServiceType))
 		result = serviceInfos[l.ServiceType]
@@ -440,7 +432,7 @@ func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) li
 	}
 }
 
-// LiquidClient is a wrapper for liquidapi.Client
+// LiquidClient is a wrapper for type liquidapi.Client.
 // Allows for the implementation of a mock client that is used in unit tests
 type LiquidClient interface {
 	GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error)
@@ -450,13 +442,17 @@ type LiquidClient interface {
 	ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error)
 }
 
-// NewLiquidClient is usually a synonym for liquidapi.NewClient().
-// In tests, it serves as a dependency injection slot to allow type Cluster to
-// access mock liquids prepared by the test's specific setup code.
-var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
-	client, err := liquidapi.NewClient(provider, eo, opts)
-	if err != nil {
-		return nil, fmt.Errorf("cannot initialize ServiceClient for %s: %w", opts.ServiceType, err)
+// LiquidClientFactory constructs LIQUID clients using liquidapi.NewClient().
+// Code holding a *Cluster object should use Cluster.LiquidClientFactory instead.
+// In tests, a factory for mock clients is inserted at that dependency injection slot.
+func LiquidClientFactory(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) func(db.ServiceType) (LiquidClient, error) {
+	return func(serviceType db.ServiceType) (LiquidClient, error) {
+		client, err := liquidapi.NewClient(provider, eo, liquidapi.ClientOpts{
+			ServiceType: "liquid-" + string(serviceType),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cannot initialize LiquidClient for liquid-%s: %w", serviceType, err)
+		}
+		return client, nil
 	}
-	return client, nil
 }

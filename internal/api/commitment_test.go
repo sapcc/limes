@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"net/http"
 	"testing"
@@ -41,7 +40,6 @@ const testCommitmentsYAML = `
 	liquids:
 		first:
 			area: first
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -49,7 +47,6 @@ const testCommitmentsYAML = `
 						min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 		second:
 			area: second
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource: []
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
@@ -69,11 +66,9 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	liquids:
 		first:
 			area: first
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource: []
 		second:
 			area: second
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: '.*'
 					value:
@@ -97,7 +92,6 @@ const testConvertCommitmentsYAML = `
 	liquids:
 		third:
 			area: third
-			liquid_service_type: %[1]s
 			commitment_behavior_per_resource:
 				- key: capacity_c32
 					value:
@@ -123,7 +117,6 @@ const testConvertCommitmentsYAML = `
 					value: { durations_per_domain: *durations }
 		fourth:
 			area: fourth
-			liquid_service_type: %[2]s
 			commitment_behavior_per_resource:
 				- key: capacity_a
 					value:
@@ -138,12 +131,12 @@ const testConvertCommitmentsYAML = `
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// GET returns an empty list if there are no commitments
@@ -190,7 +183,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -245,7 +238,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -328,7 +321,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -392,7 +385,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 		ExpectBody:   assert.JSONObject{"commitment": resp3},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -418,7 +411,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -468,7 +461,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -500,12 +493,12 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 }
 
 func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
@@ -535,7 +528,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 	// no request was done
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -593,7 +586,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// this won't work because we request too much
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity + 1
@@ -605,7 +598,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -614,7 +607,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// create a commitment for some of that capacity
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = committedCapacity
@@ -627,7 +620,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -635,7 +628,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		Body:         request(committedCapacity),
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm can only confirm the remainder of the available capacity, not more
 	remainingCommittableCapacity := maxCommittableCapacity - committedCapacity
@@ -658,7 +651,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity + 1
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(6)
@@ -669,7 +662,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -678,7 +671,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm ignores expired commitments
 	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
@@ -697,7 +690,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFirst.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -706,7 +699,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFirst.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// try to create a commitment with a mail notification flag (only possible to set for planned commitments)
 	notificationReq := assert.JSONObject{
@@ -727,12 +720,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
-	liquidClientFirst, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
@@ -757,18 +750,18 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	if liquidClientFirst.LastCommitmentChangeRequest.InfoVersion != 0 {
+	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
 		t.Fatal("expected no commitment change request to be sent to Liquid")
 	}
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// no authentication
@@ -794,12 +787,12 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 }
 
 func TestPutCommitmentErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	request := assert.JSONObject{
@@ -955,12 +948,12 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 }
 
 func TestDeleteCommitmentErrorCases(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// we need a commitment in the DB to test deletion
@@ -1009,12 +1002,12 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 }
 
 func Test_StartCommitmentTransfer(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	var transferToken = test.GenerateDummyToken()
@@ -1058,7 +1051,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -1067,7 +1060,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
@@ -1102,7 +1095,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -1111,7 +1104,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-two",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1167,12 +1160,12 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 }
 
 func Test_GetCommitmentByToken(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	var transferToken = test.GenerateDummyToken()
@@ -1237,12 +1230,12 @@ func Test_GetCommitmentByToken(t *testing.T) {
 }
 
 func Test_TransferCommitment(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	var transferToken = test.GenerateDummyToken()
@@ -1348,7 +1341,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
-	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1357,7 +1350,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-two",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1405,7 +1398,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp3},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
-	liquidClientSecond.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1414,7 +1407,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-two",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1487,12 +1480,12 @@ func Test_TransferCommitment(t *testing.T) {
 }
 
 func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// create commitments for resource "second/capacity" in AZ "az-one"
@@ -1597,7 +1590,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientSecond.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
+	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1606,17 +1599,17 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		ExpectBody:   assert.StringData("not enough committable capacity on the receiving side\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, commitmentChangeRequest)
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	_, liquidServiceTypeThird := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testConvertCommitmentsYAML, liquidServiceTypeFirst, liquidServiceTypeSecond, liquidServiceTypeThird)),
+		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("third", test.DefaultLiquidServiceInfo()),
 	)
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
@@ -1680,12 +1673,12 @@ func Test_ConvertCommitments(t *testing.T) {
 		"capacity_a": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
 		"capacity_b": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
 	}
-	_, liquidServiceTypeThird := test.NewMockLiquidClient(srvInfoThird)
-	liquidClientFourth, liquidServiceTypeFourth := test.NewMockLiquidClient(srvInfoFourth)
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testConvertCommitmentsYAML, liquidServiceTypeThird, liquidServiceTypeFourth)),
+		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("third", srvInfoThird),
+		test.WithMockLiquidClient("fourth", srvInfoFourth),
 	)
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
@@ -1796,7 +1789,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFourth.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
+	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1805,7 +1798,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFourth.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 	*s.CurrentProjectCommitmentID-- // request was unsuccessful
 
 	// Conversion with remainder should be rejected.
@@ -1836,7 +1829,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liquidClientFourth.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1845,7 +1838,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "fourth", "capacity_a")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFourth.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	var commitmentToCheck db.ProjectCommitment
 	// original
@@ -1958,16 +1951,16 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(5, 2, "fourth", "capacity_a")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientFourth.LastCommitmentChangeRequest, commitmentChangeRequest)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 }
 
 func Test_UpdateCommitmentDuration(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// Positive: confirmed commitment
@@ -2012,7 +2005,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2077,7 +2070,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2104,14 +2097,14 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	})
 
 	// check that rejections from the liquid are honored
-	liquidClientSecond.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
+	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
 		Body:         assert.JSONObject{"duration": "3 hours"},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-	liquidClientSecond.SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
 
 	// Negative: Provided duration is invalid
 	assert.HTTPRequest{
@@ -2173,12 +2166,12 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 }
 
 func Test_MergeCommitments(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	// Create two confirmed commitments on the same resource
@@ -2375,7 +2368,7 @@ func Test_MergeCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp5},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2451,12 +2444,12 @@ func Test_MergeCommitments(t *testing.T) {
 }
 
 func Test_RenewCommitments(t *testing.T) {
-	_, liquidServiceTypeFirst := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-	liquidClientSecond, liquidServiceTypeSecond := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(fmt.Sprintf(testCommitmentsYAMLWithoutMinConfirmDate, liquidServiceTypeFirst, liquidServiceTypeSecond)),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
 
 	req1 := assert.JSONObject{
@@ -2531,7 +2524,7 @@ func Test_RenewCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2560,7 +2553,7 @@ func Test_RenewCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	assert.DeepEqual(t, "CommitmentChangeRequest", liquidClientSecond.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-two",
 		InfoVersion: 1,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{

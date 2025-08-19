@@ -132,7 +132,7 @@ func main() {
 	dbm := db.InitORM(must.Return(db.Init()))
 	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
 	errs.LogFatalIfError()
-	errs = cluster.Connect(ctx, provider, eo)
+	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo))
 	errs.LogFatalIfError()
 
 	// select task
