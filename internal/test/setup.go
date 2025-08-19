@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -41,7 +39,7 @@ type setupParams struct {
 	DBFixtureFile            string
 	ConfigYAML               string
 	APIMiddlewares           []httpapi.API
-	Projects                 []*core.KeystoneProject
+	WithInitialDiscovery     bool
 	WithEmptyRecordsAsNeeded bool
 	WithLiquidConnections    bool
 	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
@@ -76,14 +74,6 @@ func WithAPIMiddleware(mw func(http.Handler) http.Handler) SetupOption {
 	}
 }
 
-// WithProjects is a SetupOption that creates a DB entry for the given project.
-// This also creates the corresponding domain object.
-func WithProject(p core.KeystoneProject) SetupOption {
-	return func(params *setupParams) {
-		params.Projects = append(params.Projects, &p)
-	}
-}
-
 // WithMockLiquidClient is a SetupOption that adds a MockLiquidClient to this test.
 // This option must be provided once for every service type in the config.
 func WithMockLiquidClient(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo) SetupOption {
@@ -108,11 +98,22 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
-// records for project_services, project_resources and project_az_resources.
-// It relies on the services, resources and az_resources
-// to exist! (e.g. use WithPersistedServiceInfo)
+// records for project_resources and project_az_resources.
+//
+// It relies on the services, resources and az_resources to exist!
+// (e.g. use WithPersistedServiceInfo)
+//
+// It also relies on domains and projects to exist!
+// (e.g. use WithInitialDiscovery)
 func WithEmptyRecordsAsNeeded(params *setupParams) {
 	params.WithEmptyRecordsAsNeeded = true
+}
+
+// WithInitialDiscovery is a SetupOption that populates the DB with records for
+// domains, projects and project_services using the data in the config section
+// "discovery.static_config", by running the ScanDomainsAndProjectsJob.
+func WithInitialDiscovery(params *setupParams) {
+	params.WithInitialDiscovery = true
 }
 
 func normalizeInlineYAML(yamlStr string) string {
@@ -136,11 +137,6 @@ type Setup struct {
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
 	Collector                  *collector.Collector
-	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
-	Projects           []*db.Project
-	ProjectServices    []*db.ProjectService
-	ProjectResources   []*db.ProjectResource
-	ProjectAZResources []*db.ProjectAZResource
 
 	// for t.Fatal() in helper functions
 	t *testing.T
@@ -180,6 +176,14 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		option(&params)
 	}
 
+	// validate selected options
+	if params.WithEmptyRecordsAsNeeded && !params.WithInitialDiscovery {
+		t.Fatal("can not create empty DB records since no projects are being discovered during setup")
+	}
+	if params.WithEmptyRecordsAsNeeded && params.DBFixtureFile != "" {
+		t.Fatal("can not create empty DB records automatically after loading a DB fixture file")
+	}
+
 	var s Setup
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
@@ -216,11 +220,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
 	failIfErrs(t, errs)
-
-	serviceInfos, err := s.Cluster.AllServiceInfos()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	s.Registry = prometheus.NewPedanticRegistry()
 
@@ -268,88 +267,51 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AddJitter: NoJitter,
 	}
 
-	for idx, project := range params.Projects {
-		dbDomain := &db.Domain{
-			ID:   db.DomainID(idx),
-			Name: "domain-" + strconv.Itoa(idx+1),
-			UUID: "uuid-for-domain-" + strconv.Itoa(idx+1),
-		}
-		mustDo(t, s.DB.Insert(dbDomain))
-		dbProject := &db.Project{
-			ID:         db.ProjectID(idx),
-			DomainID:   dbDomain.ID,
-			Name:       project.Name,
-			UUID:       project.UUID,
-			ParentUUID: dbDomain.UUID,
-		}
-		mustDo(t, s.DB.Insert(dbProject))
-		s.Projects = append(s.Projects, dbProject)
+	if params.WithInitialDiscovery {
+		_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
+		mustDo(t, err)
 	}
 
-	// fills all ProjectService entries (for each pair of project and service type),
-	// all ProjectResource entries (for each pair of service and resource name),
-	// all ProjectAZResource entries (for each pair of resource and AZ according to topology)
-	if !params.WithEmptyRecordsAsNeeded {
-		return s
+	if params.WithEmptyRecordsAsNeeded {
+		// fills all ProjectResource entries (for each pair of service and resource name)
+		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
+		_, err := s.DB.Exec(db.ExpandEnumPlaceholders(`
+			WITH tmp AS (
+				SELECT cr.id AS id, CASE
+					WHEN NOT cr.has_quota THEN NULL
+					WHEN cr.topology = {{liquid.AZSeparatedTopology}} THEN NULL
+					ELSE 0
+				END AS default_quota FROM resources cr
+			)
+			INSERT INTO project_resources (project_id, resource_id, quota, backend_quota) SELECT
+				p.id              AS project_id,
+				tmp.id            AS resource_id,
+				tmp.default_quota AS quota,
+				tmp.default_quota AS backend_quota
+			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
+		`))
+		mustDo(t, err)
+
+		_, err = s.DB.Exec(db.ExpandEnumPlaceholders(`
+			WITH tmp AS (
+				SELECT cazr.id AS id, CASE
+					WHEN NOT cr.has_quota THEN NULL
+					WHEN cr.topology != {{liquid.AZSeparatedTopology}} THEN NULL
+					WHEN cazr.az = {{liquid.AvailabilityZoneUnknown}} THEN NULL
+					ELSE 0
+				END AS default_quota FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id
+			)
+			INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, subresources) SELECT
+				p.id              AS project_id,
+				tmp.id            AS az_resource_id,
+				tmp.default_quota AS quota,
+				0                 AS usage,
+				''                AS subresources
+			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
+		`))
+		mustDo(t, err)
 	}
-	if len(params.Projects) == 0 {
-		t.Fatal("can not create empty DB records since there are no projects")
-	}
-	for serviceType := range s.Cluster.Config.Liquids {
-		var service *db.Service
-		mustDo(t, s.DB.SelectOne(&service, `SELECT * FROM services WHERE type = $1`, serviceType))
-		for _, dbProject := range s.Projects {
-			t0 := time.Unix(0, 0).UTC()
-			dbProjectService := &db.ProjectService{
-				ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
-				ProjectID: dbProject.ID,
-				ServiceID: service.ID,
-				ScrapedAt: Some(t0),
-				CheckedAt: Some(t0),
-			}
-			mustDo(t, s.DB.Insert(dbProjectService))
-			s.ProjectServices = append(s.ProjectServices, dbProjectService)
-		}
-		resInfos := core.InfoForService(serviceInfos, serviceType).Resources
-		for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
-			var resource *db.Resource
-			mustDo(t, s.DB.SelectOne(&resource, `SELECT * FROM resources WHERE name = $1 AND service_id = $2`, resName, service.ID))
-			for _, dbProject := range s.Projects {
-				dbProjectResource := &db.ProjectResource{
-					ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
-					ProjectID:    dbProject.ID,
-					ResourceID:   resource.ID,
-					Quota:        Some[uint64](0),
-					BackendQuota: Some[int64](0),
-				}
-				mustDo(t, s.DB.Insert(dbProjectResource))
-				s.ProjectResources = append(s.ProjectResources, dbProjectResource)
-			}
-			var allAZs []liquid.AvailabilityZone
-			if resource.Topology == liquid.FlatTopology {
-				allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
-			} else {
-				allAZs = s.Cluster.Config.AvailabilityZones
-			}
-			for _, az := range allAZs {
-				var azResource *db.AZResource
-				mustDo(t, s.DB.SelectOne(&azResource, `SELECT * FROM az_resources WHERE az = $1 AND resource_id = $2`, az, resource.ID))
-				for _, dbProject := range s.Projects {
-					dbProjectAZResource := &db.ProjectAZResource{
-						ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
-						ProjectID:        dbProject.ID,
-						AZResourceID:     azResource.ID,
-						Quota:            Some[uint64](0),
-						Usage:            0,
-						PhysicalUsage:    None[uint64](),
-						SubresourcesJSON: "{}",
-					}
-					mustDo(t, s.DB.Insert(dbProjectAZResource))
-					s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
-				}
-			}
-		}
-	}
+
 	return s
 }
 

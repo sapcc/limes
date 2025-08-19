@@ -27,7 +27,7 @@ type capacityScrapeBackchannelImpl struct {
 
 var (
 	getResourceDemandQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT cazr.az, pazr.usage, COALESCE(pc_view.confirmed, 0), COALESCE(pc_view.pending, 0)
+		SELECT cazr.az, pazr.usage, COALESCE(pc_view.confirmed, 0), COALESCE(pc_view.pending, 0), cr.topology
 		  FROM services cs
 		  JOIN resources cr ON cr.service_id = cs.id
 		  JOIN az_resources cazr ON cazr.resource_id = cr.id
@@ -55,10 +55,23 @@ func (i capacityScrapeBackchannelImpl) GetResourceDemand(serviceType db.ServiceT
 			usage              uint64
 			activeCommitments  uint64
 			pendingCommitments uint64
+			topology           liquid.Topology
 		)
-		err := rows.Scan(&az, &usage, &activeCommitments, &pendingCommitments)
+		err := rows.Scan(&az, &usage, &activeCommitments, &pendingCommitments, &topology)
 		if err != nil {
 			return err
+		}
+
+		// ignore usage in pseudo-AZs (as an exception, topology "flat" has a single entry for AZ "any")
+		switch topology {
+		case liquid.FlatTopology:
+			if az != liquid.AvailabilityZoneAny {
+				return nil
+			}
+		default:
+			if !az.IsReal() {
+				return nil
+			}
 		}
 
 		demand := result.PerAZ[az]

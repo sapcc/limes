@@ -63,12 +63,21 @@ func makePlaceholderList(count, offset int) string {
 var (
 	enumPlaceholderRx = regexp.MustCompile(`{{[a-zA-Z][a-zA-Z0-9\.]*}}`)
 	enumPlaceholders  = map[string]string{
+		// liquid.AvailabilityZone
+		"{{liquid.AvailabilityZoneAny}}":     enumValueToSQLLiteral(liquid.AvailabilityZoneAny),
+		"{{liquid.AvailabilityZoneTotal}}":   enumValueToSQLLiteral(liquid.AvailabilityZoneTotal),
+		"{{liquid.AvailabilityZoneUnknown}}": enumValueToSQLLiteral(liquid.AvailabilityZoneUnknown),
+		// liquid.CommitmentStatus
 		"{{liquid.CommitmentStatusPlanned}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPlanned),
 		"{{liquid.CommitmentStatusPending}}":    enumValueToSQLLiteral(liquid.CommitmentStatusPending),
 		"{{liquid.CommitmentStatusGuaranteed}}": enumValueToSQLLiteral(liquid.CommitmentStatusGuaranteed),
 		"{{liquid.CommitmentStatusConfirmed}}":  enumValueToSQLLiteral(liquid.CommitmentStatusConfirmed),
 		"{{liquid.CommitmentStatusSuperseded}}": enumValueToSQLLiteral(liquid.CommitmentStatusSuperseded),
 		"{{liquid.CommitmentStatusExpired}}":    enumValueToSQLLiteral(liquid.CommitmentStatusExpired),
+		// liquid.Topology
+		"{{liquid.FlatTopology}}":        enumValueToSQLLiteral(liquid.FlatTopology),
+		"{{liquid.AZAwareTopology}}":     enumValueToSQLLiteral(liquid.AZAwareTopology),
+		"{{liquid.AZSeparatedTopology}}": enumValueToSQLLiteral(liquid.AZSeparatedTopology),
 	}
 )
 
