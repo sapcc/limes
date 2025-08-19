@@ -38,8 +38,6 @@ const (
 )
 
 func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Setup) {
-	test.NewMockLiquidClient(srvInfo, "unittest")
-
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithConfig(liquidCapacityTestConfigYAML),
@@ -50,6 +48,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 		}),
 		test.WithEmptyRecordsAsNeeded,
 		test.WithPersistedServiceInfo("unittest", srvInfo),
+		test.WithMockLiquidClient("unittest", srvInfo),
 	)
 	return
 }

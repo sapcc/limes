@@ -45,10 +45,10 @@ const (
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	test.NewMockLiquidClient(srvInfo, "shared")
-	test.NewMockLiquidClient(srvInfo, "unshared")
 	s := test.NewSetup(t,
 		test.WithConfig(testKeystoneConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithMockLiquidClient("unshared", srvInfo),
 		// the functions called from the tests of this setup run in collect task, so we use the LiquidConnections
 		test.WithLiquidConnections,
 	)

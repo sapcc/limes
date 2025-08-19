@@ -27,7 +27,6 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
-	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
@@ -2180,9 +2179,9 @@ func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.C
 		c := p.Cluster
 		if len(c.LiquidConnections) == 0 {
 			// find the right ServiceType
-			liquidClient, err = core.NewLiquidClient(c.Provider, c.EO, liquidapi.ClientOpts{ServiceType: "liquid-" + string(serviceType)})
+			liquidClient, err = c.LiquidClientFactory(serviceType)
 			if err != nil {
-				return result, fmt.Errorf("failed to create LiquidClient for service %s: %w", serviceType, err)
+				return result, err
 			}
 		} else {
 			liquidClient = c.LiquidConnections[serviceType].LiquidClient

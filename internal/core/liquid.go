@@ -63,11 +63,8 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, av
 
 // Init is called before any other interface methods, and allows the LiquidConnection to
 // perform first-time initialization.
-func (l *LiquidConnection) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	l.LiquidClient, err = NewLiquidClient(client, eo, liquidapi.ClientOpts{ServiceType: "liquid-" + string(l.ServiceType)})
-	if err != nil {
-		return err
-	}
+func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient) (err error) {
+	l.LiquidClient = client
 	serviceInfo, apiSuccess, err := l.retrieveServiceInfo(ctx, true)
 	if err != nil {
 		return fmt.Errorf("getting ServiceInfo: %w", err)
@@ -435,7 +432,7 @@ func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) li
 	}
 }
 
-// LiquidClient is a wrapper for liquidapi.Client
+// LiquidClient is a wrapper for type liquidapi.Client.
 // Allows for the implementation of a mock client that is used in unit tests
 type LiquidClient interface {
 	GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error)
@@ -445,13 +442,17 @@ type LiquidClient interface {
 	ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error)
 }
 
-// NewLiquidClient is usually a synonym for liquidapi.NewClient().
-// In tests, it serves as a dependency injection slot to allow type Cluster to
-// access mock liquids prepared by the test's specific setup code.
-var NewLiquidClient = func(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (LiquidClient, error) {
-	client, err := liquidapi.NewClient(provider, eo, opts)
-	if err != nil {
-		return nil, fmt.Errorf("cannot initialize ServiceClient for %s: %w", opts.ServiceType, err)
+// LiquidClientFactory constructs LIQUID clients using liquidapi.NewClient().
+// Code holding a *Cluster object should use Cluster.LiquidClientFactory instead.
+// In tests, a factory for mock clients is inserted at that dependency injection slot.
+func LiquidClientFactory(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) func(db.ServiceType) (LiquidClient, error) {
+	return func(serviceType db.ServiceType) (LiquidClient, error) {
+		client, err := liquidapi.NewClient(provider, eo, liquidapi.ClientOpts{
+			ServiceType: "liquid-" + string(serviceType),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cannot initialize LiquidClient for liquid-%s: %w", serviceType, err)
+		}
+		return client, nil
 	}
-	return client, nil
 }

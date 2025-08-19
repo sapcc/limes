@@ -45,15 +45,15 @@ const (
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient := test.NewMockLiquidClient(srvInfo, "unittest")
 	s := test.NewSetup(t,
 		test.WithConfig(testCleanupOldCommitmentsConfigYAML),
+		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
 	c := getCollector(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{
+	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

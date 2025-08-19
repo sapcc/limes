@@ -44,10 +44,11 @@ const (
 
 func Test_ExpiringCommitmentNotification(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
 		test.WithConfig(testMailNoopWithTemplateYAML),
-		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"))
+		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"),
+		test.WithMockLiquidClient("shared", srvInfo),
+	)
 	c := getCollector(t, s)
 
 	job := c.ExpiringCommitmentNotificationJob(nil)

@@ -44,6 +44,7 @@ type setupParams struct {
 	WithEmptyRecordsAsNeeded bool
 	WithLiquidConnections    bool
 	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
+	LiquidClients            map[db.ServiceType]*MockLiquidClient
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -85,6 +86,14 @@ func WithProject(p core.KeystoneProject) SetupOption {
 	}
 }
 
+// WithMockLiquidClient is a SetupOption that adds a MockLiquidClient to this test.
+// This option must be provided once for every service type in the config.
+func WithMockLiquidClient(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo) SetupOption {
+	return func(params *setupParams) {
+		params.LiquidClients[serviceType] = &MockLiquidClient{serviceInfo: serviceInfo}
+	}
+}
+
 // WithLiquidConnections is a SetupOption that sets up the Cluster the same way
 // as the limes-collect task would do. This means a) the LiquidConnections are filled
 // and b) persisted to the database.
@@ -96,9 +105,6 @@ func WithLiquidConnections(params *setupParams) {
 // This is used to test how Cluster.Connect() reacts to preexisting metadata in the DB.
 func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
-		if params.PersistedServiceInfo == nil {
-			params.PersistedServiceInfo = make(map[db.ServiceType]liquid.ServiceInfo)
-		}
 		params.PersistedServiceInfo[st] = si
 	}
 }
@@ -128,6 +134,7 @@ type Setup struct {
 	Registry       *prometheus.Registry
 	TokenValidator *mock.Validator[*PolicyEnforcer]
 	Auditor        *audittools.MockAuditor
+	LiquidClients  map[db.ServiceType]*MockLiquidClient
 	// fields that are only set if their respective SetupOptions are given
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
@@ -164,7 +171,10 @@ func projectCommitmentUUIDGenerator() (generator func() liquid.CommitmentUUID, c
 // NewSetup prepares most or all pieces of Limes for a test.
 func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
-	var params setupParams
+	params := setupParams{
+		PersistedServiceInfo: make(map[db.ServiceType]liquid.ServiceInfo),
+		LiquidClients:        make(map[db.ServiceType]*MockLiquidClient),
+	}
 	for _, option := range opts {
 		option(&params)
 	}
@@ -173,6 +183,16 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
+
+	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
+	s.LiquidClients = params.LiquidClients
+	liquidClientFactory := func(serviceType db.ServiceType) (core.LiquidClient, error) {
+		client, ok := s.LiquidClients[serviceType]
+		if !ok {
+			return nil, fmt.Errorf("no MockLiquidClient registered for service type %q", serviceType)
+		}
+		return client, nil
+	}
 
 	// we need the Cluster for the availability zones, so create it first
 	var errs errext.ErrorSet
@@ -192,7 +212,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			t.Fatal(err)
 		}
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{})
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
 	failIfErrs(t, errs)
 
 	serviceInfos, err := s.Cluster.AllServiceInfos()

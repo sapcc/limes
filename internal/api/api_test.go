@@ -115,14 +115,14 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
-	test.NewMockLiquidClient(srvInfoShared, "shared")
-	test.NewMockLiquidClient(srvInfoUnshared, "unshared")
 
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("shared", srvInfoShared),
+		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 	)
 	return
 }

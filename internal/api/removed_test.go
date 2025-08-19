@@ -16,7 +16,6 @@ import (
 
 func TestForbidClusterIDHeader(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	test.NewMockLiquidClient(srvInfo, "foo")
 	s := test.NewSetup(t,
 		test.WithConfig(`
 			availability_zones: [ az-one, az-two ]
@@ -39,6 +38,7 @@ func TestForbidClusterIDHeader(t *testing.T) {
 		test.WithAPIHandler(NewV1API,
 			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		),
+		test.WithMockLiquidClient("foo", srvInfo),
 	)
 
 	// requests without X-Limes-Cluster-Id are accepted

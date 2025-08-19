@@ -59,10 +59,11 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 
 func Test_MailDelivery(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	test.NewMockLiquidClient(srvInfo, "shared")
 	s := test.NewSetup(t,
 		test.WithConfig(testMailNoopYAML),
-		test.WithDBFixtureFile("fixtures/mail_delivery.sql"))
+		test.WithDBFixtureFile("fixtures/mail_delivery.sql"),
+		test.WithMockLiquidClient("shared", srvInfo),
+	)
 	c := getCollector(t, s)
 
 	mailer := &MockMail{}

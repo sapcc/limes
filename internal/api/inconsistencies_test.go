@@ -35,13 +35,13 @@ const (
 )
 
 func TestFullInconsistencyReport(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "shared")
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "unshared")
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-inconsistencies.sql"),
 		test.WithConfig(inconsistenciesTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)
 
 	assert.HTTPRequest{
@@ -53,12 +53,12 @@ func TestFullInconsistencyReport(t *testing.T) {
 }
 
 func TestEmptyInconsistencyReport(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "shared")
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "unshared")
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithConfig(inconsistenciesTestConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
+		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)
 
 	assert.HTTPRequest{

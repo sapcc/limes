@@ -40,8 +40,6 @@ const (
 // subcapacity translation
 
 func TestTranslateManilaSubcapacities(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
-
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -94,7 +92,6 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = json.RawMessage(buf)
 	srvInfo.Resources["capacity"] = resInfo
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -148,8 +145,6 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
-
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
 			"name":     "nova-compute-bb91",
@@ -198,6 +193,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}, opts...)
 	s := test.NewSetup(t,
 		opts...,
@@ -257,8 +253,6 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 // subresource translation
 
 func TestTranslateCinderVolumeSubresources(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "6dfbbce3-078d-4c64-8f88-8145b8d44183",
@@ -299,8 +293,6 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "260da0ee-4816-48af-8784-1717cb76c0cd",
@@ -327,6 +319,7 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
+	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
 	attrs := map[string]any{
 		"cores":    5,
 		"ram_mib":  23,
@@ -337,9 +330,6 @@ func TestTranslateIronicSubresources(t *testing.T) {
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = buf
 	srvInfo.Resources["capacity"] = resInfo
-
-	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -397,8 +387,6 @@ func TestTranslateIronicSubresources(t *testing.T) {
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
-	test.NewMockLiquidClient(test.DefaultLiquidServiceInfo(), "first")
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "c655dfeb-18fa-479d-b0bf-36cd63c2e901",
@@ -503,6 +491,7 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}
 	opts = append(localOpts, opts...)
 	s := test.NewSetup(t,
