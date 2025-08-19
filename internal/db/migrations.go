@@ -211,4 +211,10 @@ var sqlMigrations = map[string]string{
 			EXECUTE FUNCTION az_resources_project_commitments_trigger_function();
 		DROP FUNCTION cluster_az_resources_project_commitments_trigger_function;
 	`,
+	"066_forbid_autogrowth.down.sql": `
+		ALTER TABLE project_resources DROP COLUMN forbid_autogrowth;
+	`,
+	"066_forbid_autogrowth.up.sql": `
+		ALTER TABLE project_resources ADD COLUMN forbid_autogrowth BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

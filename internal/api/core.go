@@ -140,6 +140,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}/max-quota").HandlerFunc(p.PutProjectMaxQuota)
+	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}/forbid-autogrowth").HandlerFunc(p.PutQuotaAutogrowth)
 	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjectRates)
 	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
 	r.Methods("POST").Path("/rates/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProjectRates)

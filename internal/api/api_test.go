@@ -425,6 +425,18 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
+	// paris has forbid_autogrowth setting
+	_, dberr = s.DB.Exec("UPDATE project_resources SET forbid_autogrowth=true where id=12")
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-forbid-autogrowth.json"),
+	}.Check(t, s.Handler)
+
 	// check GetProjectRates
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1033,6 +1045,111 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000, "unit": "MiB"}),
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value from MiB to <count> because units are incompatible\n"),
+	}.Check(t, s.Handler)
+}
+
+func Test_PutQuotaAutogrowth(t *testing.T) {
+	s := setupTest(t, "fixtures/start-data.sql")
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	makeRequest := func(serviceType limes.ServiceType, resources ...any) assert.JSONObject {
+		return assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{{
+					"type":      serviceType,
+					"resources": resources,
+				}},
+			},
+		}
+	}
+
+	// happy case: enable autogrowth twice, only update the database once.
+	for range 2 {
+		assert.HTTPRequest{
+			Method:       "PUT",
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+			ExpectStatus: http.StatusAccepted,
+		}.Check(t, s.Handler)
+	}
+	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 3 AND project_id = 1 AND resource_id = 3;`)
+
+	// happy case: disable autogrowth
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": false}),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = FALSE WHERE id = 3 AND project_id = 1 AND resource_id = 3;`)
+
+	// happy case: multiple resources.
+	assert.HTTPRequest{
+		Method: "PUT",
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body: makeRequest("shared",
+			assert.JSONObject{"name": "things", "forbid_autogrowth": true},
+			assert.JSONObject{"name": "capacity", "forbid_autogrowth": true},
+		),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 3 AND project_id = 1 AND resource_id = 3;
+		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 4 AND project_id = 1 AND resource_id = 4;
+	`)
+
+	// error case: missing the appropriate edit permission
+	s.TokenValidator.Enforcer.AllowEdit = false
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+		ExpectStatus: http.StatusForbidden,
+		ExpectBody:   assert.StringData("Forbidden\n"),
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowEdit = true
+
+	// error case: malformed request
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_auto": true}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("malformed request body for resource: shared/things\n"),
+	}.Check(t, s.Handler)
+
+	// error case: invalid service
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("unknown", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service and/or resource: unknown/things\n"),
+	}.Check(t, s.Handler)
+
+	// error case: invalid resource
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "forbid_autogrowth": true}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service and/or resource: shared/items\n"),
+	}.Check(t, s.Handler)
+
+	// error case: resource does not track quota
+	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource shared/capacity does not track quota\n"),
 	}.Check(t, s.Handler)
 }
 

@@ -48,6 +48,34 @@ func (t maxQuotaEventTarget) Render() cadf.Resource {
 	}
 }
 
+type autogrowthEventTarget struct {
+	DomainID         string
+	DomainName       string
+	ProjectID        liquid.ProjectUUID
+	ProjectName      string
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
+	AutogrowthChange autogrowthChange
+}
+type autogrowthChange struct {
+	ForbidAutogrowth bool `json:"forbid_autogrowth"`
+}
+
+// Render implements the audittools.Target interface.
+func (t autogrowthEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.AutogrowthChange)),
+		},
+	}
+}
+
 // rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding rate limits
 type rateLimitEventTarget struct {

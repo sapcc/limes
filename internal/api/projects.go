@@ -329,3 +329,144 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 
 	w.WriteHeader(http.StatusAccepted)
 }
+
+// PutQuotaAutogrowth handles PUT /v1/domains/:domain_id/projects/:project_id/forbid-autogrowth.
+func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/forbid-autogrowth")
+	requestTime := p.timeNow()
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	// parse request body
+	var parseTarget struct {
+		Project struct {
+			Services []struct {
+				Type      limes.ServiceType `json:"type"`
+				Resources []struct {
+					Name             limesresources.ResourceName `json:"name"`
+					ForbidAutogrowth Option[bool]                `json:"forbid_autogrowth"`
+				} `json:"resources"`
+			} `json:"services"`
+		} `json:"project"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// validate request
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	requested := make(map[db.ServiceType]map[liquid.ResourceName]*autogrowthChange)
+	for _, srvRequest := range parseTarget.Project.Services {
+		for _, resRequest := range srvRequest.Resources {
+			dbServiceType, dbResourceName, exists := nm.MapFromV1API(srvRequest.Type, resRequest.Name)
+			if !exists {
+				msg := fmt.Sprintf("no such service and/or resource: %s/%s", srvRequest.Type, resRequest.Name)
+				http.Error(w, msg, http.StatusUnprocessableEntity)
+				return
+			}
+
+			forbidAutogrowth, isSome := resRequest.ForbidAutogrowth.Unpack()
+			if !isSome {
+				msg := fmt.Sprintf("malformed request body for resource: %s/%s", srvRequest.Type, resRequest.Name)
+				http.Error(w, msg, http.StatusUnprocessableEntity)
+				return
+			}
+
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+			if !resInfo.HasQuota {
+				msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
+				http.Error(w, msg, http.StatusUnprocessableEntity)
+				return
+			}
+
+			if requested[dbServiceType] == nil {
+				requested[dbServiceType] = make(map[liquid.ResourceName]*autogrowthChange)
+			}
+
+			requested[dbServiceType][dbResourceName] = &autogrowthChange{ForbidAutogrowth: forbidAutogrowth}
+		}
+	}
+
+	// write requested values to DB
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	var services []db.Service
+	_, err = tx.Select(&services,
+		`SELECT cs.* FROM services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	for _, srv := range services {
+		requestedInService, exists := requested[srv.Type]
+		if !exists {
+			continue
+		}
+
+		_, err := datamodel.ProjectResourceUpdate{
+			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+				requestedChange := requestedInService[resName]
+				if requestedChange != nil {
+					res.ForbidAutogrowth = requestedChange.ForbidAutogrowth
+					return nil
+				}
+				return nil
+			},
+		}.Run(tx, serviceInfos[srv.Type], p.timeNow(), *dbDomain, *dbProject, srv)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// write audit trail
+	for dbServiceType, requestedInService := range requested {
+		for dbResourceName, requestedChange := range requestedInService {
+			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
+			if exists {
+				p.auditor.Record(audittools.Event{
+					Time:       requestTime,
+					Request:    r,
+					User:       token,
+					ReasonCode: http.StatusAccepted,
+					Action:     cadf.UpdateAction,
+					Target: autogrowthEventTarget{
+						DomainID:         dbDomain.UUID,
+						DomainName:       dbDomain.Name,
+						ProjectID:        dbProject.UUID,
+						ProjectName:      dbProject.Name,
+						ServiceType:      apiServiceType,
+						ResourceName:     apiResourceName,
+						AutogrowthChange: *requestedChange,
+					},
+				})
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}
