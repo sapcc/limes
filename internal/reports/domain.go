@@ -33,16 +33,16 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources as pazr
-		JOIN cluster_az_resources as cazr ON cazr.id = pazr.az_resource_id
-		JOIN cluster_resources as cr ON cr.id = cazr.resource_id
+		JOIN az_resources as cazr ON cazr.id = pazr.az_resource_id
+		JOIN resources as cr ON cr.id = cazr.resource_id
 	   GROUP BY pazr.project_id, cr.id
 	)
 	SELECT p.domain_id, cs.type, cr.name, SUM(pr.quota), SUM(pas.usage),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
@@ -50,20 +50,20 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	 WHERE %s {{AND cs.type = $service_type}} GROUP BY p.domain_id, cs.type, cr.name
 `)
 
-var domainReportQuery3 = sqlext.SimplifyWhitespace(`
+var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE state = 'active'
+	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT p.domain_id, cs.type, cr.name, cazr.az,
 	       SUM(pazr.quota), SUM(pazr.usage),
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0)))
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
@@ -71,29 +71,29 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az
-`)
+`))
 
-var domainReportQuery4 = sqlext.SimplifyWhitespace(`
+var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	    FROM project_commitments
 	   GROUP BY project_id, az_resource_id, duration
 	)
 	SELECT p.domain_id, cs.type, cr.name, cazr.az,
-	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = cr.id
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 GROUP BY p.domain_id, cs.type, cr.name, cazr.az, pcs.duration
-`)
+`))
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
@@ -247,18 +247,18 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				domainID       db.DomainID
-				dbServiceType  db.ServiceType
-				dbResourceName liquid.ResourceName
-				az             limes.AvailabilityZone
-				duration       limesresources.CommitmentDuration
-				activeAmount   uint64
-				pendingAmount  uint64
-				plannedAmount  uint64
+				domainID        db.DomainID
+				dbServiceType   db.ServiceType
+				dbResourceName  liquid.ResourceName
+				az              limes.AvailabilityZone
+				duration        limesresources.CommitmentDuration
+				confirmedAmount uint64
+				pendingAmount   uint64
+				plannedAmount   uint64
 			)
 			err := rows.Scan(
 				&domainID, &dbServiceType, &dbResourceName, &az,
-				&duration, &activeAmount, &pendingAmount, &plannedAmount,
+				&duration, &confirmedAmount, &pendingAmount, &plannedAmount,
 			)
 			if err != nil {
 				return err
@@ -276,11 +276,11 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			}
 			azReport := resource.PerAZ[az]
 
-			if activeAmount > 0 {
+			if confirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = activeAmount
+				azReport.Committed[duration.String()] = confirmedAmount
 			}
 			if pendingAmount > 0 {
 				if azReport.PendingCommitments == nil {

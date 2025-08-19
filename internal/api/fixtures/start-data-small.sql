@@ -1,20 +1,19 @@
 -- This start-data contains exactly one project and one service, with all capacity/quota/usage values at 0.
 -- It can be used as a base to set up isolated tests for individual reporting features.
 
-CREATE OR REPLACE FUNCTION UNIXUTC(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION UNIX(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
-INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'first', UNIXUTC(1000), UNIXUTC(2000), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'first', UNIX(1000), UNIX(2000), 1);
 
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, 'first/things');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'first/capacity');
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, 'first/things');
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'first/capacity');
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (1, 1, 'any', 0, 0, '', 'first/things/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (2, 2, 'any', 0, 0, '', 'first/capacity/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (3, 2, 'az-one', 0, 0, '', 'first/capacity/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (4, 2, 'az-two', 0, 0, '', 'first/capacity/az-two');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (5, 2, 'unknown', 0, 0, '', 'first/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (1, 1, 'any', 0, 0, '', 'first/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (2, 2, 'any', 0, 0, '', 'first/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (3, 2, 'az-one', 0, 0, '', 'first/capacity/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (4, 2, 'az-two', 0, 0, '', 'first/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (5, 2, 'unknown', 0, 0, '', 'first/capacity/unknown');
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'domainone', 'uuid-for-domainone');
 

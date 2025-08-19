@@ -30,9 +30,9 @@ const (
 	capacityScrapeErrorInterval = 3 * time.Minute
 )
 
-// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one ClusterService entry.
-// ClusterResources and ClusterAZResources are managed indirectly by this job, because a bump of the InfoVersion
-// on Liquid side causes a reconciliation against the DB. Extraneous ClusterServices are only deleted on startup
+// CapacityScrapeJob is a jobloop.Job. Each task scrapes one Liquid, equal to one Service entry.
+// Resources and AZResources are managed indirectly by this job, because a bump of the InfoVersion
+// on Liquid side causes a reconciliation against the DB. Extraneous Services are only deleted on startup
 // of the Collector, by Cluster.Connect.
 func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[capacityScrapeTask]{
@@ -50,14 +50,14 @@ func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.
 }
 
 type capacityScrapeTask struct {
-	Service db.ClusterService
+	Service db.Service
 	Timing  TaskTiming
 }
 
 var (
-	// find the next cluster_service that needs to have capacity scraped
+	// find the next service that needs to have capacity scraped
 	findServiceForScrapeQuery = sqlext.SimplifyWhitespace(`
-		SELECT * FROM cluster_services
+		SELECT * FROM services
 		-- filter by need to be updated
 		WHERE next_scrape_at <= $1
 		-- order by update priority (first schedule, then ID for deterministic test behavior)
@@ -66,33 +66,33 @@ var (
 		LIMIT 1
 	`)
 
-	// This query updates `project_commitments.state` on all rows that have not
-	// reached one of the final states ("superseded" and "expired").
+	// This query updates `project_commitments.status` on all rows that have not
+	// reached one of the final statuses ("superseded" and "expired").
 	//
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
-	// simple checks on the enum value in `state`.
-	updateProjectCommitmentStatesForResourceQuery = sqlext.SimplifyWhitespace(`
+	// simple checks on the enum value in `status`.
+	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		UPDATE project_commitments
-		   SET state = CASE WHEN superseded_at IS NOT NULL THEN 'superseded'
-		                    WHEN expires_at <= $3          THEN 'expired'
-		                    WHEN confirm_by > $3           THEN 'planned'
-		                    WHEN confirmed_at IS NULL      THEN 'pending'
-		                    ELSE 'active' END
-		WHERE state NOT IN ('superseded', 'expired') AND az_resource_id IN (
+		   SET status = CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
+		                     WHEN expires_at <= $3          THEN {{liquid.CommitmentStatusExpired}}
+		                     WHEN confirm_by > $3           THEN {{liquid.CommitmentStatusPlanned}}
+		                     WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
+		                     ELSE {{liquid.CommitmentStatusConfirmed}} END
+		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) AND az_resource_id IN (
 			SELECT cazr.id
-			  FROM cluster_services cs
-			  JOIN cluster_resources cr ON cr.service_id = cs.id
-			  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+			  FROM services cs
+			  JOIN resources cr ON cr.service_id = cs.id
+			  JOIN az_resources cazr ON cazr.resource_id = cr.id
 			 WHERE cs.type = $1 AND cr.name = $2
 		)
-	`)
+	`))
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
 	task.Timing.StartedAt = c.MeasureTime()
-	// CheckConsistencyJob will ensure that all cluster_services are present in the DB. Before it runs,
-	// we might have a cluster_service entry without a corresponding LiquidConnection or vise versa.
+	// CheckConsistencyJob will ensure that all services are present in the DB. Before it runs,
+	// we might have a service entry without a corresponding LiquidConnection or vise versa.
 
 	err = c.DB.SelectOne(&task.Service, findServiceForScrapeQuery, task.Timing.StartedAt)
 	return task, err
@@ -104,11 +104,11 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	defer func() {
 		if returnedErr != nil {
-			returnedErr = fmt.Errorf("while scraping clusterService %s: %w", strconv.FormatInt(int64(service.ID), 10), returnedErr)
+			returnedErr = fmt.Errorf("while scraping service %s: %w", strconv.FormatInt(int64(service.ID), 10), returnedErr)
 		}
 	}()
 
-	// if cluster_service is not in the LiquidConnections, do nothing
+	// if service is not in the LiquidConnections, do nothing
 	connection := c.Cluster.LiquidConnections[service.Type]
 	if connection == nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
@@ -133,8 +133,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		service.SerializedMetrics = string(serializedMetrics)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		service.ScrapeErrorMessage = ""
-		// NOTE: in this case, we continue below, with the cluster_resources update
-		// the cluster_services row will be updated at the end of the tx
+		// NOTE: in this case, we continue below, with the resources update
+		// the services row will be updated at the end of the tx
 	} else {
 		err = util.UnpackError(err)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
@@ -154,26 +154,26 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// a cluster_resources update is not necessary, as it is done within c.scrapeLiquidCapacity if necessary
-	// collect existing cluster_resources
-	var dbResources []db.ClusterResource
-	_, err = tx.Select(&dbResources, `SELECT cr.* FROM cluster_resources as cr JOIN cluster_services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
+	// a resources update is not necessary, as it is done within c.scrapeLiquidCapacity if necessary
+	// collect existing resources
+	var dbResources []db.Resource
+	_, err = tx.Select(&dbResources, `SELECT cr.* FROM resources as cr JOIN services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
+		return fmt.Errorf("cannot inspect existing resources: %w", err)
 	}
 
-	// collect cluster_az_resources for the cluster_resources owned by this capacitor
+	// collect az_resources for the resources owned by this capacitor
 	dbResourceIDs := make([]any, len(dbResources))
 	for idx, res := range dbResources {
 		dbResourceIDs[idx] = res.ID
 	}
-	var dbAZResources []db.ClusterAZResource
+	var dbAZResources []db.AZResource
 	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbResourceIDs}, 0)
-	_, err = tx.Select(&dbAZResources, `SELECT * FROM cluster_az_resources WHERE `+whereClause, queryArgs...)
+	_, err = tx.Select(&dbAZResources, `SELECT * FROM az_resources WHERE `+whereClause, queryArgs...)
 	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster AZ resources: %w", err)
+		return fmt.Errorf("cannot inspect existing AZ resources: %w", err)
 	}
-	dbAZResourcesByResourceID := make(map[db.ClusterResourceID][]db.ClusterAZResource)
+	dbAZResourcesByResourceID := make(map[db.ResourceID][]db.AZResource)
 	for _, azRes := range dbAZResources {
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
@@ -184,7 +184,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	serviceInfo := core.InfoForService(serviceInfos, service.Type)
 
-	// cluster_az_resources should be there - enumerate the data an complain if they don't match (with exceptions)
+	// az_resources should be there - enumerate the data an complain if they don't match (with exceptions)
 	for _, res := range dbResources {
 		resourceData, resExists := capacityData.Resources[res.Name]
 		if !resExists {
@@ -229,16 +229,16 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		return err
 	}
 
-	// for all cluster resources thus updated, sync commitment states with reality
+	// for all resources thus updated, sync commitment status with reality
 	for _, res := range dbResources {
 		now := c.MeasureTime()
-		_, err := c.DB.Exec(updateProjectCommitmentStatesForResourceQuery, service.Type, res.Name, now)
+		_, err := c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, service.Type, res.Name, now)
 		if err != nil {
-			return fmt.Errorf("while updating project_commitments.state for %s/%s: %w", service.Type, res.Name, err)
+			return fmt.Errorf("while updating project_commitments.status for %s/%s: %w", service.Type, res.Name, err)
 		}
 	}
 
-	// for all cluster resources thus updated, try to confirm pending commitments
+	// for all resources thus updated, try to confirm pending commitments
 	for _, res := range dbResources {
 		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name, serviceInfos)
 		if err != nil {
@@ -246,7 +246,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 	}
 
-	// for all cluster resources thus updated, recompute project quotas if necessary
+	// for all resources thus updated, recompute project quotas if necessary
 	for _, res := range dbResources {
 		now := c.MeasureTime()
 		serviceInfo := core.InfoForService(serviceInfos, service.Type)
@@ -260,7 +260,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, srv db.ClusterService, serializedMetrics []byte, err error) {
+func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, srv db.Service, serializedMetrics []byte, err error) {
 	capacityData, srv, err = connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, srv, nil, err
@@ -279,7 +279,8 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
-	if len(behavior.Durations) == 0 || !behavior.CanConfirmCommitmentsAt(now) {
+	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(now)
+	if len(behavior.Durations) == 0 || canConfirmErrMsg != "" {
 		return nil
 	}
 

@@ -20,11 +20,11 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE state = 'active'
+	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT cs.type, cr.name, cazr.az,
@@ -32,21 +32,21 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))),
 	       MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  JOIN project_services ps ON ps.service_id = cs.id
 	  -- no left join, entries will only appear when there is some project level entry
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = ps.project_id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = pazr.project_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az
-`)
+`))
 
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, SUM(pr.quota)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  JOIN project_resources pr ON pr.resource_id = cr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name
@@ -54,36 +54,36 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cazr.az, cazr.raw_capacity, cazr.usage, cazr.subcapacities, cs.scraped_at
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  LEFT OUTER JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  LEFT OUTER JOIN az_resources cazr ON cazr.resource_id = cr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 ORDER BY cazr.az
 `)
 
-var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	    FROM project_commitments
 	   GROUP BY az_resource_id, duration
 	)
 	SELECT cs.type, cr.name, cazr.az,
-	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az, pcs.duration
-`)
+`))
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM cluster_services cs
-	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  FROM services cs
+	  JOIN rates cra ON cra.service_id = cs.id
 	  JOIN project_services ps ON ps.service_id = cs.id
 	  -- TODO: this join reduces the result set to the rates which have been scraped.
 	  -- At some point, we want to have the scraped_at statistics per service - not considering rates or resources.
@@ -285,17 +285,17 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				dbServiceType  db.ServiceType
-				dbResourceName liquid.ResourceName
-				az             limes.AvailabilityZone
-				duration       limesresources.CommitmentDuration
-				activeAmount   uint64
-				pendingAmount  uint64
-				plannedAmount  uint64
+				dbServiceType   db.ServiceType
+				dbResourceName  liquid.ResourceName
+				az              limes.AvailabilityZone
+				duration        limesresources.CommitmentDuration
+				confirmedAmount uint64
+				pendingAmount   uint64
+				plannedAmount   uint64
 			)
 			err := rows.Scan(
 				&dbServiceType, &dbResourceName, &az,
-				&duration, &activeAmount, &pendingAmount, &plannedAmount,
+				&duration, &confirmedAmount, &pendingAmount, &plannedAmount,
 			)
 			if err != nil {
 				return err
@@ -310,11 +310,11 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				return nil
 			}
 
-			if activeAmount > 0 {
+			if confirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = activeAmount
+				azReport.Committed[duration.String()] = confirmedAmount
 			}
 			if pendingAmount > 0 {
 				if azReport.PendingCommitments == nil {

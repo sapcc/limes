@@ -8,14 +8,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gorilla/mux"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/liquid"
 
@@ -251,7 +255,10 @@ func (rt *runtime) pollServiceInfo(ctx context.Context, cancelHTTPServer func(),
 func (rt *runtime) setServiceInfo(serviceInfo liquid.ServiceInfo) {
 	rt.ServiceInfoMutex.Lock()
 	defer rt.ServiceInfoMutex.Unlock()
-	rt.ServiceInfo = serviceInfo
+	// Ignore new ServiceInfos if they are functionally identical to the current info
+	if !cmp.Equal(rt.ServiceInfo, serviceInfo, diffOptions...) {
+		rt.ServiceInfo = serviceInfo
+	}
 }
 
 func (rt *runtime) getServiceInfo() liquid.ServiceInfo {
@@ -259,6 +266,24 @@ func (rt *runtime) getServiceInfo() liquid.ServiceInfo {
 	defer rt.ServiceInfoMutex.RUnlock()
 	return rt.ServiceInfo
 }
+
+// ForeachOptionTypeInLIQUID calls action with every Option[] type that appears in the LIQUID API and returns a slice with the results.
+// This is intended for use with the cmpopts.EquateComparable() function when using github.com/google/go-cmp/cmp.
+func ForeachOptionTypeInLIQUID[T any](action func(...any) T) []T {
+	return []T{
+		action(Option[*big.Int]{}),
+		action(Option[liquid.ProjectMetadata]{}),
+		action(Option[time.Time]{}),
+		action(Option[uint64]{}),
+		action(Option[int64]{}),
+		action(Option[liquid.CommitmentStatus]{}),
+	}
+}
+
+var diffOptions = append(
+	[]cmp.Option{cmpopts.IgnoreFields(liquid.ServiceInfo{}, "Version")},
+	ForeachOptionTypeInLIQUID(cmpopts.EquateComparable)...,
+)
 
 // AddTo implements the httpapi.API interface.
 func (rt *runtime) AddTo(r *mux.Router) {

@@ -4,7 +4,6 @@
 package collector
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,16 +19,16 @@ import (
 func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
 	srvInfo := test.DefaultLiquidServiceInfo()
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithMockLiquidClient("unittest", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{
+	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

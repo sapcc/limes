@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -34,7 +33,6 @@ const (
 		liquids:
 			first:
 				area: first
-				liquid_service_type: %[1]s
 	`
 )
 
@@ -42,8 +40,6 @@ const (
 // subcapacity translation
 
 func TestTranslateManilaSubcapacities(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -81,7 +77,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
@@ -96,7 +92,6 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = json.RawMessage(buf)
 	srvInfo.Resources["capacity"] = resInfo
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
@@ -146,12 +141,10 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "ironic-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubcapacityTranslation(t, "ironic-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
 	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
 			"name":     "nova-compute-bb91",
@@ -192,14 +185,15 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", string(liquidServiceType), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
 	opts = append([]test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
+		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}, opts...)
 	s := test.NewSetup(t,
 		opts...,
@@ -210,7 +204,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, 
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
-	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 3`,
+	_, err := s.DB.Exec(`UPDATE az_resources SET subcapacities = $1 WHERE id = 3`,
 		string(must.Return(json.Marshal(subcapacitiesInLiquidFormat))),
 	)
 	if err != nil {
@@ -259,8 +253,6 @@ func testSubcapacityTranslation(t *testing.T, ruleID, liquidServiceType string, 
 // subresource translation
 
 func TestTranslateCinderVolumeSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "6dfbbce3-078d-4c64-8f88-8145b8d44183",
@@ -297,12 +289,10 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "260da0ee-4816-48af-8784-1717cb76c0cd",
@@ -325,10 +315,11 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
+	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
 	attrs := map[string]any{
 		"cores":    5,
 		"ram_mib":  23,
@@ -339,9 +330,6 @@ func TestTranslateIronicSubresources(t *testing.T) {
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = buf
 	srvInfo.Resources["capacity"] = resInfo
-
-	// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
@@ -395,12 +383,10 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "ironic-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubresourceTranslation(t, "ironic-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
-	_, liquidServiceType := test.NewMockLiquidClient(test.DefaultLiquidServiceInfo())
-
 	subresourcesInLiquidFormat := []assert.JSONObject{
 		{
 			"id":   "c655dfeb-18fa-479d-b0bf-36cd63c2e901",
@@ -497,14 +483,15 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", string(liquidServiceType), subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID, liquidServiceType string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
+func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
 	localOpts := []test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(fmt.Sprintf(testSmallConfigYAML, liquidServiceType)),
+		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}
 	opts = append(localOpts, opts...)
 	s := test.NewSetup(t,

@@ -32,12 +32,12 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"cluster": cluster})
@@ -61,7 +61,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -92,12 +92,12 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]any{"project": project})
@@ -166,7 +166,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	} else {
 		var err error
 		tx, err = p.DB.Begin()
-		if respondwith.ErrorText(w, err) {
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		defer sqlext.RollbackUnlessCommitted(tx)
@@ -195,7 +195,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	// get all project_rates and make them accessible quickly by ID
 	var projectRates []db.ProjectRate
 	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates WHERE project_id = $1`, updater.Project.ID)
-	projectRateByClusterRateID := make(map[db.ClusterRateID]db.ProjectRate)
+	projectRateByClusterRateID := make(map[db.RateID]db.ProjectRate)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -204,18 +204,18 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 
 	// check all services for resources to update
-	var services []db.ClusterService
-	_, err = tx.Select(&services, `SELECT * FROM cluster_services ORDER BY type`)
-	if respondwith.ErrorText(w, err) {
+	var services []db.Service
+	_, err = tx.Select(&services, `SELECT * FROM services ORDER BY type`)
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// the db types do not have json tags, additionally the Window type serializes into a human readable format - not DB compatible.
 	type serializableProjectRate struct {
-		ProjectID db.ProjectID     `json:"project_id"`
-		RateID    db.ClusterRateID `json:"rate_id"`
-		Limit     Option[uint64]   `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
-		Window    Option[uint64]   `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
+		ProjectID db.ProjectID   `json:"project_id"`
+		RateID    db.RateID      `json:"rate_id"`
+		Limit     Option[uint64] `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
+		Window    Option[uint64] `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
 	}
 
 	var ratesToUpdate []serializableProjectRate
@@ -224,9 +224,9 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		if !exists {
 			continue // no rate limits for this service
 		}
-		var rates []db.ClusterRate
-		_, err = tx.Select(&rates, `SELECT * FROM cluster_rates ORDER BY NAME`)
-		if respondwith.ErrorText(w, err) {
+		var rates []db.Rate
+		_, err = tx.Select(&rates, `SELECT * FROM rates ORDER BY NAME`)
+		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 
@@ -261,7 +261,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 	// update the DB with the new rate limits
 	mergeStr := sqlext.SimplifyWhitespace(`
-		MERGE INTO project_rates pr 
+		MERGE INTO project_rates pr
 		USING json_to_recordset($1::json) src (project_id BIGINT, rate_id BIGINT, rate_limit BIGINT, window_ns BIGINT)
 		ON src.project_id = pr.project_id AND src.rate_id = pr.rate_id
 		WHEN MATCHED THEN UPDATE SET rate_limit = src.rate_limit, window_ns = src.window_ns
@@ -272,11 +272,11 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 	_, err = tx.Exec(mergeStr, string(buf))
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 

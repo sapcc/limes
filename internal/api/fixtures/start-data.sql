@@ -1,33 +1,32 @@
-CREATE OR REPLACE FUNCTION UNIXUTC(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION UNIX(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT LOCAL $$ LANGUAGE SQL;
 
-INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'unshared', UNIXUTC(1000), UNIXUTC(2000), 1);
-INSERT INTO cluster_services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared', UNIXUTC(1100), UNIXUTC(2100), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (1, 'unshared', UNIX(1000), UNIX(2000), 1);
+INSERT INTO services (id, type, scraped_at, next_scrape_at, liquid_version) VALUES (2, 'shared', UNIX(1100), UNIX(2100), 1);
 
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'service/unshared/instances:create', 1, 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (2, 1, 'service/unshared/instances:delete', 1, 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (3, 1, 'service/unshared/instances:update', 1, 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (4, 2, 'service/shared/objects:create', 1, 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage, unit) VALUES (5, 2, 'service/shared/objects:delete', 1, 'flat', TRUE, 'MiB');
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (6, 2, 'service/shared/objects:update', 1, 'flat', TRUE);
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage, unit) VALUES (7, 2, 'service/shared/objects:unlimited', 1, 'flat', TRUE, 'KiB');
-INSERT INTO cluster_rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (8, 2, 'service/shared/objects:read/list', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'service/unshared/instances:create', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (2, 1, 'service/unshared/instances:delete', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (3, 1, 'service/unshared/instances:update', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (4, 2, 'service/shared/objects:create', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage, unit) VALUES (5, 2, 'service/shared/objects:delete', 1, 'flat', TRUE, 'MiB');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (6, 2, 'service/shared/objects:update', 1, 'flat', TRUE);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage, unit) VALUES (7, 2, 'service/shared/objects:unlimited', 1, 'flat', TRUE, 'KiB');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (8, 2, 'service/shared/objects:read/list', 1, 'flat', TRUE);
 
 -- all services have the resources "things" and "capacity"
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, 'unshared/things');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (3, 2, 'things', 1, 'flat', TRUE, 'shared/things');
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (4, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity');
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, 'unshared/things');
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (2, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (3, 2, 'things', 1, 'flat', TRUE, 'shared/things');
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (4, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity');
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139, 'unshared/things/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 2, 'any', 0, 'unshared/capacity/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 2, 'az-one', 0, 'unshared/capacity/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 2, 'az-two', 0, 'unshared/capacity/az-two');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (5, 3, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]', 246, 'shared/things/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 4, 'any', 0, 'shared/capacity/any');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (7, 4, 'az-one', 90, 12, '', 90, 'shared/capacity/az-one');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (8, 4, 'az-two', 95, 15, '', 95, 'shared/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]', 139, 'unshared/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 2, 'any', 0, 'unshared/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 2, 'az-one', 0, 'unshared/capacity/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 2, 'az-two', 0, 'unshared/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (5, 3, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]', 246, 'shared/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 4, 'any', 0, 'shared/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (7, 4, 'az-one', 90, 12, '', 90, 'shared/capacity/az-one');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path) VALUES (8, 4, 'az-two', 95, 15, '', 95, 'shared/capacity/az-two');
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
@@ -100,18 +99,18 @@ INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, 
 
 -- project_commitments has several entries for project dresden
 -- on "unshared/capacity": regular active commitments with different durations
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 3, 1,   '2 years',    UNIX(1), 'uuid-for-alice', 'alice@Default', UNIX(1),       UNIX(1), UNIX(100000001), 'active',  '{}'::jsonb);
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 3, 1,   '1 year',     UNIX(2), 'uuid-for-alice', 'alice@Default', UNIX(2),       UNIX(2), UNIX(100000002), 'active',  '{}'::jsonb);
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 2, 3, 1,   '1 year',     UNIX(3), 'uuid-for-alice', 'alice@Default', UNIX(3),       UNIX(3), UNIX(100000003), 'active',  '{}'::jsonb);
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (4, '00000000-0000-0000-0000-000000000004', 2, 4, 2,   '1 year',     UNIX(4), 'uuid-for-alice', 'alice@Default', UNIX(4),       UNIX(4), UNIX(100000004), 'active',  '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 3, 1,   '2 years',    UNIX(1), 'uuid-for-alice', 'alice@Default', UNIX(1),       UNIX(1), UNIX(100000001), 'confirmed', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 3, 1,   '1 year',     UNIX(2), 'uuid-for-alice', 'alice@Default', UNIX(2),       UNIX(2), UNIX(100000002), 'confirmed', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 2, 3, 1,   '1 year',     UNIX(3), 'uuid-for-alice', 'alice@Default', UNIX(3),       UNIX(3), UNIX(100000003), 'confirmed', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (4, '00000000-0000-0000-0000-000000000004', 2, 4, 2,   '1 year',     UNIX(4), 'uuid-for-alice', 'alice@Default', UNIX(4),       UNIX(4), UNIX(100000004), 'confirmed', '{}'::jsonb);
 -- on "unshared/capacity": unconfirmed commitments should be reported as "pending"
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (5, '00000000-0000-0000-0000-000000000005', 2, 4, 100, '2 years',    UNIX(5), 'uuid-for-alice', 'alice@Default', UNIX(5),       NULL,    UNIX(100000005), 'pending', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (5, '00000000-0000-0000-0000-000000000005', 2, 4, 100, '2 years',    UNIX(5), 'uuid-for-alice', 'alice@Default', UNIX(5),       NULL,    UNIX(100000005), 'pending',   '{}'::jsonb);
 -- on "unshared/capacity": expired commitments should not be reported (NOTE: the test's clock stands at UNIX timestamp 3600)
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (6, '00000000-0000-0000-0000-000000000006', 2, 3, 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6),       UNIX(6), UNIX(606),       'expired', '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (6, '00000000-0000-0000-0000-000000000006', 2, 3, 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6),       UNIX(6), UNIX(606),       'expired',   '{}'::jsonb);
 -- on "shared/capacity": only an unconfirmed commitment that should be reported as "planned", this tests that the "committed" structure is absent in the JSON for that resource
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (7, '00000000-0000-0000-0000-000000000007', 2, 7, 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(1000007), NULL,    UNIX(100000007), 'planned', '{}'::jsonb);
--- on "unshared/things": an active commitment on AZ "any"
-INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state, creation_context_json) VALUES (8, '00000000-0000-0000-0000-000000000008', 2, 1, 1,   '2 years',    UNIX(8), 'uuid-for-alice', 'alice@Default', UNIX(8),       UNIX(8), UNIX(100000008), 'active',  '{}'::jsonb);
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (7, '00000000-0000-0000-0000-000000000007', 2, 7, 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(1000007), NULL,    UNIX(100000007), 'planned',   '{}'::jsonb);
+-- on "unshared/things": an confirmed commitment on AZ "any"
+INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, status, creation_context_json) VALUES (8, '00000000-0000-0000-0000-000000000008', 2, 1, 1,   '2 years',    UNIX(8), 'uuid-for-alice', 'alice@Default', UNIX(8),       UNIX(8), UNIX(100000008), 'confirmed', '{}'::jsonb);
 
 -- project_rates also has multiple different setups to test different cases
 -- berlin has custom rate limits
@@ -130,6 +129,6 @@ INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage
 
 -- insert some bullshit data that should be filtered out by the internal/reports/ logic
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
-INSERT INTO cluster_services (id, type, liquid_version) VALUES (101, 'weird', 1);
-INSERT INTO cluster_resources (id, service_id, name, liquid_version, path) VALUES (101, 101, 'things', 1, 'weird/things');
-INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (101, 101, 'any', 2, 1, '', 'weird/things/any');
+INSERT INTO services (id, type, liquid_version) VALUES (101, 'weird', 1);
+INSERT INTO resources (id, service_id, name, liquid_version, path) VALUES (101, 101, 'things', 1, 'weird/things');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, subcapacities, path) VALUES (101, 101, 'any', 2, 1, '', 'weird/things/any');

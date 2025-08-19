@@ -213,11 +213,11 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 //     project_resources and project_az_resources entries and make the project fully functional.
 //   - Setting the stale flag prioritizes scraping of this service over the existing
 //     backlog of routine scrapes, even if the backlog is very long.
-//   - The WHERE clause is defense in depth against garbage entries in cluster_services.
+//   - The WHERE clause is defense in depth against garbage entries in services.
 var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
 	INSERT INTO project_services (project_id, service_id, next_scrape_at, stale)
 	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
-	  FROM cluster_services
+	  FROM services
 	 WHERE type = ANY($3::TEXT[])
 `)
 
@@ -253,6 +253,17 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	return tx.Commit()
 }
 
+var (
+	deleteProjectCheckBlockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT COUNT(*) FROM project_commitments
+		 WHERE project_id = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	`))
+	deleteProjectRemoveNonblockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		DELETE FROM project_commitments
+		 WHERE project_id = $1 AND status IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	`))
+)
+
 // Deletes a project from the DB after it was deleted in Keystone.
 // This requires special care because some constraints are "ON DELETE RESTRICT".
 func (c *Collector) deleteProject(project *db.Project) error {
@@ -263,8 +274,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	args := []any{project.ID, db.CommitmentStateSuperseded, db.CommitmentStateExpired}
-	result, err := tx.SelectInt(`SELECT COUNT(*) FROM project_commitments WHERE project_id = $1 AND STATE NOT IN ($2, $3)`, args...)
+	result, err := tx.SelectInt(deleteProjectCheckBlockingCommitmentsQuery, project.ID)
 	if err != nil {
 		return err
 	}
@@ -273,9 +283,9 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	}
 
 	// it is fine to delete a project that only has superseded and expired commitments on it
-	// (if there are commitments in any other state, the `DELETE FROM projects` below will fail
+	// (if there are commitments in any other status, the `DELETE FROM projects` below will fail
 	// and rollback the full transaction)
-	_, err = tx.Exec(`DELETE FROM project_commitments WHERE project_id = $1 AND state IN ($2, $3)`, args...)
+	_, err = tx.Exec(deleteProjectRemoveNonblockingCommitmentsQuery, project.ID)
 	if err != nil {
 		return err
 	}

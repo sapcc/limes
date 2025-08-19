@@ -26,10 +26,10 @@ import (
 // since they represent individual steps of ApplyComputedProjectQuota.
 
 var (
-	acpqGetClusterResourceIDQuery = sqlext.SimplifyWhitespace(`
+	acpqGetResourceIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT cr.id
-		  FROM cluster_services cs
-		  JOIN cluster_resources cr ON cr.service_id = cs.id
+		  FROM services cs
+		  JOIN resources cr ON cr.service_id = cs.id
 		 WHERE cs.type = $1 AND cr.name = $2
 	`)
 
@@ -48,7 +48,7 @@ var (
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources pazr
 		SET quota = $1
-		FROM cluster_az_resources cazr
+		FROM az_resources cazr
 		WHERE pazr.az_resource_id = cazr.id AND cazr.az = $2 AND pazr.project_id = $3 AND cazr.resource_id = $4
 		AND pazr.quota IS DISTINCT FROM $1
 	`)
@@ -58,7 +58,7 @@ var (
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services ps
 		SET quota_desynced_at = $1
-		FROM cluster_services cs
+		FROM services cs
 		WHERE ps.service_id = cs.id AND ps.project_id = $2 AND cs.type = $3
 		AND quota_desynced_at IS NULL
 	`)
@@ -116,21 +116,21 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// to avoid excessive joins, convert serviceType+resourceName into a ClusterResourceID only once
-	var clusterResourceID db.ClusterResourceID
-	err = tx.QueryRow(acpqGetClusterResourceIDQuery, serviceType, resourceName).Scan(&clusterResourceID)
+	// to avoid excessive joins, convert serviceType+resourceName into a ResourceID only once
+	var resourceID db.ResourceID
+	err = tx.QueryRow(acpqGetResourceIDQuery, serviceType, resourceName).Scan(&resourceID)
 	if err != nil {
-		return fmt.Errorf("could not find cluster_resources.id: %w", err)
+		return fmt.Errorf("could not find resources.id: %w", err)
 	}
 
-	// collect required data (TODO: pass `clusterResourceID` into here to simplify queries over there too?)
+	// collect required data (TODO: pass `resourceID` into here to simplify queries over there too?)
 	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx)
 	if err != nil {
 		return err
 	}
 
 	constraints := make(map[db.ProjectID]projectLocalQuotaConstraints)
-	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{clusterResourceID}, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{resourceID}, func(rows *sql.Rows) error {
 		var (
 			projectID                 db.ProjectID
 			forbidden                 bool
@@ -181,7 +181,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
 			for projectID, projectTarget := range azTarget {
-				result, err := stmt.Exec(projectTarget.Allocated, az, projectID, clusterResourceID)
+				result, err := stmt.Exec(projectTarget.Allocated, az, projectID, resourceID)
 				if err != nil {
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
@@ -220,7 +220,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				quotaToWrite = nil
 			}
 
-			result, err := stmt.Exec(quotaToWrite, projectID, clusterResourceID)
+			result, err := stmt.Exec(quotaToWrite, projectID, resourceID)
 			if err != nil {
 				return fmt.Errorf("in project %d: %w", projectID, err)
 			}

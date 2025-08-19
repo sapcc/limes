@@ -5,18 +5,10 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 
-	"github.com/gofrs/uuid/v5"
-	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/liquidapi"
-	"github.com/sapcc/go-bits/must"
-
-	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/db"
 )
 
 // DefaultLiquidServiceInfo builds the default ServiceInfo that most mock liquids use.
@@ -46,47 +38,19 @@ func DefaultLiquidServiceInfo() liquid.ServiceInfo {
 
 // MockLiquidClient implements the LiquidClient interface
 type MockLiquidClient struct {
-	serviceInfo           liquid.ServiceInfo
-	serviceCapacityReport liquid.ServiceCapacityReport
-	serviceUsageReport    liquid.ServiceUsageReport
-	usageReportError      error
-	capacityReportError   error
-	quotaError            error
-	serviceInfoError      error
+	serviceInfo                 liquid.ServiceInfo
+	serviceCapacityReport       liquid.ServiceCapacityReport
+	serviceUsageReport          liquid.ServiceUsageReport
+	commitmentChangeResponse    liquid.CommitmentChangeResponse
+	usageReportError            error
+	capacityReportError         error
+	quotaError                  error
+	serviceInfoError            error
+	commitmentChangeError       error
+	LastCommitmentChangeRequest liquid.CommitmentChangeRequest
 }
 
-var mockLiquidClients = make(map[db.ServiceType]core.LiquidClient)
-
-// NewMockLiquidClient creates a new MockLiquidClient instance.
-//
-// As a caller, you receive the actual MockLiquidClient instance that you can
-// manipulate throughout the tests to setup the specific scenarios that you
-// want to test.
-//
-// Additionally, the client is put into an internal registry under the returned
-// service type string. This value shall be put into the cluster configuration
-// to allow the core.Cluster object to find your mock client.
-func NewMockLiquidClient(serviceInfo liquid.ServiceInfo) (client *MockLiquidClient, serviceType db.ServiceType) {
-	// We use a randomly-generated service type here, in order to allow for
-	// multiple tests to proceed in parallel without interfering with each other
-	// (once we deem this actually safe to do).
-	serviceType = db.ServiceType(must.Return(uuid.NewV4()).String())
-
-	client = &MockLiquidClient{serviceInfo: serviceInfo}
-	mockLiquidClients[serviceType] = client
-	return
-}
-
-func init() {
-	core.NewLiquidClient = func(_ *gophercloud.ProviderClient, _ gophercloud.EndpointOpts, opts liquidapi.ClientOpts) (core.LiquidClient, error) {
-		client, ok := mockLiquidClients[db.ServiceType(opts.ServiceType)]
-		if !ok {
-			return nil, fmt.Errorf("no MockLiquidClient registered for service type %q", opts.ServiceType)
-		}
-		return client, nil
-	}
-}
-
+// GetInfo implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
 	if l.serviceInfoError != nil {
 		return liquid.ServiceInfo{}, l.serviceInfoError
@@ -110,6 +74,15 @@ func (l *MockLiquidClient) SetCapacityReportError(err error) {
 	l.capacityReportError = err
 }
 
+func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
+	l.serviceCapacityReport.InfoVersion++
+}
+
+func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
+	l.serviceCapacityReport = capacityReport
+}
+
+// GetCapacityReport implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
 	if l.capacityReportError != nil {
 		return liquid.ServiceCapacityReport{}, l.capacityReportError
@@ -117,18 +90,19 @@ func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.Ser
 	return cloneServiceCapacityReport(l.serviceCapacityReport), nil
 }
 
-func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
-	l.serviceCapacityReport = capacityReport
-}
-
-func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
-	l.serviceCapacityReport.InfoVersion++
-}
-
 func (l *MockLiquidClient) SetUsageReportError(err error) {
 	l.usageReportError = err
 }
 
+func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
+	l.serviceUsageReport.InfoVersion++
+}
+
+func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
+	l.serviceUsageReport = usageReport
+}
+
+// GetUsageReport implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
 	if l.usageReportError != nil {
 		return liquid.ServiceUsageReport{}, l.usageReportError
@@ -136,20 +110,30 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 	return cloneServiceUsageReport(l.serviceUsageReport), nil
 }
 
-func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
-	l.serviceUsageReport = usageReport
-}
-
-func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
-	l.serviceUsageReport.InfoVersion++
-}
-
 func (l *MockLiquidClient) SetQuotaError(err error) {
 	l.quotaError = err
 }
 
+// PutQuota implements the core.LiquidClient interface.
 func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
 	return l.quotaError
+}
+
+func (l *MockLiquidClient) SetCommitmentChangeError(err error) {
+	l.commitmentChangeError = err
+}
+
+func (l *MockLiquidClient) SetCommitmentChangeResponse(response liquid.CommitmentChangeResponse) {
+	l.commitmentChangeResponse = response
+}
+
+// ChangeCommitments implements the core.LiquidClient interface.
+func (l *MockLiquidClient) ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error) {
+	l.LastCommitmentChangeRequest = req
+	if l.commitmentChangeError != nil {
+		return liquid.CommitmentChangeResponse{}, l.commitmentChangeError
+	}
+	return l.commitmentChangeResponse, nil
 }
 
 func cloneServiceUsageReport(report liquid.ServiceUsageReport) liquid.ServiceUsageReport {

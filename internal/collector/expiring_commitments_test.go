@@ -4,7 +4,6 @@
 package collector
 
 import (
-	"fmt"
 	"html/template"
 	"testing"
 
@@ -32,7 +31,6 @@ const (
 		liquids:
 			shared:
 				area: testing
-				liquid_service_type: %[1]s
 		resource_behavior:
 		- resource: first/things
 			identity_in_v1_api: service/resource
@@ -46,10 +44,11 @@ const (
 
 func Test_ExpiringCommitmentNotification(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testMailNoopWithTemplateYAML, liquidServiceType)),
-		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"))
+		test.WithConfig(testMailNoopWithTemplateYAML),
+		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"),
+		test.WithMockLiquidClient("shared", srvInfo),
+	)
 	c := getCollector(t, s)
 
 	job := c.ExpiringCommitmentNotificationJob(nil)
@@ -73,7 +72,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	originalMailTemplates := mailConfig.Templates
 	mailConfig.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: template.New("")}}
 	// commitments that are already sent out for a notification are not visible in the result set anymore - a new one gets created.
-	_, err := s.DB.Exec("INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, state, creation_context_json) VALUES (99, '00000000-0000-0000-0000-000000000099', 1, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'active', '{}'::jsonb);")
+	_, err := s.DB.Exec("INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, creation_context_json) VALUES (99, '00000000-0000-0000-0000-000000000099', 1, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'confirmed', '{}'::jsonb);")
 	tr.DBChanges().Ignore()
 	mustT(t, err)
 	err = (job.ProcessOne(s.Ctx))

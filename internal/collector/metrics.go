@@ -62,7 +62,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
-	  JOIN cluster_services cs ON cs.id = ps.service_id
+	  JOIN services cs ON cs.id = ps.service_id
 	 WHERE ps.scraped_at IS NOT NULL
 	 GROUP BY cs.type
 `)
@@ -159,7 +159,7 @@ func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc
 
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT type, serialized_metrics
-	  FROM cluster_services
+	  FROM services
 	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
 
@@ -248,7 +248,7 @@ func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, cs.type, ps.serialized_metrics
-	  FROM cluster_services cs
+	  FROM services cs
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
@@ -350,7 +350,7 @@ const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricsBySeries, err := d.collectMetricsBySeries()
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -406,16 +406,16 @@ func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seri
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, JSON_OBJECT_AGG(car.az, car.raw_capacity), JSON_OBJECT_AGG(car.az, car.usage)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	  JOIN cluster_az_resources car ON car.resource_id = cr.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
+	  JOIN az_resources car ON car.resource_id = cr.id
 	 GROUP BY cs.type, cr.name
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, cs.type, cr.name, SUM(pr.quota)
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
@@ -430,15 +430,15 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources pazr
-	    JOIN cluster_az_resources cazr ON cazr.id = pazr.az_resource_id
+	    JOIN az_resources cazr ON cazr.id = pazr.az_resource_id
 	   GROUP BY cazr.resource_id, pazr.project_id
 	),
 	project_commitment_minExpiresAt AS (
 		SELECT p.domain_id, p.id AS project_id, cs.type, cr.name, MIN(expires_at) AS project_commitment_min_expires_at
-		FROM cluster_services cs
-		JOIN cluster_resources cr ON cr.service_id = cs.id
-		JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
-		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.state = 'active'
+		FROM services cs
+		JOIN resources cr ON cr.service_id = cs.id
+		JOIN az_resources cazr ON cazr.resource_id = cr.id
+		JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.status = 'confirmed'
 		JOIN projects p ON p.id = pc.project_id
 		GROUP BY p.domain_id, p.id, cs.type, cr.name
 	)
@@ -446,8 +446,8 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	       pr.quota, pr.backend_quota, pr.override_quota_from_config,
 	       psums.usage, psums.physical_usage, psums.has_physical_usage,
 	       pcmea.project_commitment_min_expires_at
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
@@ -456,20 +456,20 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
-	WITH project_commitment_sums_by_state AS (
-	  SELECT az_resource_id, project_id, state, SUM(amount) AS amount
+	WITH project_commitment_sums_by_status AS (
+	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE state NOT IN ('superseded', 'expired')
-	   GROUP BY az_resource_id, project_id, state
+	   WHERE status NOT IN ('superseded', 'expired')
+	   GROUP BY az_resource_id, project_id, status
 	), project_commitment_sums AS (
-	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(state, amount) AS amount_by_state
-	    FROM project_commitment_sums_by_state
+	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status
+	    FROM project_commitment_sums_by_status
 	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_state
-	  FROM cluster_services cs
-	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	  JOIN cluster_az_resources cazr ON cazr.resource_id = cr.id
+	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_status
+	  FROM services cs
+	  JOIN resources cr ON cr.service_id = cs.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
@@ -478,8 +478,8 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cra.name, pra.usage_as_bigint
-	  FROM cluster_services cs
-	  JOIN cluster_rates cra ON cra.service_id = cs.id
+	  FROM services cs
+	  JOIN rates cra ON cra.service_id = cs.id
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = p.id
@@ -687,18 +687,18 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch values for project AZ level (usage/commitments)
 	err = sqlext.ForeachRow(d.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName        string
-			domainUUID        string
-			projectName       string
-			projectUUID       string
-			dbServiceType     db.ServiceType
-			dbResourceName    liquid.ResourceName
-			az                liquid.AvailabilityZone
-			usage             uint64
-			amountByStateJSON *string
+			domainName         string
+			domainUUID         string
+			projectName        string
+			projectUUID        string
+			dbServiceType      db.ServiceType
+			dbResourceName     liquid.ResourceName
+			az                 liquid.AvailabilityZone
+			usage              uint64
+			amountByStatusJSON *string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&az, &usage, &amountByStateJSON)
+			&az, &usage, &amountByStatusJSON)
 		if err != nil {
 			return err
 		}
@@ -715,14 +715,18 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			result["limes_project_usage_per_az"] = append(result["limes_project_usage_per_az"], metric)
 		}
 		committed := uint64(0)
-		if amountByStateJSON != nil {
-			var amountByState map[db.CommitmentState]uint64
-			err = json.Unmarshal([]byte(*amountByStateJSON), &amountByState)
+		if amountByStatusJSON != nil {
+			var amountByStatus map[liquid.CommitmentStatus]uint64
+			err = json.Unmarshal([]byte(*amountByStatusJSON), &amountByStatus)
 			if err != nil {
-				return fmt.Errorf("while unmarshalling amount_by_state: %w (input was %q)", err, *amountByStateJSON)
+				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *amountByStatusJSON)
 			}
-			committed = amountByState[db.CommitmentStateActive]
-			for state, amount := range amountByState {
+			committed = amountByStatus[liquid.CommitmentStatusConfirmed]
+			for status, amount := range amountByStatus {
+				state := string(status)
+				if status == liquid.CommitmentStatusConfirmed {
+					state = "active" // backwards compatibility with old db.ProjectCommitmentState enum (TODO: use liquid.CommitmentStatus values in v2 metrics)
+				}
 				labelsWithState := fmt.Sprintf(`%s,state=%q`, labels, state)
 				metric := dataMetric{Labels: labelsWithState, Value: float64(amount)}
 				result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)

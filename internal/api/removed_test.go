@@ -5,7 +5,6 @@ package api
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -17,9 +16,8 @@ import (
 
 func TestForbidClusterIDHeader(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(`
+		test.WithConfig(`
 			availability_zones: [ az-one, az-two ]
 			discovery:
 				method: static
@@ -36,11 +34,11 @@ func TestForbidClusterIDHeader(t *testing.T) {
 			liquids:
 				foo:
 					area: testing
-					liquid_service_type: %[1]s
-		`, liquidServiceType)),
+		`),
 		test.WithAPIHandler(NewV1API,
 			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		),
+		test.WithMockLiquidClient("foo", srvInfo),
 	)
 
 	// requests without X-Limes-Cluster-Id are accepted

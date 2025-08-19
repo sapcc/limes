@@ -78,7 +78,6 @@ const (
 		liquids:
 			unittest:
 				area: testing
-				liquid_service_type: %[1]s
 				# to check how they are merged with the ServiceInfo of the liquids
 				rate_limits: 
 					global:
@@ -92,7 +91,7 @@ const (
 	`
 )
 
-func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, srvInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport, mockLiquidClient *test.MockLiquidClient) {
+func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job, srvInfo liquid.ServiceInfo, serviceUsageReport liquid.ServiceUsageReport) {
 	srvInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
@@ -119,9 +118,9 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			"limes_unittest_things_usage":   {Type: liquid.MetricTypeGauge},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s = test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testScrapeBasicConfigYAML, liquidServiceType)),
+		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
@@ -134,7 +133,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
 	// cluster_rate xOtherRate comes from the rate_limits config
-	err := s.DB.Insert(&db.ClusterRate{
+	err := s.DB.Insert(&db.Rate{
 		ServiceID:     1,
 		Name:          "xAnotherRate",
 		LiquidVersion: 1,
@@ -231,12 +230,12 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		},
 		SerializedState: []byte(`{"firstrate":1024,"secondrate":2048}`),
 	}
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 	return
 }
 
 func Test_ScrapeSuccess(t *testing.T) {
-	s, job, withLabel, syncJob, _, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, syncJob, _, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -351,11 +350,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// set some new quota values and align the report values with it, so nothing changes when next Scrape happens
 	serviceUsageReport.Resources["capacity"].Quota = Some[int64](20)
 	serviceUsageReport.Resources["things"].Quota = Some[int64](13)
-	_, err := s.DB.Exec(`UPDATE project_resources ps SET quota = $1 FROM cluster_resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 20, "capacity")
+	_, err := s.DB.Exec(`UPDATE project_resources ps SET quota = $1 FROM resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.DB.Exec(`UPDATE project_resources ps SET quota = $1 FROM cluster_resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 13, "things")
+	_, err = s.DB.Exec(`UPDATE project_resources ps SET quota = $1 FROM resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 13, "things")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +363,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// test SyncQuotaToBackendJob running and failing (this checks that it does
 	// not get stuck on a failing project service and moves on to the other one
 	// in the second attempt)
-	mockLiquidClient.SetQuotaError(errors.New("SetQuota failed as requested"))
+	s.LiquidClients["unittest"].SetQuotaError(errors.New("SetQuota failed as requested"))
 	expectedErrorRx := regexp.MustCompile(`SetQuota failed as requested$`)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -379,7 +378,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// test SyncQuotaToBackendJob running successfully
-	mockLiquidClient.SetQuotaError(nil)
+	s.LiquidClients["unittest"].SetQuotaError(nil)
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
@@ -438,13 +437,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 	commitmentForOneYear, err := limesresources.ParseCommitmentDuration("1 year")
 	mustT(t, err)
 	now := s.Clock.Now()
-	// AZResourceID = 2 has two commitments in state "active" to test summing by state
+	// AZResourceID = 2 has two commitments in status "confirmed" to test summing by status
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
 	for idx, amount := range []uint64{7, 8} {
 		mustT(t, s.DB.Insert(&db.ProjectCommitment{
-			UUID:                db.ProjectCommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
+			UUID:                liquid.CommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			ProjectID:           1,
 			AZResourceID:        2,
 			Amount:              amount,
@@ -454,11 +453,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 			CreatorName:         "dummy",
 			ConfirmedAt:         Some(now),
 			ExpiresAt:           commitmentForOneYear.AddTo(now),
-			State:               db.CommitmentStateActive,
+			Status:              liquid.CommitmentStatusConfirmed,
 			CreationContextJSON: buf,
 		}))
 	}
-	// AZResourceID = 8 has two commitments in different states to test aggregation over different states
+	// AZResourceID = 8 has two commitments in different statuses to test aggregation over different statuses
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000003",
 		ProjectID:           2,
@@ -470,7 +469,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatorName:         "dummy",
 		ConfirmedAt:         Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: buf,
 	}))
 	mustT(t, s.DB.Insert(&db.ProjectCommitment{
@@ -484,7 +483,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatorName:         "dummy",
 		ConfirmBy:           Some(now),
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
-		State:               db.CommitmentStatePending,
+		Status:              liquid.CommitmentStatusPending,
 		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()
@@ -493,7 +492,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(2048))
 	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
 	serviceUsageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -501,7 +500,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
 	serviceUsageReport.Rates["secondrate"].PerAZ["any"].Usage = Some(big.NewInt(8192))
 	serviceUsageReport.SerializedState = []byte(`{"firstrate":4096,"secondrate":8192}`)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -520,7 +519,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 
 	// check that az='unknown' is skipped in metrics only when capacity=0
-	_, err = s.DB.Exec("UPDATE cluster_az_resources SET raw_capacity = 1234 WHERE id = 4;")
+	_, err = s.DB.Exec("UPDATE az_resources SET raw_capacity = 1234 WHERE id = 4;")
 	mustT(t, err)
 
 	// check data metrics generated by this scraping pass
@@ -558,7 +557,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	s, job, withLabel, _, _, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, _, _, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^during scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
@@ -573,7 +572,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
-	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -613,8 +612,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	// once the backend starts working, we start to see plausible data again
 	s.Clock.StepBy(scrapeInterval)
 
-	mockLiquidClient.SetUsageReportError(nil)
-	mockLiquidClient.SetUsageReport(serviceUsageReport)
+	s.LiquidClients["unittest"].SetUsageReportError(nil)
+	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
@@ -653,7 +652,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// touch neither scraped_at nor the existing resources (this also tests that a
 	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	s.Clock.StepBy(scrapeInterval)
-	mockLiquidClient.SetUsageReportError(errors.New("GetUsageReport failed as requested"))
+	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
@@ -682,7 +681,6 @@ const (
 		liquids:
 			noop:
 				area: testing
-				liquid_service_type: %[1]s
 	`
 )
 
@@ -691,16 +689,16 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		Version:   1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
+		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ScrapeJob(s.Registry)
@@ -714,10 +712,10 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, scrape_duration_secs, serialized_metrics, checked_at, next_scrape_at) VALUES (1, 1, 1, %[2]d, 5, '{}', %[2]d, %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
@@ -733,16 +731,16 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 			"things": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
-	mockLiquidClient, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testNoopConfigYAML, liquidServiceType)),
+		test.WithConfig(testNoopConfigYAML),
+		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 	initialTime := s.Clock.Now()
 
 	// override some defaults we set in the MockLiquidClient
-	mockLiquidClient.SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
+	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
 	c := getCollector(t, s)
 	job := c.ScrapeJob(s.Registry)
@@ -756,24 +754,24 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'noop/things/any');
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'noop/things/az-one');
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'noop/things/az-two');
-		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'unknown', 0, 'noop/things/unknown');
-		INSERT INTO cluster_resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'noop/things/any');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'noop/things/az-one');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'noop/things/az-two');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'unknown', 0, 'noop/things/unknown');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage) VALUES (1, 1, 1, 0);
 		INSERT INTO project_resources (id, project_id, resource_id, quota, backend_quota) VALUES (1, 1, 1, 0, -1);
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 1, 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
 	)
 }
 
 func Test_TopologyScrapes(t *testing.T) {
-	s, job, withLabel, syncJob, srvInfo, serviceUsageReport, mockLiquidClient := commonComplexScrapeTestSetup(t)
+	s, job, withLabel, syncJob, srvInfo, serviceUsageReport := commonComplexScrapeTestSetup(t)
 
 	// use AZSeperated topology and adjust quota reporting accordingly
 	resInfoCap := srvInfo.Resources["capacity"]
@@ -868,8 +866,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	resThings.PerAZ["az-one"].Quota = None[int64]()
 	resThings.PerAZ["az-two"].Quota = None[int64]()
 	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report return
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementUsageReportInfoVersion()
+	s.LiquidClients["unittest"].IncrementServiceInfoVersion()
+	s.LiquidClients["unittest"].IncrementUsageReportInfoVersion()
 
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -878,15 +876,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	checkedAt2 := s.Clock.Now()
 	// note: cluster_rate "xAnotherRate" is orphaned - it is in the DB but not in the ServiceInfo and rate_limits, so the update now deletes it (incl. project references)
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'unittest/capacity/any';
-		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
-		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
-		UPDATE cluster_rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
-		DELETE FROM cluster_rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate';
-		UPDATE cluster_resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
-		UPDATE cluster_resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
-		DELETE FROM cluster_services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
-		INSERT INTO cluster_services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
+		DELETE FROM az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'unittest/capacity/any';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 1 AND project_id = 1 AND az_resource_id = 2;
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, historical_usage) VALUES (10, 2, 5, 0, '{"t":[1830],"v":[0]}');
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 2 AND project_id = 1 AND az_resource_id = 3;
@@ -902,6 +892,14 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_resources SET quota = 0, backend_quota = 42 WHERE id = 4 AND project_id = 2 AND resource_id = 2;
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
+		UPDATE rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
+		DELETE FROM rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate';
+		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
+		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
+		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
 	`,
 		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
 		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
@@ -912,8 +910,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	resInfoCap.Topology = "invalidAZ1"
 	srvInfo.Resources["capacity"] = resInfoCap
 	// in reality, this would be an update of the liquid, so we bump the version that the liquid and the report returns
-	mockLiquidClient.IncrementServiceInfoVersion()
-	mockLiquidClient.IncrementUsageReportInfoVersion()
+	s.LiquidClients["unittest"].IncrementServiceInfoVersion()
+	s.LiquidClients["unittest"].IncrementUsageReportInfoVersion()
 
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 

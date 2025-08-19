@@ -74,19 +74,22 @@ func main() {
 
 		opts := liquidapi.RunOpts{
 			TakesConfiguration:         false,
-			ServiceInfoRefreshInterval: 0, // TODO: enable for services that can benefit from it, once limes-collect can reload on the fly
+			ServiceInfoRefreshInterval: 5 * time.Minute,
 			MaxConcurrentRequests:      5,
 			DefaultListenAddress:       ":80",
 		}
 		switch liquidName {
 		case "archer":
+			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &archer.Logic{}, opts))
 		case "cinder":
 			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &cinder.Logic{}, opts))
 		case "cronus":
+			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &cronus.Logic{}, opts))
 		case "designate":
+			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
 		case "ironic":
 			opts.TakesConfiguration = true
@@ -102,6 +105,7 @@ func main() {
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
 		case "swift":
+			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, opts))
 		default:
 			logg.Fatal("no liquid implementation available for %q", liquidName)
@@ -128,7 +132,7 @@ func main() {
 	dbm := db.InitORM(must.Return(db.Init()))
 	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
 	errs.LogFatalIfError()
-	errs = cluster.Connect(ctx, provider, eo)
+	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo))
 	errs.LogFatalIfError()
 
 	// select task

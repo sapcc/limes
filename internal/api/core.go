@@ -58,13 +58,13 @@ type v1Provider struct {
 	// slots for test doubles
 	timeNow                       func() time.Time
 	generateTransferToken         func() string
-	generateProjectCommitmentUUID func() db.ProjectCommitmentUUID
+	generateProjectCommitmentUUID func() liquid.CommitmentUUID
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() db.ProjectCommitmentUUID) httpapi.API {
+func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID) httpapi.API {
 	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
@@ -210,7 +210,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, sql.ErrNoRows):
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)
 		return nil
-	case respondwith.ErrorText(w, err):
+	case respondwith.ObfuscatedErrorText(w, err):
 		return nil
 	default:
 		return &domain
@@ -250,7 +250,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	case err == nil && domain.ID != project.DomainID:
 		http.Error(w, "no such project", http.StatusNotFound)
 		return nil, false
-	case respondwith.ErrorText(w, err):
+	case respondwith.ObfuscatedErrorText(w, err):
 		return nil, false
 	default:
 		return project, true

@@ -5,13 +5,13 @@ package collector
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"testing"
 	"time"
 
 	. "github.com/majewsky/gg/option"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
@@ -38,18 +38,17 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 			unshared:
 				area: unshared
-				liquid_service_type: %[1]s
 	`
 )
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	_, liquidServiceType := test.NewMockLiquidClient(srvInfo)
 	s := test.NewSetup(t,
-		test.WithConfig(fmt.Sprintf(testKeystoneConfigYAML, liquidServiceType)),
+		test.WithConfig(testKeystoneConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithMockLiquidClient("unshared", srvInfo),
 		// the functions called from the tests of this setup run in collect task, so we use the LiquidConnections
 		test.WithLiquidConnections,
 	)
@@ -148,7 +147,7 @@ func Test_ScanDomains(t *testing.T) {
 		CreatorName:         "dummy",
 		ConfirmedAt:         Some(s.Clock.Now()),
 		ExpiresAt:           commitmentForOneDay.AddTo(s.Clock.Now()),
-		State:               db.CommitmentStateActive,
+		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: buf,
 	}))
 	tr.DBChanges().Ignore()
@@ -161,7 +160,7 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// now we set the commitment to expired, the deletion succeeds
-	_, err = s.DB.Exec(`UPDATE project_commitments SET state = $1`, db.CommitmentStateExpired)
+	_, err = s.DB.Exec(`UPDATE project_commitments SET status = $1`, liquid.CommitmentStatusExpired)
 	mustT(t, err)
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})

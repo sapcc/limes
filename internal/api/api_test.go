@@ -56,7 +56,6 @@ const (
 		liquids:
 			shared:
 				area: shared
-				liquid_service_type: %[1]s
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -83,7 +82,6 @@ const (
 
 			unshared:
 				area: unshared
-				liquid_service_type: %[2]s
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -117,14 +115,14 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
-	_, liquidServiceTypeShared := test.NewMockLiquidClient(srvInfoShared)
-	_, liquidServiceTypeUnshared := test.NewMockLiquidClient(srvInfoUnshared)
 
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
-		test.WithConfig(fmt.Sprintf(testConfigYAML, liquidServiceTypeShared, liquidServiceTypeUnshared)),
+		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
+		test.WithMockLiquidClient("shared", srvInfoShared),
+		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 	)
 	return
 }
@@ -134,7 +132,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 
 	// Add a scrape error to one specific service with type 'unshared'.
 	_, err := s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM cluster_services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
+		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape this specific unshared service",
 		1, "unshared",
 	)
@@ -145,7 +143,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	// Add the same scrape error to all services with type 'shared'. This will ensure that
 	// they get grouped under a dummy project.
 	_, err = s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM cluster_services cs WHERE ps.service_id = cs.id AND cs.type = $2`,
+		FROM services cs WHERE ps.service_id = cs.id AND cs.type = $2`,
 		"could not scrape shared service",
 		"shared",
 	)
@@ -179,7 +177,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 
 	// Add a scrape error to one specific service with type 'unshared' that has rate data.
 	_, err := s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM cluster_services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
+		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape rate data for this specific unshared service",
 		1, "unshared",
 	)
@@ -190,7 +188,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	// Add the same scrape error to both services with type 'shared' that have rate data.
 	// This will ensure that they get grouped under a dummy project.
 	_, err = s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM cluster_services cs WHERE ps.service_id = cs.id AND (ps.id = $2 OR ps.id = $3) AND type = $4`,
+		FROM services cs WHERE ps.service_id = cs.id AND (ps.id = $2 OR ps.id = $3) AND type = $4`,
 		"could not scrape rate data for shared service",
 		2, 4, "shared",
 	)
@@ -627,8 +625,8 @@ func Test_ProjectOperations(t *testing.T) {
 	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns
 		FROM project_rates pra
-		JOIN cluster_rates cra ON cra.id = pra.rate_id
-		JOIN cluster_services cs ON cs.id = cra.service_id
+		JOIN rates cra ON cra.id = pra.rate_id
+		JOIN services cs ON cs.id = cra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`,
 		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
@@ -670,8 +668,8 @@ func Test_ProjectOperations(t *testing.T) {
 	getProjectRateQuery := `
 		SELECT pra.id, pra.rate_limit, pra.window_ns
 		FROM project_rates pra
-		JOIN cluster_rates cra ON cra.id = pra.rate_id
-		JOIN cluster_services cs ON cs.id = cra.service_id
+		JOIN rates cra ON cra.id = pra.rate_id
+		JOIN services cs ON cs.id = cra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`
 	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
@@ -724,7 +722,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 	queryStr := sqlext.SimplifyWhitespace(`
 		SELECT p.name, cs.type
 		 FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 JOIN cluster_services cs on ps.service_id = cs.id
+		 JOIN services cs on ps.service_id = cs.id
 		 WHERE ps.stale
 		 ORDER BY p.name, cs.type
 	`)
@@ -839,11 +837,11 @@ func Test_LargeProjectList(t *testing.T) {
 	}
 	var expectedProjectsJSON []assert.JSONObject
 
-	clusterServiceIDByType := map[db.ServiceType]db.ClusterServiceID{
+	serviceIDByType := map[db.ServiceType]db.ServiceID{
 		"unshared": 1,
 		"shared":   2,
 	}
-	clusterResourceIDByNameByType := map[db.ServiceType]map[liquid.ResourceName]db.ClusterResourceID{
+	resourceIDByNameByType := map[db.ServiceType]map[liquid.ResourceName]db.ResourceID{
 		"unshared": {
 			"things":   1,
 			"capacity": 2,
@@ -879,7 +877,7 @@ func Test_LargeProjectList(t *testing.T) {
 		for _, serviceType := range []db.ServiceType{"shared", "unshared"} {
 			service := db.ProjectService{
 				ProjectID: project.ID,
-				ServiceID: clusterServiceIDByType[serviceType],
+				ServiceID: serviceIDByType[serviceType],
 				ScrapedAt: Some(scrapedAt),
 				CheckedAt: Some(scrapedAt),
 			}
@@ -890,14 +888,14 @@ func Test_LargeProjectList(t *testing.T) {
 			for _, resourceName := range []liquid.ResourceName{"things", "capacity"} {
 				resource := db.ProjectResource{
 					ProjectID:    project.ID,
-					ResourceID:   clusterResourceIDByNameByType[serviceType][resourceName],
+					ResourceID:   resourceIDByNameByType[serviceType][resourceName],
 					Quota:        Some[uint64](0),
 					BackendQuota: Some[int64](0),
 				}
 				azResource := db.ProjectAZResource{
 					ProjectID: project.ID,
 					//
-					AZResourceID: db.ClusterAZResourceID(clusterResourceIDByNameByType[serviceType][resourceName]),
+					AZResourceID: db.AZResourceID(resourceIDByNameByType[serviceType][resourceName]),
 					Usage:        0,
 				}
 				if serviceType == "unshared" && resourceName == "things" {
@@ -1028,7 +1026,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE cluster_resources SET has_quota = FALSE WHERE id = 4")
+	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE id = 4")
 	if err != nil {
 		t.Error(err)
 	}
