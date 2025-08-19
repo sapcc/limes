@@ -204,8 +204,9 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
-	_, err := s.DB.Exec(`UPDATE az_resources SET subcapacities = $1 WHERE id = 3`,
+	_, err := s.DB.Exec(`UPDATE az_resources SET subcapacities = $1 WHERE path = $2`,
 		string(must.Return(json.Marshal(subcapacitiesInLiquidFormat))),
+		"first/capacity/az-one",
 	)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -502,8 +503,9 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
-	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,
+	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE az_resource_id = (SELECT id FROM az_resources WHERE path = $2)`,
 		string(must.Return(json.Marshal(subresourcesInLiquidFormat))),
+		"first/capacity/az-one",
 	)
 	if err != nil {
 		t.Fatal(err.Error())
