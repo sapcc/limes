@@ -410,9 +410,9 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	var services []db.ClusterService
+	var services []db.Service
 	_, err = tx.Select(&services,
-		`SELECT cs.* FROM cluster_services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
+		`SELECT cs.* FROM services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
