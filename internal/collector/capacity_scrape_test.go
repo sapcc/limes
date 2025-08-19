@@ -1034,9 +1034,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	expectedDemandsByService := map[db.ServiceType]map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ{
 		"first": {
 			"capacity": {
-				"az-one":                   {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
-				"az-two":                   {Usage: 251, UnusedCommitments: 50, PendingCommitments: 300},
-				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				"az-one": {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
+				"az-two": {Usage: 251, UnusedCommitments: 50, PendingCommitments: 300},
 			},
 			"things": {
 				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
@@ -1044,9 +1043,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		},
 		"second": {
 			"capacity": {
-				"az-one":                   {Usage: 2, UnusedCommitments: 19, PendingCommitments: 110},
-				"az-two":                   {Usage: 2, UnusedCommitments: 1, PendingCommitments: 0},
-				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				"az-one": {Usage: 2, UnusedCommitments: 19, PendingCommitments: 110},
+				"az-two": {Usage: 2, UnusedCommitments: 1, PendingCommitments: 0},
 			},
 			"things": {
 				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
