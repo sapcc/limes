@@ -1439,9 +1439,51 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 	return true
 }
 
+const testAZSeparatedConfigYAML = `
+	availability_zones: [ az-one, az-two ]
+	discovery:
+		method: static
+		static_config:
+			domains: [{ name: germany, id: uuid-for-germany }]
+			projects:
+				uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
+	liquids:
+		shared:
+			area: shared
+	resource_behavior:
+		# check that category mapping is reported
+		- resource: '.+/capacity_az_separated'
+			category: foo_category
+`
+
 func Test_SeparatedTopologyOperations(t *testing.T) {
-	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
-	s := setupTest(t, "fixtures/start-data-az-separated.sql")
+	srvInfo := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity_az_separated": {
+				Unit:     liquid.UnitBytes,
+				Topology: liquid.AZSeparatedTopology,
+				HasQuota: true,
+			},
+		},
+	}
+	s := test.NewSetup(t,
+		test.WithConfig(testAZSeparatedConfigYAML),
+		test.WithPersistedServiceInfo("shared", srvInfo),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
+
+	mustExecT(t, s.DB, `
+		UPDATE project_services SET scraped_at = $1, checked_at = $1
+	`, time.Unix(22, 0))
+	mustExecT(t, s.DB, `
+		UPDATE project_az_resources SET backend_quota = 5, quota = 5, usage = 1 WHERE az_resource_id IN (
+			SELECT id FROM az_resources WHERE az = $1 OR az = $2
+		)
+	`, "az-one", "az-two")
+
+	// This test ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
