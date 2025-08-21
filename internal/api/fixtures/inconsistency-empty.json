@@ -1,7 +1,0 @@
-{
-  "inconsistencies": {
-    "domain_quota_overcommitted": [],
-    "project_quota_overspent": [],
-    "project_quota_mismatch": []
-  }
-}
