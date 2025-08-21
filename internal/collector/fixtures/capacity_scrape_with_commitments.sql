@@ -13,15 +13,11 @@ INSERT INTO resources (id, service_id, name, path) VALUES (2, 1, 'capacity', 'fi
 INSERT INTO resources (id, service_id, name, path) VALUES (3, 2, 'things', 'second/things');
 INSERT INTO resources (id, service_id, name, path) VALUES (4, 2, 'capacity', 'second/capacity');
 
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 0, 0, null, 'first/things/any');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (2, 1, 'az-one', 42, 8, 42, 'first/things/az-one');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (3, 1, 'az-two', 42, 8, 42, 'first/things/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (1, 1, 'any', 42, 8, 42, 'first/things/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (4, 2, 'any', 0, 0, null, 'first/capacity/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (5, 2, 'az-one', 42, 8, 42, 'first/capacity/az-one');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (6, 2, 'az-two', 42, 8, 42, 'first/capacity/az-two');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (7, 3, 'any', 0, 0, null, 'second/things/any');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (8, 3, 'az-one', 23, 4, 23, 'second/things/az-one');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (9, 3, 'az-two', 23, 4, 23, 'second/things/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (7, 3, 'any', 23, 4, 23, 'second/things/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (10, 4, 'any', 0, 0, null, 'second/capacity/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (11, 4, 'az-one', 23, 4, 23, 'second/capacity/az-one');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (12, 4, 'az-two', 23, 4, 23, 'second/capacity/az-two');
