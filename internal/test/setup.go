@@ -347,6 +347,16 @@ func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceNa
 	return result
 }
 
+// GetProjectID is a helper function for finding the ID of a db.Project record.
+func (s Setup) GetProjectID(name string) (result db.ProjectID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT id FROM projects WHERE name = $1`, name).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find projects.id for name = %q: %s", name, err.Error())
+	}
+	return result
+}
+
 func mustDo(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
