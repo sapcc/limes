@@ -20,6 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
@@ -140,6 +141,9 @@ type Setup struct {
 	ProjectServices    []*db.ProjectService
 	ProjectResources   []*db.ProjectResource
 	ProjectAZResources []*db.ProjectAZResource
+
+	// for t.Fatal() in helper functions
+	t *testing.T
 }
 
 func GenerateDummyToken() string {
@@ -180,6 +184,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Ctx = t.Context()
 	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
+	s.t = t
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
 	s.LiquidClients = params.LiquidClients
@@ -346,6 +351,38 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 	}
 	return s
+}
+
+// GetServiceID is a helper function for finding the ID of a db.Service record.
+func (s Setup) GetServiceID(srvType db.ServiceType) (result db.ServiceID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT id FROM services WHERE type = $1`, srvType).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find services.id for type = %q: %s", srvType, err.Error())
+	}
+	return result
+}
+
+// GetResourceID is a helper function for finding the ID of a db.Resource record.
+func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName) (result db.ResourceID) {
+	s.t.Helper()
+	path := string(srvType) + "/" + string(resName)
+	err := s.DB.QueryRow(`SELECT id FROM resources WHERE path = $1`, path).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find resources.id for path = %q: %s", path, err.Error())
+	}
+	return result
+}
+
+// GetAZResourceID is a helper function for finding the ID of a db.AZResource record.
+func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceName, az limes.AvailabilityZone) (result db.AZResourceID) {
+	s.t.Helper()
+	path := string(srvType) + "/" + string(resName) + "/" + string(az)
+	err := s.DB.QueryRow(`SELECT id FROM az_resources WHERE path = $1`, path).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find az_resources.id for path = %q: %s", path, err.Error())
+	}
+	return result
 }
 
 func mustDo(t *testing.T, err error) {

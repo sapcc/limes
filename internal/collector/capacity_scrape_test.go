@@ -767,7 +767,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 			"things": {
 				Unit:        liquid.UnitNone,
-				Topology:    liquid.AZAwareTopology,
+				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
 				HasQuota:    true,
 			},
@@ -784,7 +784,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 			"things": {
 				Unit:        liquid.UnitNone,
-				Topology:    liquid.AZAwareTopology,
+				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
 				HasQuota:    true,
 			},
@@ -816,11 +816,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 			"things": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
-					"az-two": {
+					liquid.AvailabilityZoneAny: {
 						Capacity: 42,
 						Usage:    Some[uint64](8),
 					},
@@ -846,11 +842,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 			"things": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 23,
-						Usage:    Some[uint64](4),
-					},
-					"az-two": {
+					liquid.AvailabilityZoneAny: {
 						Capacity: 23,
 						Usage:    Some[uint64](4),
 					},
@@ -1174,7 +1166,10 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(11, '00000000-0000-0000-0000-000000000011', 2, 11, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour))
+			VALUES(11, '00000000-0000-0000-0000-000000000011', 2, $4, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`,
+		s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour),
+		s.GetAZResourceID("second", "capacity", "az-one"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1199,14 +1194,20 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(12, '00000000-0000-0000-0000-000000000012', 2, 11, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			VALUES(12, '00000000-0000-0000-0000-000000000012', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
+		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
+		s.GetAZResourceID("second", "capacity", "az-one"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.DB.Exec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(13, '00000000-0000-0000-0000-000000000013', 2, 11, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`, s.Clock.Now(), s.Clock.Now().Add(48*time.Hour))
+			VALUES(13, '00000000-0000-0000-0000-000000000013', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
+		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
+		s.GetAZResourceID("second", "capacity", "az-one"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
