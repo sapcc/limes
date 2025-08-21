@@ -16,15 +16,16 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
+	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -784,20 +785,78 @@ func Test_EmptyProjectList(t *testing.T) {
 }
 
 func Test_LargeProjectList(t *testing.T) {
-	// start without any projects pre-defined in the start data
-	s := setupTest(t, "fixtures/start-data-minimal.sql")
-	// we don't care about the various ResourceBehaviors in this test
-	s.Cluster.Config.ResourceBehaviors = nil
-	for idx, scfg := range s.Cluster.Config.Liquids {
-		scfg.CommitmentBehaviorPerResource = nil
-		s.Cluster.Config.Liquids[idx] = scfg
+	// to test the behavior of the project list endpoint for large lists,
+	// set up a config with a large number of projects (we do it via the discovery config
+	// in order to leverage test.WithInitialDiscover and test.WithEmptyRecordsAsNeeded)
+	projectUUIDs := make([]liquid.ProjectUUID, 100)
+	projectsAsConfigured := make([]core.KeystoneProject, len(projectUUIDs))
+	for idx := range projectUUIDs {
+		projectUUID := liquid.ProjectUUID(must.Return(uuid.NewV4()).String())
+		projectUUIDs[idx] = projectUUID
+		projectsAsConfigured[idx] = core.KeystoneProject{
+			Name:       fmt.Sprintf("test-project%04d", idx),
+			UUID:       projectUUID,
+			ParentUUID: "uuid-for-germany",
+		}
 	}
 
-	// template for how a single project will look in the output JSON
-	makeProjectJSON := func(idx int, projectName string, projectUUID liquid.ProjectUUID) assert.JSONObject {
-		return assert.JSONObject{
+	configStr := string(must.Return(yaml.Marshal(core.ClusterConfiguration{
+		AvailabilityZones: []limes.AvailabilityZone{"az-one", "az-two"},
+		Discovery: core.DiscoveryConfiguration{
+			Method: "static",
+			StaticDiscoveryConfiguration: core.StaticDiscoveryConfiguration{
+				Domains:  []core.KeystoneDomain{{Name: "germany", UUID: "uuid-for-germany"}},
+				Projects: map[string][]core.KeystoneProject{"uuid-for-germany": projectsAsConfigured},
+			},
+		},
+		Liquids: map[db.ServiceType]core.LiquidConfiguration{
+			"shared":   {Area: "shared"},
+			"unshared": {Area: "unshared"},
+		},
+	})))
+
+	s := test.NewSetup(t,
+		test.WithConfig(configStr),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
+
+	// fill various fields that `test.WithEmptyRecordsAsNeeded` initializes empty with reasonably plausible dummy values
+	// (all those queries take an index into the project list as $1 and the project UUID as $2)
+	queries := []string{
+		`UPDATE project_services SET scraped_at = TO_TIMESTAMP($1) AT LOCAL WHERE project_id = (SELECT id FROM projects WHERE uuid = $2)`,
+		fmt.Sprintf(
+			`UPDATE project_resources SET quota = $1, backend_quota = $1 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND resource_id = %d`,
+			s.GetResourceID("unshared", "things"),
+		),
+		fmt.Sprintf(
+			`UPDATE project_az_resources SET usage = $1 / 2 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND az_resource_id = %d`,
+			s.GetAZResourceID("unshared", "things", "any"),
+		),
+	}
+	for _, query := range queries {
+		err := sqlext.WithPreparedStatement(s.DB, query, func(stmt *sql.Stmt) error {
+			for idx, uuid := range projectUUIDs {
+				_, err := stmt.Exec(idx, uuid)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// build expectation for what the project list will look like
+	expectedProjectsJSON := make([]assert.JSONObject, len(projectUUIDs))
+	for idx, projectUUID := range projectUUIDs {
+		expectedProjectsJSON[idx] = assert.JSONObject{
 			"id":        projectUUID,
-			"name":      projectName,
+			"name":      fmt.Sprintf("test-project%04d", idx),
 			"parent_id": "uuid-for-germany",
 			"services": []assert.JSONObject{
 				{
@@ -847,91 +906,12 @@ func Test_LargeProjectList(t *testing.T) {
 			},
 		}
 	}
-	var expectedProjectsJSON []assert.JSONObject
-
-	serviceIDByType := map[db.ServiceType]db.ServiceID{
-		"unshared": 1,
-		"shared":   2,
-	}
-	resourceIDByNameByType := map[db.ServiceType]map[liquid.ResourceName]db.ResourceID{
-		"unshared": {
-			"things":   1,
-			"capacity": 2,
-		},
-		"shared": {
-			"things":   3,
-			"capacity": 4,
-		},
-	}
-
-	// set up a large number of projects to test the behavior of the project list endpoint for large lists
-	projectCount := 100
-	for idx := 1; idx <= projectCount; idx++ {
-		projectUUIDGen, err := uuid.NewV4()
-		if err != nil {
-			t.Fatal(err)
-		}
-		projectName := fmt.Sprintf("test-project%04d", idx)
-		projectUUID := liquid.ProjectUUID(projectUUIDGen.String())
-		scrapedAt := time.Unix(int64(idx), 0).UTC()
-		expectedProjectsJSON = append(expectedProjectsJSON, makeProjectJSON(idx, projectName, projectUUID))
-
-		project := db.Project{
-			DomainID:   1,
-			ParentUUID: "uuid-for-germany",
-			Name:       projectName,
-			UUID:       projectUUID,
-		}
-		err = s.DB.Insert(&project)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, serviceType := range []db.ServiceType{"shared", "unshared"} {
-			service := db.ProjectService{
-				ProjectID: project.ID,
-				ServiceID: serviceIDByType[serviceType],
-				ScrapedAt: Some(scrapedAt),
-				CheckedAt: Some(scrapedAt),
-			}
-			err = s.DB.Insert(&service)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, resourceName := range []liquid.ResourceName{"things", "capacity"} {
-				resource := db.ProjectResource{
-					ProjectID:    project.ID,
-					ResourceID:   resourceIDByNameByType[serviceType][resourceName],
-					Quota:        Some[uint64](0),
-					BackendQuota: Some[int64](0),
-				}
-				azResource := db.ProjectAZResource{
-					ProjectID: project.ID,
-					//
-					AZResourceID: db.AZResourceID(resourceIDByNameByType[serviceType][resourceName]),
-					Usage:        0,
-				}
-				if serviceType == "unshared" && resourceName == "things" {
-					resource.Quota = Some(uint64(idx))
-					azResource.Usage = uint64(idx / 2) //nolint:gosec // idx is hardcoded in test
-					resource.BackendQuota = Some(int64(idx))
-				}
-				err = s.DB.Insert(&resource)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = s.DB.Insert(&azResource)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
-	}
-
 	sort.Slice(expectedProjectsJSON, func(i, j int) bool {
 		left := expectedProjectsJSON[i]
 		right := expectedProjectsJSON[j]
 		return left["id"].(liquid.ProjectUUID) < right["id"].(liquid.ProjectUUID)
 	})
+
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
