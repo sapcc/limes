@@ -16,11 +16,10 @@ import (
 func Test_Consistency(t *testing.T) {
 	s, cluster := keystoneTestCluster(t)
 	_ = cluster
-	c := getCollector(t, s)
-	consistencyJob := c.CheckConsistencyJob(s.Registry)
+	consistencyJob := s.Collector.CheckConsistencyJob(s.Registry)
 
 	// run ScanDomains once to establish a baseline
-	_, err := c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
+	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/internal/api"
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
@@ -133,6 +134,7 @@ type Setup struct {
 	LiquidClients              map[db.ServiceType]*MockLiquidClient
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
+	Collector                  *collector.Collector
 	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
 	Projects           []*db.Project
 	ProjectServices    []*db.ProjectService
@@ -248,6 +250,18 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			httpapi.WithoutLogging(),
 		)...,
 	)
+
+	s.Collector = &collector.Collector{
+		Cluster:     s.Cluster,
+		DB:          s.DB,
+		LogError:    t.Errorf,
+		MeasureTime: s.Clock.Now,
+		MeasureTimeAtEnd: func() time.Time {
+			s.Clock.StepBy(5 * time.Second)
+			return s.Clock.Now()
+		},
+		AddJitter: NoJitter,
+	}
 
 	for idx, project := range params.Projects {
 		dbDomain := &db.Domain{

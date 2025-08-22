@@ -47,15 +47,14 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		},
 	})
 
-	c := getCollector(t, s)
-	scrapeJob := c.ScrapeJob(s.Registry)
+	scrapeJob := s.Collector.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
-	job := c.ApplyQuotaOverridesJob(s.Registry)
+	job := s.Collector.ApplyQuotaOverridesJob(s.Registry)
 
 	configPath := filepath.Join(t.TempDir(), "quota-overrides.json")
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", configPath)

@@ -57,8 +57,7 @@ func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
-	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&collector.Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
+	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,10 +125,9 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := getCollector(t, s)
-	scrapeJob = c.ScrapeJob(s.Registry)
+	scrapeJob = s.Collector.ScrapeJob(s.Registry)
 	withLabel = jobloop.WithLabel("service_type", "unittest")
-	syncJob = c.SyncQuotaToBackendJob(s.Registry)
+	syncJob = s.Collector.SyncQuotaToBackendJob(s.Registry)
 
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
@@ -701,8 +699,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	// override some defaults we set in the MockLiquidClient
 	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
-	c := getCollector(t, s)
-	job := c.ScrapeJob(s.Registry)
+	job := s.Collector.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	// check that Scrape() behaves properly when encountering a liquid with
@@ -743,8 +740,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	// override some defaults we set in the MockLiquidClient
 	s.LiquidClients["noop"].SetUsageReport(liquid.ServiceUsageReport{InfoVersion: 1})
 
-	c := getCollector(t, s)
-	job := c.ScrapeJob(s.Registry)
+	job := s.Collector.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	// check that Scrape() behaves properly when encountering a liquid with

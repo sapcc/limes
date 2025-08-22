@@ -51,7 +51,6 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
-	c := getCollector(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
 	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
@@ -75,17 +74,17 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// to be able to create commitments, we need to have the projects discovered
 	// and their respective project resources created
-	_, err := c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
+	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	mustT(t, err)
-	projectCount, err := c.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
+	projectCount, err := s.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
 	mustT(t, err)
-	scrapeJob := c.ScrapeJob(s.Registry)
+	scrapeJob := s.Collector.ScrapeJob(s.Registry)
 	mustT(t, jobloop.ProcessMany(scrapeJob, s.Ctx, int(projectCount), jobloop.WithLabel("service_type", "unittest")))
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	job := c.CleanupOldCommitmentsJob(s.Registry)
+	job := s.Collector.CleanupOldCommitmentsJob(s.Registry)
 	oneDay := 24 * time.Hour
 	commitmentForOneDay, err := limesresources.ParseCommitmentDuration("1 day")
 	mustT(t, err)
@@ -96,7 +95,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000001",
 		ID:                  1,
 		ProjectID:           1,
@@ -112,7 +111,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000002",
 		ID:                  2,
 		ProjectID:           1,
@@ -156,7 +155,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		ID:                   3,
 		UUID:                 "00000000-0000-0000-0000-000000000003",
 		ProjectID:            1,
@@ -178,7 +177,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		ID:                  4,
 		UUID:                "00000000-0000-0000-0000-000000000004",
 		ProjectID:           1,
@@ -230,7 +229,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: json.RawMessage(buf),
 	}
-	mustT(t, c.DB.Insert(&commitment5))
+	mustT(t, s.DB.Insert(&commitment5))
 	commitment6 := db.ProjectCommitment{
 		ID:                  6,
 		UUID:                "00000000-0000-0000-0000-000000000006",
@@ -245,7 +244,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: buf,
 	}
-	mustT(t, c.DB.Insert(&commitment6))
+	mustT(t, s.DB.Insert(&commitment6))
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5, 6},
@@ -253,7 +252,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, c.DB.Insert(&db.ProjectCommitment{
+	mustT(t, s.DB.Insert(&db.ProjectCommitment{
 		ID:                  7,
 		UUID:                "00000000-0000-0000-0000-000000000007",
 		ProjectID:           1,
