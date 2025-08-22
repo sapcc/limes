@@ -11,7 +11,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
-	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
 )
@@ -193,7 +192,6 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 	opts = append([]test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
-		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}, opts...)
 	s := test.NewSetup(t,
@@ -492,7 +490,6 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 	localOpts := []test.SetupOption{
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
-		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 	}
 	opts = append(localOpts, opts...)

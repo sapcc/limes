@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
-	"github.com/sapcc/go-bits/httpapi"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/test"
@@ -36,9 +35,7 @@ func TestForbidClusterIDHeader(t *testing.T) {
 				foo:
 					area: testing
 		`),
-		test.WithAPIHandler(api.NewV1API,
-			httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
-		),
+		test.WithAPIMiddleware(api.ForbidClusterIDHeader),
 		test.WithMockLiquidClient("foo", srvInfo),
 	)
 

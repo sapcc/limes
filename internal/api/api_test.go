@@ -26,7 +26,6 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -121,7 +120,6 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
-		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", srvInfoShared),
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 	)
