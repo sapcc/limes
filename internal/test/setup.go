@@ -269,13 +269,15 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	if params.WithInitialDiscovery {
 		_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
-		mustDo(t, err)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
 	}
 
 	if params.WithEmptyRecordsAsNeeded {
 		// fills all ProjectResource entries (for each pair of service and resource name)
 		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
-		_, err := s.DB.Exec(db.ExpandEnumPlaceholders(`
+		s.MustDBExec(db.ExpandEnumPlaceholders(`
 			WITH tmp AS (
 				SELECT cr.id AS id, CASE
 					WHEN NOT cr.has_quota THEN NULL
@@ -290,9 +292,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				tmp.default_quota AS backend_quota
 			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
 		`))
-		mustDo(t, err)
 
-		_, err = s.DB.Exec(db.ExpandEnumPlaceholders(`
+		s.MustDBExec(db.ExpandEnumPlaceholders(`
 			WITH tmp AS (
 				SELECT cazr.id AS id, CASE
 					WHEN NOT cr.has_quota THEN NULL
@@ -309,7 +310,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				''                AS subresources
 			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
 		`))
-		mustDo(t, err)
 	}
 
 	return s
@@ -357,10 +357,12 @@ func (s Setup) GetProjectID(name string) (result db.ProjectID) {
 	return result
 }
 
-func mustDo(t *testing.T, err error) {
-	t.Helper()
+// MustDBExec is a shorthand for s.DB.Exec() + t.Fatal() on error.
+func (s Setup) MustDBExec(query string, args ...any) {
+	s.t.Helper()
+	_, err := s.DB.Exec(query, args...)
 	if err != nil {
-		t.Fatal(err.Error())
+		s.t.Fatal(err.Error())
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
@@ -51,7 +50,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 	s := commonLiquidTestSetup(t, srvInfo)
 
 	// modify the first Resource that the Setup creates
-	mustExecT(t, s.DB,
+	s.MustDBExec(
 		`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
 		s.GetAZResourceID("unittest", "capacity", "az-one"),
 	)
@@ -173,12 +172,4 @@ func TestServiceUsageRequest(t *testing.T) {
 			},
 		},
 	}.Check(t, s.Handler)
-}
-
-func mustExecT(t *testing.T, db *gorp.DbMap, query string, args ...any) {
-	t.Helper()
-	_, err := db.Exec(query, args...)
-	if err != nil {
-		t.Fatal(err)
-	}
 }

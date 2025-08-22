@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -131,25 +132,19 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared'.
-	_, err := s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
+	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
 		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape this specific unshared service",
 		1, "unshared",
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Add the same scrape error to all services with type 'shared'. This will ensure that
 	// they get grouped under a dummy project.
-	_, err = s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
+	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
 		FROM services cs WHERE ps.service_id = cs.id AND cs.type = $2`,
 		"could not scrape shared service",
 		"shared",
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// check ListScrapeErrors
 	assert.HTTPRequest{
@@ -176,25 +171,19 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
 	// Add a scrape error to one specific service with type 'unshared' that has rate data.
-	_, err := s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
+	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
 		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
 		"could not scrape rate data for this specific unshared service",
 		1, "unshared",
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Add the same scrape error to both services with type 'shared' that have rate data.
 	// This will ensure that they get grouped under a dummy project.
-	_, err = s.DB.Exec(`UPDATE project_services ps SET scrape_error_message = $1
+	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
 		FROM services cs WHERE ps.service_id = cs.id AND (ps.id = $2 OR ps.id = $3) AND type = $4`,
 		"could not scrape rate data for shared service",
 		2, 4, "shared",
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// check ListRateScrapeErrors
 	assert.HTTPRequest{
@@ -413,24 +402,12 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
-	// get ID of a ProjectResource that we will be manipulating below
-	var parisSharedCapacityID db.ProjectResourceID
-	dberr := s.DB.QueryRow(`
-			SELECT id FROM project_resources
-			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
-			AND resource_id = (SELECT id FROM resources WHERE path = $2)
-		`,
-		"paris", "shared/capacity",
-	).Scan(&parisSharedCapacityID)
-	if dberr != nil {
-		t.Fatal(dberr)
-	}
-
 	// paris returns lowest max_quota setting
-	_, dberr = s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=$1", parisSharedCapacityID)
-	if dberr != nil {
-		t.Fatal(dberr)
-	}
+	s.MustDBExec(
+		"UPDATE project_resources SET max_quota_from_outside_admin = 300, max_quota_from_local_admin = 200 WHERE project_id = $1 AND resource_id = $2",
+		s.GetProjectID("paris"),
+		s.GetResourceID("shared", "capacity"),
+	)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
@@ -439,10 +416,11 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// paris has forbid_autogrowth setting
-	_, dberr = s.DB.Exec("UPDATE project_resources SET forbid_autogrowth=true where id=$1", parisSharedCapacityID)
-	if dberr != nil {
-		t.Fatal(dberr)
-	}
+	s.MustDBExec(
+		"UPDATE project_resources SET forbid_autogrowth = true WHERE project_id = $1 AND resource_id = $2",
+		s.GetProjectID("paris"),
+		s.GetResourceID("shared", "capacity"),
+	)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
@@ -569,10 +547,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	// DiscoverProjects sets `stale` on new project_services;
 	// clear this to avoid confusion in the next test
-	_, err := s.DB.Exec(`UPDATE project_services SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE project_services SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
 
 	// check SyncProject
 	expectStaleProjectServices(t, s.DB /*, nothing */)
@@ -635,7 +610,7 @@ func Test_ProjectOperations(t *testing.T) {
 		actualWindow  limesrates.Window
 		projectRateId db.ProjectRateID
 	)
-	err = s.DB.QueryRow(`
+	err := s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns
 		FROM project_rates pra
 		JOIN rates cra ON cra.id = pra.rate_id
@@ -644,8 +619,8 @@ func Test_ProjectOperations(t *testing.T) {
 		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`,
 		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
 	// There shouldn't be anything in the DB.
-	if err.Error() != "sql: no rows in result set" {
-		t.Fatalf("expected error %v but got %v", "sql: no rows in result set", err)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected error %v but got %v", sql.ErrNoRows, err)
 	}
 
 	// Attempt setting a rate limit for which a default exists should be successful.
@@ -765,14 +740,8 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 func Test_EmptyProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
-	_, err := s.DB.Exec(`DELETE FROM project_commitments`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.DB.Exec(`DELETE FROM projects`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`DELETE FROM project_commitments`)
+	s.MustDBExec(`DELETE FROM projects`)
 
 	// This warrants its own unit test since the rendering of empty project lists
 	// uses a different code path than the rendering of non-empty project lists.
@@ -1018,10 +987,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
-	if err != nil {
-		t.Error(err)
-	}
+	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
@@ -1131,10 +1097,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
-	_, err := s.DB.Exec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
-	if err != nil {
-		t.Error(err)
-	}
+	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1148,25 +1111,12 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
-	var berlinSharedCapacityOneID db.ProjectAZResourceID
-	dberr := s.DB.QueryRow(`
-			SELECT id FROM project_az_resources
-			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
-			AND az_resource_id = (SELECT id FROM az_resources WHERE path = $2)
-		`,
-		"berlin", "shared/capacity/az-one",
-	).Scan(&berlinSharedCapacityOneID)
-	if dberr != nil {
-		t.Fatal(dberr)
-	}
-
-	_, err := s.DB.Exec(
-		`UPDATE project_az_resources SET usage=2, historical_usage=$1 WHERE id=$2`,
-		`{"t":[1719399600, 1719486000],"v":[1, 5]}`, berlinSharedCapacityOneID,
+	s.MustDBExec(
+		`UPDATE project_az_resources SET usage = 2, historical_usage = $1 WHERE project_id = $2 AND az_resource_id = $3`,
+		`{"t":[1719399600, 1719486000],"v":[1, 5]}`,
+		s.GetProjectID("berlin"),
+		s.GetAZResourceID("shared", "capacity", "az-one"),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1454,10 +1404,10 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		test.WithEmptyRecordsAsNeeded,
 	)
 
-	mustExecT(t, s.DB, `
+	s.MustDBExec(`
 		UPDATE project_services SET scraped_at = $1, checked_at = $1
 	`, time.Unix(22, 0))
-	mustExecT(t, s.DB, `
+	s.MustDBExec(`
 		UPDATE project_az_resources SET backend_quota = 5, quota = 5, usage = 1 WHERE az_resource_id IN (
 			SELECT id FROM az_resources WHERE az = $1 OR az = $2
 		)

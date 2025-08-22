@@ -435,12 +435,9 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, status = $3",
+	s.MustDBExec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, status = $3",
 		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// check that the confirmation shows up on GET
 	resp1["confirmed_at"] = s.Clock.Now().Unix()
@@ -672,11 +669,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm ignores expired commitments
-	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
+	s.MustDBExec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
 		s.Clock.Now(), liquid.CommitmentStatusExpired)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(7)
@@ -726,10 +720,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 	)
 
 	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
-	_, err := s.DB.Exec(`UPDATE resources SET handles_commitments = FALSE;`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := assert.JSONObject{
 		"commitment": assert.JSONObject{
@@ -857,10 +848,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
-	_, err := s.DB.Exec(`UPDATE project_resources SET forbidden = TRUE`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE`)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -868,10 +856,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
 	}.Check(t, s.Handler)
-	_, err = s.DB.Exec(`UPDATE project_resources SET forbidden = FALSE`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE project_resources SET forbidden = FALSE`)
 
 	// invalid request field: AZ given, but resource does not accept AZ-aware commitments
 	cloned = maps.Clone(request)
@@ -2139,10 +2124,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 
 	// Negative: Superseded commitment
 	s.Clock.StepBy(-1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
@@ -2329,10 +2311,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Do not merge commitments with statuses other than "active"
 	unmergableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
 	for _, status := range unmergableStatuses {
-		_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
-		if err != nil {
-			t.Fatal(err)
-		}
+		s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
 		assert.HTTPRequest{
 			Method:       http.MethodPost,
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
@@ -2340,10 +2319,7 @@ func Test_MergeCommitments(t *testing.T) {
 			ExpectStatus: http.StatusConflict,
 		}.Check(t, s.Handler)
 	}
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", liquid.CommitmentStatusConfirmed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", liquid.CommitmentStatusConfirmed)
 
 	// Happy path
 	// New merged commitment should be returned with latest expiration date of all commitments
@@ -2401,7 +2377,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
 	var supersededCommitment db.ProjectCommitment
-	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
+	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2595,10 +2571,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	s.Clock.StepBy(-2 * time.Hour)
 	// Do not allow to renew explicit expired commitments
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
@@ -2606,12 +2579,9 @@ func Test_RenewCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Reject requests that try to renew commitments too early (more than 3 month before expiring date)
-	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
+	s.MustDBExec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
 		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",

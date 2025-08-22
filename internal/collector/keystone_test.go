@@ -160,8 +160,7 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// now we set the commitment to expired, the deletion succeeds
-	_, err = s.DB.Exec(`UPDATE project_commitments SET status = $1`, liquid.CommitmentStatusExpired)
-	mustT(t, err)
+	s.MustDBExec(`UPDATE project_commitments SET status = $1`, liquid.CommitmentStatusExpired)
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
