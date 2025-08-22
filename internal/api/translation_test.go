@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
@@ -15,26 +16,17 @@ import (
 	"github.com/sapcc/limes/internal/test"
 )
 
-const (
-	testSmallConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			first:
-				area: first
-	`
-)
+const testTranslationConfigYAML = `
+	availability_zones: [ az-one, az-two ]
+	discovery:
+		method: static
+		static_config:
+			domains: [{ name: domainone, id: uuid-for-domainone }]
+			projects:
+				uuid-for-domainone: [{ name: projectone, id: uuid-for-projectone, parent_id: uuid-for-domainone }]
+	liquids:
+		first: { area: first }
+`
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // subcapacity translation
@@ -77,7 +69,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo())
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
@@ -141,7 +133,7 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "ironic-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubcapacityTranslation(t, "ironic-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, srvInfo)
 }
 
 func TestTranslateNovaSubcapacities(t *testing.T) {
@@ -185,18 +177,17 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo())
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
-	opts = append([]test.SetupOption{
-		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(testSmallConfigYAML),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-	}, opts...)
+func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {
 	s := test.NewSetup(t,
-		opts...,
+		test.WithConfig(testTranslationConfigYAML),
+		test.WithPersistedServiceInfo("first", srvInfo),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
 	)
+
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
@@ -215,14 +206,10 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 		ExpectStatus: http.StatusOK,
 		ExpectBody: assert.JSONObject{
 			"cluster": assert.JSONObject{
-				"id":             "current",
-				"min_scraped_at": 1000,
-				"max_scraped_at": 1000,
+				"id": "current",
 				"services": []assert.JSONObject{{
-					"type":           "first",
-					"area":           "first",
-					"min_scraped_at": 11,
-					"max_scraped_at": 11,
+					"type": "first",
+					"area": "first",
 					"resources": []assert.JSONObject{{
 						"name":          "capacity",
 						"unit":          "B",
@@ -234,8 +221,8 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 							{"capacity": 0, "name": "az-two"},
 						},
 						"per_az": assert.JSONObject{
-							"az-one": assert.JSONObject{"capacity": 0, "usage": 0, "subcapacities": subcapacitiesInLegacyFormat},
-							"az-two": assert.JSONObject{"capacity": 0, "usage": 0},
+							"az-one": assert.JSONObject{"capacity": 0, "subcapacities": subcapacitiesInLegacyFormat},
+							"az-two": assert.JSONObject{"capacity": 0},
 						},
 						"quota_distribution_model": "autogrow",
 						"subcapacities":            subcapacitiesInLegacyFormat,
@@ -286,7 +273,7 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
@@ -312,7 +299,7 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
@@ -380,7 +367,7 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "ironic-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.WithPersistedServiceInfo("first", srvInfo))
+	testSubresourceTranslation(t, "ironic-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, srvInfo)
 }
 
 func TestTranslateNovaSubresources(t *testing.T) {
@@ -480,19 +467,17 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, opts ...test.SetupOption) {
-	localOpts := []test.SetupOption{
-		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(testSmallConfigYAML),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-	}
-	opts = append(localOpts, opts...)
+func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {
 	s := test.NewSetup(t,
-		opts...,
+		test.WithConfig(testTranslationConfigYAML),
+		test.WithPersistedServiceInfo("first", srvInfo),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
 	)
+
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
@@ -516,9 +501,8 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 				"parent_id": "uuid-for-domainone",
 				"services": []assert.JSONObject{
 					{
-						"type":       "first",
-						"area":       "first",
-						"scraped_at": 11,
+						"type": "first",
+						"area": "first",
 						"resources": []assert.JSONObject{
 							{
 								"name":         "capacity",
@@ -527,8 +511,8 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 								"usable_quota": 0,
 								"usage":        0,
 								"per_az": assert.JSONObject{
-									"az-one": assert.JSONObject{"quota": 0, "usage": 0, "subresources": subresourcesInLegacyFormat},
-									"az-two": assert.JSONObject{"quota": 0, "usage": 0},
+									"az-one": assert.JSONObject{"usage": 0, "subresources": subresourcesInLegacyFormat},
+									"az-two": assert.JSONObject{"usage": 0},
 								},
 								"quota_distribution_model": "autogrow",
 								"subresources":             subresourcesInLegacyFormat,
