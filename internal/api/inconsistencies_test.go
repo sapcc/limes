@@ -33,12 +33,12 @@ func TestInconsistencyReport(t *testing.T) {
 	)
 
 	// initially, we will put in some numbers that do not have any inconsistencies
-	mustExecT(t, s.DB, `UPDATE project_resources SET quota = 30, backend_quota = 30`)
-	mustExecT(t, s.DB, `UPDATE project_az_resources SET usage = 9 WHERE az_resource_id IN ($1, $2)`,
+	s.MustDBExec(`UPDATE project_resources SET quota = 30, backend_quota = 30`)
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 9 WHERE az_resource_id IN ($1, $2)`,
 		s.GetAZResourceID("shared", "capacity", "az-one"),
 		s.GetAZResourceID("shared", "capacity", "az-two"),
 	)
-	mustExecT(t, s.DB, `UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
 		s.GetAZResourceID("shared", "things", "any"),
 	)
 
@@ -56,11 +56,11 @@ func TestInconsistencyReport(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// now put in some inconsistencies
-	mustExecT(t, s.DB, `UPDATE project_resources SET backend_quota = 10 WHERE project_id = $1 AND resource_id = $2`,
+	s.MustDBExec(`UPDATE project_resources SET backend_quota = 10 WHERE project_id = $1 AND resource_id = $2`,
 		s.GetProjectID("dresden"),
 		s.GetResourceID("shared", "capacity"),
 	)
-	mustExecT(t, s.DB, `UPDATE project_resources SET quota = 14, backend_quota = 14 WHERE project_id = $1 AND resource_id = $2`,
+	s.MustDBExec(`UPDATE project_resources SET quota = 14, backend_quota = 14 WHERE project_id = $1 AND resource_id = $2`,
 		s.GetProjectID("karachi"),
 		s.GetResourceID("shared", "capacity"),
 	)

@@ -198,27 +198,18 @@ func Test_ScanCapacity(t *testing.T) {
 		Path:          "unshared/unknown",
 		LiquidVersion: 1,
 	}
-	err := s.DB.Insert(unknownRes)
-	if err != nil {
-		t.Error(err)
-	}
-	err = s.DB.Insert(&db.AZResource{
+	mustT(t, s.DB.Insert(unknownRes))
+	mustT(t, s.DB.Insert(&db.AZResource{
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: liquid.AvailabilityZoneAny,
 		Path:             "unshared/unknown/" + string(liquid.AvailabilityZoneAny),
 		RawCapacity:      100,
 		Usage:            Some[uint64](50),
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = s.DB.Exec(
+	}))
+	s.MustDBExec(
 		`DELETE FROM resources WHERE service_id = $1 AND name = $2`,
 		1, "things",
 	)
-	if err != nil {
-		t.Error(err)
-	}
 	capacityReport.Resources["things"].PerAZ["any"].Capacity = 23
 	capacityReport.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
 	tr.DBChanges().Ignore()
@@ -609,8 +600,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 	t.Helper()
-	_, err := s.DB.Exec(`UPDATE services SET next_scrape_at = $1`, s.Clock.Now())
-	mustT(t, err)
+	s.MustDBExec(`UPDATE services SET next_scrape_at = $1`, s.Clock.Now())
 }
 
 func Test_ScanCapacityButNoResources(t *testing.T) {
@@ -1156,21 +1146,15 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 
 	// day 1: schedule two mails for different projects
 	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
-	_, err := s.DB.Exec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
 	// (Commitment ID: 11) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
-	_, err = s.DB.Exec(`
+	s.MustDBExec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, status, notify_on_confirm, creation_context_json)
 			VALUES(11, '00000000-0000-0000-0000-000000000011', 2, $4, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`,
 		s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour),
 		s.GetAZResourceID("second", "capacity", "az-one"),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1189,26 +1173,20 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 
 	// day 2: schedule one mail with two commitments for the same project.
 	// (Commitment IDs: 12, 13) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
-	_, err = s.DB.Exec(`
+	s.MustDBExec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
 			VALUES(12, '00000000-0000-0000-0000-000000000012', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
 		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
 		s.GetAZResourceID("second", "capacity", "az-one"),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.DB.Exec(`
+	s.MustDBExec(`
 			INSERT INTO project_commitments
 			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
 			VALUES(13, '00000000-0000-0000-0000-000000000013', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
 		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
 		s.GetAZResourceID("second", "capacity", "az-one"),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	scrapedAt2 = s.Clock.Now()

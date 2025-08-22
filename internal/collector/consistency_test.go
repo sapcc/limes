@@ -37,16 +37,13 @@ func Test_Consistency(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// remove some project_services entries
-	_, err = s.DB.Exec(`
+	s.MustDBExec(`
 			DELETE FROM project_services
 			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
 			AND service_id = (SELECT id FROM services WHERE type = $2)
 		`,
 		"berlin", "unshared",
 	)
-	if err != nil {
-		t.Error(err)
-	}
 	// add some useless *_services entries
 	newService := db.Service{Type: "whatever", NextScrapeAt: s.Clock.Now()}
 	err = s.DB.Insert(&newService)

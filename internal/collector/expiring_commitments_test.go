@@ -71,15 +71,14 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	originalMailTemplates := mailConfig.Templates
 	mailConfig.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: template.New("")}}
 	// commitments that are already sent out for a notification are not visible in the result set anymore - a new one gets created.
-	_, err := s.DB.Exec("INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, creation_context_json) VALUES (99, '00000000-0000-0000-0000-000000000099', 1, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'confirmed', '{}'::jsonb);")
+	s.MustDBExec("INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, creation_context_json) VALUES (99, '00000000-0000-0000-0000-000000000099', 1, 1, 10, UNIX(0), 'dummy', 'dummy', '1 year', UNIX(0), 'confirmed', '{}'::jsonb);")
 	tr.DBChanges().Ignore()
-	mustT(t, err)
-	err = (job.ProcessOne(s.Ctx))
+	err := job.ProcessOne(s.Ctx)
 	if err == nil {
 		t.Fatal("execution without mail template must fail")
 	}
 	mailConfig.Templates = core.MailTemplateConfiguration{ExpiringCommitments: core.MailTemplate{Compiled: nil}}
-	err = (job.ProcessOne(s.Ctx))
+	err = job.ProcessOne(s.Ctx)
 	if err == nil {
 		t.Fatal("execution without mail template must fail")
 	}
