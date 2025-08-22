@@ -24,12 +24,12 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
 
+	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
@@ -38,7 +38,6 @@ type setupParams struct {
 	DBSetupOptions           []easypg.TestSetupOption
 	DBFixtureFile            string
 	ConfigYAML               string
-	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API
 	APIMiddlewares           []httpapi.API
 	Projects                 []*core.KeystoneProject
 	WithEmptyRecordsAsNeeded bool
@@ -67,14 +66,11 @@ func WithConfig(yamlStr string) SetupOption {
 	}
 }
 
-// WithAPIHandler is a SetupOption that initializes a http.Handler with the
-// Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
-// directly call this function because that would create an import cycle, so it
-// must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API, middlewares ...httpapi.API) SetupOption {
+// WithAPIMiddleware is a SetupOption that attaches a custom middleware to the
+// HTTP handler providing the Limes API within the test.
+func WithAPIMiddleware(mw func(http.Handler) http.Handler) SetupOption {
 	return func(params *setupParams) {
-		params.APIBuilder = apiBuilder
-		params.APIMiddlewares = middlewares
+		params.APIMiddlewares = append(params.APIMiddlewares, httpapi.WithGlobalMiddleware(mw))
 	}
 }
 
@@ -127,15 +123,14 @@ func normalizeInlineYAML(yamlStr string) string {
 // Setup contains all the pieces that are needed for most tests.
 type Setup struct {
 	// fields that are always set
-	Ctx            context.Context //nolint:containedctx // only used in tests
-	DB             *gorp.DbMap
-	Cluster        *core.Cluster
-	Clock          *mock.Clock
-	Registry       *prometheus.Registry
-	TokenValidator *mock.Validator[*PolicyEnforcer]
-	Auditor        *audittools.MockAuditor
-	LiquidClients  map[db.ServiceType]*MockLiquidClient
-	// fields that are only set if their respective SetupOptions are given
+	Ctx                        context.Context //nolint:containedctx // only used in tests
+	DB                         *gorp.DbMap
+	Cluster                    *core.Cluster
+	Clock                      *mock.Clock
+	Registry                   *prometheus.Registry
+	TokenValidator             *mock.Validator[*PolicyEnforcer]
+	Auditor                    *audittools.MockAuditor
+	LiquidClients              map[db.ServiceType]*MockLiquidClient
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
 	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
@@ -245,16 +240,14 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
 	s.Auditor = audittools.NewMockAuditor()
 
-	if params.APIBuilder != nil {
-		generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
-		s.CurrentProjectCommitmentID = currentProjectCommitmentID
-		s.Handler = httpapi.Compose(
-			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
-				httpapi.WithoutLogging(),
-			}, params.APIMiddlewares...)...,
-		)
-	}
+	generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
+	s.CurrentProjectCommitmentID = currentProjectCommitmentID
+	s.Handler = httpapi.Compose(
+		append(params.APIMiddlewares,
+			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
+			httpapi.WithoutLogging(),
+		)...,
+	)
 
 	for idx, project := range params.Projects {
 		dbDomain := &db.Domain{

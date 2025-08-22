@@ -8,7 +8,6 @@ import (
 
 	"github.com/sapcc/go-bits/assert"
 
-	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -40,7 +39,6 @@ func TestFullInconsistencyReport(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-inconsistencies.sql"),
 		test.WithConfig(inconsistenciesTestConfigYAML),
-		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)
@@ -57,7 +55,6 @@ func TestEmptyInconsistencyReport(t *testing.T) {
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithConfig(inconsistenciesTestConfigYAML),
-		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)
