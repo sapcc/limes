@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -42,7 +43,7 @@ type MockMail struct {
 	UndeliverableMails uint64
 }
 
-func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
+func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) error {
 	switch req.ProjectID {
 	case "uuid-for-waldorf":
 		return nil
@@ -52,7 +53,7 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 		return nil
 	case "uuid-for-frankfurt":
 		m.UndeliverableMails++
-		return UndeliverableMailError{Inner: errMailUndeliverable}
+		return collector.UndeliverableMailError{Inner: errMailUndeliverable}
 	}
 	return nil
 }

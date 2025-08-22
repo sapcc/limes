@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"database/sql"
@@ -25,6 +25,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
@@ -57,7 +58,7 @@ func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(s.Ctx, ScanDomainsOpts{})
+	_, err := (&collector.Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +246,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// correct usage and backend quota values (and quota = 0 because no ACPQ has run yet)
 	// and set `project_services.scraped_at` to the current time;
 	// a desync should be noted, but we will not run syncJob until later in this test
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
@@ -275,8 +276,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 	firstScrapedAt1 := scrapedAt1
 	firstScrapedAt2 := scrapedAt2
@@ -287,7 +288,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// change the data that is reported by the liquid
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	serviceUsageReport.Resources["capacity"].Quota = Some[int64](110)
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Usage = 3
 	serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources = append(serviceUsageReport.Resources["things"].PerAZ["az-two"].Subresources, liquid.Subresource{Name: "index", Usage: Some[uint64](4)})
@@ -307,13 +308,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 		firstScrapedAt1.Unix(), firstScrapedAt2.Unix(),
 	)
 
 	// check the impact of setting the forbidden flag on a resource
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	serviceUsageReport.Resources["capacity"].Forbidden = true
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -326,11 +327,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 		`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 	// revert the forbidden flag
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	serviceUsageReport.Resources["capacity"].Forbidden = false
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -343,8 +344,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 			UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 		`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
 	// set some new quota values and align the report values with it, so nothing changes when next Scrape happens
@@ -395,7 +396,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// Scrape should show that the quota update was durable
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -405,12 +406,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
 	// set "capacity" to a non-zero usage to observe a non-zero usage
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	// note: there is currently no concistency check between the metrics and the actual resources
 	serviceUsageReport.Resources["capacity"].PerAZ["az-one"].Usage = 20
 	serviceUsageReport.Metrics["limes_unittest_capacity_usage"] = []liquid.Metric{{Value: 20}}
@@ -427,8 +428,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":20,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":3,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 		firstScrapedAt1.Unix(),
 		firstScrapedAt2.Unix(),
 	)
@@ -494,7 +495,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	serviceUsageReport.SerializedState = []byte(`{"firstrate":2048,"secondrate":4096}`)
 	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
 
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
 	serviceUsageReport.Rates["firstrate"].PerAZ["any"].Usage = Some(big.NewInt(4096))
@@ -514,8 +515,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, serialized_scrape_state = '{"firstrate":2048,"secondrate":4096}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, serialized_scrape_state = '{"firstrate":4096,"secondrate":8192}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
 	// check that az='unknown' is skipped in metrics only when capacity=0
@@ -524,24 +525,24 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
-	amc := &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
+	amc := &collector.AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	umc := &UsageCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
+	umc := &collector.UsageCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(umc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
-	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	dmr := &collector.DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics.prom"),
 	}.Check(t, dmr)
 
@@ -551,7 +552,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics_skipzero.prom"),
 	}.Check(t, dmr)
 }
@@ -571,7 +572,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	//
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -590,12 +591,12 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_services SET scraped_at = 0, stale = FALSE, checked_at = %[1]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = 0, stale = FALSE, checked_at = %[3]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		checkedAt1.Unix(), checkedAt1.Add(recheckInterval).Unix(),
-		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
+		checkedAt1.Unix(), checkedAt1.Add(collector.RecheckInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(collector.RecheckInterval).Unix(),
 	)
 
 	// next Scrape should yield the same result
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 
@@ -605,12 +606,12 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_services SET checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		checkedAt1.Unix(), checkedAt1.Add(recheckInterval).Unix(),
-		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
+		checkedAt1.Unix(), checkedAt1.Add(collector.RecheckInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(collector.RecheckInterval).Unix(),
 	)
 
 	// once the backend starts working, we start to see plausible data again
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 
 	s.LiquidClients["unittest"].SetUsageReportError(nil)
 	s.LiquidClients["unittest"].SetUsageReport(serviceUsageReport)
@@ -644,14 +645,14 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
 	// backend fails again and we need to scrape because of the stale flag ->
 	// touch neither scraped_at nor the existing resources (this also tests that a
 	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	s.LiquidClients["unittest"].SetUsageReportError(errors.New("GetUsageReport failed as requested"))
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
@@ -662,8 +663,8 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_services SET checked_at = %[1]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET checked_at = %[3]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
-		checkedAt1.Unix(), checkedAt1.Add(recheckInterval).Unix(),
-		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
+		checkedAt1.Unix(), checkedAt1.Add(collector.RecheckInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(collector.RecheckInterval).Unix(),
 	)
 }
 
@@ -717,7 +718,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 	`,
-		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
+		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.ScrapeInterval).Unix(),
 	)
 }
 
@@ -766,7 +767,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
 	`,
-		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(recheckInterval).Unix(),
+		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.RecheckInterval).Unix(),
 	)
 }
 
@@ -822,8 +823,8 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 		`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
 	// set some quota acpq values.
@@ -857,7 +858,7 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_services SET quota_desynced_at = NULL, quota_sync_duration_secs = 5 WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`)
 
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 
 	// topology of a resource changes. Reset AZ-separated backend_quota
 	resInfoThings.Topology = liquid.AZAwareTopology
@@ -901,11 +902,11 @@ func Test_TopologyScrapes(t *testing.T) {
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
 	`,
-		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
-		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
+		checkedAt1.Unix(), checkedAt1.Add(collector.ScrapeInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	// negative: service info validation should fail with invalid AZs
 	resInfoCap.Topology = "invalidAZ1"
 	srvInfo.Resources["capacity"] = resInfoCap
@@ -915,7 +916,7 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
 
-	s.Clock.StepBy(scrapeInterval)
+	s.Clock.StepBy(collector.ScrapeInterval)
 	// negative: service usage report validation should fail for mismatched topology and AZ reports
 	resInfoCap.Topology = liquid.FlatTopology
 	srvInfo.Resources["capacity"] = resInfoCap

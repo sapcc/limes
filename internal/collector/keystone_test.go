@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"encoding/json"
@@ -15,6 +15,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -69,7 +70,7 @@ func Test_ScanDomains(t *testing.T) {
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
 	// are then constructed by the scraper)
-	actualNewDomains, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	actualNewDomains, err := c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
 	}
@@ -81,7 +82,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// second ScanDomains should not discover anything new
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
@@ -96,7 +97,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not see this new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
@@ -105,7 +106,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains with ScanAllProjects should discover the new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
@@ -123,7 +124,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not notice anything
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #5 failed: %v", err)
 	}
@@ -152,7 +153,7 @@ func Test_ScanDomains(t *testing.T) {
 	}))
 	tr.DBChanges().Ignore()
 	s.Clock.StepBy(10 * time.Minute)
-	_, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
+	_, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
 	if err == nil {
 		t.Errorf("ScanDomains #6 did not fail when it should have")
 	}
@@ -163,7 +164,7 @@ func Test_ScanDomains(t *testing.T) {
 	_, err = s.DB.Exec(`UPDATE project_commitments SET status = $1`, liquid.CommitmentStatusExpired)
 	mustT(t, err)
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
@@ -180,7 +181,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
@@ -198,7 +199,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the changed names and update the domain/project records accordingly
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #9 failed: %v", err)
 	}

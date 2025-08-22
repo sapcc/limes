@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"bytes"
@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -120,7 +121,7 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 	s = test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", srvInfoShared),
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 	)

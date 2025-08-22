@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -19,7 +20,7 @@ func Test_Consistency(t *testing.T) {
 	consistencyJob := c.CheckConsistencyJob(s.Registry)
 
 	// run ScanDomains once to establish a baseline
-	_, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	_, err := c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
