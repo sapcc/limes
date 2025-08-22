@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2018 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -39,7 +40,7 @@ func TestFullInconsistencyReport(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-inconsistencies.sql"),
 		test.WithConfig(inconsistenciesTestConfigYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)
@@ -56,7 +57,7 @@ func TestEmptyInconsistencyReport(t *testing.T) {
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithConfig(inconsistenciesTestConfigYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("shared", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("unshared", test.DefaultLiquidServiceInfo()),
 	)

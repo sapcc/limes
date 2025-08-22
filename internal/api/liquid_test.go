@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"net/http"
@@ -10,6 +10,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
 )
@@ -41,7 +42,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithConfig(liquidCapacityTestConfigYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithProject(core.KeystoneProject{
 			Name: "project-1",
 			UUID: "uuid-for-project-1",

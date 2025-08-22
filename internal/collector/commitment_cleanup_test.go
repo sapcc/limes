@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"encoding/json"
@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
@@ -74,7 +75,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// to be able to create commitments, we need to have the projects discovered
 	// and their respective project resources created
-	_, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	_, err := c.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	mustT(t, err)
 	projectCount, err := c.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
 	mustT(t, err)

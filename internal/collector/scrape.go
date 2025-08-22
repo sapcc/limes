@@ -26,9 +26,9 @@ import (
 
 const (
 	// how long to wait before scraping the same project and service again
-	scrapeInterval = 30 * time.Minute
+	ScrapeInterval = 30 * time.Minute
 	// how long to wait before re-checking a project service that failed scraping
-	recheckInterval = 5 * time.Minute
+	RecheckInterval = 5 * time.Minute
 )
 
 var (
@@ -195,7 +195,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	// update scraped_at timestamp and reset the stale flag on this service so
 	// that we don't scrape it again immediately afterwards
 	_, err = c.DB.Exec(writeScrapeSuccessQuery,
-		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(ScrapeInterval)), task.Timing.Duration().Seconds(),
 		string(serializedMetrics), serializedScrapeState, projectService.ID,
 	)
 	if err != nil {
@@ -207,7 +207,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject, serviceInfo liquid.ServiceInfo) error {
 	_, err := c.DB.Exec(
 		writeScrapeErrorQuery,
-		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(RecheckInterval)),
 		task.Err.Error(), task.ProjectService.ID,
 	)
 	if err != nil {

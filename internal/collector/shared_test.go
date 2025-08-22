@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -16,8 +17,8 @@ func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-func getCollector(t *testing.T, s test.Setup) Collector {
-	return Collector{
+func getCollector(t *testing.T, s test.Setup) collector.Collector {
+	return collector.Collector{
 		Cluster:     s.Cluster,
 		DB:          s.DB,
 		LogError:    t.Errorf,

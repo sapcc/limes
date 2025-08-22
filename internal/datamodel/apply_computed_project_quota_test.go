@@ -3,6 +3,9 @@
 
 package datamodel
 
+// NOTE: Unlike most tests, this needs to be in the same package as the implementation,
+//       because we are constructing and comparing private types.
+
 import (
 	"encoding/json"
 	"reflect"

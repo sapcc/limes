@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"encoding/json"
@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -134,7 +135,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -496,7 +497,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -723,7 +724,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -759,7 +760,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -790,7 +791,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -951,7 +952,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -1005,7 +1006,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -1163,7 +1164,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -1233,7 +1234,7 @@ func Test_TransferCommitment(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -1483,7 +1484,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -1606,7 +1607,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testConvertCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("third", test.DefaultLiquidServiceInfo()),
@@ -1676,7 +1677,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testConvertCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("third", srvInfoThird),
 		test.WithMockLiquidClient("fourth", srvInfoFourth),
 	)
@@ -1958,7 +1959,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -2169,7 +2170,7 @@ func Test_MergeCommitments(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)
@@ -2447,7 +2448,7 @@ func Test_RenewCommitments(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
+		test.WithAPIHandler(api.NewV1API),
 		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
 		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
 	)

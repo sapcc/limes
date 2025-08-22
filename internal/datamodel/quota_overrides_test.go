@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package datamodel
+package datamodel_test
 
 import (
 	"testing"
@@ -10,6 +10,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
@@ -110,7 +111,7 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)
-	overrides, errs := LoadQuotaOverrides(s.Cluster)
+	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {
 		t.Error(err.Error())
 	}
@@ -127,7 +128,7 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)
-	overrides, errs := LoadQuotaOverrides(s.Cluster)
+	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
 	for _, err := range errs {
 		t.Error(err.Error())
 	}

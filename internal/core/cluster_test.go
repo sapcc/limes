@@ -61,7 +61,6 @@ func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-// We have to put this into the test package, because we are testing something which is baked into the Setup in a normal test.
 func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
