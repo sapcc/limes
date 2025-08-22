@@ -5,28 +5,10 @@ package collector_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/sapcc/go-bits/easypg"
-
-	"github.com/sapcc/limes/internal/collector"
-	"github.com/sapcc/limes/internal/test"
 )
 
 func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
-}
-
-func getCollector(t *testing.T, s test.Setup) collector.Collector {
-	return collector.Collector{
-		Cluster:     s.Cluster,
-		DB:          s.DB,
-		LogError:    t.Errorf,
-		MeasureTime: s.Clock.Now,
-		MeasureTimeAtEnd: func() time.Time {
-			s.Clock.StepBy(5 * time.Second)
-			return s.Clock.Now()
-		},
-		AddJitter: test.NoJitter,
-	}
 }

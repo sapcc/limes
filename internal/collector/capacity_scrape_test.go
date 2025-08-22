@@ -137,8 +137,7 @@ func Test_ScanCapacity(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 	insertTime := s.Clock.Now()
 
 	capacityReport := liquid.ServiceCapacityReport{
@@ -297,8 +296,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -439,8 +437,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -529,8 +526,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -626,8 +622,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -702,8 +697,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 
-	c := getCollector(t, s)
-	job := c.CapacityScrapeJob(s.Registry)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -803,8 +797,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 		test.WithMockLiquidClient("second", secondServiceInfo),
 		test.WithLiquidConnections,
 	)
-	c := getCollector(t, s)
-	scrapeJob = c.CapacityScrapeJob(s.Registry)
+	scrapeJob = s.Collector.CapacityScrapeJob(s.Registry)
 
 	firstCapacityReport = liquid.ServiceCapacityReport{
 		InfoVersion: 1,

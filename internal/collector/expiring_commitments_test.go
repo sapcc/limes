@@ -49,9 +49,8 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 		test.WithDBFixtureFile("fixtures/mail_expiring_commitments.sql"),
 		test.WithMockLiquidClient("shared", srvInfo),
 	)
-	c := getCollector(t, s)
 
-	job := c.ExpiringCommitmentNotificationJob(nil)
+	job := s.Collector.ExpiringCommitmentNotificationJob(nil)
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 	// successfully queue two projects with 2 commitments each. Ignore short-term commitments and mark them as notified.
@@ -65,7 +64,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:5 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-two', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Information about expiring commitments', 'Domain:germany Project:dresden Creator:dummy Amount:5 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-one Creator:dummy Amount:10 Duration:1 year Date:1970-01-27 Service:service Resource:resource AZ:az-two', %[1]d);
-	`, c.MeasureTime().Unix())
+	`, s.Clock.Now().Unix())
 
 	// mail queue with an empty template should fail
 	mailConfig := s.Cluster.Config.MailNotifications.UnwrapOrPanic("MailNotifications == nil!")
@@ -91,5 +90,5 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 99 AND uuid = '00000000-0000-0000-0000-000000000099' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:1 year Date:1970-01-01 Service:service Resource:resource AZ:az-one', %d);
-	`, c.MeasureTime().Unix())
+	`, s.Clock.Now().Unix())
 }

@@ -65,10 +65,9 @@ func Test_MailDelivery(t *testing.T) {
 		test.WithDBFixtureFile("fixtures/mail_delivery.sql"),
 		test.WithMockLiquidClient("shared", srvInfo),
 	)
-	c := getCollector(t, s)
 
 	mailer := &MockMail{}
-	job := c.MailDeliveryJob(nil, mailer)
+	job := s.Collector.MailDeliveryJob(nil, mailer)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
