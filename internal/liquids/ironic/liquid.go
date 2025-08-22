@@ -15,6 +15,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -27,7 +28,8 @@ type Logic struct {
 	WithSubcapacities bool                               `json:"with_subcapacities"`
 	WithSubresources  bool                               `json:"with_subresources"`
 	NodeToAZOverrides map[string]liquid.AvailabilityZone `json:"node_to_az_overrides"`
-	NodePageLimit     int                                `json:"node_page_limit"`
+	NodePageLimit     Option[int]                        `json:"node_page_limit"`
+	InstancePageLimit Option[int]                        `json:"instance_page_limit"`
 	// connections
 	NovaV2       *gophercloud.ServiceClient `json:"-"`
 	IronicV1     *gophercloud.ServiceClient `json:"-"`

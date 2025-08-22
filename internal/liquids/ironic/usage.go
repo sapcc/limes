@@ -66,6 +66,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		opts := servers.ListOpts{
 			AllTenants: true,
 			TenantID:   projectUUID,
+			Limit:      l.InstancePageLimit.UnwrapOr(250),
 		}
 		err := servers.List(l.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 			var instances []servers.Server
