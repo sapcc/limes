@@ -349,8 +349,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// set some new quota values and align the report values with it, so nothing changes when next Scrape happens
 	serviceUsageReport.Resources["capacity"].Quota = Some[int64](20)
 	serviceUsageReport.Resources["things"].Quota = Some[int64](13)
-	s.MustDBExec(`UPDATE project_resources ps SET quota = $1 FROM resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 20, "capacity")
-	s.MustDBExec(`UPDATE project_resources ps SET quota = $1 FROM resources cs WHERE ps.resource_id = cs.id AND cs.name = $2`, 13, "things")
+	s.MustDBExec(`UPDATE project_resources SET quota = $1 WHERE resource_id = $2`, 20, s.GetResourceID("unittest", "capacity"))
+	s.MustDBExec(`UPDATE project_resources SET quota = $1 WHERE resource_id = $2`, 13, s.GetResourceID("unittest", "things"))
 	tr.DBChanges().Ignore()
 
 	// test SyncQuotaToBackendJob running and failing (this checks that it does
@@ -816,9 +816,17 @@ func Test_TopologyScrapes(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
 	)
 
-	// set some quota acpq values.
-	s.MustDBExec(`UPDATE project_az_resources SET quota = $1 WHERE az_resource_id BETWEEN 2 AND 4`, 20)
-	s.MustDBExec(`UPDATE project_az_resources SET quota = $1 WHERE az_resource_id BETWEEN 6 AND 8`, 13)
+	// set some quota values as if ACPQ had been run
+	for _, az := range s.Cluster.Config.AvailabilityZones {
+		s.MustDBExec(
+			`UPDATE project_az_resources SET quota = $1 WHERE az_resource_id = $2`,
+			20, s.GetAZResourceID("unittest", "capacity", az),
+		)
+		s.MustDBExec(
+			`UPDATE project_az_resources SET quota = $1 WHERE az_resource_id = $2`,
+			13, s.GetAZResourceID("unittest", "things", az),
+		)
+	}
 	s.MustDBExec(`UPDATE project_services SET quota_desynced_at = $1`, s.Clock.Now())
 	tr.DBChanges().Ignore()
 
