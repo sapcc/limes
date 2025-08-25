@@ -24,7 +24,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
-	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
 	"gopkg.in/yaml.v2"
 
@@ -103,7 +102,7 @@ const (
 	`
 )
 
-func setupTest(t *testing.T, startData string) (s test.Setup) {
+func setupTest(t *testing.T) (s test.Setup) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"service/shared/objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
@@ -120,7 +119,7 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 
 	t.Helper()
 	s = test.NewSetup(t,
-		test.WithDBFixtureFile(startData),
+		test.WithDBFixtureFile("fixtures/start-data.sql"),
 		test.WithConfig(testConfigYAML),
 		test.WithMockLiquidClient("shared", srvInfoShared),
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),
@@ -129,21 +128,50 @@ func setupTest(t *testing.T, startData string) (s test.Setup) {
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany:
+							- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-germany }
+			liquids:
+				shared: { area: shared }
+				unshared: { area: unshared }
+		`),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
+
+	s.MustDBExec(`UPDATE project_services SET scraped_at = $1, checked_at = $1`, time.Unix(11, 0))
+
+	// by default, there are no scrape errors to report
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/admin/scrape-errors",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"scrape_errors": []assert.JSONObject{}},
+	}.Check(t, s.Handler)
 
 	// Add a scrape error to one specific service with type 'unshared'.
-	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
+	s.MustDBExec(
+		`UPDATE project_services SET scrape_error_message = $1 WHERE project_id = 1 AND service_id = $2`,
 		"could not scrape this specific unshared service",
-		1, "unshared",
+		s.GetServiceID("unshared"),
 	)
 
 	// Add the same scrape error to all services with type 'shared'. This will ensure that
 	// they get grouped under a dummy project.
-	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM services cs WHERE ps.service_id = cs.id AND cs.type = $2`,
+	s.MustDBExec(
+		`UPDATE project_services SET scrape_error_message = $1 WHERE service_id = $2`,
 		"could not scrape shared service",
-		"shared",
+		s.GetServiceID("shared"),
 	)
 
 	// check ListScrapeErrors
@@ -155,59 +183,8 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-func Test_EmptyScrapeErrorReport(t *testing.T) {
-	s := setupTest(t, "/dev/null")
-
-	// check ListScrapeErrors
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/admin/scrape-errors",
-		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-empty.json"),
-	}.Check(t, s.Handler)
-}
-
-func Test_RateScrapeErrorOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
-
-	// Add a scrape error to one specific service with type 'unshared' that has rate data.
-	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM services cs WHERE ps.service_id = cs.id AND ps.id = $2 AND cs.type = $3`,
-		"could not scrape rate data for this specific unshared service",
-		1, "unshared",
-	)
-
-	// Add the same scrape error to both services with type 'shared' that have rate data.
-	// This will ensure that they get grouped under a dummy project.
-	s.MustDBExec(`UPDATE project_services ps SET scrape_error_message = $1
-		FROM services cs WHERE ps.service_id = cs.id AND (ps.id = $2 OR ps.id = $3) AND type = $4`,
-		"could not scrape rate data for shared service",
-		2, 4, "shared",
-	)
-
-	// check ListRateScrapeErrors
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/admin/scrape-errors",
-		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-list.json"),
-	}.Check(t, s.Handler)
-}
-
-func Test_EmptyRateScrapeErrorReport(t *testing.T) {
-	s := setupTest(t, "/dev/null")
-
-	// check ListRateScrapeErrors
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/admin/scrape-errors",
-		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-empty.json"),
-	}.Check(t, s.Handler)
-}
-
 func Test_ClusterOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t)
 
 	// check GetCluster
 	assert.HTTPRequest{
@@ -285,7 +262,7 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func Test_DomainOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t)
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
@@ -366,7 +343,7 @@ func Test_DomainOperations(t *testing.T) {
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t)
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
@@ -738,10 +715,21 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 }
 
 func Test_EmptyProjectList(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
-
-	s.MustDBExec(`DELETE FROM project_commitments`)
-	s.MustDBExec(`DELETE FROM projects`)
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects: { uuid-for-germany: [] }
+			liquids:
+				first: { area: first }
+		`),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
 
 	// This warrants its own unit test since the rendering of empty project lists
 	// uses a different code path than the rendering of non-empty project lists.
@@ -890,7 +878,22 @@ func Test_LargeProjectList(t *testing.T) {
 }
 
 func Test_PutMaxQuotaOnProject(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
+			liquids:
+				shared: { area: shared }
+		`),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -915,7 +918,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 3 AND project_id = 1 AND resource_id = 3;
+			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 		`, value)
 	}
 
@@ -930,7 +933,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 3 AND project_id = 1 AND resource_id = 3;
+		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`)
 
 	// happy case: set value with unit conversion
@@ -941,7 +944,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 4 AND project_id = 1 AND resource_id = 4;
+		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 	`)
 
 	// happy case: set max quota with project permissions
@@ -953,7 +956,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 3 AND project_id = 1 AND resource_id = 3;
+		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`, 500)
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
 
@@ -1007,7 +1010,22 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 }
 
 func Test_PutQuotaAutogrowth(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
+			liquids:
+				shared: { area: shared }
+		`),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1032,7 +1050,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 	}
-	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 3 AND project_id = 1 AND resource_id = 3;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 2 AND project_id = 1 AND resource_id = 2;`)
 
 	// happy case: disable autogrowth
 	assert.HTTPRequest{
@@ -1041,7 +1059,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": false}),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = FALSE WHERE id = 3 AND project_id = 1 AND resource_id = 3;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = FALSE WHERE id = 2 AND project_id = 1 AND resource_id = 2;`)
 
 	// happy case: multiple resources.
 	assert.HTTPRequest{
@@ -1054,8 +1072,8 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 3 AND project_id = 1 AND resource_id = 3;
-		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 4 AND project_id = 1 AND resource_id = 4;
+		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 	`)
 
 	// error case: missing the appropriate edit permission
@@ -1109,7 +1127,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 }
 
 func Test_Historical_Usage(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t)
 
 	s.MustDBExec(
 		`UPDATE project_az_resources SET usage = 2, historical_usage = $1 WHERE project_id = $2 AND az_resource_id = $3`,
@@ -1128,39 +1146,37 @@ func Test_Historical_Usage(t *testing.T) {
 }
 
 func TestResourceRenaming(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
-
-	// a shorthand constructor (unfortunately it is hard to construct regexpext.ConfigSet
-	// by hand because the element type (the Key/Value pair) not a named type)
-	makeDurations := func(d time.Duration) regexpext.ConfigSet[string, []limesresources.CommitmentDuration] {
-		result := make(regexpext.ConfigSet[string, []limesresources.CommitmentDuration], 1)
-		result[0].Key = ".*"
-		result[0].Value = []limesresources.CommitmentDuration{{Short: d}}
-		return result
-	}
-
 	// I want to test with various renaming configs, but matching on the full
 	// report is extremely tedious because the types and names are scattered
-	// throughout, making a compact match; as a proxy, we set a different
+	// throughout, making a compact match difficult; as a proxy, we set a different
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
-	for serviceType, l := range s.Cluster.Config.Liquids {
-		switch serviceType {
-		case "shared":
-			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			l.CommitmentBehaviorPerResource[0].Key = "capacity"
-			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(2 * time.Second)
-			l.CommitmentBehaviorPerResource[1].Key = "things"
-			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(3 * time.Second)
-		case "unshared":
-			l.CommitmentBehaviorPerResource = make(regexpext.ConfigSet[liquid.ResourceName, core.CommitmentBehavior], 3)
-			l.CommitmentBehaviorPerResource[0].Key = "capacity"
-			l.CommitmentBehaviorPerResource[0].Value.DurationsPerDomain = makeDurations(4 * time.Second)
-			l.CommitmentBehaviorPerResource[1].Key = "things"
-			l.CommitmentBehaviorPerResource[1].Value.DurationsPerDomain = makeDurations(5 * time.Second)
-		}
-		s.Cluster.Config.Liquids[serviceType] = l
-	}
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
+			liquids:
+				shared:
+					area: shared
+					commitment_behavior_per_resource:
+						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '2 seconds' ]}]}}
+						- { key: things,   value: { durations_per_domain: [{ key: '.*', value: [ '3 seconds' ]}]}}
+				unshared:
+					area: unshared
+					commitment_behavior_per_resource:
+						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '4 seconds' ]}]}}
+						- { key: things,   value: { durations_per_domain: [{ key: '.*', value: [ '5 seconds' ]}]}}
+		`),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
 
 	// helper function that makes one GET query per structural level and checks
 	// that commitment durations appear on the right resources in the right
