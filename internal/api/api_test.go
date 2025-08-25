@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -47,34 +48,24 @@ const (
 			static_config:
 				domains:
 					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
+					- { name: france,  id: uuid-for-france  }
 				projects:
 					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+						- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
+						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
 					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
+						- { name: paris,   id: uuid-for-paris,   parent_id: uuid-for-france  }
 		liquids:
 			shared:
 				area: shared
 				rate_limits:
 					global:
-						- name:   service/shared/objects:create
-							limit:  5000
-							window: 1s
+						- { name: service/shared/objects:create,    limit: 5000, window: 1s }
 					project_default:
-						- name:   service/shared/objects:create
-							limit:  5
-							window: 1m
-						- name:   service/shared/objects:delete
-							limit:  1
-							window: 1m
-						- name:   service/shared/objects:update
-							limit:  2
-							window: 1s
-						- name:   service/shared/objects:read/list
-							limit:  3
-							window: 1s
+						- { name: service/shared/objects:create,    limit: 5,    window: 1m }
+						- { name: service/shared/objects:delete,    limit: 1,    window: 1m }
+						- { name: service/shared/objects:update,    limit: 2,    window: 1s }
+						- { name: service/shared/objects:read/list, limit: 3,    window: 1s }
 				commitment_behavior_per_resource:
 					- key: 'capacity|things'
 						value:
@@ -102,7 +93,10 @@ const (
 	`
 )
 
-func setupTest(t *testing.T) (s test.Setup) {
+func setupTest(t *testing.T) test.Setup {
+	// NOTE: For new tests, please try to use a more minimal setup that focuses on the specific needs of the test.
+	//       This test setup is designed to be backwards-compatible with the old start-data.sql fixture.
+
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"service/shared/objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
@@ -116,15 +110,178 @@ func setupTest(t *testing.T) (s test.Setup) {
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
-
-	t.Helper()
-	s = test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data.sql"),
+	s := test.NewSetup(t,
 		test.WithConfig(testConfigYAML),
-		test.WithMockLiquidClient("shared", srvInfoShared),
-		test.WithMockLiquidClient("unshared", srvInfoUnshared),
+		test.WithPersistedServiceInfo("shared", srvInfoShared),
+		test.WithPersistedServiceInfo("unshared", srvInfoUnshared),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
 	)
-	return
+
+	// shorthands
+	unix := func(val int64) time.Time { return time.Unix(val, 0) }
+	mustInsert := func(record any) {
+		t.Helper()
+		err := s.DB.Insert(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	berlin := s.GetProjectID("berlin")
+	dresden := s.GetProjectID("dresden")
+	paris := s.GetProjectID("paris")
+
+	shared := s.GetServiceID("shared")
+	unshared := s.GetServiceID("unshared")
+
+	sharedCapacity := s.GetResourceID("shared", "capacity")
+	unsharedThings := s.GetResourceID("unshared", "things")
+
+	sharedCapacityAny := s.GetAZResourceID("shared", "capacity", limes.AvailabilityZoneAny)
+	sharedCapacityAZOne := s.GetAZResourceID("shared", "capacity", "az-one")
+	sharedCapacityAZTwo := s.GetAZResourceID("shared", "capacity", "az-two")
+	sharedThingsAny := s.GetAZResourceID("shared", "things", limes.AvailabilityZoneAny)
+	unsharedCapacityAny := s.GetAZResourceID("unshared", "capacity", limes.AvailabilityZoneAny)
+	unsharedCapacityAZOne := s.GetAZResourceID("unshared", "capacity", "az-one")
+	unsharedCapacityAZTwo := s.GetAZResourceID("unshared", "capacity", "az-two")
+	unsharedThingsAny := s.GetAZResourceID("unshared", "things", limes.AvailabilityZoneAny)
+
+	sharedObjectsCreate := s.GetRateID("shared", "service/shared/objects:create")
+	sharedObjectsDelete := s.GetRateID("shared", "service/shared/objects:delete")
+	sharedObjectsUpdate := s.GetRateID("shared", "service/shared/objects:update")
+	sharedObjectsUnlimited := s.GetRateID("shared", "service/shared/objects:unlimited")
+	unsharedInstancesCreate := s.GetRateID("unshared", "service/unshared/instances:create")
+	unsharedInstancesDelete := s.GetRateID("unshared", "service/unshared/instances:delete")
+	unsharedInstancesUpdate := s.GetRateID("unshared", "service/unshared/instances:update")
+
+	// fill `services`
+	query := `UPDATE services SET scraped_at = $1, next_scrape_at = $2 WHERE type = $3`
+	s.MustDBExec(query, unix(1000), unix(2000), "unshared")
+	s.MustDBExec(query, unix(1100), unix(2100), "shared")
+
+	// fill `az_resources` (unshared/capacity has zero capacity)
+	query = `UPDATE az_resources SET raw_capacity = $1, last_nonzero_raw_capacity = $1, usage = $2, subcapacities = $3 WHERE path = $4`
+	s.MustDBExec(query, 139, 45, `[{"smaller_half":46},{"larger_half":93}]`, "unshared/things/any")
+	s.MustDBExec(query, 246, 158, `[{"smaller_half":82},{"larger_half":164}]`, "shared/things/any")
+	s.MustDBExec(query, 90, 12, "", "shared/capacity/az-one")
+	s.MustDBExec(query, 95, 15, "", "shared/capacity/az-two")
+
+	// fill `project_services`
+	query = `UPDATE project_services SET stale = FALSE, scraped_at = $1, checked_at = $1 WHERE project_id = $2 AND service_id = $3`
+	s.MustDBExec(query, unix(11), berlin, unshared)
+	s.MustDBExec(query, unix(22), berlin, shared)
+	s.MustDBExec(query, unix(33), dresden, unshared)
+	s.MustDBExec(query, unix(44), dresden, shared)
+	s.MustDBExec(query, unix(55), paris, unshared)
+	s.MustDBExec(query, unix(66), paris, shared)
+
+	// fill `project_resources` (most have quota = 10, some test special cases)
+	s.MustDBExec(`UPDATE project_resources SET quota = 10, backend_quota = 10`)
+	s.MustDBExec(`UPDATE project_resources SET backend_quota = 100 WHERE project_id = $1 AND resource_id = $2`, dresden, sharedCapacity)
+	s.MustDBExec(`UPDATE project_resources SET backend_quota = -1 WHERE project_id = $1 AND resource_id = $2`, paris, unsharedThings)
+	s.MustDBExec(`UPDATE project_resources SET max_quota_from_outside_admin = 200 WHERE project_id = $1 AND resource_id = $2`, paris, sharedCapacity)
+
+	// fill `project_az_resources` subresources (only in Berlin)
+	query = `UPDATE project_az_resources SET subresources = $1 WHERE project_id = $2 AND az_resource_id = $3`
+	s.MustDBExec(query, `[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]`, berlin, unsharedThingsAny)
+	s.MustDBExec(query, `[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]`, berlin, sharedThingsAny)
+
+	// fill `project_az_resources` usage:
+	// - every resource has usage = 2 per project, but split between AZs for "capacity"
+	// - for Berlin and "things", this matches the subresource count above
+	query = `UPDATE project_az_resources SET usage = $1 WHERE az_resource_id = $2`
+	s.MustDBExec(query, 1, sharedCapacityAZOne)
+	s.MustDBExec(query, 1, sharedCapacityAZTwo)
+	s.MustDBExec(query, 2, sharedThingsAny)
+	s.MustDBExec(query, 1, unsharedCapacityAZOne)
+	s.MustDBExec(query, 1, unsharedCapacityAZTwo)
+	s.MustDBExec(query, 2, unsharedThingsAny)
+
+	// fill `project_az_resources` quota:
+	// - in most cases, the even quota of 10 from above gets split evenly between relevant AZs
+	// - Dresden instead has some quota shifted into `any` for the AZ-aware resources (2x3 AZ-aware + 4 any = 10)
+	// - Paris does not have quota at all (aggregation should only count quota in projects that have it)
+	query = `UPDATE project_az_resources SET quota = $1 WHERE az_resource_id = $2`
+	s.MustDBExec(query, 0, sharedCapacityAny)
+	s.MustDBExec(query, 5, sharedCapacityAZOne)
+	s.MustDBExec(query, 5, sharedCapacityAZTwo)
+	s.MustDBExec(query, 10, sharedThingsAny)
+	s.MustDBExec(query, 0, unsharedCapacityAny)
+	s.MustDBExec(query, 5, unsharedCapacityAZOne)
+	s.MustDBExec(query, 5, unsharedCapacityAZTwo)
+	s.MustDBExec(query, 10, unsharedThingsAny)
+	query = `UPDATE project_az_resources SET quota = $1 WHERE project_id = $2 AND az_resource_id = $3`
+	s.MustDBExec(query, 4, dresden, sharedCapacityAny)
+	s.MustDBExec(query, 3, dresden, sharedCapacityAZOne)
+	s.MustDBExec(query, 3, dresden, sharedCapacityAZTwo)
+	s.MustDBExec(query, 4, dresden, unsharedCapacityAny)
+	s.MustDBExec(query, 3, dresden, unsharedCapacityAZOne)
+	s.MustDBExec(query, 3, dresden, unsharedCapacityAZTwo)
+	s.MustDBExec(`UPDATE project_az_resources SET quota = NULL WHERE project_id = $1`, paris)
+
+	// fill `project_az_resources` physical usage: only Paris (aggregation should consider physical_usage = usage in the other projects)
+	query = `UPDATE project_az_resources SET physical_usage = $1 WHERE project_id = $2 AND az_resource_id = $3`
+	s.MustDBExec(query, 0, paris, sharedCapacityAZOne)
+	s.MustDBExec(query, 1, paris, sharedCapacityAZTwo)
+	s.MustDBExec(query, 0, paris, unsharedCapacityAZOne)
+	s.MustDBExec(query, 1, paris, unsharedCapacityAZTwo)
+
+	// fill `project_rates`:
+	// - Berlin has custom rate limits
+	// - only Dresden has usage values, and it also shows usage for a rate that does not have rate limits
+	// - Dresden also has zero-valued usage values, which is different from empty string (empty string means "usage unknown", 0 means "no usage yet")
+	// - Paris has no records at all, so the API will only display the default rate limits
+	window := Some(1 * limesrates.WindowMinutes)
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesCreate, Limit: Some[uint64](5), Window: window})
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "12345"})
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesUpdate, Limit: Some[uint64](2), Window: window})
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsCreate, Limit: Some[uint64](5), Window: window})
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "23456"})
+	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsUpdate, Limit: Some[uint64](2), Window: window})
+	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: unsharedInstancesDelete, UsageAsBigint: "0"})
+	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsDelete, UsageAsBigint: "0"})
+	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsUnlimited, UsageAsBigint: "1048576"})
+
+	// fill `project_commitments`: we only really care about duration, status and amount;
+	// this helper function fills most other relevant fields to look vaguely plausible
+	makeCommitment := func(projectID db.ProjectID, azResourceID db.AZResourceID, amount uint64, status liquid.CommitmentStatus, durationStr string) *db.ProjectCommitment {
+		duration := must.Return(limesresources.ParseCommitmentDuration(durationStr))
+		c := db.ProjectCommitment{
+			UUID:                liquid.CommitmentUUID(must.Return(uuid.NewV4()).String()),
+			ProjectID:           projectID,
+			AZResourceID:        azResourceID,
+			Amount:              amount,
+			Duration:            duration,
+			Status:              status,
+			CreatedAt:           s.Clock.Now(),
+			CreatorUUID:         "uuid-for-alice",
+			CreatorName:         "alice@Default",
+			ExpiresAt:           duration.AddTo(s.Clock.Now()),
+			CreationContextJSON: json.RawMessage(`{}`),
+		}
+		switch c.Status {
+		case "pending":
+			c.ConfirmBy = Some(s.Clock.Now())
+		case "planned":
+			c.ConfirmBy = Some(s.Clock.Now().Add(24 * time.Hour))
+		}
+		return &c
+	}
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "2 years"))
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 2, "confirmed", "1 year"))
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 100, "pending", "2 years"))
+	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 5, "expired", "10 minutes"))
+	mustInsert(makeCommitment(dresden, sharedCapacityAZOne, 100, "planned", "2 years"))
+	mustInsert(makeCommitment(dresden, unsharedThingsAny, 1, "confirmed", "2 years"))
+
+	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
+	// to match the setup of confirmed vs. expired commitments above
+	s.Clock.StepBy(1 * time.Hour)
+
+	return s
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
@@ -265,10 +422,6 @@ func Test_DomainOperations(t *testing.T) {
 	s := setupTest(t)
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
-	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
-	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
-	s.Clock.StepBy(1 * time.Hour)
-
 	// check GetDomain
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -345,10 +498,6 @@ func Test_DomainOperations(t *testing.T) {
 func Test_ProjectOperations(t *testing.T) {
 	s := setupTest(t)
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
-
-	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
-	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
-	s.Clock.StepBy(1 * time.Hour)
 
 	// check GetProject
 	assert.HTTPRequest{
