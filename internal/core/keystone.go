@@ -184,7 +184,8 @@ func (p *StaticDiscoveryPlugin) ListProjects(ctx context.Context, queryDomain Ke
 	}
 	for _, domain := range p.Config.Domains {
 		if domain.UUID == queryDomain.UUID {
-			if len(p.Config.Projects[domain.UUID]) == 0 {
+			if p.Config.Projects[domain.UUID] == nil {
+				// NOTE: An empty non-nil project list is acceptable, and means that a domain legitimately contains no projects.
 				return nil, fmt.Errorf("no projects configured for domain %s", queryDomain.UUID)
 			}
 			for _, project := range p.Config.Projects[domain.UUID] {
