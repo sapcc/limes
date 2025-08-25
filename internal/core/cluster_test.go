@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
 
@@ -31,6 +32,15 @@ const (
 				area: shared
 			unshared:
 				area: unshared
+				rate_limits:
+					global:
+						- { name: in_global_and_liquid,  limit: 10, window: 1m }
+						- { name: in_global_and_project, limit: 20, window: 1m }
+						- { name: only_in_global,        limit: 30, window: 1m }
+					project_default:
+						- { name: in_global_and_project, limit: 2, window: 1m }
+						- { name: in_liquid_and_project, limit: 4, window: 1m }
+						- { name: only_in_project,       limit: 5, window: 1m }
 	`
 )
 
@@ -55,6 +65,11 @@ func TestMain(m *testing.M) {
 func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo()
 	srvInfoUnshared := test.DefaultLiquidServiceInfo()
+	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
+		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+	}
 
 	s := test.NewSetup(t,
 		test.WithConfig(testConfigYAML),
@@ -73,6 +88,12 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 3, 'az-one', 0, 'unshared/capacity/az-one');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'az-two', 0, 'unshared/capacity/az-two');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'unknown', 0, 'unshared/capacity/unknown');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (2, 2, 'in_global_and_project', 1, 'flat');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (4, 2, 'only_in_global', 1, 'flat');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (6, 2, 'only_in_project', 1, 'flat');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', 0, 1);
