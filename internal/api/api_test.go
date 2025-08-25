@@ -524,7 +524,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	// DiscoverProjects sets `stale` on new project_services;
 	// clear this to avoid confusion in the next test
-	s.MustDBExec(`UPDATE project_services SET stale = FALSE WHERE project_id = (SELECT id FROM projects WHERE name = $1)`, "frankfurt")
+	s.MustDBExec(`UPDATE project_services SET stale = FALSE WHERE project_id = $1`, s.GetProjectID("frankfurt"))
 
 	// check SyncProject
 	expectStaleProjectServices(t, s.DB /*, nothing */)
