@@ -20,7 +20,7 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dre
 
 INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
 INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
-INSERT INTO rates (id, service_id, name, liquid_version) VALUES (3, 1, 'xOtherRate', 1);
+INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (3, 1, 'xOtherRate', 1, 'flat');
 INSERT INTO rates (id, service_id, name, liquid_version) VALUES (4, 1, 'xAnotherRate', 1);
 
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity');

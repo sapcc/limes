@@ -521,19 +521,22 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		},
 		Create: func(rateName liquid.RateName) (db.Rate, error) {
 			return db.Rate{
-				ServiceID:     dbServices[0].ID,
-				Name:          rateName,
-				LiquidVersion: serviceInfo.Version,
-				Unit:          serviceInfo.Rates[rateName].Unit,
-				Topology:      serviceInfo.Rates[rateName].Topology,
-				HasUsage:      serviceInfo.Rates[rateName].HasUsage,
+				ServiceID: dbServices[0].ID,
+				Name:      rateName,
 			}, nil
 		},
 		Update: func(rate *db.Rate) (err error) {
 			rate.LiquidVersion = serviceInfo.Version
-			rate.Unit = serviceInfo.Rates[rate.Name].Unit
-			rate.Topology = serviceInfo.Rates[rate.Name].Topology
-			rate.HasUsage = serviceInfo.Rates[rate.Name].HasUsage
+			if rateInfo, exists := serviceInfo.Rates[rate.Name]; exists {
+				rate.Unit = rateInfo.Unit
+				rate.Topology = rateInfo.Topology
+				rate.HasUsage = rateInfo.HasUsage
+			} else {
+				// fallbacks for rates that are only declared in the config and not announced by the liquid
+				rate.Unit = liquid.UnitNone
+				rate.Topology = liquid.FlatTopology
+				rate.HasUsage = false
+			}
 			return nil
 		},
 	}
