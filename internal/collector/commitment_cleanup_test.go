@@ -53,7 +53,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
+	s.LiquidClients["unittest"].UsageReport.Set(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {

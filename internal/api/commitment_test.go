@@ -683,7 +683,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -705,7 +705,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -747,7 +747,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -772,7 +772,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1615,7 +1615,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1788,7 +1788,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
+	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1828,7 +1828,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -2090,14 +2090,14 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	})
 
 	// check that rejections from the liquid are honored
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
 		Body:         assert.JSONObject{"duration": "3 hours"},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	// Negative: Provided duration is invalid
 	assert.HTTPRequest{

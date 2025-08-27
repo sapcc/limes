@@ -78,7 +78,9 @@ func WithAPIMiddleware(mw func(http.Handler) http.Handler) SetupOption {
 // This option must be provided once for every service type in the config.
 func WithMockLiquidClient(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
-		params.LiquidClients[serviceType] = &MockLiquidClient{serviceInfo: serviceInfo}
+		client := &MockLiquidClient{}
+		client.ServiceInfo.Set(serviceInfo)
+		params.LiquidClients[serviceType] = client
 	}
 }
 

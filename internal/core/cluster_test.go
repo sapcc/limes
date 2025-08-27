@@ -99,9 +99,10 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	`)
 
 	// Now, we update the serviceInfo of the shared service, updates should be done
-	srvInfoShared.Version = 2
-	delete(srvInfoShared.Resources, "things") // remove things resource
-	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	s.LiquidClients["shared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		info.Version = 2
+		delete(info.Resources, "things") // remove things resource
+	})
 	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		DELETE FROM az_resources WHERE id = 5 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
@@ -112,9 +113,10 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	`)
 
 	// Now, we add the "things" resource back to the shared service, it should be added again.
-	srvInfoShared = test.DefaultLiquidServiceInfo()
-	srvInfoShared.Version = 3
-	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	s.LiquidClients["shared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		*info = test.DefaultLiquidServiceInfo()
+		info.Version = 3
+	})
 	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (11, 5, 'any', 0, 'shared/things/any');
@@ -125,8 +127,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	`)
 
 	// just an increase of the LiquidVersion
-	srvInfoShared.Version = 4
-	s.LiquidClients["shared"].SetServiceInfo(srvInfoShared)
+	s.LiquidClients["shared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		info.Version = 4
+	})
 	generateNewClusterWithPersistingServiceInfo(t, s)
 	tr.DBChanges().AssertEqual(`
 		UPDATE resources SET liquid_version = 4 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';

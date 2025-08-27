@@ -140,34 +140,28 @@ func Test_ScanCapacity(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 	insertTime := s.Clock.Now()
 
-	capacityReport := liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"things": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"any": {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
-				},
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 42,
+					Usage:    Some[uint64](8),
+				}),
 			},
 		},
-	}
-	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
-	capacityReport2 := liquid.ServiceCapacityReport{
+	})
+	s.LiquidClients["unshared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"any": {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
-				},
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 42,
+					Usage:    Some[uint64](8),
+				}),
 			},
 		},
-	}
-	s.LiquidClients["unshared"].SetCapacityReport(capacityReport2)
+	})
 
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -210,8 +204,10 @@ func Test_ScanCapacity(t *testing.T) {
 		`DELETE FROM resources WHERE service_id = $1 AND name = $2`,
 		1, "things",
 	)
-	capacityReport.Resources["things"].PerAZ["any"].Capacity = 23
-	capacityReport.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
+	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		report.Resources["things"].PerAZ["any"].Capacity = 23
+		report.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
+	})
 	tr.DBChanges().Ignore()
 
 	// if we don't bump the version, we will observe that for "things" nothing happens (as it is unknown
@@ -300,45 +296,26 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	// check that scraping correctly updates subcapacities on an existing record
 	buf := must.Return(json.Marshal(map[string]any{"az": "az-one"}))
 	buf2 := must.Return(json.Marshal(map[string]any{"az": "az-two"}))
-	capacityReport := liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"things": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"any": {
-						Capacity: 42,
-						Subcapacities: []liquid.Subcapacity{
-							{
-								Name:       "smaller_half",
-								Capacity:   7,
-								Attributes: json.RawMessage(buf),
-							},
-							{
-								Name:       "larger_half",
-								Capacity:   14,
-								Attributes: json.RawMessage(buf),
-							},
-							{
-								Name:       "smaller_half",
-								Capacity:   7,
-								Attributes: json.RawMessage(buf2),
-							},
-							{
-								Name:       "larger_half",
-								Capacity:   14,
-								Attributes: json.RawMessage(buf2),
-							},
-						},
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 42,
+					Subcapacities: []liquid.Subcapacity{
+						{Name: "smaller_half", Capacity: 7, Attributes: json.RawMessage(buf)},
+						{Name: "larger_half", Capacity: 14, Attributes: json.RawMessage(buf)},
+						{Name: "smaller_half", Capacity: 7, Attributes: json.RawMessage(buf2)},
+						{Name: "larger_half", Capacity: 14, Attributes: json.RawMessage(buf2)},
 					},
-				},
+				}),
 			},
 		},
 		Metrics: map[liquid.MetricName][]liquid.Metric{
 			"limes_unittest_capacity_smaller_half": {{Value: 3}},
 			"limes_unittest_capacity_larger_half":  {{Value: 7}},
 		},
-	}
-	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
+	})
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -352,30 +329,15 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	)
 
 	// check that scraping correctly updates subcapacities on an existing record
-	capacityReport.Resources["things"].PerAZ["any"].Capacity = 10
-	capacityReport.Resources["things"].PerAZ["any"].Subcapacities = []liquid.Subcapacity{
-		{
-			Name:       "smaller_half",
-			Capacity:   1,
-			Attributes: json.RawMessage(buf),
-		},
-		{
-			Name:       "larger_half",
-			Capacity:   4,
-			Attributes: json.RawMessage(buf),
-		},
-		{
-			Name:       "smaller_half",
-			Capacity:   1,
-			Attributes: json.RawMessage(buf2),
-		},
-		{
-			Name:       "larger_half",
-			Capacity:   4,
-			Attributes: json.RawMessage(buf2),
-		},
-	}
-	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
+	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		report.Resources["things"].PerAZ["any"].Capacity = 10
+		report.Resources["things"].PerAZ["any"].Subcapacities = []liquid.Subcapacity{
+			{Name: "smaller_half", Capacity: 1, Attributes: json.RawMessage(buf)},
+			{Name: "larger_half", Capacity: 4, Attributes: json.RawMessage(buf)},
+			{Name: "smaller_half", Capacity: 1, Attributes: json.RawMessage(buf2)},
+			{Name: "larger_half", Capacity: 4, Attributes: json.RawMessage(buf2)},
+		}
+	})
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
@@ -441,24 +403,17 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
 	`, s.Clock.Now().Unix())
 
-	capacityReport := liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"things": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 21,
-						Usage:    Some[uint64](4),
-					},
-					"az-two": {
-						Capacity: 21,
-						Usage:    Some[uint64](4),
-					},
+					"az-one": {Capacity: 21, Usage: Some[uint64](4)},
+					"az-two": {Capacity: 21, Usage: Some[uint64](4)},
 				},
 			},
 		},
-	}
-	s.LiquidClients["shared"].SetCapacityReport(capacityReport)
+	})
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -473,10 +428,12 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	)
 
 	// check that scraping correctly updates the capacities on an existing record
-	capacityReport.Resources["things"].PerAZ["az-one"].Capacity = 15
-	capacityReport.Resources["things"].PerAZ["az-one"].Usage = Some[uint64](3)
-	capacityReport.Resources["things"].PerAZ["az-two"].Capacity = 15
-	capacityReport.Resources["things"].PerAZ["az-two"].Usage = Some[uint64](3)
+	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		report.Resources["things"].PerAZ["az-one"].Capacity = 15
+		report.Resources["things"].PerAZ["az-one"].Usage = Some[uint64](3)
+		report.Resources["things"].PerAZ["az-two"].Capacity = 15
+		report.Resources["things"].PerAZ["az-two"].Usage = Some[uint64](3)
+	})
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
@@ -509,7 +466,12 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 }
 
 func TestScanCapacityReportsZeroValues(t *testing.T) {
+	// setup both "capacity" and "things" with HasCapacity = true
 	srvInfo := test.DefaultLiquidServiceInfo()
+	res := srvInfo.Resources["things"]
+	res.HasCapacity = true
+	srvInfo.Resources["things"] = res
+
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
 		test.WithMockLiquidClient("shared", srvInfo),
@@ -523,10 +485,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr0.Ignore()
 
 	// when the capacity report shows zero capacity and usage...
-	res := srvInfo.Resources["things"]
-	res.HasCapacity = true
-	srvInfo.Resources["things"] = res
-	zeroReport := liquid.ServiceCapacityReport{
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
@@ -539,8 +498,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 0, Usage: Some[uint64](0)}),
 			},
 		},
-	}
-	s.LiquidClients["shared"].SetCapacityReport(zeroReport)
+	})
 
 	// ...scrape will record those values faithfully and not set "last_nonzero_raw_capacity"
 	setClusterCapacitorsStale(t, s)
@@ -555,19 +513,10 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 
 	// when the capacity report shows non-zero capacity and usage...
-	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
-		InfoVersion: 1,
-		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
-			"capacity": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {Capacity: 10, Usage: Some[uint64](5)},
-					"az-two": {Capacity: 10, Usage: Some[uint64](5)},
-				},
-			},
-			"things": {
-				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 20, Usage: Some[uint64](10)}),
-			},
-		},
+	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		report.Resources["capacity"].PerAZ["az-one"] = &liquid.AZResourceCapacityReport{Capacity: 10, Usage: Some[uint64](5)}
+		report.Resources["capacity"].PerAZ["az-two"] = &liquid.AZResourceCapacityReport{Capacity: 10, Usage: Some[uint64](5)}
+		report.Resources["things"].PerAZ = liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 20, Usage: Some[uint64](10)})
 	})
 
 	// ...scrape will record those values and set "last_nonzero_raw_capacity" because a non-zero value was observed
@@ -583,7 +532,11 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 
 	// when the capacity report once again shows zero capacity and usage afterwards...
-	s.LiquidClients["shared"].SetCapacityReport(zeroReport)
+	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		report.Resources["capacity"].PerAZ["az-one"] = &liquid.AZResourceCapacityReport{Capacity: 0, Usage: Some[uint64](0)}
+		report.Resources["capacity"].PerAZ["az-two"] = &liquid.AZResourceCapacityReport{Capacity: 0, Usage: Some[uint64](0)}
+		report.Resources["things"].PerAZ = liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: 0, Usage: Some[uint64](0)})
+	})
 
 	// ...scrape will record those values and, once again, leave "last_nonzero_raw_capacity" untouched
 	setClusterCapacitorsStale(t, s)
@@ -604,10 +557,10 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 }
 
 func Test_ScanCapacityButNoResources(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	// test ScanCapacity on a LIQUID with no resources
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
-		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithMockLiquidClient("shared", liquid.ServiceInfo{Version: 1, Resources: nil}),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -617,28 +570,17 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/capacity/any');
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'shared/capacity/az-one');
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'shared/capacity/az-two');
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'unknown', 0, 'shared/capacity/unknown');
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 2, 'any', 0, 'shared/things/any');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (2, 1, 'things', 1, 'flat', TRUE, 'shared/things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
 	`,
 		s.Clock.Now().Unix(),
 	)
 
-	// adjust the capacity report to not show any resources
-	// this is a state which should not happen in production - it leads to a logged error
-	res := srvInfo.Resources["capacity"]
-	res.HasCapacity = false
-	srvInfo.Resources["capacity"] = res
-	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
+	// since ServiceInfo does not declare resources, the capacity report is also empty
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 	})
 
-	// check that the capacitor runs, but does not touch resources and az_resources
+	// check that the capacitor runs, and does not touch resources and az_resources
 	// since it does not report for anything (this used to fail because we generated a syntactically
 	// invalid WHERE clause when matching zero resources)
 	setClusterCapacitorsStale(t, s)
@@ -667,8 +609,6 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
-		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2);
 	`,
@@ -704,49 +644,36 @@ func Test_ScanManualCapacity(t *testing.T) {
 		s.Clock.Now().Unix(),
 	)
 
-	// adjust the capacity report to not show any capacity
-	// this is a state which should not happen in production - it leads to a logged error
-	res := srvInfo.Resources["capacity"]
-	res.HasCapacity = false
-	srvInfo.Resources["capacity"] = res
-	s.LiquidClients["shared"].SetCapacityReport(liquid.ServiceCapacityReport{
+	// since "capacity" has HasCapacity = true, it must show capacity here;
+	// but "things" has HasCapacity = false, so it must not
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one": {Capacity: 42, Usage: Some[uint64](8)},
+					"az-two": {Capacity: 42, Usage: Some[uint64](8)},
+				},
+			},
+		},
 	})
 
-	// normal resource are not written, but the manual resource is
+	// capacity scrape writes both the LIQUID-based and the manual capacity value
 	setClusterCapacitorsStale(t, s)
 	mustT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 5 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
-
-	// now we bump the version, so that the services and resources are reconciled
-	s.LiquidClients["shared"].IncrementServiceInfoVersion()
-	s.LiquidClients["shared"].IncrementCapacityReportInfoVersion()
-	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
-
-	tr.DBChanges().AssertEqualf(`
-		UPDATE resources SET liquid_version = 2, has_capacity = FALSE WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
-		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
-		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %d, 5, '{}', %d, 2);
-	`,
-		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
-	)
 }
 
-func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
-	s test.Setup, scrapeJob jobloop.Job,
-	firstCapacityReport liquid.ServiceCapacityReport, secondCapacityReport liquid.ServiceCapacityReport,
-	firstServiceInfo liquid.ServiceInfo, secondServiceInfo liquid.ServiceInfo,
-) {
-
-	firstServiceInfo = liquid.ServiceInfo{
+func commonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job) {
+	firstServiceInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -763,7 +690,7 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 			},
 		},
 	}
-	secondServiceInfo = liquid.ServiceInfo{
+	secondServiceInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -789,64 +716,46 @@ func CommonScanCapacityWithCommitmentsSetup(t *testing.T) (
 	)
 	scrapeJob = s.Collector.CapacityScrapeJob(s.Registry)
 
-	firstCapacityReport = liquid.ServiceCapacityReport{
+	s.LiquidClients["first"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
-					"az-two": {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
+					"az-one": {Capacity: 42, Usage: Some[uint64](8)},
+					"az-two": {Capacity: 42, Usage: Some[uint64](8)},
 				},
 			},
 			"things": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					liquid.AvailabilityZoneAny: {
-						Capacity: 42,
-						Usage:    Some[uint64](8),
-					},
-				},
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 42,
+					Usage:    Some[uint64](8),
+				}),
 			},
 		},
-	}
-	s.LiquidClients["first"].SetCapacityReport(firstCapacityReport)
-	secondCapacityReport = liquid.ServiceCapacityReport{
+	})
+	s.LiquidClients["second"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {
-						Capacity: 23,
-						Usage:    Some[uint64](4),
-					},
-					"az-two": {
-						Capacity: 23,
-						Usage:    Some[uint64](4),
-					},
+					"az-one": {Capacity: 23, Usage: Some[uint64](4)},
+					"az-two": {Capacity: 23, Usage: Some[uint64](4)},
 				},
 			},
 			"things": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					liquid.AvailabilityZoneAny: {
-						Capacity: 23,
-						Usage:    Some[uint64](4),
-					},
-				},
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 23,
+					Usage:    Some[uint64](4),
+				}),
 			},
 		},
-	}
-	s.LiquidClients["second"].SetCapacityReport(secondCapacityReport)
+	})
 
 	return
 }
 
 func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, job, firstCapacityReport, secondCapacityReport, firstServiceInfo, secondServiceInfo := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job := commonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1073,12 +982,14 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	`, timestampUpdates(false))
 
 	// we remove first/capacity, which does not have any active commitments. The trigger removes the expired commitments.
-	delete(firstCapacityReport.Resources, "capacity")
-	firstCapacityReport.InfoVersion = 2
-	s.LiquidClients["first"].SetCapacityReport(firstCapacityReport)
-	delete(firstServiceInfo.Resources, "capacity")
-	firstServiceInfo.Version = 2
-	s.LiquidClients["first"].SetServiceInfo(firstServiceInfo)
+	s.LiquidClients["first"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		delete(report.Resources, "capacity")
+		report.InfoVersion = 2
+	})
+	s.LiquidClients["first"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		delete(info.Resources, "capacity")
+		info.Version = 2
+	})
 
 	s.Clock.StepBy(1 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1107,12 +1018,14 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	`)
 
 	// now we try to remove second/capacity, which has an active commitment. Hence, it will fail on SaveServiceInfoToDB
-	delete(secondCapacityReport.Resources, "capacity")
-	secondCapacityReport.InfoVersion = 2
-	s.LiquidClients["second"].SetCapacityReport(secondCapacityReport)
-	delete(secondServiceInfo.Resources, "capacity")
-	secondServiceInfo.Version = 2
-	s.LiquidClients["second"].SetServiceInfo(secondServiceInfo)
+	s.LiquidClients["second"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
+		delete(report.Resources, "capacity")
+		report.InfoVersion = 2
+	})
+	s.LiquidClients["second"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		delete(info.Resources, "capacity")
+		info.Version = 2
+	})
 
 	s.Clock.StepBy(1 * time.Hour)
 	mustFailT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)), errors.New(sqlext.SimplifyWhitespace(
@@ -1122,7 +1035,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	s, job, _, _, _, _ := CommonScanCapacityWithCommitmentsSetup(t)
+	s, job := commonScanCapacityWithCommitmentsSetup(t)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
