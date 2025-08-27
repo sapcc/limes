@@ -5,8 +5,6 @@ package test
 
 import (
 	"context"
-	"maps"
-	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -87,7 +85,7 @@ func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.Ser
 	if l.capacityReportError != nil {
 		return liquid.ServiceCapacityReport{}, l.capacityReportError
 	}
-	return cloneServiceCapacityReport(l.serviceCapacityReport), nil
+	return l.serviceCapacityReport.Clone(), nil
 }
 
 func (l *MockLiquidClient) SetUsageReportError(err error) {
@@ -107,7 +105,7 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 	if l.usageReportError != nil {
 		return liquid.ServiceUsageReport{}, l.usageReportError
 	}
-	return cloneServiceUsageReport(l.serviceUsageReport), nil
+	return l.serviceUsageReport.Clone(), nil
 }
 
 func (l *MockLiquidClient) SetQuotaError(err error) {
@@ -134,74 +132,4 @@ func (l *MockLiquidClient) ChangeCommitments(ctx context.Context, req liquid.Com
 		return liquid.CommitmentChangeResponse{}, l.commitmentChangeError
 	}
 	return l.commitmentChangeResponse, nil
-}
-
-func cloneServiceUsageReport(report liquid.ServiceUsageReport) liquid.ServiceUsageReport {
-	result := report
-	resources := maps.Clone(report.Resources)
-	for resName, resReport := range report.Resources {
-		resReportClone := liquid.ResourceUsageReport{Forbidden: resReport.Forbidden, Quota: resReport.Quota}
-		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
-		for az, azReport := range resReport.PerAZ {
-			azReportClone := liquid.AZResourceUsageReport{Usage: azReport.Usage, PhysicalUsage: azReport.PhysicalUsage, Quota: azReport.Quota}
-			azReportClone.Subresources = slices.Clone(azReport.Subresources)
-			for i, subres := range azReport.Subresources {
-				subres.Attributes = slices.Clone(subres.Attributes)
-				azReport.Subresources[i] = subres
-			}
-			resReportClone.PerAZ[az] = &azReportClone
-		}
-		resources[resName] = &resReportClone
-	}
-	result.Resources = resources
-
-	rates := maps.Clone(report.Rates)
-	for rateName, rateReport := range rates {
-		rateReportClone := liquid.RateUsageReport{}
-		rateReportClone.PerAZ = maps.Clone(rateReport.PerAZ)
-		rates[rateName] = &rateReportClone
-	}
-	result.Rates = rates
-
-	result.Metrics = cloneMetrics(report.Metrics)
-
-	result.SerializedState = slices.Clone(report.SerializedState)
-	return result
-}
-
-func cloneServiceCapacityReport(report liquid.ServiceCapacityReport) liquid.ServiceCapacityReport {
-	result := report
-
-	resources := maps.Clone(report.Resources)
-	for resName, resReport := range report.Resources {
-		resReportClone := liquid.ResourceCapacityReport{}
-		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
-		for az, azReport := range resReport.PerAZ {
-			azReportClone := liquid.AZResourceCapacityReport{Capacity: azReport.Capacity, Usage: azReport.Usage}
-			azReportClone.Subcapacities = slices.Clone(azReport.Subcapacities)
-			for i, subcap := range azReport.Subcapacities {
-				subcap.Attributes = slices.Clone(subcap.Attributes)
-				azReport.Subcapacities[i] = subcap
-			}
-			resReportClone.PerAZ[az] = &azReportClone
-		}
-		resources[resName] = &resReportClone
-	}
-	result.Resources = resources
-
-	result.Metrics = cloneMetrics(report.Metrics)
-	return result
-}
-
-func cloneMetrics(metrics map[liquid.MetricName][]liquid.Metric) map[liquid.MetricName][]liquid.Metric {
-	metricsClone := maps.Clone(metrics)
-	for familyName, familyMetrics := range metricsClone {
-		familyMetrics = slices.Clone(familyMetrics)
-		for i, familyMetric := range familyMetrics {
-			familyMetric.LabelValues = slices.Clone(familyMetric.LabelValues)
-			familyMetrics[i] = familyMetric
-		}
-		metricsClone[familyName] = familyMetrics
-	}
-	return metricsClone
 }
