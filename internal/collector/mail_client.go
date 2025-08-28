@@ -11,14 +11,16 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
-// MailClient is an interface that provides the methods to communicate with a mail backend service.
+// MailClient provides methods for communicating with a mail backend service.
 type MailClient interface {
-	// Builds the request to sent the mail content to a mail API.
+	// Sends a mail using the mail API.
 	PostMail(ctx context.Context, req MailRequest) error
 }
 
 // mailClientImpl is an implmentation of MailClient.
-// It builds the request to send a mail to the target mail server.
+//
+// It sends mails using the OpenStack service type "mailClient"
+// as specified in the Limes documentation.
 type mailClientImpl struct {
 	gophercloud.ServiceClient
 }
