@@ -136,7 +136,7 @@ func Test_ScanDomains(t *testing.T) {
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000001",
 		ProjectID:           4,
 		AZResourceID:        1,
@@ -149,7 +149,7 @@ func Test_ScanDomains(t *testing.T) {
 		ExpiresAt:           commitmentForOneDay.AddTo(s.Clock.Now()),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: buf,
-	}))
+	})
 	tr.DBChanges().Ignore()
 	s.Clock.StepBy(10 * time.Minute)
 	_, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})

@@ -192,14 +192,14 @@ func Test_ScanCapacity(t *testing.T) {
 		Path:          "unshared/unknown",
 		LiquidVersion: 1,
 	}
-	mustT(t, s.DB.Insert(unknownRes))
-	mustT(t, s.DB.Insert(&db.AZResource{
+	s.MustDBInsert(unknownRes)
+	s.MustDBInsert(&db.AZResource{
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: liquid.AvailabilityZoneAny,
 		Path:             "unshared/unknown/" + string(liquid.AvailabilityZoneAny),
 		RawCapacity:      100,
 		Usage:            Some[uint64](50),
-	}))
+	})
 	s.MustDBExec(
 		`DELETE FROM resources WHERE service_id = $1 AND name = $2`,
 		1, "things",

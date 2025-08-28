@@ -46,18 +46,12 @@ func Test_Consistency(t *testing.T) {
 	)
 	// add some useless *_services entries
 	newService := db.Service{Type: "whatever", NextScrapeAt: s.Clock.Now()}
-	err = s.DB.Insert(&newService)
-	if err != nil {
-		t.Error(err)
-	}
-	err = s.DB.Insert(&db.ProjectService{
+	s.MustDBInsert(&newService)
+	s.MustDBInsert(&db.ProjectService{
 		ProjectID:    1,
 		ServiceID:    newService.ID,
 		NextScrapeAt: time.Unix(0, 0).UTC(),
 	})
-	if err != nil {
-		t.Error(err)
-	}
 	tr.DBChanges().Ignore()
 
 	// check that CheckConsistency() brings everything back into a nice state

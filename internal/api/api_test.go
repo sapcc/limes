@@ -120,13 +120,6 @@ func setupTest(t *testing.T) test.Setup {
 
 	// shorthands
 	unix := func(val int64) time.Time { return time.Unix(val, 0) }
-	mustInsert := func(record any) {
-		t.Helper()
-		err := s.DB.Insert(record)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	berlin := s.GetProjectID("berlin")
 	dresden := s.GetProjectID("dresden")
@@ -233,15 +226,15 @@ func setupTest(t *testing.T) test.Setup {
 	// - Dresden also has zero-valued usage values, which is different from empty string (empty string means "usage unknown", 0 means "no usage yet")
 	// - Paris has no records at all, so the API will only display the default rate limits
 	window := Some(1 * limesrates.WindowMinutes)
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesCreate, Limit: Some[uint64](5), Window: window})
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "12345"})
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesUpdate, Limit: Some[uint64](2), Window: window})
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsCreate, Limit: Some[uint64](5), Window: window})
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "23456"})
-	mustInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsUpdate, Limit: Some[uint64](2), Window: window})
-	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: unsharedInstancesDelete, UsageAsBigint: "0"})
-	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsDelete, UsageAsBigint: "0"})
-	mustInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsUnlimited, UsageAsBigint: "1048576"})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesCreate, Limit: Some[uint64](5), Window: window})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "12345"})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: unsharedInstancesUpdate, Limit: Some[uint64](2), Window: window})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsCreate, Limit: Some[uint64](5), Window: window})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsDelete, Limit: Some[uint64](2), Window: window, UsageAsBigint: "23456"})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: berlin, RateID: sharedObjectsUpdate, Limit: Some[uint64](2), Window: window})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: dresden, RateID: unsharedInstancesDelete, UsageAsBigint: "0"})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsDelete, UsageAsBigint: "0"})
+	s.MustDBInsert(&db.ProjectRate{ProjectID: dresden, RateID: sharedObjectsUnlimited, UsageAsBigint: "1048576"})
 
 	// fill `project_commitments`: we only really care about duration, status and amount;
 	// this helper function fills most other relevant fields to look vaguely plausible
@@ -268,14 +261,14 @@ func setupTest(t *testing.T) test.Setup {
 		}
 		return &c
 	}
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "2 years"))
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 2, "confirmed", "1 year"))
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 100, "pending", "2 years"))
-	mustInsert(makeCommitment(dresden, unsharedCapacityAZOne, 5, "expired", "10 minutes"))
-	mustInsert(makeCommitment(dresden, sharedCapacityAZOne, 100, "planned", "2 years"))
-	mustInsert(makeCommitment(dresden, unsharedThingsAny, 1, "confirmed", "2 years"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "2 years"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZOne, 1, "confirmed", "1 year"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 2, "confirmed", "1 year"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZTwo, 100, "pending", "2 years"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedCapacityAZOne, 5, "expired", "10 minutes"))
+	s.MustDBInsert(makeCommitment(dresden, sharedCapacityAZOne, 100, "planned", "2 years"))
+	s.MustDBInsert(makeCommitment(dresden, unsharedThingsAny, 1, "confirmed", "2 years"))
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of confirmed vs. expired commitments above

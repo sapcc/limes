@@ -380,6 +380,15 @@ func (s Setup) MustDBExec(query string, args ...any) {
 	}
 }
 
+// MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.
+func (s Setup) MustDBInsert(pointerToRecord any) {
+	s.t.Helper()
+	err := s.DB.Insert(pointerToRecord)
+	if err != nil {
+		s.t.Fatal(err.Error())
+	}
+}
+
 func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
 	opts := append(slices.Clone(extraOpts),
 		easypg.ClearTables("project_commitments", "services", "domains"),

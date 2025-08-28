@@ -95,7 +95,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000001",
 		ID:                  1,
 		ProjectID:           1,
@@ -107,11 +107,11 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ExpiresAt:           commitmentForThreeYears.AddTo(s.Clock.Now()),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
-	}))
+	})
 
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000002",
 		ID:                  2,
 		ProjectID:           1,
@@ -123,7 +123,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ExpiresAt:           s.Clock.Now(),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
-	}))
+	})
 	tr.DBChanges().Ignore()
 
 	// job should set it to "expired", but leave it around for now
@@ -155,7 +155,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	mustT(t, err)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		ID:                   3,
 		UUID:                 "00000000-0000-0000-0000-000000000003",
 		ProjectID:            1,
@@ -169,7 +169,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Status:               liquid.CommitmentStatusSuperseded,
 		CreationContextJSON:  json.RawMessage(buf),
 		SupersedeContextJSON: Some(json.RawMessage(supersedeBuf)),
-	}))
+	})
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonConvert,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{3},
@@ -177,7 +177,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		ID:                  4,
 		UUID:                "00000000-0000-0000-0000-000000000004",
 		ProjectID:           1,
@@ -189,7 +189,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ExpiresAt:           s.Clock.Now(),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
-	}))
+	})
 	tr.DBChanges().Ignore()
 
 	// the commitment in status "superseded" should not be touched when moving to status "expired"
@@ -229,7 +229,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: json.RawMessage(buf),
 	}
-	mustT(t, s.DB.Insert(&commitment5))
+	s.MustDBInsert(&commitment5)
 	commitment6 := db.ProjectCommitment{
 		ID:                  6,
 		UUID:                "00000000-0000-0000-0000-000000000006",
@@ -244,7 +244,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Status:              liquid.CommitmentStatusSuperseded,
 		CreationContextJSON: buf,
 	}
-	mustT(t, s.DB.Insert(&commitment6))
+	s.MustDBInsert(&commitment6)
 	creationContext = db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5, 6},
@@ -252,7 +252,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	buf, err = json.Marshal(creationContext)
 	mustT(t, err)
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		ID:                  7,
 		UUID:                "00000000-0000-0000-0000-000000000007",
 		ProjectID:           1,
@@ -264,7 +264,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		ExpiresAt:           s.Clock.Now().Add(5 * time.Minute),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: json.RawMessage(buf),
-	}))
+	})
 	tr.DBChanges().Ignore()
 
 	// only the merged commitment should be set to status expired,

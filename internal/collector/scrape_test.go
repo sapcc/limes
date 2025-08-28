@@ -132,32 +132,23 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
 	// cluster_rate xOtherRate comes from the rate_limits config
-	err := s.DB.Insert(&db.Rate{
+	s.MustDBInsert(&db.Rate{
 		ServiceID:     1,
 		Name:          "xAnotherRate",
 		LiquidVersion: 1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.DB.Insert(&db.ProjectRate{
+	s.MustDBInsert(&db.ProjectRate{
 		ProjectID: 2,
 		RateID:    3,
 		Limit:     Some[uint64](10),
 		Window:    Some(1 * limesrates.WindowSeconds),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.DB.Insert(&db.ProjectRate{
+	s.MustDBInsert(&db.ProjectRate{
 		ProjectID: 1,
 		RateID:    4,
 		Limit:     Some[uint64](42),
 		Window:    Some(2 * limesrates.WindowMinutes),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	s.LiquidClients["unittest"].UsageReport.Set(liquid.ServiceUsageReport{
 		InfoVersion: 1,
@@ -422,7 +413,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	buf, err := json.Marshal(creationContext)
 	mustT(t, err)
 	for idx, amount := range []uint64{7, 8} {
-		mustT(t, s.DB.Insert(&db.ProjectCommitment{
+		s.MustDBInsert(&db.ProjectCommitment{
 			UUID:                liquid.CommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			ProjectID:           1,
 			AZResourceID:        2,
@@ -435,10 +426,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 			ExpiresAt:           commitmentForOneYear.AddTo(now),
 			Status:              liquid.CommitmentStatusConfirmed,
 			CreationContextJSON: buf,
-		}))
+		})
 	}
 	// AZResourceID = 8 has two commitments in different statuses to test aggregation over different statuses
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000003",
 		ProjectID:           2,
 		AZResourceID:        2,
@@ -451,8 +442,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
 		Status:              liquid.CommitmentStatusConfirmed,
 		CreationContextJSON: buf,
-	}))
-	mustT(t, s.DB.Insert(&db.ProjectCommitment{
+	})
+	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000004",
 		ProjectID:           2,
 		AZResourceID:        2,
@@ -465,7 +456,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		ExpiresAt:           commitmentForOneYear.AddTo(now),
 		Status:              liquid.CommitmentStatusPending,
 		CreationContextJSON: buf,
-	}))
+	})
 	tr.DBChanges().Ignore()
 
 	// test that changes in rates are reflected in the db
