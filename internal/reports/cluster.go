@@ -34,7 +34,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_services ps ON ps.service_id = cs.id
 	  -- no left join, entries will only appear when there is some project level entry
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = ps.project_id
@@ -52,14 +52,14 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	 GROUP BY cs.type, cr.name
 `)
 
-var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT cs.type, cr.name, cazr.az, cazr.raw_capacity, cazr.usage, cazr.subcapacities, cs.scraped_at
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  LEFT OUTER JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  LEFT OUTER JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 ORDER BY cazr.az
-`)
+`))
 
 var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -74,7 +74,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 	 GROUP BY cs.type, cr.name, cazr.az, pcs.duration

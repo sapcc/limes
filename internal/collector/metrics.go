@@ -404,13 +404,13 @@ func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seri
 	}
 }
 
-var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
+var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT cs.type, cr.name, JSON_OBJECT_AGG(car.az, car.raw_capacity), JSON_OBJECT_AGG(car.az, car.usage)
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id
-	  JOIN az_resources car ON car.resource_id = cr.id
+	  JOIN az_resources car ON car.resource_id = cr.id AND car.az != {{liquid.AvailabilityZoneTotal}}
 	 GROUP BY cs.type, cr.name
-`)
+`))
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, cs.type, cr.name, SUM(pr.quota)
@@ -455,7 +455,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND cs.type= pcmea.TYPE AND cr.name = pcmea.name
 `)
 
-var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
+var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums_by_status AS (
 	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
@@ -469,12 +469,12 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cr.name, cazr.az, pazr.usage, pcs.amount_by_status
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
-`)
+`))
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, cs.type, cra.name, pra.usage_as_bigint

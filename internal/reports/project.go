@@ -38,11 +38,11 @@ var (
 	 ORDER BY p.uuid
 `)
 
-	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
+	projectReportResourcesQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.forbid_autogrowth, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
 	  FROM services cs
 	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
 	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
@@ -50,7 +50,7 @@ var (
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
 	 WHERE %s {{AND cs.type = $service_type}}
 	 ORDER BY p.uuid, cazr.az
-`)
+`))
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT cs.type, cr.name, cazr.az, pc.duration,
@@ -59,7 +59,7 @@ var (
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	  FROM services cs
 	  JOIN resources cr on cr.service_id = cs.id
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	  JOIN az_resources cazr ON cazr.resource_id = cr.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
 	 WHERE pc.project_id = $1
 	 GROUP BY cs.type, cr.name, cazr.az, pc.duration
