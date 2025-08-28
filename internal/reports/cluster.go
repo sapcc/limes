@@ -34,7 +34,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_services ps ON ps.service_id = s.id
 	  -- no left join, entries will only appear when there is some project level entry
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = ps.project_id
@@ -52,14 +52,14 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	 GROUP BY s.type, r.name
 `)
 
-var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, azr.raw_capacity, azr.usage, azr.subcapacities, s.scraped_at
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  LEFT OUTER JOIN az_resources azr ON azr.resource_id = r.id
+	  LEFT OUTER JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	 WHERE TRUE {{AND s.type = $service_type}}
 	 ORDER BY azr.az
-`)
+`))
 
 var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -74,7 +74,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = azr.id
 	 WHERE TRUE {{AND s.type = $service_type}}
 	 GROUP BY s.type, r.name, azr.az, pcs.duration
