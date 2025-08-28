@@ -26,15 +26,15 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
-var domainReportQuery2 = sqlext.SimplifyWhitespace(`
+var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_az_sums AS (
 	  SELECT pazr.project_id, r.id AS resource_id,
 	         SUM(pazr.usage) AS usage,
 	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
 	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
 	    FROM project_az_resources as pazr
-		JOIN az_resources as azr ON azr.id = pazr.az_resource_id
-		JOIN resources as r ON r.id = azr.resource_id
+	    JOIN az_resources as cazr ON cazr.id = pazr.az_resource_id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
+	    JOIN resources as r ON r.id = cazr.resource_id
 	   GROUP BY pazr.project_id, r.id
 	)
 	SELECT p.domain_id, s.type, r.name, SUM(pr.quota), SUM(pas.usage),
@@ -48,7 +48,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = r.id
 	  LEFT OUTER JOIN project_az_sums pas ON pas.project_id = p.id AND pas.resource_id = r.id 
 	 WHERE %s {{AND s.type = $service_type}} GROUP BY p.domain_id, s.type, r.name
-`)
+`))
 
 var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -63,7 +63,7 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0)))
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = s.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = r.id
@@ -86,7 +86,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = s.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = r.id

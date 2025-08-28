@@ -206,10 +206,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
 		for _, azRes := range dbAZResourcesByResourceID[res.ID] {
 			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
+			// TODO: fill az=total (for now it is ignored and skipped)
+			if azRes.AvailabilityZone == liquid.AvailabilityZoneTotal {
+				continue
+			}
 			// az=unknown and az=any do not have to exist
 			// specific AZs do not need capacity when az=any has capacity (sum should be correct)
 			if !azResExists && !slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, azRes.AvailabilityZone) && resourceTopology != liquid.FlatTopology && !anyAZexists {
-				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", azRes.AvailabilityZone, res.Name, service.Type)
+				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, azRes.AvailabilityZone, service.Type)
 			}
 			// the unknown AZ is the only one which can vanish from the report, we treat this as capacity=0 and usage=NULL
 			if !azResExists && azRes.AvailabilityZone == liquid.AvailabilityZoneUnknown {

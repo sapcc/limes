@@ -404,13 +404,13 @@ func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seri
 	}
 }
 
-var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
+var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity), JSON_OBJECT_AGG(azr.az, azr.usage)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	 GROUP BY s.type, r.name
-`)
+`))
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, s.type, r.name, SUM(pr.quota)
@@ -455,7 +455,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND s.type= pcmea.TYPE AND r.name = pcmea.name
 `)
 
-var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
+var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums_by_status AS (
 	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
@@ -466,15 +466,15 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
 	    FROM project_commitment_sums_by_status
 	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status
+	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, cazr.az, pazr.usage, pcs.amount_by_status
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources cazr ON cazr.resource_id = r.id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
 	  CROSS JOIN domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
-	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = azr.id AND pcs.project_id = p.id
-`)
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = cazr.id AND pcs.project_id = p.id
+`))
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, s.type, ra.name, pra.usage_as_bigint

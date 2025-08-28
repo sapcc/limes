@@ -1,13 +1,17 @@
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/capacity/any');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (10, 4, 'any', 0, 'unshared/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (10, 3, 'az-two', 0, 'unshared/capacity/az-two');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (11, 3, 'total', 0, 'unshared/capacity/total');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (12, 3, 'unknown', 0, 'unshared/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (13, 4, 'any', 0, 'unshared/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (14, 4, 'total', 0, 'unshared/things/total');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'shared/capacity/az-one');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'shared/capacity/az-two');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'unknown', 0, 'shared/capacity/unknown');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 2, 'any', 0, 'shared/things/any');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 3, 'any', 0, 'unshared/capacity/any');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 3, 'az-one', 0, 'unshared/capacity/az-one');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'az-two', 0, 'unshared/capacity/az-two');
-INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'unknown', 0, 'unshared/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'total', 0, 'shared/capacity/total');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 1, 'unknown', 0, 'shared/capacity/unknown');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 2, 'any', 0, 'shared/things/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 2, 'total', 0, 'shared/things/total');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
+INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
