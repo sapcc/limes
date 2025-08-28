@@ -15,6 +15,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -672,8 +673,8 @@ func Test_ScanManualCapacity(t *testing.T) {
 	)
 }
 
-func commonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job) {
-	firstServiceInfo := liquid.ServiceInfo{
+func commonScanCapacityWithCommitmentsSetup() (srvInfo liquid.ServiceInfo, firstCapacityReport, secondCapacityReport liquid.ServiceCapacityReport) {
+	srvInfo = liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
@@ -690,72 +691,42 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T) (s test.Setup, scrapeJ
 			},
 		},
 	}
-	secondServiceInfo := liquid.ServiceInfo{
-		Version: 1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"capacity": {
-				Unit:        liquid.UnitNone,
-				Topology:    liquid.AZAwareTopology,
-				HasCapacity: true,
-				HasQuota:    true,
-			},
-			"things": {
-				Unit:        liquid.UnitNone,
-				Topology:    liquid.FlatTopology,
-				HasCapacity: true,
-				HasQuota:    true,
-			},
-		},
-	}
-	s = test.NewSetup(t,
-		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
-		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
-		test.WithMockLiquidClient("first", firstServiceInfo),
-		test.WithMockLiquidClient("second", secondServiceInfo),
-		test.WithLiquidConnections,
-	)
-	scrapeJob = s.Collector.CapacityScrapeJob(s.Registry)
 
-	s.LiquidClients["first"].CapacityReport.Set(liquid.ServiceCapacityReport{
+	azReportForFirst := liquid.AZResourceCapacityReport{Capacity: 42, Usage: Some[uint64](8)}
+	firstCapacityReport = liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {Capacity: 42, Usage: Some[uint64](8)},
-					"az-two": {Capacity: 42, Usage: Some[uint64](8)},
+					"az-one": &azReportForFirst,
+					"az-two": &azReportForFirst,
 				},
 			},
-			"things": {
-				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
-					Capacity: 42,
-					Usage:    Some[uint64](8),
-				}),
-			},
+			"things": {PerAZ: liquid.InAnyAZ(azReportForFirst)},
 		},
-	})
-	s.LiquidClients["second"].CapacityReport.Set(liquid.ServiceCapacityReport{
-		InfoVersion: 1,
-		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
-			"capacity": {
-				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
-					"az-one": {Capacity: 23, Usage: Some[uint64](4)},
-					"az-two": {Capacity: 23, Usage: Some[uint64](4)},
-				},
-			},
-			"things": {
-				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
-					Capacity: 23,
-					Usage:    Some[uint64](4),
-				}),
-			},
-		},
-	})
+	}
+
+	azReportForSecond := liquid.AZResourceCapacityReport{Capacity: 23, Usage: Some[uint64](4)}
+	secondCapacityReport = firstCapacityReport.Clone()
+	secondCapacityReport.Resources["capacity"].PerAZ["az-one"] = &azReportForSecond
+	secondCapacityReport.Resources["capacity"].PerAZ["az-two"] = &azReportForSecond
+	secondCapacityReport.Resources["things"].PerAZ[liquid.AvailabilityZoneAny] = &azReportForSecond
 
 	return
 }
 
 func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, job := commonScanCapacityWithCommitmentsSetup(t)
+	srvInfo, firstCapacityReport, secondCapacityReport := commonScanCapacityWithCommitmentsSetup()
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
+		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+		test.WithMockLiquidClient("first", srvInfo),
+		test.WithMockLiquidClient("second", srvInfo),
+		test.WithLiquidConnections,
+	)
+	s.LiquidClients["first"].CapacityReport.Set(firstCapacityReport)
+	s.LiquidClients["second"].CapacityReport.Set(secondCapacityReport)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1035,7 +1006,44 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	s, job := commonScanCapacityWithCommitmentsSetup(t)
+	srvInfo, firstCapacityReport, secondCapacityReport := commonScanCapacityWithCommitmentsSetup()
+
+	s := test.NewSetup(t,
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany:
+							- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
+							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
+			liquids:
+				first:
+					area: first
+					commitment_behavior_per_resource: &commitment-on-capacity
+						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ]}]}}
+				second:
+					area: second
+					commitment_behavior_per_resource: *commitment-on-capacity
+			resource_behavior:
+				- { resource: second/capacity, identity_in_v1_api: service/resource }
+			mail_notifications:
+				templates:
+					confirmed_commitments:
+						subject: "Your recent commitment confirmations"
+						body: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+		`),
+		test.WithMockLiquidClient("first", srvInfo),
+		test.WithMockLiquidClient("second", srvInfo),
+		test.WithLiquidConnections,
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
+	)
+	s.LiquidClients["first"].CapacityReport.Set(firstCapacityReport)
+	s.LiquidClients["second"].CapacityReport.Set(secondCapacityReport)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1055,19 +1063,40 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		))
 	}
 
+	// day 1: confirm two commitments in different projects -> one mail will be scheduled per project
+	committedForTwoDays := must.Return(limesresources.ParseCommitmentDuration("2 days"))
+	committedForTenDays := must.Return(limesresources.ParseCommitmentDuration("10 days"))
+	s.MustDBInsert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000001",
+		ProjectID:           s.GetProjectID("berlin"),
+		AZResourceID:        s.GetAZResourceID("first", "capacity", "az-one"),
+		Amount:              10,
+		CreatedAt:           time.Unix(0, 0),
+		CreatorUUID:         "dummy",
+		CreatorName:         "dummy",
+		ConfirmBy:           Some(s.Clock.Now()),
+		Duration:            committedForTenDays,
+		ExpiresAt:           committedForTenDays.AddTo(s.Clock.Now()),
+		Status:              liquid.CommitmentStatusPlanned,
+		CreationContextJSON: json.RawMessage(`{}`),
+		NotifyOnConfirm:     true,
+	})
+	s.MustDBInsert(&db.ProjectCommitment{
+		UUID:                "00000000-0000-0000-0000-000000000002",
+		ProjectID:           s.GetProjectID("dresden"),
+		AZResourceID:        s.GetAZResourceID("second", "capacity", "az-one"),
+		Amount:              1,
+		CreatedAt:           s.Clock.Now(),
+		CreatorUUID:         "dummy",
+		CreatorName:         "dummy",
+		ConfirmBy:           Some(s.Clock.Now().Add(12 * time.Hour)),
+		Duration:            committedForTwoDays,
+		ExpiresAt:           committedForTwoDays.AddTo(s.Clock.Now()),
+		Status:              liquid.CommitmentStatusPlanned,
+		CreationContextJSON: json.RawMessage(`{}`),
+		NotifyOnConfirm:     true,
+	})
 	tr.DBChanges().Ignore()
-
-	// day 1: schedule two mails for different projects
-	// (Commitment ID: 1) Confirmed commitment for first/capacity in berlin az-one (amount = 10).
-	s.MustDBExec("UPDATE project_commitments SET notify_on_confirm=true WHERE id=1;")
-	// (Commitment ID: 11) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
-	s.MustDBExec(`
-			INSERT INTO project_commitments
-			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(11, '00000000-0000-0000-0000-000000000011', 2, $4, 1, $1, 'dummy', 'dummy', $2, '2 days', $3, 'planned', true, '{}'::jsonb)`,
-		s.Clock.Now(), s.Clock.Now().Add(12*time.Hour), s.Clock.Now().Add(48*time.Hour),
-		s.GetAZResourceID("second", "capacity", "az-one"),
-	)
 
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1075,45 +1104,50 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_az_resources SET quota = 10 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = 86415, notify_on_confirm = TRUE WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, notify_on_confirm, creation_context_json) VALUES (11, '00000000-0000-0000-0000-000000000011', 2, 11, 'confirmed', 1, '2 days', 10, 'dummy', 'dummy', 43210, 86420, 172810, TRUE, '{}');
+		UPDATE project_az_resources SET quota = 1 WHERE id = 17 AND project_id = 2 AND az_resource_id = 7;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[2]d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:service Resource:resource AZ:az-one', %[2]d);
-		UPDATE project_resources SET quota = 260 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		UPDATE project_resources SET quota = 10 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources SET quota = 1 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
+		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
 		%s
 	`, scrapedAt1.Unix(), scrapedAt2.Unix(), timestampUpdates())
 
-	// day 2: schedule one mail with two commitments for the same project.
-	// (Commitment IDs: 12, 13) Confirmed commitment for second/capacity in dresden az-one (amount = 1).
-	s.MustDBExec(`
-			INSERT INTO project_commitments
-			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(12, '00000000-0000-0000-0000-000000000012', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
-		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
-		s.GetAZResourceID("second", "capacity", "az-one"),
-	)
-	s.MustDBExec(`
-			INSERT INTO project_commitments
-			(id, uuid, project_id, az_resource_id, amount, created_at, creator_uuid, creator_name, duration, expires_at, status, notify_on_confirm, creation_context_json)
-			VALUES(13, '00000000-0000-0000-0000-000000000013', 2, $3, 1, $1, 'dummy', 'dummy', '2 days', $2, 'pending', true, '{}'::jsonb)`,
-		s.Clock.Now(), s.Clock.Now().Add(48*time.Hour),
-		s.GetAZResourceID("second", "capacity", "az-one"),
-	)
+	// day 2: confirm two commitments in the same project -> only one mail will be scheduled regarding both confirmations
+	for _, uuid := range []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000003", "00000000-0000-0000-0000-000000000004"} {
+		s.MustDBInsert(&db.ProjectCommitment{
+			UUID:                uuid,
+			ProjectID:           s.GetProjectID("dresden"),
+			AZResourceID:        s.GetAZResourceID("second", "capacity", "az-one"),
+			Amount:              1,
+			CreatedAt:           s.Clock.Now(),
+			CreatorUUID:         "dummy",
+			CreatorName:         "dummy",
+			ConfirmBy:           Some(s.Clock.Now()),
+			Duration:            committedForTwoDays,
+			ExpiresAt:           committedForTwoDays.AddTo(s.Clock.Now()),
+			Status:              liquid.CommitmentStatusPlanned,
+			CreationContextJSON: json.RawMessage(`{}`),
+			NotifyOnConfirm:     true,
+		})
+	}
+	tr.DBChanges().Ignore()
+
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_az_resources SET quota = 7 WHERE id = 14 AND project_id = 2 AND az_resource_id = 10;
-		UPDATE project_az_resources SET quota = 2 WHERE id = 15 AND project_id = 2 AND az_resource_id = 11;
-		UPDATE project_az_resources SET quota = 110 WHERE id = 6 AND project_id = 1 AND az_resource_id = 5;
-		UPDATE project_commitments SET status = 'expired' WHERE id = 11 AND uuid = '00000000-0000-0000-0000-000000000011' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, notify_on_confirm, creation_context_json) VALUES (12, '00000000-0000-0000-0000-000000000012', 2, 11, 'confirmed', 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, TRUE, '{}');
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, notify_on_confirm, creation_context_json) VALUES (13, '00000000-0000-0000-0000-000000000013', 2, 11, 'confirmed', 1, '2 days', 86420, 'dummy', 'dummy', 172830, 259220, TRUE, '{}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = 172825 WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'pending' WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one', %d);
-		UPDATE project_resources SET quota = 360 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
-		%s
+		UPDATE project_az_resources SET quota = 2 WHERE id = 17 AND project_id = 2 AND az_resource_id = 7;
+		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one', %[1]d);
+		UPDATE project_resources SET quota = 2 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
+		%[2]s
 	`, scrapedAt2.Unix(), timestampUpdates())
 }

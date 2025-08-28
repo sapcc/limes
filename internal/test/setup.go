@@ -86,13 +86,17 @@ func WithMockLiquidClient(serviceType db.ServiceType, serviceInfo liquid.Service
 
 // WithLiquidConnections is a SetupOption that sets up the Cluster the same way
 // as the limes-collect task would do. This means a) the LiquidConnections are filled
-// and b) persisted to the database.
+// and b) the respective `services`, `resources` and `az_resources` records are
+// persisted to the database.
 func WithLiquidConnections(params *setupParams) {
 	params.WithLiquidConnections = true
 }
 
 // WithPersistedServiceInfo is a SetupOption that fills ServiceInfo into the DB before setting up the Cluster instance.
 // This is used to test how Cluster.Connect() reacts to preexisting metadata in the DB.
+//
+// Most tests will want to use EITHER this OR test.WithLiquidConnections().
+// Either method will fill the `services`, `resources` and `az_resources` tables.
 func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
 		params.PersistedServiceInfo[st] = si
