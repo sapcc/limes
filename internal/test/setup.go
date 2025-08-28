@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,8 +34,6 @@ import (
 )
 
 type setupParams struct {
-	DBSetupOptions           []easypg.TestSetupOption
-	DBFixtureFile            string
 	ConfigYAML               string
 	APIMiddlewares           []httpapi.API
 	WithInitialDiscovery     bool
@@ -48,14 +45,6 @@ type setupParams struct {
 
 // SetupOption is an option that can be given to NewSetup().
 type SetupOption func(*setupParams)
-
-// WithDBFixtureFile is a SetupOption that prefills the test DB by executing
-// the SQL statements in the given file.
-func WithDBFixtureFile(file string) SetupOption {
-	return func(params *setupParams) {
-		params.DBSetupOptions = append(params.DBSetupOptions, easypg.LoadSQLFile(file))
-	}
-}
 
 // WithConfig is a SetupOption that initializes the test cluster from a
 // configuration provided as YAML. This option is effectively required, as an
@@ -186,15 +175,20 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	if params.WithEmptyRecordsAsNeeded && !params.WithInitialDiscovery {
 		t.Fatal("can not create empty DB records since no projects are being discovered during setup")
 	}
-	if params.WithEmptyRecordsAsNeeded && params.DBFixtureFile != "" {
-		t.Fatal("can not create empty DB records automatically after loading a DB fixture file")
-	}
 
 	var s Setup
 	s.Ctx = t.Context()
-	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
 	s.t = t
+
+	s.DB = db.InitORM(easypg.ConnectForTest(t, db.Configuration(),
+		easypg.ClearTables("project_commitments", "services", "domains"),
+		easypg.ResetPrimaryKeys(
+			"services", "resources", "rates", "az_resources",
+			"domains", "projects", "project_commitments", "project_mail_notifications",
+			"project_services", "project_resources", "project_az_resources", "project_rates",
+		),
+	))
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
 	s.LiquidClients = params.LiquidClients
@@ -391,18 +385,6 @@ func (s Setup) MustDBInsert(pointerToRecord any) {
 	if err != nil {
 		s.t.Fatal(err.Error())
 	}
-}
-
-func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
-	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments", "services", "domains"),
-		easypg.ResetPrimaryKeys(
-			"services", "resources", "rates", "az_resources",
-			"domains", "projects", "project_commitments", "project_mail_notifications",
-			"project_services", "project_resources", "project_az_resources", "project_rates",
-		),
-	)
-	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
 func failIfErrs(t *testing.T, errs errext.ErrorSet) {
