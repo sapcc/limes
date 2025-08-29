@@ -226,6 +226,7 @@ const (
 	CommitmentReasonRenew   CommitmentReason = "renew"
 )
 
+// MailNotification contains a record from the `project_mail_notifications` table.
 type MailNotification struct {
 	ID                int64     `db:"id"`
 	ProjectID         ProjectID `db:"project_id"`
