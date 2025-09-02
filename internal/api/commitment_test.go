@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
@@ -853,6 +854,126 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
+func TestGetPublicCommitments(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
+	transferToken := test.GenerateDummyToken()
+
+	// GET returns an empty list when there are no commitments at all
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments?service=second&resource=capacity",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+	}.Check(t, s.Handler)
+
+	// create a commitment
+	s.Clock.StepBy(1 * time.Hour)
+	req1 := assert.JSONObject{
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            10,
+		"duration":          "2 hours",
+	}
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"confirmed_at":      s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		"status":            "confirmed",
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+	}.Check(t, s.Handler)
+
+	// foreach transfer status...
+	allStatuses := []limesresources.CommitmentTransferStatus{
+		limesresources.CommitmentTransferStatusNone,
+		limesresources.CommitmentTransferStatusUnlisted,
+		limesresources.CommitmentTransferStatusPublic,
+	}
+	for _, status := range allStatuses {
+		// set the commitment into that status
+		if status == limesresources.CommitmentTransferStatusNone {
+			delete(resp1, "transfer_status")
+			delete(resp1, "transfer_token")
+		} else {
+			resp1["transfer_status"] = status
+			resp1["transfer_token"] = transferToken
+		}
+		assert.HTTPRequest{
+			Method:       "POST",
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+			ExpectStatus: http.StatusAccepted,
+			ExpectBody:   assert.JSONObject{"commitment": resp1},
+			Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": status}},
+		}.Check(t, s.Handler)
+
+		// check that it only shows up in the public commitments list for CommitmentTransferStatusPublic
+		resp := assert.JSONObject{}
+		if status == limesresources.CommitmentTransferStatusPublic {
+			// when shown as a public commitment, some attributes are missing
+			cloned := maps.Clone(resp1)
+			delete(cloned, "can_be_deleted")
+			delete(cloned, "creator_uuid")
+			delete(cloned, "creator_name")
+			resp["commitments"] = []assert.JSONObject{cloned}
+		} else {
+			resp["commitments"] = []assert.JSONObject{}
+		}
+		assert.HTTPRequest{
+			Method:       http.MethodGet,
+			Path:         "/v1/public-commitments?service=second&resource=capacity",
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   resp,
+		}.Check(t, s.Handler)
+	}
+}
+
+func TestGetPublicCommitmentsErrorCases(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
+
+	// invalid service/resource selection
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service and/or resource: \"/\"\n"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments?service=unknown&resource=capacity",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service and/or resource: \"unknown/capacity\"\n"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments?service=first&resource=unknown",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service and/or resource: \"first/unknown\"\n"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments?service=first&resource=capacity",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
+	}.Check(t, s.Handler)
+}
+
 func TestPutCommitmentErrorCases(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsYAML)
 
@@ -1182,6 +1303,20 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 			},
 		},
 	})
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+
+	// test resetting a commitment to CommitmentTransferStatusNone (this will also clear out its transfer token)
+	delete(resp2, "transfer_status")
+	delete(resp2, "transfer_token")
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/start-transfer",
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": ""}},
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp2},
+	}.Check(t, s.Handler)
+
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	// Negative Test, amount = 0.
 	assert.HTTPRequest{

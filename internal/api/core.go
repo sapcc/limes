@@ -147,6 +147,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/rates/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProjectRates)
 	r.Methods("PUT").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProjectRates)
 
+	r.Methods("GET").Path("/v1/public-commitments").HandlerFunc(p.GetPublicCommitments)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments").HandlerFunc(p.GetProjectCommitments)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/new").HandlerFunc(p.CreateProjectCommitment)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/merge").HandlerFunc(p.MergeProjectCommitments)
