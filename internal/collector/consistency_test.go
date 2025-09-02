@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"testing"
@@ -9,17 +9,17 @@ import (
 
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 )
 
 func Test_Consistency(t *testing.T) {
 	s, cluster := keystoneTestCluster(t)
 	_ = cluster
-	c := getCollector(t, s)
-	consistencyJob := c.CheckConsistencyJob(s.Registry)
+	consistencyJob := s.Collector.CheckConsistencyJob(s.Registry)
 
 	// run ScanDomains once to establish a baseline
-	_, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
+	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
@@ -37,23 +37,21 @@ func Test_Consistency(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	// remove some project_services entries
-	_, err = s.DB.Exec(`DELETE FROM project_services WHERE id = $1`, 2)
-	if err != nil {
-		t.Error(err)
-	}
+	s.MustDBExec(`
+			DELETE FROM project_services
+			WHERE project_id = (SELECT id FROM projects WHERE name = $1)
+			AND service_id = (SELECT id FROM services WHERE type = $2)
+		`,
+		"berlin", "unshared",
+	)
 	// add some useless *_services entries
-	err = s.DB.Insert(&db.Service{Type: "whatever", NextScrapeAt: s.Clock.Now()})
-	if err != nil {
-		t.Error(err)
-	}
-	err = s.DB.Insert(&db.ProjectService{
+	newService := db.Service{Type: "whatever", NextScrapeAt: s.Clock.Now()}
+	s.MustDBInsert(&newService)
+	s.MustDBInsert(&db.ProjectService{
 		ProjectID:    1,
-		ServiceID:    3,
+		ServiceID:    newService.ID,
 		NextScrapeAt: time.Unix(0, 0).UTC(),
 	})
-	if err != nil {
-		t.Error(err)
-	}
 	tr.DBChanges().Ignore()
 
 	// check that CheckConsistency() brings everything back into a nice state

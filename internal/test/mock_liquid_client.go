@@ -5,8 +5,6 @@ package test
 
 import (
 	"context"
-	"maps"
-	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -36,78 +34,41 @@ func DefaultLiquidServiceInfo() liquid.ServiceInfo {
 	}
 }
 
-// MockLiquidClient implements the LiquidClient interface
+// MockLiquidClient implements the LiquidClient interface.
 type MockLiquidClient struct {
-	serviceInfo                 liquid.ServiceInfo
-	serviceCapacityReport       liquid.ServiceCapacityReport
-	serviceUsageReport          liquid.ServiceUsageReport
-	commitmentChangeResponse    liquid.CommitmentChangeResponse
-	usageReportError            error
-	capacityReportError         error
+	ServiceInfo                 MockLiquidSlot[liquid.ServiceInfo]
+	CapacityReport              MockLiquidSlot[liquid.ServiceCapacityReport]
+	UsageReport                 MockLiquidSlot[liquid.ServiceUsageReport]
+	CommitmentChangeResponse    MockLiquidSlot[liquid.CommitmentChangeResponse]
 	quotaError                  error
-	serviceInfoError            error
-	commitmentChangeError       error
 	LastCommitmentChangeRequest liquid.CommitmentChangeRequest
 }
 
 // GetInfo implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
-	if l.serviceInfoError != nil {
-		return liquid.ServiceInfo{}, l.serviceInfoError
-	}
-	return l.serviceInfo, nil
-}
-
-func (l *MockLiquidClient) SetServiceInfoError(err error) {
-	l.serviceInfoError = err
-}
-
-func (l *MockLiquidClient) SetServiceInfo(info liquid.ServiceInfo) {
-	l.serviceInfo = info
+	return l.ServiceInfo.get()
 }
 
 func (l *MockLiquidClient) IncrementServiceInfoVersion() {
-	l.serviceInfo.Version++
-}
-
-func (l *MockLiquidClient) SetCapacityReportError(err error) {
-	l.capacityReportError = err
-}
-
-func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
-	l.serviceCapacityReport.InfoVersion++
-}
-
-func (l *MockLiquidClient) SetCapacityReport(capacityReport liquid.ServiceCapacityReport) {
-	l.serviceCapacityReport = capacityReport
+	l.ServiceInfo.Modify(func(info *liquid.ServiceInfo) { info.Version++ })
 }
 
 // GetCapacityReport implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
-	if l.capacityReportError != nil {
-		return liquid.ServiceCapacityReport{}, l.capacityReportError
-	}
-	return cloneServiceCapacityReport(l.serviceCapacityReport), nil
+	return l.CapacityReport.get()
 }
 
-func (l *MockLiquidClient) SetUsageReportError(err error) {
-	l.usageReportError = err
-}
-
-func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
-	l.serviceUsageReport.InfoVersion++
-}
-
-func (l *MockLiquidClient) SetUsageReport(usageReport liquid.ServiceUsageReport) {
-	l.serviceUsageReport = usageReport
+func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
+	l.CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) { report.InfoVersion++ })
 }
 
 // GetUsageReport implements the core.LiquidClient interface.
 func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
-	if l.usageReportError != nil {
-		return liquid.ServiceUsageReport{}, l.usageReportError
-	}
-	return cloneServiceUsageReport(l.serviceUsageReport), nil
+	return l.UsageReport.get()
+}
+
+func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
+	l.UsageReport.Modify(func(report *liquid.ServiceUsageReport) { report.InfoVersion++ })
 }
 
 func (l *MockLiquidClient) SetQuotaError(err error) {
@@ -119,89 +80,47 @@ func (l *MockLiquidClient) PutQuota(ctx context.Context, projectUUID string, req
 	return l.quotaError
 }
 
-func (l *MockLiquidClient) SetCommitmentChangeError(err error) {
-	l.commitmentChangeError = err
-}
-
-func (l *MockLiquidClient) SetCommitmentChangeResponse(response liquid.CommitmentChangeResponse) {
-	l.commitmentChangeResponse = response
-}
-
 // ChangeCommitments implements the core.LiquidClient interface.
 func (l *MockLiquidClient) ChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest) (result liquid.CommitmentChangeResponse, err error) {
 	l.LastCommitmentChangeRequest = req
-	if l.commitmentChangeError != nil {
-		return liquid.CommitmentChangeResponse{}, l.commitmentChangeError
-	}
-	return l.commitmentChangeResponse, nil
+	return l.CommitmentChangeResponse.get()
 }
 
-func cloneServiceUsageReport(report liquid.ServiceUsageReport) liquid.ServiceUsageReport {
-	result := report
-	resources := maps.Clone(report.Resources)
-	for resName, resReport := range report.Resources {
-		resReportClone := liquid.ResourceUsageReport{Forbidden: resReport.Forbidden, Quota: resReport.Quota}
-		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
-		for az, azReport := range resReport.PerAZ {
-			azReportClone := liquid.AZResourceUsageReport{Usage: azReport.Usage, PhysicalUsage: azReport.PhysicalUsage, Quota: azReport.Quota}
-			azReportClone.Subresources = slices.Clone(azReport.Subresources)
-			for i, subres := range azReport.Subresources {
-				subres.Attributes = slices.Clone(subres.Attributes)
-				azReport.Subresources[i] = subres
-			}
-			resReportClone.PerAZ[az] = &azReportClone
-		}
-		resources[resName] = &resReportClone
-	}
-	result.Resources = resources
-
-	rates := maps.Clone(report.Rates)
-	for rateName, rateReport := range rates {
-		rateReportClone := liquid.RateUsageReport{}
-		rateReportClone.PerAZ = maps.Clone(rateReport.PerAZ)
-		rates[rateName] = &rateReportClone
-	}
-	result.Rates = rates
-
-	result.Metrics = cloneMetrics(report.Metrics)
-
-	result.SerializedState = slices.Clone(report.SerializedState)
-	return result
+type cloneableLiquidData[Self any] interface {
+	Clone() Self
 }
 
-func cloneServiceCapacityReport(report liquid.ServiceCapacityReport) liquid.ServiceCapacityReport {
-	result := report
-
-	resources := maps.Clone(report.Resources)
-	for resName, resReport := range report.Resources {
-		resReportClone := liquid.ResourceCapacityReport{}
-		resReportClone.PerAZ = maps.Clone(resReport.PerAZ)
-		for az, azReport := range resReport.PerAZ {
-			azReportClone := liquid.AZResourceCapacityReport{Capacity: azReport.Capacity, Usage: azReport.Usage}
-			azReportClone.Subcapacities = slices.Clone(azReport.Subcapacities)
-			for i, subcap := range azReport.Subcapacities {
-				subcap.Attributes = slices.Clone(subcap.Attributes)
-				azReport.Subcapacities[i] = subcap
-			}
-			resReportClone.PerAZ[az] = &azReportClone
-		}
-		resources[resName] = &resReportClone
-	}
-	result.Resources = resources
-
-	result.Metrics = cloneMetrics(report.Metrics)
-	return result
+// MockLiquidSlot contains a prepared response (and/or error) to a LIQUID function call.
+type MockLiquidSlot[T cloneableLiquidData[T]] struct {
+	data T
+	err  error
 }
 
-func cloneMetrics(metrics map[liquid.MetricName][]liquid.Metric) map[liquid.MetricName][]liquid.Metric {
-	metricsClone := maps.Clone(metrics)
-	for familyName, familyMetrics := range metricsClone {
-		familyMetrics = slices.Clone(familyMetrics)
-		for i, familyMetric := range familyMetrics {
-			familyMetric.LabelValues = slices.Clone(familyMetric.LabelValues)
-			familyMetrics[i] = familyMetric
-		}
-		metricsClone[familyName] = familyMetrics
+func (s MockLiquidSlot[T]) get() (T, error) {
+	if s.err != nil {
+		var zero T
+		return zero, s.err
 	}
-	return metricsClone
+	// This Clone() ensures that the receiver of the data does not mess with
+	// data structures that are also held by us (thus messing up the next get() call).
+	return s.data.Clone(), nil
+}
+
+// Modify changes the held data in-place by executing the provided callback.
+// The data instance will be cloned after the callback to ensure that the test
+// function cannot smuggle live references to the data.
+func (s *MockLiquidSlot[T]) Modify(action func(*T)) {
+	data := s.data
+	action(&data)
+	s.data = data.Clone()
+}
+
+// Set replaces the held data.
+func (s *MockLiquidSlot[T]) Set(data T) {
+	s.data = data.Clone()
+}
+
+// SetError sets an error to return instead of the data, or clears it if nil is given.
+func (s *MockLiquidSlot[T]) SetError(err error) {
+	s.err = err
 }

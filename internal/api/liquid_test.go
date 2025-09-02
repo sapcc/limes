@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"net/http"
@@ -10,7 +10,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -20,18 +19,11 @@ const (
 		discovery:
 			method: static
 			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
+				domains: [{ name: domain-1, id: uuid-for-domain-1 }]
 				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
+					uuid-for-domain-1: [{ name: project-1, id: uuid-for-project-1, parent_id: uuid-for-domain-1 }]
 		liquids:
-			unittest:
-				area: testing
+			unittest: { area: testing }
 		resource_behavior:
 		- { resource: unittest/capacity, overcommit_factor: 1.5 }
 	`
@@ -41,11 +33,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 	t.Helper()
 	s = test.NewSetup(t,
 		test.WithConfig(liquidCapacityTestConfigYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithProject(core.KeystoneProject{
-			Name: "project-1",
-			UUID: "uuid-for-project-1",
-		}),
+		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 		test.WithPersistedServiceInfo("unittest", srvInfo),
 		test.WithMockLiquidClient("unittest", srvInfo),
@@ -62,9 +50,10 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 	s := commonLiquidTestSetup(t, srvInfo)
 
 	// modify the first Resource that the Setup creates
-	s.ProjectAZResources[0].Usage = 10
-	_, err := s.DB.Update(s.ProjectAZResources[0])
-	mustT(t, err)
+	s.MustDBExec(
+		`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
+		s.GetAZResourceID("unittest", "capacity", "az-one"),
+	)
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
@@ -183,11 +172,4 @@ func TestServiceUsageRequest(t *testing.T) {
 			},
 		},
 	}.Check(t, s.Handler)
-}
-
-func mustT(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
 }

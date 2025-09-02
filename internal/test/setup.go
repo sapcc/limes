@@ -8,9 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"maps"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,29 +16,27 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
 
+	"github.com/sapcc/limes/internal/api"
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
 type setupParams struct {
-	DBSetupOptions           []easypg.TestSetupOption
-	DBFixtureFile            string
 	ConfigYAML               string
-	APIBuilder               func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API
 	APIMiddlewares           []httpapi.API
-	Projects                 []*core.KeystoneProject
+	WithInitialDiscovery     bool
 	WithEmptyRecordsAsNeeded bool
 	WithLiquidConnections    bool
 	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
@@ -49,14 +45,6 @@ type setupParams struct {
 
 // SetupOption is an option that can be given to NewSetup().
 type SetupOption func(*setupParams)
-
-// WithDBFixtureFile is a SetupOption that prefills the test DB by executing
-// the SQL statements in the given file.
-func WithDBFixtureFile(file string) SetupOption {
-	return func(params *setupParams) {
-		params.DBSetupOptions = append(params.DBSetupOptions, easypg.LoadSQLFile(file))
-	}
-}
 
 // WithConfig is a SetupOption that initializes the test cluster from a
 // configuration provided as YAML. This option is effectively required, as an
@@ -67,22 +55,11 @@ func WithConfig(yamlStr string) SetupOption {
 	}
 }
 
-// WithAPIHandler is a SetupOption that initializes a http.Handler with the
-// Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
-// directly call this function because that would create an import cycle, so it
-// must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string, func() liquid.CommitmentUUID) httpapi.API, middlewares ...httpapi.API) SetupOption {
+// WithAPIMiddleware is a SetupOption that attaches a custom middleware to the
+// HTTP handler providing the Limes API within the test.
+func WithAPIMiddleware(mw func(http.Handler) http.Handler) SetupOption {
 	return func(params *setupParams) {
-		params.APIBuilder = apiBuilder
-		params.APIMiddlewares = middlewares
-	}
-}
-
-// WithProjects is a SetupOption that creates a DB entry for the given project.
-// This also creates the corresponding domain object.
-func WithProject(p core.KeystoneProject) SetupOption {
-	return func(params *setupParams) {
-		params.Projects = append(params.Projects, &p)
+		params.APIMiddlewares = append(params.APIMiddlewares, httpapi.WithGlobalMiddleware(mw))
 	}
 }
 
@@ -90,19 +67,25 @@ func WithProject(p core.KeystoneProject) SetupOption {
 // This option must be provided once for every service type in the config.
 func WithMockLiquidClient(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
-		params.LiquidClients[serviceType] = &MockLiquidClient{serviceInfo: serviceInfo}
+		client := &MockLiquidClient{}
+		client.ServiceInfo.Set(serviceInfo)
+		params.LiquidClients[serviceType] = client
 	}
 }
 
 // WithLiquidConnections is a SetupOption that sets up the Cluster the same way
 // as the limes-collect task would do. This means a) the LiquidConnections are filled
-// and b) persisted to the database.
+// and b) the respective `services`, `resources` and `az_resources` records are
+// persisted to the database.
 func WithLiquidConnections(params *setupParams) {
 	params.WithLiquidConnections = true
 }
 
 // WithPersistedServiceInfo is a SetupOption that fills ServiceInfo into the DB before setting up the Cluster instance.
 // This is used to test how Cluster.Connect() reacts to preexisting metadata in the DB.
+//
+// Most tests will want to use EITHER this OR test.WithLiquidConnections().
+// Either method will fill the `services`, `resources` and `az_resources` tables.
 func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOption {
 	return func(params *setupParams) {
 		params.PersistedServiceInfo[st] = si
@@ -110,11 +93,22 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 }
 
 // WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
-// records for project_services, project_resources and project_az_resources.
-// It relies on the services, resources and az_resources
-// to exist! (e.g. use WithPersistedServiceInfo)
+// records for project_resources and project_az_resources.
+//
+// It relies on the services, resources and az_resources to exist!
+// (e.g. use WithPersistedServiceInfo)
+//
+// It also relies on domains and projects to exist!
+// (e.g. use WithInitialDiscovery)
 func WithEmptyRecordsAsNeeded(params *setupParams) {
 	params.WithEmptyRecordsAsNeeded = true
+}
+
+// WithInitialDiscovery is a SetupOption that populates the DB with records for
+// domains, projects and project_services using the data in the config section
+// "discovery.static_config", by running the ScanDomainsAndProjectsJob.
+func WithInitialDiscovery(params *setupParams) {
+	params.WithInitialDiscovery = true
 }
 
 func normalizeInlineYAML(yamlStr string) string {
@@ -127,22 +121,20 @@ func normalizeInlineYAML(yamlStr string) string {
 // Setup contains all the pieces that are needed for most tests.
 type Setup struct {
 	// fields that are always set
-	Ctx            context.Context //nolint:containedctx // only used in tests
-	DB             *gorp.DbMap
-	Cluster        *core.Cluster
-	Clock          *mock.Clock
-	Registry       *prometheus.Registry
-	TokenValidator *mock.Validator[*PolicyEnforcer]
-	Auditor        *audittools.MockAuditor
-	LiquidClients  map[db.ServiceType]*MockLiquidClient
-	// fields that are only set if their respective SetupOptions are given
+	Ctx                        context.Context //nolint:containedctx // only used in tests
+	DB                         *gorp.DbMap
+	Cluster                    *core.Cluster
+	Clock                      *mock.Clock
+	Registry                   *prometheus.Registry
+	TokenValidator             *mock.Validator[*PolicyEnforcer]
+	Auditor                    *audittools.MockAuditor
+	LiquidClients              map[db.ServiceType]*MockLiquidClient
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
-	// fields that are filled by WithProject and WithEmptyRecordsAsNeeded
-	Projects           []*db.Project
-	ProjectServices    []*db.ProjectService
-	ProjectResources   []*db.ProjectResource
-	ProjectAZResources []*db.ProjectAZResource
+	Collector                  *collector.Collector
+
+	// for t.Fatal() in helper functions
+	t *testing.T
 }
 
 func GenerateDummyToken() string {
@@ -179,10 +171,24 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		option(&params)
 	}
 
+	// validate selected options
+	if params.WithEmptyRecordsAsNeeded && !params.WithInitialDiscovery {
+		t.Fatal("can not create empty DB records since no projects are being discovered during setup")
+	}
+
 	var s Setup
 	s.Ctx = t.Context()
-	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Clock = mock.NewClock()
+	s.t = t
+
+	s.DB = db.InitORM(easypg.ConnectForTest(t, db.Configuration(),
+		easypg.ClearTables("project_commitments", "services", "domains"),
+		easypg.ResetPrimaryKeys(
+			"services", "resources", "rates", "az_resources",
+			"domains", "projects", "project_commitments", "project_mail_notifications",
+			"project_services", "project_resources", "project_az_resources", "project_rates",
+		),
+	))
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
 	s.LiquidClients = params.LiquidClients
@@ -215,11 +221,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
 	failIfErrs(t, errs)
 
-	serviceInfos, err := s.Cluster.AllServiceInfos()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	// load mock policy (where everything is allowed)
@@ -245,119 +246,145 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
 	s.Auditor = audittools.NewMockAuditor()
 
-	if params.APIBuilder != nil {
-		generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
-		s.CurrentProjectCommitmentID = currentProjectCommitmentID
-		s.Handler = httpapi.Compose(
-			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
-				httpapi.WithoutLogging(),
-			}, params.APIMiddlewares...)...,
-		)
+	generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
+	s.CurrentProjectCommitmentID = currentProjectCommitmentID
+	s.Handler = httpapi.Compose(
+		append(params.APIMiddlewares,
+			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
+			httpapi.WithoutLogging(),
+		)...,
+	)
+
+	s.Collector = &collector.Collector{
+		Cluster:     s.Cluster,
+		DB:          s.DB,
+		LogError:    t.Errorf,
+		MeasureTime: s.Clock.Now,
+		MeasureTimeAtEnd: func() time.Time {
+			s.Clock.StepBy(5 * time.Second)
+			return s.Clock.Now()
+		},
+		AddJitter: NoJitter,
 	}
 
-	for idx, project := range params.Projects {
-		dbDomain := &db.Domain{
-			ID:   db.DomainID(idx),
-			Name: "domain-" + strconv.Itoa(idx+1),
-			UUID: "uuid-for-domain-" + strconv.Itoa(idx+1),
+	if params.WithInitialDiscovery {
+		_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
+		if err != nil {
+			t.Fatal(err.Error())
 		}
-		mustDo(t, s.DB.Insert(dbDomain))
-		dbProject := &db.Project{
-			ID:         db.ProjectID(idx),
-			DomainID:   dbDomain.ID,
-			Name:       project.Name,
-			UUID:       project.UUID,
-			ParentUUID: dbDomain.UUID,
-		}
-		mustDo(t, s.DB.Insert(dbProject))
-		s.Projects = append(s.Projects, dbProject)
 	}
 
-	// fills all ProjectService entries (for each pair of project and service type),
-	// all ProjectResource entries (for each pair of service and resource name),
-	// all ProjectAZResource entries (for each pair of resource and AZ according to topology)
-	if !params.WithEmptyRecordsAsNeeded {
-		return s
+	if params.WithEmptyRecordsAsNeeded {
+		// fills all ProjectResource entries (for each pair of service and resource name)
+		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
+		s.MustDBExec(db.ExpandEnumPlaceholders(`
+			WITH tmp AS (
+				SELECT cr.id AS id, CASE
+					WHEN NOT cr.has_quota THEN NULL
+					WHEN cr.topology = {{liquid.AZSeparatedTopology}} THEN NULL
+					ELSE 0
+				END AS default_quota FROM resources cr
+			)
+			INSERT INTO project_resources (project_id, resource_id, quota, backend_quota) SELECT
+				p.id              AS project_id,
+				tmp.id            AS resource_id,
+				tmp.default_quota AS quota,
+				tmp.default_quota AS backend_quota
+			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
+		`))
+
+		s.MustDBExec(db.ExpandEnumPlaceholders(`
+			WITH tmp AS (
+				SELECT cazr.id AS id, CASE
+					WHEN NOT cr.has_quota THEN NULL
+					WHEN cr.topology != {{liquid.AZSeparatedTopology}} THEN NULL
+					WHEN cazr.az = {{liquid.AvailabilityZoneUnknown}} THEN NULL
+					ELSE 0
+				END AS default_quota FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id
+			)
+			INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, subresources) SELECT
+				p.id              AS project_id,
+				tmp.id            AS az_resource_id,
+				tmp.default_quota AS quota,
+				0                 AS usage,
+				''                AS subresources
+			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
+		`))
 	}
-	if len(params.Projects) == 0 {
-		t.Fatal("can not create empty DB records since there are no projects")
-	}
-	for serviceType := range s.Cluster.Config.Liquids {
-		var service *db.Service
-		mustDo(t, s.DB.SelectOne(&service, `SELECT * FROM services WHERE type = $1`, serviceType))
-		for _, dbProject := range s.Projects {
-			t0 := time.Unix(0, 0).UTC()
-			dbProjectService := &db.ProjectService{
-				ID:        db.ProjectServiceID(len(s.ProjectServices) + 1),
-				ProjectID: dbProject.ID,
-				ServiceID: service.ID,
-				ScrapedAt: Some(t0),
-				CheckedAt: Some(t0),
-			}
-			mustDo(t, s.DB.Insert(dbProjectService))
-			s.ProjectServices = append(s.ProjectServices, dbProjectService)
-		}
-		resInfos := core.InfoForService(serviceInfos, serviceType).Resources
-		for _, resName := range slices.Sorted(maps.Keys(resInfos)) {
-			var resource *db.Resource
-			mustDo(t, s.DB.SelectOne(&resource, `SELECT * FROM resources WHERE name = $1 AND service_id = $2`, resName, service.ID))
-			for _, dbProject := range s.Projects {
-				dbProjectResource := &db.ProjectResource{
-					ID:           db.ProjectResourceID(len(s.ProjectResources) + 1),
-					ProjectID:    dbProject.ID,
-					ResourceID:   resource.ID,
-					Quota:        Some[uint64](0),
-					BackendQuota: Some[int64](0),
-				}
-				mustDo(t, s.DB.Insert(dbProjectResource))
-				s.ProjectResources = append(s.ProjectResources, dbProjectResource)
-			}
-			var allAZs []liquid.AvailabilityZone
-			if resource.Topology == liquid.FlatTopology {
-				allAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
-			} else {
-				allAZs = s.Cluster.Config.AvailabilityZones
-			}
-			for _, az := range allAZs {
-				var azResource *db.AZResource
-				mustDo(t, s.DB.SelectOne(&azResource, `SELECT * FROM az_resources WHERE az = $1 AND resource_id = $2`, az, resource.ID))
-				for _, dbProject := range s.Projects {
-					dbProjectAZResource := &db.ProjectAZResource{
-						ID:               db.ProjectAZResourceID(len(s.ProjectAZResources) + 1),
-						ProjectID:        dbProject.ID,
-						AZResourceID:     azResource.ID,
-						Quota:            Some[uint64](0),
-						Usage:            0,
-						PhysicalUsage:    None[uint64](),
-						SubresourcesJSON: "{}",
-					}
-					mustDo(t, s.DB.Insert(dbProjectAZResource))
-					s.ProjectAZResources = append(s.ProjectAZResources, dbProjectAZResource)
-				}
-			}
-		}
-	}
+
 	return s
 }
 
-func mustDo(t *testing.T, err error) {
-	t.Helper()
+// GetServiceID is a helper function for finding the ID of a db.Service record.
+func (s Setup) GetServiceID(srvType db.ServiceType) (result db.ServiceID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT id FROM services WHERE type = $1`, srvType).Scan(&result)
 	if err != nil {
-		t.Fatal(err.Error())
+		s.t.Fatalf("could not find services.id for type = %q: %s", srvType, err.Error())
+	}
+	return result
+}
+
+// GetResourceID is a helper function for finding the ID of a db.Resource record.
+func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName) (result db.ResourceID) {
+	s.t.Helper()
+	path := string(srvType) + "/" + string(resName)
+	err := s.DB.QueryRow(`SELECT id FROM resources WHERE path = $1`, path).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find resources.id for path = %q: %s", path, err.Error())
+	}
+	return result
+}
+
+// GetAZResourceID is a helper function for finding the ID of a db.AZResource record.
+func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceName, az limes.AvailabilityZone) (result db.AZResourceID) {
+	s.t.Helper()
+	path := string(srvType) + "/" + string(resName) + "/" + string(az)
+	err := s.DB.QueryRow(`SELECT id FROM az_resources WHERE path = $1`, path).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find az_resources.id for path = %q: %s", path, err.Error())
+	}
+	return result
+}
+
+// GetRateID is a helper function for finding the ID of a db.Rate record.
+func (s Setup) GetRateID(srvType db.ServiceType, rateName liquid.RateName) (result db.RateID) {
+	// TODO: we should have a `path` attribute on `rates`, too
+	s.t.Helper()
+	path := string(srvType) + "/" + string(rateName)
+	err := s.DB.QueryRow(`SELECT id FROM rates WHERE service_id = $1 AND name = $2`, s.GetServiceID(srvType), rateName).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find rates.id for path = %q: %s", path, err.Error())
+	}
+	return result
+}
+
+// GetProjectID is a helper function for finding the ID of a db.Project record.
+func (s Setup) GetProjectID(name string) (result db.ProjectID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT id FROM projects WHERE name = $1`, name).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find projects.id for name = %q: %s", name, err.Error())
+	}
+	return result
+}
+
+// MustDBExec is a shorthand for s.DB.Exec() + t.Fatal() on error.
+func (s Setup) MustDBExec(query string, args ...any) {
+	s.t.Helper()
+	_, err := s.DB.Exec(query, args...)
+	if err != nil {
+		s.t.Fatal(err.Error())
 	}
 }
 
-func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
-	opts := append(slices.Clone(extraOpts),
-		easypg.ClearTables("project_commitments", "services", "domains"),
-		easypg.ResetPrimaryKeys(
-			"services", "resources", "rates", "az_resources",
-			"domains", "projects", "project_commitments", "project_mail_notifications",
-			"project_services", "project_resources", "project_az_resources", "project_rates",
-		),
-	)
-	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
+// MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.
+func (s Setup) MustDBInsert(pointerToRecord any) {
+	s.t.Helper()
+	err := s.DB.Insert(pointerToRecord)
+	if err != nil {
+		s.t.Fatal(err.Error())
+	}
 }
 
 func failIfErrs(t *testing.T, errs errext.ErrorSet) {

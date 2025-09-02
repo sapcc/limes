@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package api_test
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
@@ -30,13 +29,13 @@ const testCommitmentsYAML = `
 		static_config:
 			domains:
 				- { name: germany, id: uuid-for-germany }
-				- { name: france,id: uuid-for-france }
+				- { name: france, id: uuid-for-france }
 			projects:
 				uuid-for-germany:
 					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
 				uuid-for-france:
-					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france }
 	liquids:
 		first:
 			area: first
@@ -56,13 +55,13 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 		static_config:
 			domains:
 				- { name: germany, id: uuid-for-germany }
-				- { name: france,id: uuid-for-france }
+				- { name: france, id: uuid-for-france }
 			projects:
 				uuid-for-germany:
 					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
 				uuid-for-france:
-					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france }
 	liquids:
 		first:
 			area: first
@@ -82,13 +81,13 @@ const testConvertCommitmentsYAML = `
 		static_config:
 			domains:
 				- { name: germany, id: uuid-for-germany }
-				- { name: france,id: uuid-for-france }
+				- { name: france, id: uuid-for-france }
 			projects:
 				uuid-for-germany:
 					- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
 					- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
 				uuid-for-france:
-					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
+					- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france }
 	liquids:
 		third:
 			area: third
@@ -130,14 +129,109 @@ const testConvertCommitmentsYAML = `
 					value: { durations_per_domain: *durations }
 `
 
-func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
+func setupCommitmentTest(t *testing.T, configYAML string) test.Setup {
+	// setup ServiceInfo to mimic the old `fixtures/start-data-commitments.sql`
+	// as closely as possible
+	resInfoLikeCapacity := test.DefaultLiquidServiceInfo().Resources["capacity"]
+	resInfoLikeCapacity.HandlesCommitments = true
+	resInfoLikeThings := test.DefaultLiquidServiceInfo().Resources["things"]
+	resInfoLikeThings.HandlesCommitments = true
+	resInfoConvertible := liquid.ResourceInfo{
+		Unit:               liquid.UnitBytes,
+		Topology:           liquid.FlatTopology,
+		HandlesCommitments: true,
+	}
+
+	srvInfoFirst := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": resInfoLikeCapacity,
+			"things":   resInfoLikeThings,
+			"other":    resInfoLikeCapacity,
+		},
+	}
+	srvInfoSecond := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": resInfoLikeCapacity,
+			"things":   resInfoLikeThings,
+			"other":    resInfoLikeCapacity,
+		},
+	}
+	srvInfoThird := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity_c32":   resInfoConvertible,
+			"capacity_c48":   resInfoConvertible,
+			"capacity_c96":   resInfoConvertible,
+			"capacity_c120":  resInfoLikeThings,
+			"capacity2_c144": resInfoLikeThings,
+		},
+	}
+	srvInfoFourth := liquid.ServiceInfo{
+		Version: 1,
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity_a": resInfoLikeCapacity,
+			"capacity_b": resInfoLikeCapacity,
+		},
+	}
+
 	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
+		test.WithConfig(configYAML),
+		test.WithMockLiquidClient("first", srvInfoFirst),
+		test.WithPersistedServiceInfo("first", srvInfoFirst),
+		test.WithMockLiquidClient("second", srvInfoSecond),
+		test.WithPersistedServiceInfo("second", srvInfoSecond),
+		test.WithMockLiquidClient("third", srvInfoThird),
+		test.WithPersistedServiceInfo("third", srvInfoThird),
+		test.WithMockLiquidClient("fourth", srvInfoFourth),
+		test.WithPersistedServiceInfo("fourth", srvInfoFourth),
+		test.WithInitialDiscovery,
+		test.WithEmptyRecordsAsNeeded,
 	)
+
+	// fill `az_resources`
+	query := `UPDATE az_resources SET raw_capacity = $1, last_nonzero_raw_capacity = $1, usage = $2 WHERE path = $3`
+	s.MustDBExec(query, 10, 6, `first/capacity/az-one`)
+	s.MustDBExec(query, 20, 6, `first/capacity/az-two`)
+	s.MustDBExec(query, 30, 6, `second/capacity/az-one`)
+	s.MustDBExec(query, 40, 6, `second/capacity/az-two`)
+	s.MustDBExec(query, 10, 6, `fourth/capacity_a/az-one`)
+	s.MustDBExec(query, 20, 6, `fourth/capacity_a/az-two`)
+	s.MustDBExec(query, 30, 6, `fourth/capacity_b/az-one`)
+	s.MustDBExec(query, 40, 6, `fourth/capacity_b/az-two`)
+
+	// fill `project_resources`: only boring placeholder values
+	query = `UPDATE project_resources SET quota = $1, backend_quota = $1 WHERE resource_id = $2`
+	s.MustDBExec(query, 10, s.GetResourceID("first", "capacity"))
+	s.MustDBExec(query, 10, s.GetResourceID("first", "things"))
+	s.MustDBExec(query, 10, s.GetResourceID("second", "capacity"))
+	s.MustDBExec(query, 10, s.GetResourceID("second", "things"))
+	s.MustDBExec(query, 10, s.GetResourceID("fourth", "capacity_a"))
+	s.MustDBExec(query, 10, s.GetResourceID("fourth", "capacity_b"))
+
+	// fill `project_az_resources`
+	query = `UPDATE project_az_resources SET usage = $1 WHERE az_resource_id = $2`
+	s.MustDBExec(query, 2, s.GetAZResourceID("first", "capacity", "az-one"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("first", "capacity", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("first", "things", liquid.AvailabilityZoneAny))
+	s.MustDBExec(query, 1, s.GetAZResourceID("first", "other", "az-one"))
+	s.MustDBExec(query, 1, s.GetAZResourceID("first", "other", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("second", "capacity", "az-one"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("second", "capacity", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("second", "things", liquid.AvailabilityZoneAny))
+	s.MustDBExec(query, 1, s.GetAZResourceID("second", "other", "az-one"))
+	s.MustDBExec(query, 1, s.GetAZResourceID("second", "other", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_a", "az-one"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_a", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_b", "az-one"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_b", "az-two"))
+
+	return s
+}
+
+func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
@@ -436,12 +530,9 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, status = $3",
+	s.MustDBExec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, status = $3",
 		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// check that the confirmation shows up on GET
 	resp1["confirmed_at"] = s.Clock.Now().Unix()
@@ -493,13 +584,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 }
 
 func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
 	request := func(amount uint64) assert.JSONObject {
@@ -598,7 +683,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -620,7 +705,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -662,7 +747,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -674,11 +759,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// check that can-confirm ignores expired commitments
-	_, err = s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
+	s.MustDBExec(`UPDATE project_commitments SET expires_at = $1, status = $2`,
 		s.Clock.Now(), liquid.CommitmentStatusExpired)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(7)
@@ -690,7 +772,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["first"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -720,19 +802,10 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
-	_, err := s.DB.Exec(`UPDATE resources SET handles_commitments = FALSE;`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := assert.JSONObject{
 		"commitment": assert.JSONObject{
@@ -756,13 +829,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowView = false
@@ -787,13 +854,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 }
 
 func TestPutCommitmentErrorCases(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	request := assert.JSONObject{
 		"service_type":      "first",
@@ -862,10 +923,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
-	_, err := s.DB.Exec(`UPDATE project_resources SET forbidden = TRUE`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE`)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -873,10 +931,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
 	}.Check(t, s.Handler)
-	_, err = s.DB.Exec(`UPDATE project_resources SET forbidden = FALSE`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec(`UPDATE project_resources SET forbidden = FALSE`)
 
 	// invalid request field: AZ given, but resource does not accept AZ-aware commitments
 	cloned = maps.Clone(request)
@@ -948,13 +1003,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 }
 
 func TestDeleteCommitmentErrorCases(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAML)
 
 	// we need a commitment in the DB to test deletion
 	request := assert.JSONObject{
@@ -1002,13 +1051,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 }
 
 func Test_StartCommitmentTransfer(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	var transferToken = test.GenerateDummyToken()
 
@@ -1160,13 +1203,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 }
 
 func Test_GetCommitmentByToken(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	var transferToken = test.GenerateDummyToken()
 	// Prepare a commitment to test against in transfer mode.
@@ -1230,13 +1267,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 }
 
 func Test_TransferCommitment(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	var transferToken = test.GenerateDummyToken()
 	req1 := assert.JSONObject{
@@ -1480,13 +1511,7 @@ func Test_TransferCommitment(t *testing.T) {
 }
 
 func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	// create commitments for resource "second/capacity" in AZ "az-one"
 	// for all projects, so that all existing capacity is covered
@@ -1590,7 +1615,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1603,14 +1628,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testConvertCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("third", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testConvertCommitmentsYAML)
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []assert.JSONObject{
@@ -1660,26 +1678,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 }
 
 func Test_ConvertCommitments(t *testing.T) {
-	srvInfoThird := test.DefaultLiquidServiceInfo()
-	srvInfoThird.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
-		"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true, Topology: liquid.FlatTopology},
-		"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true, Topology: liquid.FlatTopology},
-		"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true, Topology: liquid.FlatTopology},
-		"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.FlatTopology},
-		"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.FlatTopology},
-	}
-	srvInfoFourth := test.DefaultLiquidServiceInfo()
-	srvInfoFourth.Resources = map[liquid.ResourceName]liquid.ResourceInfo{
-		"capacity_a": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
-		"capacity_b": {Unit: liquid.UnitBytes, Topology: liquid.AZAwareTopology, HasCapacity: true, HasQuota: true, NeedsResourceDemand: true, HandlesCommitments: true},
-	}
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testConvertCommitmentsYAML),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("third", srvInfoThird),
-		test.WithMockLiquidClient("fourth", srvInfoFourth),
-	)
+	s := setupCommitmentTest(t, testConvertCommitmentsYAML)
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{
@@ -1789,7 +1788,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
+	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1829,7 +1828,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["fourth"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -1955,13 +1954,7 @@ func Test_ConvertCommitments(t *testing.T) {
 }
 
 func Test_UpdateCommitmentDuration(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	// Positive: confirmed commitment
 	assert.HTTPRequest{
@@ -2097,14 +2090,14 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	})
 
 	// check that rejections from the liquid are honored
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
 		Body:         assert.JSONObject{"duration": "3 hours"},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-	s.LiquidClients["second"].SetCommitmentChangeResponse(liquid.CommitmentChangeResponse{})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	// Negative: Provided duration is invalid
 	assert.HTTPRequest{
@@ -2152,10 +2145,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 
 	// Negative: Superseded commitment
 	s.Clock.StepBy(-1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
@@ -2166,13 +2156,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 }
 
 func Test_MergeCommitments(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	// Create two confirmed commitments on the same resource
 	req1 := assert.JSONObject{
@@ -2343,10 +2327,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Do not merge commitments with statuses other than "active"
 	unmergableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
 	for _, status := range unmergableStatuses {
-		_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
-		if err != nil {
-			t.Fatal(err)
-		}
+		s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
 		assert.HTTPRequest{
 			Method:       http.MethodPost,
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
@@ -2354,10 +2335,7 @@ func Test_MergeCommitments(t *testing.T) {
 			ExpectStatus: http.StatusConflict,
 		}.Check(t, s.Handler)
 	}
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 2", liquid.CommitmentStatusConfirmed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", liquid.CommitmentStatusConfirmed)
 
 	// Happy path
 	// New merged commitment should be returned with latest expiration date of all commitments
@@ -2415,7 +2393,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
 	var supersededCommitment db.ProjectCommitment
-	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
+	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2444,13 +2422,7 @@ func Test_MergeCommitments(t *testing.T) {
 }
 
 func Test_RenewCommitments(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
-		test.WithAPIHandler(NewV1API),
-		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo()),
-		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo()),
-	)
+	s := setupCommitmentTest(t, testCommitmentsYAMLWithoutMinConfirmDate)
 
 	req1 := assert.JSONObject{
 		"id":                1,
@@ -2610,10 +2582,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	s.Clock.StepBy(-2 * time.Hour)
 	// Do not allow to renew explicit expired commitments
-	_, err := s.DB.Exec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
@@ -2621,12 +2590,9 @@ func Test_RenewCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Reject requests that try to renew commitments too early (more than 3 month before expiring date)
-	_, err = s.DB.Exec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
+	s.MustDBExec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
 		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",

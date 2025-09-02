@@ -26,9 +26,9 @@ import (
 
 const (
 	// how long to wait before scraping the same project and service again
-	scrapeInterval = 30 * time.Minute
+	ScrapeInterval = 30 * time.Minute
 	// how long to wait before re-checking a project service that failed scraping
-	recheckInterval = 5 * time.Minute
+	RecheckInterval = 5 * time.Minute
 )
 
 var (
@@ -155,21 +155,12 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	}
 	logg.Debug("scraping %s resources for %s/%s", service.Type, dbDomain.Name, dbProject.Name)
 
-	maybeServiceInfo, err := c.Cluster.InfoForService(service.Type)
-	if err != nil {
-		task.Err = fmt.Errorf("while getting ServiceInfos: %w", err)
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		task.Err = fmt.Errorf("no such service type: %q", service.Type)
-	}
-
 	// perform resource scrape
 	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project)
 	if err != nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 		task.Err = util.UnpackError(err)
-		return c.recordScrapeError(task, dbProject, dbDomain, project, serviceInfo)
+		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
 
 	// perform rate scrape
@@ -177,7 +168,18 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = util.UnpackError(err)
-		return c.recordScrapeError(task, dbProject, dbDomain, project, serviceInfo)
+		return c.recordScrapeError(task, dbProject, dbDomain, project)
+	}
+
+	// collect additional DB records (it is important to do this step after the
+	// scrape, because the scrape might observe a new ServiceInfo version)
+	maybeServiceInfo, err := c.Cluster.InfoForService(service.Type)
+	if err != nil {
+		task.Err = fmt.Errorf("while getting ServiceInfo for %q: %w", service.Type, err)
+	}
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		task.Err = fmt.Errorf("no such service type: %q", service.Type)
 	}
 
 	// write resource results
@@ -195,7 +197,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	// update scraped_at timestamp and reset the stale flag on this service so
 	// that we don't scrape it again immediately afterwards
 	_, err = c.DB.Exec(writeScrapeSuccessQuery,
-		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(ScrapeInterval)), task.Timing.Duration().Seconds(),
 		string(serializedMetrics), serializedScrapeState, projectService.ID,
 	)
 	if err != nil {
@@ -204,10 +206,10 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	return nil
 }
 
-func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject, serviceInfo liquid.ServiceInfo) error {
+func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
 	_, err := c.DB.Exec(
 		writeScrapeErrorQuery,
-		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(RecheckInterval)),
 		task.Err.Error(), task.ProjectService.ID,
 	)
 	if err != nil {
@@ -218,7 +220,7 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 
 	if task.ProjectService.ScrapedAt.IsNone() {
 		// see explanation inside the called function's body
-		err := c.writeDummyResources(dbDomain, dbProject, task.Service, serviceInfo)
+		err := c.writeDummyResources(dbDomain, dbProject, task.Service)
 		if err != nil {
 			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
 				task.Service.Type, project.UUID, err.Error(),
@@ -533,7 +535,16 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	return tx.Commit()
 }
 
-func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.Service, serviceInfo liquid.ServiceInfo) error {
+func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.Service) error {
+	maybeServiceInfo, err := c.Cluster.InfoForService(srv.Type)
+	if err != nil {
+		return fmt.Errorf("while getting ServiceInfo for %q: %w", srv.Type, err)
+	}
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		return fmt.Errorf("no such service type: %q", srv.Type)
+	}
+
 	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,

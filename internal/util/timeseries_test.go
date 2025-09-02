@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package util
+package util_test
 
 import (
 	"cmp"
@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/assert"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 func TestTimeSeries(t *testing.T) {
-	s := EmptyTimeSeries[float64]()
+	s := util.EmptyTimeSeries[float64]()
 	expectJSON(t, s, `{}`)
 
 	// pruning an empty time series just does nothing
@@ -82,14 +84,14 @@ func TestTimeSeriesUnmarshalErrors(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Logf("testing unmarshal of `%s`", tc.Representation)
-		_, err := ParseTimeSeries[float64](tc.Representation)
+		_, err := util.ParseTimeSeries[float64](tc.Representation)
 		mustFailT(t, err, tc.ExpectedError)
 	}
 }
 
 func TestTimeSeriesPruningWithOnlyAncientValues(t *testing.T) {
 	// This time series is from prod.
-	s, err := ParseTimeSeries[uint64](`{"t":[1714649006,1715247668],"v":[5,6]}`)
+	s, err := util.ParseTimeSeries[uint64](`{"t":[1714649006,1715247668],"v":[5,6]}`)
 	mustT(t, err)
 	// A few days after the timestamps in the time series...
 	now := time.Unix(1715600837, 0)
@@ -118,7 +120,7 @@ func mustFailT(t *testing.T, err error, expected string) {
 	}
 }
 
-func expectJSON[T cmp.Ordered](t *testing.T, value TimeSeries[T], repr string) {
+func expectJSON[T cmp.Ordered](t *testing.T, value util.TimeSeries[T], repr string) {
 	t.Helper()
 
 	// test that the value marshals to the given JSON representation
@@ -130,7 +132,7 @@ func expectJSON[T cmp.Ordered](t *testing.T, value TimeSeries[T], repr string) {
 	}
 
 	// test that the JSON representation unmarshals into an identical value
-	unmarshaled, err := ParseTimeSeries[T](repr)
+	unmarshaled, err := util.ParseTimeSeries[T](repr)
 	if err != nil {
 		t.Error("while unmarshaling: " + err.Error())
 	} else {

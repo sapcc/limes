@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"os"
@@ -28,7 +28,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	prepareDomainsAndProjectsForScrape(t, s)
 
 	// the Scrape job needs a report that at least satisfies the topology constraints
-	s.LiquidClients["unittest"].SetUsageReport(liquid.ServiceUsageReport{
+	s.LiquidClients["unittest"].UsageReport.Set(liquid.ServiceUsageReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
@@ -47,15 +47,14 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		},
 	})
 
-	c := getCollector(t, s)
-	scrapeJob := c.ScrapeJob(s.Registry)
+	scrapeJob := s.Collector.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
 	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
-	job := c.ApplyQuotaOverridesJob(s.Registry)
+	job := s.Collector.ApplyQuotaOverridesJob(s.Registry)
 
 	configPath := filepath.Join(t.TempDir(), "quota-overrides.json")
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", configPath)

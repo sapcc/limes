@@ -305,16 +305,18 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
 		// the base quotas; we ignore those entries here if the "any" usage is zero
 		// and there are other AZs
+		// "unknown" may exist because the location for usages or capacities may be
+		// unknown, but we only show it if there is non-zero quota/usage.
 		for _, domainReport := range domains {
 			for _, srvReport := range domainReport.Services {
 				for _, resReport := range srvReport.Resources {
 					if len(resReport.PerAZ) >= 2 {
-						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
-						// AZSeparatedTopology does not provide the "any" AZ.
-						if reportInAny == nil {
-							continue
+						reportInUnknown := resReport.PerAZ[limes.AvailabilityZoneUnknown]
+						if reportInUnknown != nil && (reportInUnknown.Quota == nil || *reportInUnknown.Quota == 0) && reportInUnknown.Usage == 0 {
+							delete(resReport.PerAZ, limes.AvailabilityZoneUnknown)
 						}
-						if (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
+						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
+						if reportInAny != nil && (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
 							delete(resReport.PerAZ, limes.AvailabilityZoneAny)
 						}
 					}

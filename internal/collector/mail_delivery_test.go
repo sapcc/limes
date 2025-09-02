@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package collector
+package collector_test
 
 import (
 	"context"
@@ -12,39 +12,22 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
+	"github.com/sapcc/limes/internal/collector"
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
-)
-
-const (
-	testMailNoopYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			shared:
-				area: testing
-`
 )
 
 var errMailUndeliverable = errors.New("mail undeliverable")
 
+// MockMail is a mock implementation of the collector.MailClient interface.
 type MockMail struct {
 	UndeliverableMails uint64
 }
 
-func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
+// PostMail implements the collector.MailClient interface.
+func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) error {
 	switch req.ProjectID {
-	case "uuid-for-waldorf":
+	case "uuid-for-walldorf":
 		return nil
 	case "uuid-for-berlin":
 		return errors.New("fail project id 1")
@@ -52,7 +35,7 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 		return nil
 	case "uuid-for-frankfurt":
 		m.UndeliverableMails++
-		return UndeliverableMailError{Inner: errMailUndeliverable}
+		return collector.UndeliverableMailError{Inner: errMailUndeliverable}
 	}
 	return nil
 }
@@ -60,14 +43,53 @@ func (m *MockMail) PostMail(ctx context.Context, req MailRequest) error {
 func Test_MailDelivery(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testMailNoopYAML),
-		test.WithDBFixtureFile("fixtures/mail_delivery.sql"),
-		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
+			discovery:
+				method: static
+				static_config:
+					domains: [{ name: germany, id: uuid-for-germany }]
+					projects:
+						uuid-for-germany:
+							- { name: walldorf,  id: uuid-for-walldorf,  parent_id: uuid-for-germany }
+							- { name: berlin,    id: uuid-for-berlin,    parent_id: uuid-for-germany }
+							- { name: dresden,   id: uuid-for-dresden,   parent_id: uuid-for-germany }
+							- { name: frankfurt, id: uuid-for-frankfurt, parent_id: uuid-for-germany }
+			liquids:
+				shared:
+					area: testing
+		`),
+		test.WithPersistedServiceInfo("shared", srvInfo),
+		test.WithInitialDiscovery,
 	)
-	c := getCollector(t, s)
+
+	s.MustDBInsert(&db.MailNotification{
+		ProjectID:        s.GetProjectID("walldorf"),
+		Subject:          "dummy",
+		Body:             "dummy",
+		NextSubmissionAt: s.Clock.Now(),
+	})
+	s.MustDBInsert(&db.MailNotification{
+		ProjectID:        s.GetProjectID("berlin"),
+		Subject:          "dummy",
+		Body:             "dummy",
+		NextSubmissionAt: s.Clock.Now().Add(24 * time.Hour),
+	})
+	s.MustDBInsert(&db.MailNotification{
+		ProjectID:        s.GetProjectID("dresden"),
+		Subject:          "dummy",
+		Body:             "dummy",
+		NextSubmissionAt: s.Clock.Now().Add(48 * time.Hour),
+	})
+	s.MustDBInsert(&db.MailNotification{
+		ProjectID:        s.GetProjectID("frankfurt"),
+		Subject:          "dummy",
+		Body:             "dummy",
+		NextSubmissionAt: s.Clock.Now().Add(72 * time.Hour),
+	})
 
 	mailer := &MockMail{}
-	job := c.MailDeliveryJob(nil, mailer)
+	job := s.Collector.MailDeliveryJob(nil, mailer)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
