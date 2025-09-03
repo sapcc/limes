@@ -58,6 +58,16 @@ var (
 		 WHERE %s
 	`)
 
+	getPublicCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT pc.*
+		  FROM project_commitments pc
+		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
+		  JOIN resources cr ON cazr.resource_id = cr.id
+		 WHERE cr.path = $1
+		   AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+		   AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
+	`))
+
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
 		  FROM project_commitments pc
@@ -165,6 +175,136 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
 		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token, resInfo.Unit))
+	}
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
+}
+
+// GetPublicCommitments handles GET /v1/public-commitments.
+func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/public-commitments")
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:show_basic") {
+		return
+	}
+
+	// with the "cluster:show" permission, the user is assumed to be a cloud admin;
+	// non-cloud-admins will be restricted to committability rules in their respective domain
+	var dbDomain Option[db.Domain]
+	if token.Check("cluster:show") {
+		dbDomain = None[db.Domain]()
+	} else {
+		domainUUID := cmp.Or(token.ProjectScopeDomainUUID(), token.DomainScopeUUID(), "")
+		if domainUUID == "" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		var domain db.Domain
+		err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "no such domain", http.StatusNotFound)
+			return
+		case respondwith.ObfuscatedErrorText(w, err):
+			return
+		default:
+			dbDomain = Some(domain)
+		}
+	}
+
+	// parse and validate request
+	query := r.URL.Query()
+	requestedServiceType := limes.ServiceType(query.Get("service"))
+	requestedResourceName := limesresources.ResourceName(query.Get("resource"))
+
+	serviceInfos, err := p.Cluster.AllServiceInfos()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	dbServiceType, dbResourceName, ok := nm.MapFromV1API(requestedServiceType, requestedResourceName)
+	if !ok {
+		msg := fmt.Sprintf("no such service and/or resource: %q", fmt.Sprintf("%s/%s", requestedServiceType, requestedResourceName))
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+	resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+
+	if domain, ok := dbDomain.Unpack(); ok {
+		behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name)
+		if len(behavior.Durations) == 0 {
+			http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+			return
+		}
+	} else {
+		// as a cloud-admin, allow listing commitments if there is any rule that could allow a domain to have commitments
+		behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName)
+		allowsCommitments := false
+		for _, entry := range behavior.DurationsPerDomain {
+			if len(entry.Value) > 0 {
+				allowsCommitments = true
+				break
+			}
+		}
+		if !allowsCommitments {
+			http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+			return
+		}
+	}
+
+	// list AZ resource locations
+	filter := reports.Filter{
+		Includes: map[db.ServiceType]map[liquid.ResourceName]bool{
+			dbServiceType: {dbResourceName: true},
+		},
+		ServiceTypeIsFiltered:  true,
+		ResourceNameIsFiltered: true,
+	}
+	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(nil, len(joinArgs))
+	azResourceLocationsByID := make(map[db.AZResourceID]core.AZResourceLocation)
+	err = sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			id  db.AZResourceID
+			loc core.AZResourceLocation
+		)
+		err := rows.Scan(&id, &loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+		if err != nil {
+			return err
+		}
+		// this check is defense in depth (the DB should be consistent with our config)
+		if core.HasResource(serviceInfos, loc.ServiceType, loc.ResourceName) {
+			azResourceLocationsByID[id] = loc
+		}
+		return nil
+	})
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	// list commitments
+	var dbCommitments []db.ProjectCommitment
+	_, err = p.DB.Select(&dbCommitments, getPublicCommitmentsQuery, fmt.Sprintf("%s/%s", dbServiceType, dbResourceName))
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	result := make([]limesresources.Commitment, 0, len(dbCommitments))
+	for _, dbCommitment := range dbCommitments {
+		loc, exists := azResourceLocationsByID[dbCommitment.AZResourceID]
+		if !exists {
+			continue // like above, this is just defense in depth (the DB should be consistent with itself)
+		}
+		c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resInfo.Unit)
+		// hide some fields that we should not be showing in this very public list
+		c.CreatorUUID = ""
+		c.CreatorName = ""
+		c.CanBeDeleted = false
+		c.NotifyOnConfirm = false
+		c.WasRenewed = false
+
+		result = append(result, c)
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -1098,8 +1238,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	req := parseTarget.Request
 
-	if req.TransferStatus != limesresources.CommitmentTransferStatusUnlisted && req.TransferStatus != limesresources.CommitmentTransferStatusPublic {
-		http.Error(w, fmt.Sprintf("Invalid transfer_status code. Must be %s or %s.", limesresources.CommitmentTransferStatusUnlisted, limesresources.CommitmentTransferStatusPublic), http.StatusBadRequest)
+	acceptableTransferStatuses := []limesresources.CommitmentTransferStatus{
+		limesresources.CommitmentTransferStatusUnlisted,
+		limesresources.CommitmentTransferStatusPublic,
+		// None is allowed in order to withdraw a public offer for a commitment transfer
+		limesresources.CommitmentTransferStatusNone,
+	}
+	if !slices.Contains(acceptableTransferStatuses, req.TransferStatus) {
+		http.Error(w, fmt.Sprintf("Invalid transfer_status code. Must be one of %v.", acceptableTransferStatuses), http.StatusBadRequest)
 		return
 	}
 
@@ -1148,17 +1294,23 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// when moving into CommitmentTransferStatusNone, the token is cleared;
+	// otherwise a new token is generated and filled in for the transfer
+	transferToken := None[string]()
+	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		transferToken = Some(p.generateTransferToken())
+	}
+
 	// Mark whole commitment or a newly created, splitted one as transferrable.
 	tx, err := p.DB.Begin()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	transferToken := p.generateTransferToken()
 
 	if req.Amount == dbCommitment.Amount {
 		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = Some(transferToken)
+		dbCommitment.TransferToken = transferToken
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1172,7 +1324,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = Some(transferToken)
+		transferCommitment.TransferToken = transferToken
 		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1546,6 +1698,8 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
 		return
 	}
+
+	// TODO: counter metric for moves by transfer_status (to see if the marketplace has any impact)
 
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = None[string]()

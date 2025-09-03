@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -78,6 +79,10 @@ var (
 		"{{liquid.FlatTopology}}":        enumValueToSQLLiteral(liquid.FlatTopology),
 		"{{liquid.AZAwareTopology}}":     enumValueToSQLLiteral(liquid.AZAwareTopology),
 		"{{liquid.AZSeparatedTopology}}": enumValueToSQLLiteral(liquid.AZSeparatedTopology),
+		// limesresources.CommitmentTransferStatus
+		"{{limesresources.CommitmentTransferStatusNone}}":     enumValueToSQLLiteral(limesresources.CommitmentTransferStatusNone),
+		"{{limesresources.CommitmentTransferStatusPublic}}":   enumValueToSQLLiteral(limesresources.CommitmentTransferStatusPublic),
+		"{{limesresources.CommitmentTransferStatusUnlisted}}": enumValueToSQLLiteral(limesresources.CommitmentTransferStatusUnlisted),
 	}
 )
 
