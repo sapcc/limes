@@ -191,6 +191,22 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
+  "vendor/github.com/containerd/errdefs/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "vendor/github.com/containerd/errdefs/pkg/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
   "vendor/github.com/davecgh/go-spew/**",
 ]
 precedence = "aggregate"
@@ -288,6 +304,14 @@ SPDX-License-Identifier = "MIT"
 [[annotations]]
 path = [
   "vendor/github.com/google/go-cmp/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "BSD-3-Clause"
+
+[[annotations]]
+path = [
+  "vendor/github.com/grafana/regexp/**",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Other"
@@ -535,6 +559,14 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
+  "vendor/go.opentelemetry.io/auto/sdk/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
   "vendor/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/**",
 ]
 precedence = "aggregate"
@@ -564,14 +596,6 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/go.uber.org/atomic/**",
-]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
