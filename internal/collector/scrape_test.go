@@ -347,7 +347,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		failedAt2.Add(30*time.Second).Unix(),
 	)
 
-	// StatusNotFound errors
+	// Projects that are not known by the backend service should return a StatusNotFound error and should not be processed further.
 	notFoundError := gophercloud.ErrUnexpectedResponseCode{Expected: []int{204}, Actual: http.StatusNotFound, URL: "setQuota"}
 	s.LiquidClients["unittest"].SetQuotaError(notFoundError)
 	expectedErrorNotFoundRx := regexp.MustCompile(regexp.QuoteMeta(notFoundError.Error()))
