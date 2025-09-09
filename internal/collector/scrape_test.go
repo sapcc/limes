@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gophercloud/gophercloud/v2"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -345,6 +346,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 		failedAt1.Add(30*time.Second).Unix(),
 		failedAt2.Add(30*time.Second).Unix(),
 	)
+
+	// StatusNotFound errors
+	notFoundError := gophercloud.ErrUnexpectedResponseCode{Expected: []int{204}, Actual: http.StatusNotFound, URL: "setQuota"}
+	s.LiquidClients["unittest"].SetQuotaError(notFoundError)
+	expectedErrorNotFoundRx := regexp.MustCompile(regexp.QuoteMeta(notFoundError.Error()))
+	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorNotFoundRx)
+	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorNotFoundRx) // twice because there are two projects
+	tr.DBChanges().AssertEmpty()
 
 	// test SyncQuotaToBackendJob running successfully
 	s.LiquidClients["unittest"].SetQuotaError(nil)

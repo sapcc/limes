@@ -7,8 +7,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/lib/pq"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
@@ -239,6 +241,11 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		// apply quotas in backend
 		err = connection.SetQuota(ctx, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 		if err != nil {
+			if gophercloud.ResponseCodeIs(err, http.StatusNotFound) {
+				logg.Info("project %s not found: %v", core.KeystoneProjectFromDB(project, domain), err)
+				return err
+			}
+
 			// if SetQuota fails, do not retry immediately;
 			// try to sync other projects first, then retry in 30 seconds from now at the earliest
 			finishedAt := c.MeasureTimeAtEnd()
