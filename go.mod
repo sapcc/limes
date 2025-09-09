@@ -12,8 +12,8 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/majewsky/gg v1.3.0
 	github.com/majewsky/schwift/v2 v2.0.0
-	github.com/prometheus/client_golang v1.23.0
-	github.com/prometheus/common v0.66.0
+	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/common v0.66.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.17.4
 	github.com/sapcc/go-bits v0.0.0-20250904120357-fc660754039e
@@ -26,7 +26,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -39,6 +38,7 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )
