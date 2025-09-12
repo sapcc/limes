@@ -80,11 +80,11 @@ var (
 		                     WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
 		                     ELSE {{liquid.CommitmentStatusConfirmed}} END
 		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) AND az_resource_id IN (
-			SELECT cazr.id
-			  FROM services cs
-			  JOIN resources cr ON cr.service_id = cs.id
-			  JOIN az_resources cazr ON cazr.resource_id = cr.id
-			 WHERE cs.type = $1 AND cr.name = $2
+			SELECT azr.id
+			  FROM services s
+			  JOIN resources r ON r.service_id = s.id
+			  JOIN az_resources azr ON azr.resource_id = r.id
+			 WHERE s.type = $1 AND r.name = $2
 		)
 	`))
 )
@@ -157,7 +157,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// a resources update is not necessary, as it is done within c.scrapeLiquidCapacity if necessary
 	// collect existing resources
 	var dbResources []db.Resource
-	_, err = tx.Select(&dbResources, `SELECT cr.* FROM resources as cr JOIN services as cs ON cr.service_id = cs.id WHERE cs.type = $1`, service.Type)
+	_, err = tx.Select(&dbResources, `SELECT r.* FROM resources as r JOIN services as s ON r.service_id = s.id WHERE s.type = $1`, service.Type)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing resources: %w", err)
 	}

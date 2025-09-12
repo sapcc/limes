@@ -35,9 +35,9 @@ var (
 	// find the next project that needs to have resources scraped
 	findProjectForScrapeQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.* FROM project_services ps
-		JOIN services cs ON ps.service_id = cs.id
+		JOIN services s ON ps.service_id = s.id
 		-- filter by service type
-		WHERE cs.type = $1
+		WHERE s.type = $1
 		-- filter by need to be updated (because of user request, or because of scheduled scrape)
 		AND (ps.stale OR ps.next_scrape_at <= $2)
 		-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
@@ -326,7 +326,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	azResourcesByResourceID, err := db.BuildArrayIndexOfDBResult(
 		tx,
 		func(azRes db.AZResource) db.ResourceID { return azRes.ResourceID },
-		`SELECT cazr.* FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1`,
+		`SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`,
 		service.ID,
 	)
 	if err != nil {
@@ -344,7 +344,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	projectAZResourcesByAZResourceID, err := db.BuildIndexOfDBResult(
 		tx,
 		func(pAZRes db.ProjectAZResource) db.AZResourceID { return pAZRes.AZResourceID },
-		`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources cazr ON PAZR.az_resource_id = cazr.id JOIN resources cr ON cazr.resource_id = cr.id WHERE cr.service_id = $1 AND pazr.project_id = $2`,
+		`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
 		service.ID, dbProject.ID,
 	)
 	if err != nil {
@@ -460,7 +460,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	// For inserting the project_az_resources, we need to translate the datasets rate.Name
 	ratesByName, err := db.BuildIndexOfDBResult(
 		tx,
-		func(cr db.Rate) liquid.RateName { return cr.Name },
+		func(r db.Rate) liquid.RateName { return r.Name },
 		`SELECT * FROM rates WHERE service_id = $1`,
 		task.Service.ID,
 	)
@@ -475,7 +475,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	// update existing project_rates entries
 	rateExists := make(map[liquid.RateName]bool)
 	var rates []db.ProjectRate
-	_, err = tx.Select(&rates, `SELECT pra.* FROM project_rates pra JOIN rates cra ON pra.rate_id = cra.id WHERE cra.service_id = $1 AND pra.project_id = $2 ORDER BY cra.name`, service.ID, projectService.ProjectID)
+	_, err = tx.Select(&rates, `SELECT pra.* FROM project_rates pra JOIN rates ra ON pra.rate_id = ra.id WHERE ra.service_id = $1 AND pra.project_id = $2 ORDER BY ra.name`, service.ID, projectService.ProjectID)
 	if err != nil {
 		return err
 	}

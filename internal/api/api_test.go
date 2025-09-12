@@ -732,10 +732,10 @@ func Test_ProjectOperations(t *testing.T) {
 	err := s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns
 		FROM project_rates pra
-		JOIN rates cra ON cra.id = pra.rate_id
-		JOIN services cs ON cs.id = cra.service_id
+		JOIN rates ra ON ra.id = pra.rate_id
+		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
-		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`,
+		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`,
 		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
 	// There shouldn't be anything in the DB.
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -775,10 +775,10 @@ func Test_ProjectOperations(t *testing.T) {
 	getProjectRateQuery := `
 		SELECT pra.id, pra.rate_limit, pra.window_ns
 		FROM project_rates pra
-		JOIN rates cra ON cra.id = pra.rate_id
-		JOIN services cs ON cs.id = cra.service_id
+		JOIN rates ra ON ra.id = pra.rate_id
+		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
-		WHERE p.name = $1 AND cs.type = $2 AND cra.name = $3`
+		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`
 	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
 	if err != nil {
 		t.Fatal(err)
@@ -827,11 +827,11 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 	t.Helper()
 
 	queryStr := sqlext.SimplifyWhitespace(`
-		SELECT p.name, cs.type
+		SELECT p.name, s.type
 		 FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 JOIN services cs on ps.service_id = cs.id
+		 JOIN services s on ps.service_id = s.id
 		 WHERE ps.stale
-		 ORDER BY p.name, cs.type
+		 ORDER BY p.name, s.type
 	`)
 	var actualPairs []string
 

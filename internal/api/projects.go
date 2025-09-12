@@ -266,7 +266,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 
 	var services []db.Service
 	_, err = tx.Select(&services,
-		`SELECT cs.* FROM services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
+		`SELECT s.* FROM services s JOIN project_services ps ON ps.service_id = s.id and ps.project_id = $1 ORDER BY s.type`, dbProject.ID)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -412,7 +412,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 
 	var services []db.Service
 	_, err = tx.Select(&services,
-		`SELECT cs.* FROM services cs JOIN project_services ps ON ps.service_id = cs.id and ps.project_id = $1 ORDER BY cs.type`, dbProject.ID)
+		`SELECT s.* FROM services s JOIN project_services ps ON ps.service_id = s.id and ps.project_id = $1 ORDER BY s.type`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

@@ -27,10 +27,10 @@ import (
 
 var (
 	acpqGetResourceIDQuery = sqlext.SimplifyWhitespace(`
-		SELECT cr.id
-		  FROM services cs
-		  JOIN resources cr ON cr.service_id = cs.id
-		 WHERE cs.type = $1 AND cr.name = $2
+		SELECT r.id
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		 WHERE s.type = $1 AND r.name = $2
 	`)
 
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
@@ -48,8 +48,8 @@ var (
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources pazr
 		SET quota = $1
-		FROM az_resources cazr
-		WHERE pazr.az_resource_id = cazr.id AND cazr.az = $2 AND pazr.project_id = $3 AND cazr.resource_id = $4
+		FROM az_resources azr
+		WHERE pazr.az_resource_id = azr.id AND azr.az = $2 AND pazr.project_id = $3 AND azr.resource_id = $4
 		AND pazr.quota IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
@@ -58,8 +58,8 @@ var (
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services ps
 		SET quota_desynced_at = $1
-		FROM services cs
-		WHERE ps.service_id = cs.id AND ps.project_id = $2 AND cs.type = $3
+		FROM services s
+		WHERE ps.service_id = s.id AND ps.project_id = $2 AND s.type = $3
 		AND quota_desynced_at IS NULL
 	`)
 )
