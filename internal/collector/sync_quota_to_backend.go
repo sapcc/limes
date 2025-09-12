@@ -169,7 +169,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return nil
 		}
 
-		if forbidden && currentQuotaPtr.UnwrapOr(0) != 0 {
+		if forbidden && currentQuotaPtr.UnwrapOr(0) == 0 {
 			return nil
 		}
 
