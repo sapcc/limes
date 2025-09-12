@@ -48,28 +48,28 @@ type MismatchProjectQuota struct {
 }
 
 var ospqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, cs.type, cr.name, pr.quota, SUM(pazr.usage)
+	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota, SUM(pazr.usage)
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_resources pr ON pr.project_id = p.id
-	  JOIN resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
-	  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
-	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = pr.project_id
-	 GROUP BY d.uuid, d.name, p.uuid, p.name, cs.type, cr.name, pr.quota
+	  JOIN resources r ON pr.resource_id = r.id {{AND r.name = $resource_name}}
+	  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
+	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
+	 GROUP BY d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota
 	HAVING SUM(pazr.usage) > pr.quota
-	 ORDER BY d.name, p.name, cs.type, cr.name
+	 ORDER BY d.name, p.name, s.type, r.name
 `)
 
 var mmpqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, cs.type, cr.name, pr.quota, pr.backend_quota
+	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota, pr.backend_quota
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_resources pr ON pr.project_id = p.id 
-	  JOIN resources cr ON pr.resource_id = cr.id {{AND cr.name = $resource_name}}
-	  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+	  JOIN resources r ON pr.resource_id = r.id {{AND r.name = $resource_name}}
+	  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
 	WHERE pr.backend_quota != pr.quota
-	ORDER BY d.name, p.name, cs.type, cr.name
+	ORDER BY d.name, p.name, s.type, r.name
 `)
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.

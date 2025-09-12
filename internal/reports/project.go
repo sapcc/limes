@@ -28,41 +28,41 @@ import (
 // project reports (and then reclaim their memory usage) as soon as possible.
 var (
 	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, cs.type, ps.scraped_at, cra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
-	  FROM services cs
-	  JOIN rates cra ON cra.service_id = cs.id
+	SELECT p.id, s.type, ps.scraped_at, ra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	  FROM services s
+	  JOIN rates ra ON ra.service_id = s.id
 	  CROSS JOIN projects p
-	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
-	  JOIN project_rates pra ON pra.rate_id = cra.id AND pra.project_id = ps.project_id
-	 WHERE %s {{AND cs.type = $service_type}}
+	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
+	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = ps.project_id
+	 WHERE %s {{AND s.type = $service_type}}
 	 ORDER BY p.uuid
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, cs.type, ps.scraped_at, cr.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.forbid_autogrowth, cazr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
-	  FROM services cs
-	  JOIN resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
+	SELECT p.id, s.type, ps.scraped_at, r.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
+	  FROM services s
+	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
+	  JOIN az_resources azr ON azr.resource_id = r.id
 	  CROSS JOIN projects p
-	  JOIN project_services ps ON ps.service_id = cs.id AND ps.project_id = p.id
-	  JOIN project_resources pr ON pr.resource_id = cr.id AND pr.project_id = p.id
+	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
+	  JOIN project_resources pr ON pr.resource_id = r.id AND pr.project_id = p.id
 	  -- no left join, entries will only appear when there is some project level entry
-	  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id AND pazr.project_id = p.id
-	 WHERE %s {{AND cs.type = $service_type}}
-	 ORDER BY p.uuid, cazr.az
+	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
+	 WHERE %s {{AND s.type = $service_type}}
+	 ORDER BY p.uuid, azr.az
 `)
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT cs.type, cr.name, cazr.az, pc.duration,
+	SELECT s.type, r.name, azr.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
-	  FROM services cs
-	  JOIN resources cr on cr.service_id = cs.id
-	  JOIN az_resources cazr ON cazr.resource_id = cr.id
-	  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
+	  FROM services s
+	  JOIN resources r on r.service_id = s.id
+	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN project_commitments pc ON pc.az_resource_id = azr.id
 	 WHERE pc.project_id = $1
-	 GROUP BY cs.type, cr.name, cazr.az, pc.duration
+	 GROUP BY s.type, r.name, azr.az, pc.duration
 	`))
 )
 
