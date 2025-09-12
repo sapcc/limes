@@ -132,17 +132,17 @@ var sqlMigrations = map[string]string{
 				problem RECORD;
 			BEGIN
 				FOR problem IN
-					SELECT cr.id AS id, cr.path AS actual, CONCAT(cs.type, '/', cr.name) AS expected
-					FROM resources cr JOIN services cs ON cr.service_id = cs.id
-					WHERE cr.path != CONCAT(cs.type, '/', cr.name)
+					SELECT r.id AS id, r.path AS actual, CONCAT(s.type, '/', r.name) AS expected
+					FROM resources r JOIN services s ON r.service_id = s.id
+					WHERE r.path != CONCAT(s.type, '/', r.name)
 				LOOP
 					RAISE EXCEPTION 'inconsistent value for resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
 				END LOOP;
 
 				FOR problem IN
-					SELECT cazr.id AS id, cazr.path AS actual, CONCAT(cr.path, '/', cazr.az) AS expected
-					FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id
-					WHERE cazr.path != CONCAT(cr.path, '/', cazr.az)
+					SELECT azr.id AS id, azr.path AS actual, CONCAT(r.path, '/', azr.az) AS expected
+					FROM az_resources azr JOIN resources r ON azr.resource_id = r.id
+					WHERE azr.path != CONCAT(r.path, '/', azr.az)
 				LOOP
 					RAISE EXCEPTION 'inconsistent value for az_resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
 				END LOOP;

@@ -48,10 +48,10 @@ var (
 	// See `initProjectServicesQuery` for rationale regarding `next_scrape_at = NOW(), stale = TRUE`.
 	insertMissingProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		INSERT INTO project_services (project_id, service_id, next_scrape_at, stale)
-		SELECT p.id, cs.id, $1::TIMESTAMPTZ, TRUE
-		  FROM services cs
-		  JOIN projects p ON TRUE -- this is intentionally a full cross join between "cs" and "p"
-		  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = cs.id
+		SELECT p.id, s.id, $1::TIMESTAMPTZ, TRUE
+		  FROM services s
+		  JOIN projects p ON TRUE -- this is intentionally a full cross join between "s" and "p"
+		  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = s.id
 		 WHERE ps.id IS NULL
 		RETURNING project_id, service_id
 	`)

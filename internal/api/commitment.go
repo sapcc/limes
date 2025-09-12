@@ -42,28 +42,28 @@ var (
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
-		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
-		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+		  JOIN az_resources azr ON pc.az_resource_id = azr.id
+		  JOIN resources r ON azr.resource_id = r.id {{AND r.name = $resource_name}}
+		  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
 		 WHERE %s AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
 		 ORDER BY pc.id
 	`))
 
 	getAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
-		SELECT cazr.id, cs.type, cr.name, cazr.az
+		SELECT azr.id, s.type, r.name, azr.az
 		  FROM project_az_resources pazr
-		  JOIN az_resources cazr on pazr.az_resource_id = cazr.id
-		  JOIN resources cr ON cazr.resource_id = cr.id {{AND cr.name = $resource_name}}
-		  JOIN services cs ON cr.service_id = cs.id {{AND cs.type = $service_type}}
+		  JOIN az_resources azr on pazr.az_resource_id = azr.id
+		  JOIN resources r ON azr.resource_id = r.id {{AND r.name = $resource_name}}
+		  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
 		 WHERE %s
 	`)
 
 	getPublicCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		  JOIN az_resources cazr ON pc.az_resource_id = cazr.id
-		  JOIN resources cr ON cazr.resource_id = cr.id
-		 WHERE cr.path = $1
+		  JOIN az_resources azr ON pc.az_resource_id = azr.id
+		  JOIN resources r ON azr.resource_id = r.id
+		 WHERE r.path = $1
 		   AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
 		   AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
 	`))
@@ -75,33 +75,33 @@ var (
 	`)
 
 	findAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT cazr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments, COALESCE(total_confirmed, 0) as total_confirmed
-		FROM az_resources cazr
-		JOIN resources cr ON cazr.resource_id = cr.id
-		JOIN services cs ON cr.service_id = cs.id
-		JOIN project_resources pr ON pr.resource_id = cr.id
+		SELECT azr.id, pr.forbidden IS NOT TRUE as resource_allows_commitments, COALESCE(total_confirmed, 0) as total_confirmed
+		FROM az_resources azr
+		JOIN resources r ON azr.resource_id = r.id
+		JOIN services s ON r.service_id = s.id
+		JOIN project_resources pr ON pr.resource_id = r.id
 		LEFT JOIN (
 			SELECT SUM(pc.amount) as total_confirmed
-			FROM az_resources cazr
-			JOIN resources cr ON cazr.resource_id = cr.id
-			JOIN services cs ON cr.service_id = cs.id
-			JOIN project_commitments pc ON cazr.id = pc.az_resource_id
-			WHERE pc.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4 AND status = {{liquid.CommitmentStatusConfirmed}}
+			FROM az_resources azr
+			JOIN resources r ON azr.resource_id = r.id
+			JOIN services s ON r.service_id = s.id
+			JOIN project_commitments pc ON azr.id = pc.az_resource_id
+			WHERE pc.project_id = $1 AND s.type = $2 AND r.name = $3 AND azr.az = $4 AND status = {{liquid.CommitmentStatusConfirmed}}
 		) pc ON 1=1
-		WHERE pr.project_id = $1 AND cs.type = $2 AND cr.name = $3 AND cazr.az = $4
+		WHERE pr.project_id = $1 AND s.type = $2 AND r.name = $3 AND azr.az = $4
 	`))
 
 	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT cs.type, cr.name, cazr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
-		FROM az_resources cazr
-		JOIN resources cr ON cazr.resource_id = cr.id
-		JOIN services cs ON cr.service_id = cs.id
+		SELECT s.type, r.name, azr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
+		FROM az_resources azr
+		JOIN resources r ON azr.resource_id = r.id
+		JOIN services s ON r.service_id = s.id
 		LEFT JOIN (
 				SELECT SUM(amount) as total_confirmed
 				FROM project_commitments pc
 				WHERE az_resource_id = $1 AND project_id = $2 AND status = {{liquid.CommitmentStatusConfirmed}}
 		) pc ON 1=1
-		WHERE cazr.id = $1;
+		WHERE azr.id = $1;
 	`))
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2

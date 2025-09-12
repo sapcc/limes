@@ -72,7 +72,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 
 	// collect existing project_resources for this service
 	var dbResources []db.ProjectResource
-	_, err = dbi.Select(&dbResources, `SELECT pr.* FROM project_resources pr JOIN resources cr ON pr.resource_id = cr.id WHERE cr.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
+	_, err = dbi.Select(&dbResources, `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
 	}
@@ -157,7 +157,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	// if this update caused `quota != backend_quota` anywhere,
 	// request SetQuotaJob to take over (unless we already have an open request)
 	if hasBackendQuotaDrift {
-		query := `UPDATE project_services ps SET quota_desynced_at = $1 FROM services cs WHERE cs.id = ps.service_id AND cs.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
+		query := `UPDATE project_services ps SET quota_desynced_at = $1 FROM services s WHERE s.id = ps.service_id AND s.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
 		_, err := dbi.Exec(query, now, srv.ID, project.ID)
 		if err != nil {
 			return nil, fmt.Errorf("while scheduling backend sync for %s quotas: %w", srv.Type, err)
