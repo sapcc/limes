@@ -800,6 +800,33 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": notificationReq},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
+
+	// to check the behavior with a commitment being set to transfer_status = "public", we create one and modify it
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(1),
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1",
+		limesresources.CommitmentTransferStatusPublic,
+	)
+
+	// now, /can-confirm and /new both reject
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(1),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("cannot request new commitments, when one or more commitments are in transfer_status public\n"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(1),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("cannot request new commitments, when one or more commitments are in transfer_status public\n"),
+	}.Check(t, s.Handler)
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
