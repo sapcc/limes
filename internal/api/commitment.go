@@ -91,6 +91,12 @@ var (
 		WHERE pr.project_id = $1 AND s.type = $2 AND r.name = $3 AND azr.az = $4
 	`))
 
+	findPublicCommitmentsByResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT count(*)
+		FROM project_commitments
+		WHERE project_id = $1 AND az_resource_id = $2 AND transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
+	`))
+
 	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT s.type, r.name, azr.az, COALESCE(pc.total_confirmed,0) AS total_confirmed
 		FROM az_resources azr
@@ -447,6 +453,17 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// check, that a customer does not try to create commitments for a resource he has posted public commitments for
+	var publicCommitmentsCount int
+	err = p.DB.QueryRow(findPublicCommitmentsByResourceQuery, dbProject.ID, azResourceID).Scan(&publicCommitmentsCount)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	if publicCommitmentsCount > 0 {
+		http.Error(w, "cannot request new commitments, when one or more commitments are in transfer_status public", http.StatusUnprocessableEntity)
+		return
+	}
+
 	// check for committable capacity
 	newStatus := liquid.CommitmentStatusConfirmed
 	totalConfirmedAfter := totalConfirmed + req.Amount
@@ -536,6 +553,17 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
 	if canConfirmErrMsg != "" {
 		http.Error(w, canConfirmErrMsg, http.StatusUnprocessableEntity)
+		return
+	}
+
+	// check, that a customer does not try to create commitments for a resource he has posted public commitments for
+	var publicCommitmentsCount int
+	err = p.DB.QueryRow(findPublicCommitmentsByResourceQuery, dbProject.ID, azResourceID).Scan(&publicCommitmentsCount)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	if publicCommitmentsCount > 0 {
+		http.Error(w, "cannot request new commitments, when one or more commitments are in transfer_status public", http.StatusUnprocessableEntity)
 		return
 	}
 
