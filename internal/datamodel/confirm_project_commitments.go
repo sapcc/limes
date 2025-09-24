@@ -4,21 +4,22 @@
 package datamodel
 
 import (
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"time"
 
 	"github.com/lib/pq"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
+	. "github.com/majewsky/gg/option"
+
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-
-	. "github.com/majewsky/gg/option"
 )
 
 var (
@@ -29,13 +30,31 @@ var (
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT pc.project_id, pc.id, pc.amount, pc.notify_on_confirm
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
+		SELECT pc.*
+		  FROM services cs
+		  JOIN resources cr ON cr.service_id = cs.id
+		  JOIN az_resources azr ON azr.resource_id = cr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = azr.id
-		 WHERE s.type = $1 AND r.name = $2 AND azr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
+		 WHERE cs.type = $1 AND cr.name = $2 AND azr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
+	`))
+
+	// Before Commitments get confirmed, commitments with transfer_status = public
+	// are released. Commitments with transfer_status=public are matched with
+	// commitments to be confirmed in the order they were posted in for transfer.
+	// The status of a transferable commitment does not matter for this operation.
+	//
+	// The final `BY pc.id` ordering ensures deterministic behavior in tests, in reality
+	// the probability of multiple commitments set to transfer at the exact same time is
+	// very small due to the atomicity of the API operation.
+	getTransferCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT pc.*
+		FROM services cs
+		JOIN resources cr ON cr.service_id = cs.id
+		JOIN az_resources azr ON azr.resource_id = cr.id
+		JOIN project_commitments pc ON pc.az_resource_id = azr.id
+		WHERE cs.type = $1 AND cr.name = $2 AND azr.az = $3 AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
+		ORDER BY pc.transfer_started_at ASC, pc.created_at ASC, pc.id ASC
 	`))
 )
 
@@ -106,27 +125,21 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
-// them as possible given the currently available capacity.
-func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) ([]db.MailNotification, error) {
+// them as possible given the currently available capacity. Simultaneously, it
+// releases transferable commitments that can be used to satisfy the pending ones.
+func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string) ([]db.MailNotification, error) {
 	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 
-	// load confirmable commitments (we need to load them into a buffer first, since
-	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
-	type confirmableCommitment struct {
-		ProjectID       db.ProjectID
-		CommitmentID    db.ProjectCommitmentID
-		Amount          uint64
-		NotifyOnConfirm bool
+	// load confirmable commitments
+	var confirmableCommitments []db.ProjectCommitment
+	type transferredSplittedConsumption struct {
+		Amount    uint64
+		RelatedID db.ProjectCommitmentID
 	}
-	var confirmableCommitments []confirmableCommitment
 	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
+	transferredCommitmentIDs := make(map[db.ProjectID]map[db.ProjectCommitmentID]transferredSplittedConsumption)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	err := sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
-		var c confirmableCommitment
-		err := rows.Scan(&c.ProjectID, &c.CommitmentID, &c.Amount, &c.NotifyOnConfirm)
-		confirmableCommitments = append(confirmableCommitments, c)
-		return err
-	})
+	_, err := dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
@@ -136,31 +149,130 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 		return nil, nil
 	}
 
+	// load transferable commitments
+	var transferableCommitments []db.ProjectCommitment
+	_, err = dbi.Select(&transferableCommitments, getTransferCommitmentsQuery, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("while enumerating transferable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+	}
+	transferableCommitmentsByID := make(map[db.ProjectCommitmentID]*db.ProjectCommitment, len(transferableCommitments))
+	for i := range transferableCommitments {
+		transferableCommitmentsByID[transferableCommitments[i].ID] = &transferableCommitments[i]
+	}
+
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return nil, err
 	}
 	stats := statsByAZ[loc.AvailabilityZone]
 
-	// foreach confirmable commitment...
+	// foreach confirmable commitment in the order to be confirmed
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
 		additions := map[db.ProjectID]uint64{c.ProjectID: c.Amount}
 		logg.Debug("checking ConfirmPendingCommitments in %s/%s/%s: commitmentID = %d, projectID = %d, amount = %d",
-			loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, c.CommitmentID, c.ProjectID, c.Amount)
+			loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, c.ID, c.ProjectID, c.Amount)
 		if !stats.CanAcceptCommitmentChanges(additions, nil, behavior) {
 			continue
 		}
 
+		// if a commitment was transferred in this iteration already, we do not need to confirm it
+		transfersPerProject, exists := transferredCommitmentIDs[c.ProjectID]
+		if _, exists2 := transfersPerProject[c.ID]; exists && exists2 {
+			continue
+		}
+
+		// Now we try to consume transferable commitments.
+		// When confirming a commitment, we consume max. the amount that we confirm.
+		// A commitment is only consumed if it's expires_at <= expires_at of the commitment we confirm.
+		// The status of a commitment to be consumed does not matter.
+		// When a commitment is both pending and transferable, the handling depends on the order:
+		// When confirmed first, it might be taken over later anyway.
+		// When transferred first, it does not get confirmed later.
+		// A partial transfer will lead to a separate mail which contains the new ID, so that the customer
+		// can track the whole processing of the transferred commitment.
+		// TODO: collate notifications about the same commitment.
+
+		overallTransferredAmount := uint64(0)
+		for idx, t := range transferableCommitments {
+			if overallTransferredAmount == c.Amount {
+				break
+			}
+			transfersPerProject, exists := transferredCommitmentIDs[t.ProjectID]
+			if _, exists2 := transfersPerProject[t.ID]; t.ProjectID == c.ProjectID || t.ExpiresAt.After(c.ExpiresAt) || (exists && exists2) {
+				continue
+			}
+
+			// checks passed, a part of this commitment will be consumed, so we will supersede it in any case
+			if !exists {
+				transferredCommitmentIDs[t.ProjectID] = make(map[db.ProjectCommitmentID]transferredSplittedConsumption)
+			}
+
+			leftoverConsumptionAmount := c.Amount - overallTransferredAmount
+			if t.Amount > leftoverConsumptionAmount {
+				overallTransferredAmount += leftoverConsumptionAmount
+				// the leftover amount to be transferred is not enough to consume the whole commitment
+				// we will place a new commitment for the leftover amount
+				leftoverCommitment, err := BuildSplitCommitment(t, t.Amount-leftoverConsumptionAmount, now, generateProjectCommitmentUUID)
+				if err != nil {
+					return nil, err
+				}
+				leftoverCommitment.TransferStatus = limesresources.CommitmentTransferStatusPublic
+				leftoverCommitment.TransferToken = Some(generateTransferToken())
+				leftoverCommitment.TransferStartedAt = t.TransferStartedAt
+				err = dbi.Insert(&leftoverCommitment)
+				if err != nil {
+					return nil, err
+				}
+
+				transferableCommitments[idx] = leftoverCommitment
+				transferableCommitmentsByID[leftoverCommitment.ID] = &leftoverCommitment
+				transferredCommitmentIDs[t.ProjectID][t.ID] = transferredSplittedConsumption{
+					Amount:    leftoverConsumptionAmount,
+					RelatedID: leftoverCommitment.ID,
+				}
+			} else {
+				// the transferable commitment is fully consumed
+				overallTransferredAmount += t.Amount
+				transferredCommitmentIDs[t.ProjectID][t.ID] = transferredSplittedConsumption{}
+			}
+
+			// supersede consumed commitment
+			t.TransferStartedAt = None[time.Time]()
+			t.TransferStatus = limesresources.CommitmentTransferStatusNone
+			t.TransferToken = None[string]()
+			t.Status = liquid.CommitmentStatusSuperseded
+			t.SupersededAt = Some(now)
+			supersedeContext := db.CommitmentWorkflowContext{
+				Reason:                 db.CommitmentReasonTransfer,
+				RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
+				RelatedCommitmentUUIDs: []liquid.CommitmentUUID{c.UUID},
+			}
+			buf, err := json.Marshal(supersedeContext)
+			if err != nil {
+				return nil, err
+			}
+			t.SupersedeContextJSON = Some(json.RawMessage(buf))
+			_, err = dbi.Update(&t)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// confirm the commitment
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, status = $2 WHERE id = $3`,
-			now, liquid.CommitmentStatusConfirmed, c.CommitmentID)
+			now, liquid.CommitmentStatusConfirmed, c.ID)
 		if err != nil {
-			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+		}
+		if value, exists := transferableCommitmentsByID[c.ID]; exists {
+			// in case the commitment get's taken over later, it should keep the status it gets now
+			value.ConfirmedAt = Some(now)
+			value.Status = liquid.CommitmentStatusConfirmed
 		}
 
 		if c.NotifyOnConfirm {
-			confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.CommitmentID)
+			confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.ID)
 		}
 
 		// block its allocation from being committed again in this loop

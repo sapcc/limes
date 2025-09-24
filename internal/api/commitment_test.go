@@ -671,6 +671,17 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	// We will later test with this amount of capacity already committed.
 	committedCapacity := uint64(4)
 
+	// requests with confirm_by are not accepted
+	requestInFuture := request(1)
+	requestInFuture["commitment"].(assert.JSONObject)["confirm_by"] = s.Clock.Now().Add(7 * day).Unix()
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         requestInFuture,
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("this API can only check whether a commitment can be confirmed immediately\n"),
+	}.Check(t, s.Handler)
+
 	// the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -922,7 +933,6 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 
 func TestGetPublicCommitments(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
-	transferToken := test.GenerateDummyToken()
 
 	// GET returns an empty list when there are no commitments at all
 	assert.HTTPRequest{
@@ -968,9 +978,9 @@ func TestGetPublicCommitments(t *testing.T) {
 
 	// foreach transfer status...
 	allStatuses := []limesresources.CommitmentTransferStatus{
-		limesresources.CommitmentTransferStatusNone,
 		limesresources.CommitmentTransferStatusUnlisted,
 		limesresources.CommitmentTransferStatusPublic,
+		limesresources.CommitmentTransferStatusNone,
 	}
 	for _, status := range allStatuses {
 		// set the commitment into that status
@@ -979,7 +989,7 @@ func TestGetPublicCommitments(t *testing.T) {
 			delete(resp1, "transfer_token")
 		} else {
 			resp1["transfer_status"] = status
-			resp1["transfer_token"] = transferToken
+			resp1["transfer_token"] = test.GenerateDummyTransferToken(*s.CurrentTransferTokenNumber + 1)
 		}
 		assert.HTTPRequest{
 			Method:       "POST",
@@ -1240,10 +1250,8 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 func Test_StartCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
-	var transferToken = test.GenerateDummyToken()
+	var transferToken = test.GenerateDummyTransferToken(1)
 
-	// Test on confirmed commitment should succeed.
-	// TransferAmount >= CommitmentAmount
 	req1 := assert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
@@ -1270,7 +1278,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
-		"transfer_status":   "unlisted",
+		"transfer_status":   "public",
 		"transfer_token":    transferToken,
 		"status":            "confirmed",
 	}
@@ -1283,15 +1291,55 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
+	// unknown transfer status
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "asdf"}},
+	}.Check(t, s.Handler)
+
+	// Test on confirmed commitment should succeed.
+	// TransferAmount >= CommitmentAmount
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
+	// try to set the same status again, should complain
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("transfer_status is already set to desired value\n"),
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// withdraw
+	delete(resp1, "transfer_status")
+	delete(resp1, "transfer_token")
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
+	}.Check(t, s.Handler)
+
+	// try to transfer an expired commitment
+	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 1", liquid.CommitmentStatusExpired)
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
+	}.Check(t, s.Handler)
+
+	// cleanup
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
@@ -1315,7 +1363,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "public",
-		"transfer_token":    transferToken,
+		"transfer_token":    test.GenerateDummyTransferToken(2),
 		"status":            "confirmed",
 	}
 
@@ -1396,7 +1444,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// Negative Test, delivered amount > commitment amount
 	assert.HTTPRequest{
 		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/start-transfer",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("delivered amount exceeds the commitment amount.\n"),
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 11, "transfer_status": "public"}},
@@ -1406,7 +1454,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 func Test_GetCommitmentByToken(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
-	var transferToken = test.GenerateDummyToken()
+	var transferToken = test.GenerateDummyTransferToken(1)
 	// Prepare a commitment to test against in transfer mode.
 	req1 := assert.JSONObject{
 		"id":                1,
@@ -1470,7 +1518,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 func Test_TransferCommitment(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
-	var transferToken = test.GenerateDummyToken()
+	var transferToken = test.GenerateDummyTransferToken(1)
 	req1 := assert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
@@ -1520,6 +1568,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 
 	// Split commitment
+	transferToken2 := test.GenerateDummyTransferToken(2)
 	resp3 := assert.JSONObject{
 		"id":                2,
 		"uuid":              test.GenerateDummyCommitmentUUID(2),
@@ -1536,7 +1585,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken,
+		"transfer_token":    transferToken2,
 		"status":            "confirmed",
 	}
 	resp4 := assert.JSONObject{
@@ -1635,7 +1684,7 @@ func Test_TransferCommitment(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2",
-		Header:       map[string]string{"Transfer-Token": transferToken},
+		Header:       map[string]string{"Transfer-Token": transferToken2},
 		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)

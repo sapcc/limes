@@ -652,6 +652,18 @@ The response is a JSON of the commitment including the following fields that ide
   }
 }
 ```
+With the following request body, the endpoint can be used to withdraw a commitment from transfer.
+```json
+{
+  "commitment": {
+    "transfer_status": ""
+  }
+}
+```
+This operation only works on commitments that were not transferred yet.
+An `amount` is ignored in this case, the whole commitment is withdrawn from transfer.
+A commitment previously splitted for transfer is not automatically merged back, this can be done manually with the `/merge` endpoint.
+
 ### POST /v1/domains/:id/projects/:id/transfer-commitment/:id
 Transfers the commitment from a source project to a target project.
 Requires a project-admin token.

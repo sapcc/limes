@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
+	"github.com/sapcc/limes/internal/util"
 )
 
 var (
@@ -325,8 +326,8 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
 		CanBeDeleted:     p.canDeleteCommitment(token, c),
-		ConfirmBy:        options.Map(c.ConfirmBy, intoUnixEncodedTime).AsPointer(),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, intoUnixEncodedTime).AsPointer(),
+		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime).AsPointer(),
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken.AsPointer(),
@@ -532,7 +533,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
 		return
 	}
-	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
+	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), util.FromUnixEncodedTime)
 	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
 	if canConfirmErrMsg != "" {
 		http.Error(w, canConfirmErrMsg, http.StatusUnprocessableEntity)
@@ -1264,10 +1265,24 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Deny requests with a greater amount than the commitment.
-	if req.Amount > dbCommitment.Amount {
-		http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+	// Deny requests which do not change the current transfer status.
+	if dbCommitment.TransferStatus == req.TransferStatus {
+		http.Error(w, "transfer_status is already set to desired value", http.StatusBadRequest)
 		return
+	}
+
+	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		// In order to prevent confusion, only commitments in a certain status can be marked as transferable.
+		if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, dbCommitment.Status) {
+			http.Error(w, "expired or superseded commitments cannot be transferred", http.StatusBadRequest)
+			return
+		}
+
+		// Deny requests with a greater amount than the commitment.
+		if req.Amount > dbCommitment.Amount {
+			http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+			return
+		}
 	}
 
 	var (
@@ -1297,8 +1312,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	// when moving into CommitmentTransferStatusNone, the token is cleared;
 	// otherwise a new token is generated and filled in for the transfer
 	transferToken := None[string]()
+	transferStartedAt := None[time.Time]()
 	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
 		transferToken = Some(p.generateTransferToken())
+		transferStartedAt = Some(p.timeNow())
 	}
 
 	// Mark whole commitment or a newly created, splitted one as transferrable.
@@ -1308,9 +1325,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	if req.Amount == dbCommitment.Amount {
+	if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = transferToken
+		dbCommitment.TransferStartedAt = transferStartedAt
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1319,13 +1337,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		now := p.timeNow()
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
-		transferCommitment, err := p.buildSplitCommitment(dbCommitment, transferAmount)
+		transferCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, transferAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
 		transferCommitment.TransferToken = transferToken
-		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		transferCommitment.TransferStartedAt = transferStartedAt
+		remainingCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1429,34 +1448,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		},
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
-}
-
-func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) (db.ProjectCommitment, error) {
-	now := p.timeNow()
-	creationContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonSplit,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
-	}
-	buf, err := json.Marshal(creationContext)
-	if err != nil {
-		return db.ProjectCommitment{}, err
-	}
-	return db.ProjectCommitment{
-		UUID:                p.generateProjectCommitmentUUID(),
-		ProjectID:           dbCommitment.ProjectID,
-		AZResourceID:        dbCommitment.AZResourceID,
-		Amount:              amount,
-		Duration:            dbCommitment.Duration,
-		CreatedAt:           now,
-		CreatorUUID:         dbCommitment.CreatorUUID,
-		CreatorName:         dbCommitment.CreatorName,
-		ConfirmBy:           dbCommitment.ConfirmBy,
-		ConfirmedAt:         dbCommitment.ConfirmedAt,
-		ExpiresAt:           dbCommitment.ExpiresAt,
-		CreationContextJSON: json.RawMessage(buf),
-		Status:              dbCommitment.Status,
-	}, nil
 }
 
 func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.AZResourceID, amount uint64) (db.ProjectCommitment, error) {
@@ -1944,6 +1935,11 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
+	// do not allow conversions on commitments in transfer
+	if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		http.Error(w, "commitments in transfer cannot be converted", http.StatusUnprocessableEntity)
+		return
+	}
 	targetLoc := core.AZResourceLocation{
 		ServiceType:      sourceLoc.ServiceType,
 		ResourceName:     targetResourceName,
@@ -1966,7 +1962,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// when there is a remaining amount, we must request to add this
 	if remainingAmount > 0 {
-		remainingCommitment, err = p.buildSplitCommitment(dbCommitment, remainingAmount)
+		remainingCommitment, err = datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}

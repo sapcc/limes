@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/liquids/archer"
 	"github.com/sapcc/limes/internal/liquids/cinder"
@@ -256,7 +257,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, tokenValidator, auditor, time.Now, api.GenerateTransferToken, api.GenerateProjectCommitmentUUID),
+		api.NewV1API(cluster, tokenValidator, auditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
