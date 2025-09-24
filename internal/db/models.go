@@ -184,6 +184,8 @@ type ProjectCommitment struct {
 	// calculation, but it still blocks capacity and still counts towards billing.
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
 	TransferToken  Option[string]                          `db:"transfer_token"`
+	// publicly transferred commitments are ordered by the time of their posting
+	TransferStartedAt Option[time.Time] `db:"transfer_started_at"`
 
 	// To a certain extent, this column is technically redundant, since the
 	// status can often be derived from the values of other fields. For example,
@@ -218,11 +220,12 @@ type CommitmentWorkflowContext struct {
 type CommitmentReason string
 
 const (
-	CommitmentReasonCreate  CommitmentReason = "create"
-	CommitmentReasonSplit   CommitmentReason = "split"
-	CommitmentReasonConvert CommitmentReason = "convert"
-	CommitmentReasonMerge   CommitmentReason = "merge"
-	CommitmentReasonRenew   CommitmentReason = "renew"
+	CommitmentReasonCreate   CommitmentReason = "create"
+	CommitmentReasonSplit    CommitmentReason = "split"
+	CommitmentReasonConvert  CommitmentReason = "convert"
+	CommitmentReasonMerge    CommitmentReason = "merge"
+	CommitmentReasonRenew    CommitmentReason = "renew"
+	CommitmentReasonTransfer CommitmentReason = "transfer"
 )
 
 // MailNotification contains a record from the `project_mail_notifications` table.
