@@ -217,4 +217,10 @@ var sqlMigrations = map[string]string{
 	"066_forbid_autogrowth.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN forbid_autogrowth BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
+	"067_introduce_transfer_started_at.down.sql": `
+		ALTER TABLE project_commitments DROP COLUMN transfer_started_at;
+	`,
+	"067_introduce_transfer_started_at.up.sql": `
+		ALTER TABLE project_commitments ADD COLUMN transfer_started_at TIMESTAMPTZ DEFAULT NULL;
+	`,
 }
