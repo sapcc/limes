@@ -45,8 +45,8 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 
 var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.* FROM project_services ps
-	JOIN services cs ON ps.service_id = cs.id
-	WHERE cs.type = $1 AND ps.quota_desynced_at IS NOT NULL
+	JOIN services s ON ps.service_id = s.id
+	WHERE s.type = $1 AND ps.quota_desynced_at IS NOT NULL
 	-- order by priority (oldest requests first), then by ID for deterministic test behavior
 	ORDER BY ps.quota_desynced_at ASC, ps.id ASC
 	LIMIT 1
@@ -89,31 +89,31 @@ var (
 	// NOTE: This query does not use `AND quota IS NOT NULL` to filter out NoQuota resources
 	// because it would also filter out resources with AZSeparatedTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, pr.resource_id, cr.name, pr.backend_quota, pr.quota, pr.forbidden
+		SELECT pr.id, pr.resource_id, r.name, pr.backend_quota, pr.quota, pr.forbidden
 		FROM project_resources pr
-		JOIN resources cr ON pr.resource_id = cr.id
-		WHERE cr.service_id = $1 AND pr.project_id = $2
+		JOIN resources r ON pr.resource_id = r.id
+		WHERE r.service_id = $1 AND pr.project_id = $2
 	`)
 	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
-		SELECT cazr.az, pazr.backend_quota, pazr.quota
+		SELECT azr.az, pazr.backend_quota, pazr.quota
 		FROM project_az_resources pazr
-		JOIN az_resources cazr ON pazr.az_resource_id = cazr.id
-		WHERE cazr.resource_id = $1 AND pazr.project_id = $2 AND pazr.quota IS NOT NULL
+		JOIN az_resources azr ON pazr.az_resource_id = azr.id
+		WHERE azr.resource_id = $1 AND pazr.project_id = $2 AND pazr.quota IS NOT NULL
 	`)
 	quotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources pr
 		SET backend_quota = quota
-		FROM resources cr
-		WHERE pr.resource_id = cr.id
-		AND cr.service_id = $1
+		FROM resources r
+		WHERE pr.resource_id = r.id
+		AND r.service_id = $1
 		AND pr.project_id = $2
 	`)
 	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources pazr
 		SET backend_quota = quota
-		FROM az_resources cazr
-		WHERE pazr.az_resource_id = cazr.id
-		AND cazr.resource_id = ANY($1)
+		FROM az_resources azr
+		WHERE pazr.az_resource_id = azr.id
+		AND azr.resource_id = ANY($1)
 		AND pazr.project_id = $2
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`

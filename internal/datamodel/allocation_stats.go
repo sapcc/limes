@@ -110,22 +110,22 @@ type projectAZAllocationStats struct {
 
 var (
 	getRawCapacityInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT car.az, car.raw_capacity, car.last_nonzero_raw_capacity IS NOT NULL
-		  FROM services cs
-		  JOIN resources cr ON cr.service_id = cs.id
-		  JOIN az_resources car ON car.resource_id = cr.id
-		  WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR car.az = $3)
+		SELECT azr.az, azr.raw_capacity, azr.last_nonzero_raw_capacity IS NOT NULL
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
+		  WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3)
 	`)
 
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT pazr.project_id, cazr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
-		  FROM services cs
-		  JOIN resources cr ON cr.service_id = cs.id
-		  JOIN az_resources cazr ON cazr.resource_id = cr.id
-		  JOIN project_az_resources pazr ON pazr.az_resource_id = cazr.id
-		  LEFT OUTER JOIN project_commitments pc ON pc.az_resource_id = cazr.id AND pc.project_id = pazr.project_id AND pc.status = {{liquid.CommitmentStatusConfirmed}}
-		 WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR cazr.az = $3)
-		 GROUP BY pazr.project_id, cazr.az, pazr.usage, pazr.historical_usage
+		SELECT pazr.project_id, azr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
+		  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id
+		  LEFT OUTER JOIN project_commitments pc ON pc.az_resource_id = azr.id AND pc.project_id = pazr.project_id AND pc.status = {{liquid.CommitmentStatusConfirmed}}
+		 WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3)
+		 GROUP BY pazr.project_id, azr.az, pazr.usage, pazr.historical_usage
 	`))
 )
 

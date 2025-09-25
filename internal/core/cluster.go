@@ -447,7 +447,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 
 	// collect existing az_resources
 	var dbAZResources []db.AZResource
-	_, err = tx.Select(&dbAZResources, `SELECT car.* FROM az_resources car JOIN resources cr ON car.resource_id = cr.id WHERE cr.service_id = $1`, srv.ID)
+	_, err = tx.Select(&dbAZResources, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID)
 	if err != nil {
 		return srv, fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
 	}
