@@ -47,13 +47,13 @@ var (
 		 WHERE expires_at <= $1 AND status = {{liquid.CommitmentStatusConfirmed}} AND renew_context_json IS NULL AND NOT notified_for_expiration
 	`))
 	locateExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pc.project_id, cs.type, cr.name, cazr.az, pc.id
-		  FROM services cs
-		  JOIN resources cr ON cr.service_id = cs.id
-		  JOIN az_resources cazr ON cazr.resource_id = cr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = cazr.id
+		SELECT pc.project_id, s.type, r.name, azr.az, pc.id
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
+		  JOIN project_commitments pc ON pc.az_resource_id = azr.id
 		WHERE pc.id = ANY($1)
-		ORDER BY cs.type, cr.name, cazr.az ASC, pc.amount DESC
+		ORDER BY s.type, r.name, azr.az ASC, pc.amount DESC
 	`)
 	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = true WHERE id = ANY($1)`
 )

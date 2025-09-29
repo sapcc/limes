@@ -279,11 +279,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
 			WITH tmp AS (
-				SELECT cr.id AS id, CASE
-					WHEN NOT cr.has_quota THEN NULL
-					WHEN cr.topology = {{liquid.AZSeparatedTopology}} THEN NULL
+				SELECT r.id AS id, CASE
+					WHEN NOT r.has_quota THEN NULL
+					WHEN r.topology = {{liquid.AZSeparatedTopology}} THEN NULL
 					ELSE 0
-				END AS default_quota FROM resources cr
+				END AS default_quota FROM resources r
 			)
 			INSERT INTO project_resources (project_id, resource_id, quota, backend_quota) SELECT
 				p.id              AS project_id,
@@ -295,12 +295,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
 			WITH tmp AS (
-				SELECT cazr.id AS id, CASE
-					WHEN NOT cr.has_quota THEN NULL
-					WHEN cr.topology != {{liquid.AZSeparatedTopology}} THEN NULL
-					WHEN cazr.az = {{liquid.AvailabilityZoneUnknown}} THEN NULL
+				SELECT azr.id AS id, CASE
+					WHEN NOT r.has_quota THEN NULL
+					WHEN r.topology != {{liquid.AZSeparatedTopology}} THEN NULL
+					WHEN azr.az = {{liquid.AvailabilityZoneUnknown}} THEN NULL
 					ELSE 0
-				END AS default_quota FROM az_resources cazr JOIN resources cr ON cazr.resource_id = cr.id
+				END AS default_quota FROM az_resources azr JOIN resources r ON azr.resource_id = r.id
 			)
 			INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, subresources) SELECT
 				p.id              AS project_id,
