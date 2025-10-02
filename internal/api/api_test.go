@@ -521,19 +521,6 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
-	// paris returns lowest max_quota setting
-	s.MustDBExec(
-		"UPDATE project_resources SET max_quota_from_outside_admin = 300, max_quota_from_local_admin = 200 WHERE project_id = $1 AND resource_id = $2",
-		s.GetProjectID("paris"),
-		s.GetResourceID("shared", "capacity"),
-	)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
-	}.Check(t, s.Handler)
-
 	// paris has forbid_autogrowth setting
 	s.MustDBExec(
 		"UPDATE project_resources SET forbid_autogrowth = true WHERE project_id = $1 AND resource_id = $2",
@@ -1089,29 +1076,14 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 	`)
 
-	// happy case: set max quota with project permissions
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = false
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
 		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 500}),
-		ExpectStatus: http.StatusAccepted,
-	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 2 AND project_id = 1 AND resource_id = 2;
-	`, 500)
-	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
-
-	// error case: missing the appropriate edit permission
-	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000}),
 		ExpectStatus: http.StatusForbidden,
-		ExpectBody:   assert.StringData("Forbidden\n"),
 	}.Check(t, s.Handler)
-	s.TokenValidator.Enforcer.AllowEdit = true
+	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
 
 	// error case: invalid service
 	assert.HTTPRequest{
