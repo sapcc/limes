@@ -39,7 +39,7 @@ var (
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, s.type, ps.scraped_at, r.name, pr.quota, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
+	SELECT p.id, s.type, ps.scraped_at, r.name, pr.quota, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -124,7 +124,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			dbResourceName           liquid.ResourceName
 			quota                    *uint64
 			maxQuotaFromOutsideAdmin *uint64
-			MaxQuotaFromLocalAdmin   *uint64
 			ForbidAutogrowth         bool
 			az                       *limes.AvailabilityZone
 			azQuota                  *uint64
@@ -136,7 +135,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		)
 		err := rows.Scan(
 			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&quota, &maxQuotaFromOutsideAdmin, &MaxQuotaFromLocalAdmin, &ForbidAutogrowth,
+			&quota, &maxQuotaFromOutsideAdmin, &ForbidAutogrowth,
 			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
@@ -215,15 +214,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				if quota != nil {
 					resReport.Quota = quota
 					resReport.UsableQuota = quota
-					if maxQuotaFromOutsideAdmin != nil && MaxQuotaFromLocalAdmin == nil {
+					if maxQuotaFromOutsideAdmin != nil {
 						resReport.MaxQuota = maxQuotaFromOutsideAdmin
-					}
-					if MaxQuotaFromLocalAdmin != nil && maxQuotaFromOutsideAdmin == nil {
-						resReport.MaxQuota = MaxQuotaFromLocalAdmin
-					}
-					if maxQuotaFromOutsideAdmin != nil && MaxQuotaFromLocalAdmin != nil {
-						maxQuota := min(*maxQuotaFromOutsideAdmin, *MaxQuotaFromLocalAdmin)
-						resReport.MaxQuota = &maxQuota
 					}
 					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
 						resReport.BackendQuota = backendQuota
