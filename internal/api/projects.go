@@ -248,7 +248,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				if err != nil {
 					msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 					http.Error(w, msg, http.StatusUnprocessableEntity)
-					break
+					return
 				}
 				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: Some(convertedMaxQuota)}
 			}
