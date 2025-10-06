@@ -161,10 +161,9 @@ type MailConfiguration struct {
 // It contains the mail template for each notification case.
 // The templates will be filled with the details collected from the limes collect job.
 type MailTemplateConfiguration struct {
-	ConfirmedCommitments           MailTemplate `yaml:"confirmed_commitments"`
-	ExpiringCommitments            MailTemplate `yaml:"expiring_commitments"`
-	TransferredCommitments         MailTemplate `yaml:"transferred_commitments"`
-	TransferredSplittedCommitments MailTemplate `yaml:"transferred_splitted_commitments"`
+	ConfirmedCommitments   MailTemplate `yaml:"confirmed_commitments"`
+	ExpiringCommitments    MailTemplate `yaml:"expiring_commitments"`
+	TransferredCommitments MailTemplate `yaml:"transferred_commitments"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
