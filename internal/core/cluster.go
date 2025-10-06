@@ -68,6 +68,10 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 		if err != nil {
 			errs.Addf("could not parse expiration mail template: %w", err)
 		}
+		err = mailConfig.Templates.TransferredCommitments.Compile()
+		if err != nil {
+			errs.Addf("could not parse transfer mail template: %w", err)
+		}
 	}
 
 	if !fillLiquidConnections {

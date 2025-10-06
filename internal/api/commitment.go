@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
+	"github.com/sapcc/limes/internal/util"
 )
 
 var (
@@ -89,6 +90,12 @@ var (
 			WHERE pc.project_id = $1 AND s.type = $2 AND r.name = $3 AND azr.az = $4 AND status = {{liquid.CommitmentStatusConfirmed}}
 		) pc ON 1=1
 		WHERE pr.project_id = $1 AND s.type = $2 AND r.name = $3 AND azr.az = $4
+	`))
+
+	findPublicCommitmentsByResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT count(*)
+		FROM project_commitments
+		WHERE project_id = $1 AND az_resource_id = $2 AND transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
 	`))
 
 	findAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
@@ -447,6 +454,17 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// check, that a customer does not try to create commitments for a resource he has posted public commitments for
+	var publicCommitmentsCount int
+	err = p.DB.QueryRow(findPublicCommitmentsByResourceQuery, dbProject.ID, azResourceID).Scan(&publicCommitmentsCount)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	if publicCommitmentsCount > 0 {
+		http.Error(w, "cannot request new commitments, when one or more commitments are in transfer_status public", http.StatusUnprocessableEntity)
+		return
+	}
+
 	// check for committable capacity
 	newStatus := liquid.CommitmentStatusConfirmed
 	totalConfirmedAfter := totalConfirmed + req.Amount
@@ -536,6 +554,17 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
 	if canConfirmErrMsg != "" {
 		http.Error(w, canConfirmErrMsg, http.StatusUnprocessableEntity)
+		return
+	}
+
+	// check, that a customer does not try to create commitments for a resource he has posted public commitments for
+	var publicCommitmentsCount int
+	err = p.DB.QueryRow(findPublicCommitmentsByResourceQuery, dbProject.ID, azResourceID).Scan(&publicCommitmentsCount)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	if publicCommitmentsCount > 0 {
+		http.Error(w, "cannot request new commitments, when one or more commitments are in transfer_status public", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -1264,10 +1293,35 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Deny requests with a greater amount than the commitment.
-	if req.Amount > dbCommitment.Amount {
-		http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+	// Deny requests which do not change the current transfer status.
+	if dbCommitment.TransferStatus == req.TransferStatus {
+		http.Error(w, "transfer_status is already set to desired value", http.StatusBadRequest)
 		return
+	}
+
+	if req.TransferStatus == limesresources.CommitmentTransferStatusNone {
+		// requests to withdraw from transfer are only allowed for 24 hours after starting the transfer
+		ok, err := p.canWithdrawTransfer(token, dbCommitment)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "withdrawing from a public commitment transfer is only possible for 24 hours after posting", http.StatusForbidden)
+			return
+		}
+	} else {
+		// In order to prevent confusion, only commitments in a certain status can be marked as transferable.
+		if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, dbCommitment.Status) {
+			http.Error(w, "expired or superseded commitments cannot be transferred", http.StatusBadRequest)
+			return
+		}
+
+		// Deny requests with a greater amount than the commitment.
+		if req.Amount > dbCommitment.Amount {
+			http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+			return
+		}
 	}
 
 	var (
@@ -1297,8 +1351,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	// when moving into CommitmentTransferStatusNone, the token is cleared;
 	// otherwise a new token is generated and filled in for the transfer
 	transferToken := None[string]()
+	transferStartedAt := None[time.Time]()
 	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
 		transferToken = Some(p.generateTransferToken())
+		transferStartedAt = Some(p.timeNow())
 	}
 
 	// Mark whole commitment or a newly created, splitted one as transferrable.
@@ -1308,9 +1364,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	if req.Amount == dbCommitment.Amount {
+	if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = transferToken
+		dbCommitment.TransferStartedAt = transferStartedAt
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1319,13 +1376,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		now := p.timeNow()
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
-		transferCommitment, err := p.buildSplitCommitment(dbCommitment, transferAmount)
+		transferCommitment, err := util.BuildSplitCommitment(dbCommitment, transferAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
 		transferCommitment.TransferToken = transferToken
-		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		transferCommitment.TransferStartedAt = transferStartedAt
+		remainingCommitment, err := util.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1431,32 +1489,27 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) (db.ProjectCommitment, error) {
-	now := p.timeNow()
-	creationContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonSplit,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
+func (p *v1Provider) canWithdrawTransfer(token *gopherpolicy.Token, commitment db.ProjectCommitment) (bool, error) {
+	if commitment.TransferStatus == limesresources.CommitmentTransferStatusUnlisted {
+		return true, nil
 	}
-	buf, err := json.Marshal(creationContext)
-	if err != nil {
-		return db.ProjectCommitment{}, err
+
+	// defense in depth: a transfer has to have a transferStartedAt
+	transferStartedAt, ok := commitment.TransferStartedAt.Unpack()
+	if !ok {
+		return false, fmt.Errorf("commitment is in transfer status %q but has no transferStartedAt timestamp", commitment.TransferStatus)
 	}
-	return db.ProjectCommitment{
-		UUID:                p.generateProjectCommitmentUUID(),
-		ProjectID:           dbCommitment.ProjectID,
-		AZResourceID:        dbCommitment.AZResourceID,
-		Amount:              amount,
-		Duration:            dbCommitment.Duration,
-		CreatedAt:           now,
-		CreatorUUID:         dbCommitment.CreatorUUID,
-		CreatorName:         dbCommitment.CreatorName,
-		ConfirmBy:           dbCommitment.ConfirmBy,
-		ConfirmedAt:         dbCommitment.ConfirmedAt,
-		ExpiresAt:           dbCommitment.ExpiresAt,
-		CreationContextJSON: json.RawMessage(buf),
-		Status:              dbCommitment.Status,
-	}, nil
+
+	// publicly posted commitments can be withdrawn for 24 hours
+	if p.timeNow().Before(transferStartedAt.Add(24 * time.Hour)) {
+		return true, nil
+	}
+
+	// afterwards, a more specific permission is required to delete it
+	//
+	// This protects cloud admins making capacity planning decisions based on future commitments
+	// from having their forecasts ruined by project admins suffering from buyer's remorse.
+	return token.Check("project:uncommit"), nil
 }
 
 func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.AZResourceID, amount uint64) (db.ProjectCommitment, error) {
@@ -1944,6 +1997,11 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
+	// do not allow conversions on commitments in transfer
+	if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		http.Error(w, "commitments in transfer cannot be converted", http.StatusUnprocessableEntity)
+		return
+	}
 	targetLoc := core.AZResourceLocation{
 		ServiceType:      sourceLoc.ServiceType,
 		ResourceName:     targetResourceName,
@@ -1966,7 +2024,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// when there is a remaining amount, we must request to add this
 	if remainingAmount > 0 {
-		remainingCommitment, err = p.buildSplitCommitment(dbCommitment, remainingAmount)
+		remainingCommitment, err = util.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
