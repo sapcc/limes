@@ -1134,9 +1134,16 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 					projects:
 						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
 			liquids:
-				shared: { area: shared }
+				shared:
+					area: shared
+					commitment_behavior_per_resource:
+						- key: 'capacity|things'
+							value:
+								durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
+				unshared: { area: unshared }
 		`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -1226,6 +1233,18 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("no such service and/or resource: shared/items\n"),
+	}.Check(t, s.Handler)
+
+	// error case: resource does not allow commitments (we only allow setting
+	// forbid_autogrowth on resources that track commitments because, on other
+	// resources, this will usually lead to the user locking themselves out of
+	// using the resource entirely)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
+		Body:         makeRequest("unshared", assert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource unshared/capacity does not allow commitments\n"),
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
