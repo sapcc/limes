@@ -389,6 +389,13 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
+			behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
+			if len(behavior.Durations) == 0 {
+				msg := fmt.Sprintf("resource %s/%s does not allow commitments", dbServiceType, dbResourceName)
+				http.Error(w, msg, http.StatusUnprocessableEntity)
+				return
+			}
+
 			if requested[dbServiceType] == nil {
 				requested[dbServiceType] = make(map[liquid.ResourceName]*autogrowthChange)
 			}
