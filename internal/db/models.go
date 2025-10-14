@@ -125,7 +125,6 @@ type ProjectResource struct {
 	Forbidden                bool              `db:"forbidden"`
 	ForbidAutogrowth         bool              `db:"forbid_autogrowth"`
 	MaxQuotaFromOutsideAdmin Option[uint64]    `db:"max_quota_from_outside_admin"`
-	MaxQuotaFromLocalAdmin   Option[uint64]    `db:"max_quota_from_local_admin"`
 	OverrideQuotaFromConfig  Option[uint64]    `db:"override_quota_from_config"`
 }
 

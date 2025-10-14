@@ -217,4 +217,10 @@ var sqlMigrations = map[string]string{
 	"066_forbid_autogrowth.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN forbid_autogrowth BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
+	"067_maxQuotaFromLocalAdmin.up.sql": `
+		ALTER TABLE project_resources DROP COLUMN max_quota_from_local_admin;
+	`,
+	"067_maxQuotaFromLocalAdmin.down.sql": `
+		ALTER TABLE project_resources ADD COLUMN max_quota_from_local_admin BIGINT;
+	`,
 }
