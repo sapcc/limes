@@ -34,11 +34,10 @@ var (
 	`)
 
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT project_id, forbidden, max_quota_from_outside_admin, max_quota_from_local_admin, forbid_autogrowth, override_quota_from_config
+		SELECT project_id, forbidden, max_quota_from_outside_admin, forbid_autogrowth, override_quota_from_config
 		  FROM project_resources
 		 WHERE resource_id = $1 AND (forbidden IS NOT NULL
 		                          OR max_quota_from_outside_admin IS NOT NULL
-		                          OR max_quota_from_local_admin IS NOT NULL
 		                          OR forbid_autogrowth IS NOT NULL
 		                          OR override_quota_from_config IS NOT NULL)
 	`)
@@ -135,11 +134,10 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 			projectID                 db.ProjectID
 			forbidden                 bool
 			maxQuotaFromOutsideAdmin  Option[uint64]
-			maxQuotaFromLocalAdmin    Option[uint64]
 			forbidAutogrowthFromAdmin bool
 			overrideQuotaFromConfig   Option[uint64]
 		)
-		err := rows.Scan(&projectID, &forbidden, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &forbidAutogrowthFromAdmin, &overrideQuotaFromConfig)
+		err := rows.Scan(&projectID, &forbidden, &maxQuotaFromOutsideAdmin, &forbidAutogrowthFromAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
@@ -149,7 +147,6 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 			c.AddMaxQuota(Some(uint64(0)))
 		}
 		c.AddMaxQuota(maxQuotaFromOutsideAdmin)
-		c.AddMaxQuota(maxQuotaFromLocalAdmin)
 		c.AddMinQuota(overrideQuotaFromConfig)
 		c.AddMaxQuota(overrideQuotaFromConfig)
 
