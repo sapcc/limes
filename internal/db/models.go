@@ -120,8 +120,6 @@ type ProjectResource struct {
 	ID                       ProjectResourceID `db:"id"`
 	ProjectID                ProjectID         `db:"project_id"`
 	ResourceID               ResourceID        `db:"resource_id"`
-	Quota                    Option[uint64]    `db:"quota"`
-	BackendQuota             Option[int64]     `db:"backend_quota"`
 	Forbidden                bool              `db:"forbidden"`
 	ForbidAutogrowth         bool              `db:"forbid_autogrowth"`
 	MaxQuotaFromOutsideAdmin Option[uint64]    `db:"max_quota_from_outside_admin"`

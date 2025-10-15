@@ -230,4 +230,34 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments ADD COLUMN transfer_started_at TIMESTAMPTZ DEFAULT NULL;
 		UPDATE project_commitments SET transfer_started_at = NOW() WHERE transfer_status = 'public' AND transfer_started_at IS NULL;
 	`,
+	"069_remove_project_level_values.down.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN quota                         BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			ADD COLUMN backend_quota                 BIGINT     DEFAULT NULL;
+		UPDATE project_resources pr
+			SET pr.quota = pazr.quota, pr.backend_quota = pazr.backend_quota
+			FROM az_resources azr 
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
+			WHERE azr.resource_id = pr.resource_id AND azr.az = 'total';
+		DELETE FROM project_az_resources WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = 'total');
+		DELETE FROM az_resources WHERE az = 'total';
+	`,
+	"069_remove_project_level_values.up.sql": `
+		-- We do a migration of the used values here, so that the APIs don't produce garbage after migration
+		-- We skip fields like subcapacities, subresources and historical usage, as they only make sense when az-attributed or are unused.
+		INSERT INTO az_resources (resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path)
+			SELECT azr.resource_id, 'total' as az, SUM(raw_capacity), SUM(usage), '' AS subcapacities, SUM(last_nonzero_raw_capacity), REPLACE(azr.path, azr.az, 'total') AS path
+            FROM az_resources azr
+			GROUP BY azr.resource_id, REPLACE(azr.path, azr.az, 'total');
+		INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, physical_usage, subresources, historical_usage, backend_quota)
+			SELECT pazr.project_id, azr_total.id AS az_resource_id, pr.quota, SUM(pazr.usage), SUM(pazr.physical_usage), '' AS subresources, '' as historical_usage, pr.backend_quota
+			FROM az_resources azr
+			JOIN az_resources azr_total ON azr.resource_id = azr_total.resource_id AND azr_total.az = 'total'
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id
+			JOIN project_resources pr ON pr.project_id = pazr.project_id AND pr.resource_id = azr.resource_id
+			GROUP BY pazr.project_id, azr_total.id, pr.quota, pr.backend_quota;
+		ALTER TABLE project_resources
+			DROP COLUMN quota,
+			DROP COLUMN backend_quota;
+	`,
 }
