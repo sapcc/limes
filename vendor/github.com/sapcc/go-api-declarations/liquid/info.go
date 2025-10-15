@@ -116,7 +116,7 @@ const (
 	// PerAZ may also include an entry for AvailabilityZoneUnknown as needed.
 	// Any other entry (including AvailabilityZoneAny) will be considered an error by Limes.
 	//
-	// If the resource sets "HasQuota = true", only a flat number will be given, and PerAZ will be null.
+	// If only a flat number will be given, and PerAZ will be null.
 	// This behavior matches the AZ-unawareness of quota in most OpenStack services.
 	AZAwareTopology Topology = "az-aware"
 

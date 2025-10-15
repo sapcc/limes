@@ -147,6 +147,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		return err
 	}
 
+	enrichCapacityReportTotals(&capacityData)
+
 	// do the following in a transaction to avoid inconsistent DB state
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -169,7 +171,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	var dbAZResources []db.AZResource
 	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbResourceIDs}, 0)
-	_, err = tx.Select(&dbAZResources, `SELECT * FROM az_resources WHERE `+whereClause, queryArgs...)
+	_, err = tx.Select(&dbAZResources, `SELECT * FROM az_resources WHERE `+whereClause+
+		` ORDER BY CASE WHEN az != 'total' THEN 0 ELSE 1 END`, queryArgs...)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing AZ resources: %w", err)
 	}
@@ -184,7 +187,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	serviceInfo := core.InfoForService(serviceInfos, service.Type)
 
-	// az_resources should be there - enumerate the data an complain if they don't match (with exceptions)
+	// az_resources should be there - enumerate the data and complain if they don't match (with exceptions)
 	for _, res := range dbResources {
 		resourceData, resExists := capacityData.Resources[res.Name]
 		if !resExists {
@@ -194,12 +197,10 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 		resourceTopology := core.InfoForResource(serviceInfo, res.Name).Topology
 		_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
+		totalLastNonzeroRawCapacity := uint64(0)
+		// NOTE: because of the ordering, we can sum up the AZs here to the last one
 		for _, azRes := range dbAZResourcesByResourceID[res.ID] {
 			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
-			// TODO: fill az=total (for now it is ignored and skipped)
-			if azRes.AvailabilityZone == liquid.AvailabilityZoneTotal {
-				continue
-			}
 			// az=unknown and az=any do not have to exist
 			// specific AZs do not need capacity when az=any has capacity (sum should be correct)
 			if !azResExists && !slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, azRes.AvailabilityZone) && resourceTopology != liquid.FlatTopology && !anyAZexists {
@@ -210,14 +211,24 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 				azResExists = true
 				azResourceData = &liquid.AZResourceCapacityReport{}
 			}
-
+			// the total AZ gets the sum of all AZs' LastNonzeroRawCapacity
+			// NOTE: this is different to the sum of the current capacities if one is 0!
+			if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal && !azResExists {
+				totalLastNonzeroRawCapacity += azRes.LastNonzeroRawCapacity.UnwrapOr(0)
+			}
+			// exit if no data
 			if !azResExists {
 				continue
 			}
+
 			azRes.RawCapacity = azResourceData.Capacity
 			if azResourceData.Capacity > 0 {
 				azRes.LastNonzeroRawCapacity = Some(azResourceData.Capacity)
 			}
+			if azRes.AvailabilityZone == liquid.AvailabilityZoneTotal && totalLastNonzeroRawCapacity > 0 {
+				azRes.LastNonzeroRawCapacity = Some(totalLastNonzeroRawCapacity)
+			}
+
 			azRes.Usage = azResourceData.Usage
 			azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", azResourceData.Subcapacities)
 			if err != nil {
@@ -323,4 +334,42 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 		}
 	}
 	return tx.Commit()
+}
+
+func enrichCapacityReportTotals(value *liquid.ServiceCapacityReport) {
+	if value == nil || value.Resources == nil {
+		return
+	}
+
+	for resName, resValue := range value.Resources {
+		if len(resValue.PerAZ) == 0 {
+			continue
+		}
+
+		var (
+			totalCapacity    uint64
+			totalUsage       uint64
+			totalUsageExists bool
+			subcapacities    []liquid.Subcapacity
+		)
+		for _, azValue := range resValue.PerAZ {
+			totalCapacity += azValue.Capacity
+			subcapacities = append(subcapacities, azValue.Subcapacities...)
+			if usage, ok := azValue.Usage.Unpack(); ok {
+				totalUsageExists = true
+				totalUsage += usage
+			}
+		}
+		totalUsageOption := None[uint64]()
+		if totalUsageExists {
+			totalUsageOption = Some(totalUsage)
+		}
+		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &liquid.AZResourceCapacityReport{
+			Capacity:      totalCapacity,
+			Usage:         totalUsageOption,
+			Subcapacities: subcapacities,
+		}
+
+		value.Resources[resName] = resValue
+	}
 }
