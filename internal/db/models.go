@@ -59,13 +59,15 @@ type AZResource struct {
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
 	Path string `db:"path"`
 
-	RawCapacity       uint64         `db:"raw_capacity"`
-	Usage             Option[uint64] `db:"usage"`
-	SubcapacitiesJSON string         `db:"subcapacities"`
+	RawCapacity uint64         `db:"raw_capacity"`
+	Usage       Option[uint64] `db:"usage"`
+	// '' for az=total
+	SubcapacitiesJSON string `db:"subcapacities"`
 
 	// LastNonzeroRawCapacity is None initially, and gets filled whenever capacity scrape sees a non-zero capacity value.
 	// We use this as a signal for ACPQ to distinguish new AZs in buildup that should be ignored for the purposes of base quota overcommit,
 	// from existing AZs with faulty capacity recording that should block base quota overcommit.
+	// None for az=total
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
 }
 
@@ -120,8 +122,6 @@ type ProjectResource struct {
 	ID                       ProjectResourceID `db:"id"`
 	ProjectID                ProjectID         `db:"project_id"`
 	ResourceID               ResourceID        `db:"resource_id"`
-	Quota                    Option[uint64]    `db:"quota"`
-	BackendQuota             Option[int64]     `db:"backend_quota"`
 	Forbidden                bool              `db:"forbidden"`
 	ForbidAutogrowth         bool              `db:"forbid_autogrowth"`
 	MaxQuotaFromOutsideAdmin Option[uint64]    `db:"max_quota_from_outside_admin"`
@@ -130,15 +130,19 @@ type ProjectResource struct {
 
 // ProjectAZResource contains a record from the `project_az_resources` table.
 type ProjectAZResource struct {
-	ID                  ProjectAZResourceID `db:"id"`
-	ProjectID           ProjectID           `db:"project_id"`
-	AZResourceID        AZResourceID        `db:"az_resource_id"`
-	Quota               Option[uint64]      `db:"quota"`
-	BackendQuota        Option[int64]       `db:"backend_quota"`
-	Usage               uint64              `db:"usage"`
-	PhysicalUsage       Option[uint64]      `db:"physical_usage"`
-	SubresourcesJSON    string              `db:"subresources"`
-	HistoricalUsageJSON string              `db:"historical_usage"`
+	ID           ProjectAZResourceID `db:"id"`
+	ProjectID    ProjectID           `db:"project_id"`
+	AZResourceID AZResourceID        `db:"az_resource_id"`
+	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
+	Quota Option[uint64] `db:"quota"`
+	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
+	BackendQuota  Option[int64]  `db:"backend_quota"`
+	Usage         uint64         `db:"usage"`
+	PhysicalUsage Option[uint64] `db:"physical_usage"`
+	// '' for az=total
+	SubresourcesJSON string `db:"subresources"`
+	// '' for az=total
+	HistoricalUsageJSON string `db:"historical_usage"`
 }
 
 // ProjectRate contains a record from the `project_rates` table.

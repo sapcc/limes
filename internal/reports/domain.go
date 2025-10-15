@@ -25,32 +25,8 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	 WHERE %s
 `)
 
-// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
+// NOTE: The select emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	WITH project_az_sums AS (
-	  SELECT pazr.project_id, r.id AS resource_id,
-	         SUM(pazr.usage) AS usage,
-	         SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage,
-	         COUNT(pazr.physical_usage) > 0 AS has_physical_usage
-	    FROM project_az_resources as pazr
-	    JOIN az_resources as cazr ON cazr.id = pazr.az_resource_id AND cazr.az != {{liquid.AvailabilityZoneTotal}}
-	    JOIN resources as r ON r.id = cazr.resource_id
-	   GROUP BY pazr.project_id, r.id
-	)
-	SELECT p.domain_id, s.type, r.name, SUM(pr.quota), SUM(pas.usage),
-	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
-	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
-	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM services s
-	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  CROSS JOIN projects p
-	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = s.id
-	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = r.id
-	  LEFT OUTER JOIN project_az_sums pas ON pas.project_id = p.id AND pas.resource_id = r.id 
-	 WHERE %s {{AND s.type = $service_type}} GROUP BY p.domain_id, s.type, r.name
-`))
-
-var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
@@ -59,11 +35,14 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	)
 	SELECT p.domain_id, s.type, r.name, azr.az,
 	       SUM(pazr.quota), SUM(pazr.usage),
-	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
-	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0)))
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)) AS unused_commitments,
+	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))) AS uncommitted_usage,
+		   SUM(GREATEST(pazr.backend_quota, 0)) as backend_quota, MIN(pazr.backend_quota) < 0 as infinite_backend_quota,
+		   SUM(COALESCE(pazr.physical_usage, pazr.usage)) as physical_usage, COUNT(pazr.physical_usage) > 0 as has_physical_usage,
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
+	  JOIN az_resources azr ON azr.resource_id = r.id
 	  CROSS JOIN projects p
 	  JOIN project_services ps ON ps.project_id = p.id AND ps.service_id = s.id
 	  JOIN project_resources pr ON pr.project_id = p.id AND pr.resource_id = r.id
@@ -134,16 +113,23 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		fields = map[string]any{"p.domain_id": *domainID}
 	}
 
-	// second query: data for projects in this domain
-	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery2)
+	// second query: add resource and az-level values
+	queryStr := domainReportQuery2
+	if !filter.WithAZBreakdown {
+		queryStr = strings.Replace(queryStr, "%s", db.ExpandEnumPlaceholders("azr.az = {{liquid.AvailabilityZoneTotal}} AND %s"), 1)
+	}
+	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainID             db.DomainID
 			dbServiceType        db.ServiceType
 			dbResourceName       liquid.ResourceName
-			projectsQuota        *uint64
+			az                   limes.AvailabilityZone
+			quota                *uint64
 			usage                *uint64
+			unusedCommitments    *uint64
+			uncommittedUsage     *uint64
 			backendQuota         *uint64
 			infiniteBackendQuota *bool
 			physicalUsage        *uint64
@@ -152,11 +138,9 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			maxScrapedAt         *time.Time
 		)
 		err := rows.Scan(
-			&domainID, &dbServiceType, &dbResourceName,
-			&projectsQuota, &usage,
-			&backendQuota, &infiniteBackendQuota,
-			&physicalUsage, &showPhysicalUsage,
-			&minScrapedAt, &maxScrapedAt,
+			&domainID, &dbServiceType, &dbResourceName, &az,
+			&quota, &usage, &unusedCommitments, &uncommittedUsage,
+			&backendQuota, &infiniteBackendQuota, &physicalUsage, &showPhysicalUsage, &minScrapedAt, &maxScrapedAt,
 		)
 		if err != nil {
 			return err
@@ -169,80 +153,56 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		}
 		service, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
 
-		service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
-		service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+		if az == liquid.AvailabilityZoneTotal {
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 
-		if usage != nil {
-			resource.Usage = *usage
-		}
-		if !resource.NoQuota {
-			if projectsQuota != nil {
-				resource.ProjectsQuota = projectsQuota
-				resource.DomainQuota = projectsQuota
-				if backendQuota != nil && *projectsQuota != *backendQuota {
-					resource.BackendQuota = backendQuota
+			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
+			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+
+			if usage != nil {
+				resource.Usage = *usage
+			}
+			if !resource.NoQuota {
+				if quota != nil && resInfo.Topology != liquid.AZSeparatedTopology {
+					resource.ProjectsQuota = quota
+					resource.DomainQuota = quota
+					if backendQuota != nil && *quota != *backendQuota {
+						resource.BackendQuota = backendQuota
+					}
+				}
+				if infiniteBackendQuota != nil && *infiniteBackendQuota {
+					resource.InfiniteBackendQuota = infiniteBackendQuota
 				}
 			}
-			if infiniteBackendQuota != nil && *infiniteBackendQuota {
-				resource.InfiniteBackendQuota = infiniteBackendQuota
+			if showPhysicalUsage != nil && *showPhysicalUsage {
+				resource.PhysicalUsage = physicalUsage
 			}
 		}
-		if showPhysicalUsage != nil && *showPhysicalUsage {
-			resource.PhysicalUsage = physicalUsage
-		}
 
+		if filter.WithAZBreakdown && az != liquid.AvailabilityZoneTotal {
+			if resource.PerAZ == nil {
+				resource.PerAZ = make(limesresources.DomainAZResourceReports)
+			}
+			sanitizedQuota := uint64(0)
+			if quota != nil {
+				sanitizedQuota = *quota
+			}
+			resource.PerAZ[az] = &limesresources.DomainAZResourceReport{
+				Quota:             &sanitizedQuota,
+				Usage:             *usage,
+				UnusedCommitments: *unusedCommitments,
+				UncommittedUsage:  *uncommittedUsage,
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	// fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
 	if filter.WithAZBreakdown {
-		// third query: add basic AZ breakdown (quota, usage, unused commitments)
-		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery3)
-		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				domainID          db.DomainID
-				dbServiceType     db.ServiceType
-				dbResourceName    liquid.ResourceName
-				az                limes.AvailabilityZone
-				quota             *uint64
-				usage             uint64
-				unusedCommitments uint64
-				uncommittedUsage  uint64
-			)
-			err := rows.Scan(
-				&domainID, &dbServiceType, &dbResourceName, &az,
-				&quota, &usage, &unusedCommitments, &uncommittedUsage,
-			)
-			if err != nil {
-				return err
-			}
-			if domains[domainID] == nil {
-				return nil
-			}
-			if !filter.Includes[dbServiceType][dbResourceName] {
-				return nil
-			}
-			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
-
-			if resource.PerAZ == nil {
-				resource.PerAZ = make(limesresources.DomainAZResourceReports)
-			}
-			resource.PerAZ[az] = &limesresources.DomainAZResourceReport{
-				Quota:             quota,
-				Usage:             usage,
-				UnusedCommitments: unusedCommitments,
-				UncommittedUsage:  uncommittedUsage,
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery4)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -300,25 +260,24 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if err != nil {
 			return nil, err
 		}
-
-		// project_az_resources always has entries for "any", even if the resource
-		// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
-		// the base quotas; we ignore those entries here if the "any" usage is zero
-		// and there are other AZs
-		// "unknown" may exist because the location for usages or capacities may be
-		// unknown, but we only show it if there is non-zero quota/usage.
-		for _, domainReport := range domains {
-			for _, srvReport := range domainReport.Services {
-				for _, resReport := range srvReport.Resources {
-					if len(resReport.PerAZ) >= 2 {
-						reportInUnknown := resReport.PerAZ[limes.AvailabilityZoneUnknown]
-						if reportInUnknown != nil && (reportInUnknown.Quota == nil || *reportInUnknown.Quota == 0) && reportInUnknown.Usage == 0 {
-							delete(resReport.PerAZ, limes.AvailabilityZoneUnknown)
-						}
-						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
-						if reportInAny != nil && (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
-							delete(resReport.PerAZ, limes.AvailabilityZoneAny)
-						}
+	}
+	// project_az_resources always has entries for "any", even if the resource
+	// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+	// the base quotas; we ignore those entries here if the "any" usage is zero
+	// and there are other AZs
+	// "unknown" may exist because the location for usages or capacities may be
+	// unknown, but we only show it if there is non-zero quota/usage.
+	for _, domainReport := range domains {
+		for _, srvReport := range domainReport.Services {
+			for _, resReport := range srvReport.Resources {
+				if len(resReport.PerAZ) >= 2 {
+					reportInUnknown := resReport.PerAZ[limes.AvailabilityZoneUnknown]
+					if reportInUnknown != nil && (reportInUnknown.Quota == nil || *reportInUnknown.Quota == 0) && reportInUnknown.Usage == 0 {
+						delete(resReport.PerAZ, limes.AvailabilityZoneUnknown)
+					}
+					reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
+					if reportInAny != nil && (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
+						delete(resReport.PerAZ, limes.AvailabilityZoneAny)
 					}
 				}
 			}

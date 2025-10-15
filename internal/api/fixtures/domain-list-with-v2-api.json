@@ -21,10 +21,12 @@
               },
               "per_az": {
                 "az-one": {
+                  "quota": 5,
                   "usage": 1,
                   "uncommitted_usage": 1
                 },
                 "az-two": {
+                  "quota": 5,
                   "usage": 1,
                   "uncommitted_usage": 1
                 }
@@ -46,6 +48,7 @@
               },
               "per_az": {
                 "any": {
+                  "quota": 10,
                   "usage": 2,
                   "uncommitted_usage": 2
                 }
@@ -68,10 +71,12 @@
               "quota_distribution_model": "autogrow",
               "per_az": {
                 "az-one": {
+                  "quota": 5,
                   "usage": 1,
                   "uncommitted_usage": 1
                 },
                 "az-two": {
+                  "quota": 5,
                   "usage": 1,
                   "uncommitted_usage": 1
                 }
@@ -86,6 +91,7 @@
               "quota_distribution_model": "autogrow",
               "per_az": {
                 "any": {
+                  "quota": 10,
                   "usage": 2,
                   "uncommitted_usage": 2
                 }

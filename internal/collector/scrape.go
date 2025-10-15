@@ -272,6 +272,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			}
 		}
 	}
+	enrichUsageReportTotals(&resourceData, serviceInfo)
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -289,25 +290,16 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 	}
 
-	// this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
-	updateResource := func(res *db.ProjectResource, resName liquid.ResourceName) error {
-		backendQuota := resourceData.Resources[resName].Quota
-
-		resInfo := core.InfoForResource(serviceInfo, resName)
-		if resInfo.HasQuota {
-			if resInfo.Topology != liquid.AZSeparatedTopology {
-				res.BackendQuota = backendQuota
-			}
-			res.Forbidden = resourceData.Resources[resName].Forbidden
-		}
-
-		return nil
-	}
-
-	// update project_resources using the action callback from above
+	// we only need to ensure existence of project_resources - the values don't impact this operation
 	_, err = datamodel.ProjectResourceUpdate{
-		UpdateResource: updateResource,
-		LogError:       c.LogError,
+		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+			resInfo := core.InfoForResource(serviceInfo, resName)
+			if resInfo.HasQuota {
+				res.Forbidden = resourceData.Resources[resName].Forbidden
+			}
+			return nil
+		},
+		LogError: c.LogError,
 	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, service)
 	if err != nil {
 		return err
@@ -353,6 +345,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	resourceNames := slices.Sorted(maps.Keys(resourcesByName))
 
 	// update project_az_resources for each resource
+	hasBackendQuotaDrift := false
 	for _, resourceName := range resourceNames {
 		resource := resourcesByName[resourceName]
 		usageData := resourceData.Resources[resourceName].PerAZ
@@ -384,12 +377,34 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				// set AZ backend quota.
+				// depending on the resource topology, we may or may not have a value in this AZ
 				resInfo := core.InfoForResource(serviceInfo, resourceName)
-				if resInfo.Topology == liquid.AZSeparatedTopology && resInfo.HasQuota {
-					azRes.BackendQuota = data.Quota
-				} else {
+				switch {
+				case !resInfo.HasQuota:
+					// reset everything to none, when no quota is supported
 					azRes.BackendQuota = None[int64]()
+					azRes.Quota = None[uint64]()
+				case az == liquid.AvailabilityZoneTotal || resInfo.Topology == liquid.AZSeparatedTopology:
+					// filled accordingly by enrichUsageReportTotals
+					azRes.BackendQuota = data.Quota
+				default:
+					azRes.BackendQuota = None[int64]()
+				}
+
+				// check if we need to arrange for SetQuotaJob to look at this project service
+				if resInfo.HasQuota {
+					if azRes.Quota.IsNone() {
+						// apply missing default quota
+						azRes.Quota = Some[uint64](0)
+					}
+					if (resInfo.Topology == liquid.AZSeparatedTopology && az != liquid.AvailabilityZoneTotal) ||
+						(resInfo.Topology != liquid.AZSeparatedTopology && az == liquid.AvailabilityZoneTotal) {
+						backendQuota := azRes.BackendQuota.UnwrapOr(-1)
+						quota := azRes.Quota.UnwrapOr(0)
+						if backendQuota < 0 || uint64(backendQuota) != quota {
+							hasBackendQuotaDrift = true
+						}
+					}
 				}
 
 				// warn when the backend is inconsistent with itself
@@ -431,6 +446,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		_, err := setUpdate.Execute(tx)
 		if err != nil {
 			return err
+		}
+	}
+	if hasBackendQuotaDrift {
+		query := `UPDATE project_services ps SET quota_desynced_at = $1 WHERE ps.id = $2 AND quota_desynced_at IS NULL`
+		_, err := tx.Exec(query, c.MeasureTime(), task.ProjectService.ID)
+		if err != nil {
+			return fmt.Errorf("while scheduling backend sync for %s quotas: %w", task.Service.Type, err)
 		}
 	}
 
@@ -563,16 +585,8 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// create all project_resources, but do not set any particular values (except
-	// that quota overrides are persisted)
+	// create all project_resources, but do not set any particular values
 	_, err = datamodel.ProjectResourceUpdate{
-		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			resInfo := core.InfoForResource(serviceInfo, resName)
-			if resInfo.HasQuota && res.BackendQuota.IsNone() {
-				res.BackendQuota = Some[int64](-1)
-			}
-			return nil
-		},
 		LogError: c.LogError,
 	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, srv)
 	if err != nil {
@@ -583,7 +597,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 
 	// create dummy project_az_resources; for this, we need the az_resources
 	var azResources []db.AZResource
-	_, err = tx.Select(&azResources, `SELECT * FROM az_resources WHERE resource_id IN (SELECT id FROM resources WHERE service_id = $1) AND az = $2`, srv.ID, liquid.AvailabilityZoneAny)
+	_, err = tx.Select(&azResources, `SELECT * FROM az_resources WHERE resource_id IN (SELECT id FROM resources WHERE service_id = $1) AND az IN ($2, $3) ORDER BY id`, srv.ID, liquid.AvailabilityZoneAny, liquid.AvailabilityZoneTotal)
 	if err != nil {
 		return err
 	}
@@ -592,15 +606,15 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 			ProjectID:    dbProject.ID,
 			AZResourceID: res.ID,
 			Usage:        0,
+			BackendQuota: Some(int64(-1)),
 		})
 		if err != nil {
 			return err
 		}
 	}
 
-	// FIXME: These dummy resources do not conform to `resInfo.Topology` and are never AZ-aware.
-	//        I'm not fixing this right now because dummy resources are an extremely rare corner-case anyway.
-	// TODO:  When we rework the DB schema next year, we should build it so that dummy resources can be avoided entirely.
+	// TODO: Do we still want to find a way to make the datamodel work without dummy resources?
+	// with the total-AZ, we are kind of getting away from this desire, so at some point, we should discuss this again.
 
 	// update scraped_at timestamp and reset stale flag to make sure that we do
 	// not scrape this service again immediately afterwards if there are other
@@ -617,4 +631,52 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	}
 
 	return tx.Commit()
+}
+
+func enrichUsageReportTotals(value *liquid.ServiceUsageReport, serviceInfo liquid.ServiceInfo) {
+	if value == nil || value.Resources == nil {
+		return
+	}
+
+	for resName, resValue := range value.Resources {
+		if len(resValue.PerAZ) == 0 {
+			continue
+		}
+
+		resourceInfo := core.InfoForResource(serviceInfo, resName)
+		var (
+			totalUsage         uint64
+			totalPhysicalUsage uint64
+			totalQuota         int64
+		)
+		for _, azValue := range resValue.PerAZ {
+			totalUsage += azValue.Usage
+			if physicalUsage, ok := azValue.PhysicalUsage.Unpack(); ok {
+				totalPhysicalUsage += physicalUsage
+			}
+			// defense in depth: the report from the liquid should be consistent with the topology
+			if quota, ok := azValue.Quota.Unpack(); ok && resourceInfo.HasQuota && resourceInfo.Topology == liquid.AZSeparatedTopology {
+				totalQuota += quota
+			}
+		}
+		totalPhysicalUsageOption := None[uint64]()
+		if totalPhysicalUsage > 0 {
+			totalPhysicalUsageOption = Some(totalPhysicalUsage)
+		}
+		totalQuotaOption := None[int64]()
+		if totalQuota > 0 {
+			totalQuotaOption = Some(totalQuota)
+		}
+		// defense in depth: the report from the liquid should be consistent with the topology
+		if resourceInfo.HasQuota && resourceInfo.Topology != liquid.AZSeparatedTopology {
+			totalQuotaOption = resValue.Quota
+		}
+		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &liquid.AZResourceUsageReport{
+			Usage:         totalUsage,
+			PhysicalUsage: totalPhysicalUsageOption,
+			Quota:         totalQuotaOption,
+		}
+
+		value.Resources[resName] = resValue
+	}
 }

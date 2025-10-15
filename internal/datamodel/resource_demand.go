@@ -40,6 +40,7 @@ var (
 		     GROUP BY az_resource_id, project_id
 		  ) pc_view ON pc_view.az_resource_id = azr.id AND pc_view.project_id = pazr.project_id
 		 WHERE s.type = $1 AND r.name = $2
+		 -- no az filter, as az.isReal() is used later
 	`))
 )
 
