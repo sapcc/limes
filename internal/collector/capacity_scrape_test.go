@@ -147,7 +147,9 @@ func Test_ScanCapacity(t *testing.T) {
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 2 AND az = 'any' AND path = 'unshared/capacity/any';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 4 AND resource_id = 2 AND az = 'total' AND path = 'unshared/capacity/total';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
@@ -205,7 +207,7 @@ func Test_ScanCapacity(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM az_resources WHERE id = 5 AND resource_id = 3 AND az = 'any' AND path = 'unshared/unknown/any';
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (6, 4, 'any', 23, 4, 23, 'shared/things/any');
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 4, 'total', 0, 'shared/things/total');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (7, 4, 'total', 23, 4, 23, 'shared/things/total');
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		DELETE FROM resources WHERE id = 3 AND service_id = 2 AND name = 'unknown' AND path = 'unshared/unknown';
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE, 'shared/things');
@@ -292,6 +294,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -313,6 +316,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 10 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 10, subcapacities = '[{"name":"smaller_half","capacity":1,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":1,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":4,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -392,6 +396,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -411,6 +416,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
 		UPDATE az_resources SET raw_capacity = 15, usage = 3, last_nonzero_raw_capacity = 15 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
+		UPDATE az_resources SET raw_capacity = 30, usage = 6, last_nonzero_raw_capacity = 30 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
@@ -476,7 +482,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET usage = 0 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -495,7 +503,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -514,7 +524,9 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -637,7 +649,9 @@ func Test_ScanManualCapacity(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 84, usage = 16, last_nonzero_raw_capacity = 84 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
@@ -730,10 +744,14 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	query := `UPDATE az_resources SET raw_capacity = $1, last_nonzero_raw_capacity = $1, usage = $2 WHERE path = $3`
 	s.MustDBExec(query, 42, 8, "first/capacity/az-one")
 	s.MustDBExec(query, 42, 8, "first/capacity/az-two")
+	s.MustDBExec(query, 84, 16, "first/capacity/total")
 	s.MustDBExec(query, 42, 8, "first/things/any")
+	s.MustDBExec(query, 42, 8, "first/things/total")
 	s.MustDBExec(query, 23, 4, "second/capacity/az-one")
 	s.MustDBExec(query, 23, 4, "second/capacity/az-two")
+	s.MustDBExec(query, 46, 8, "second/capacity/total")
 	s.MustDBExec(query, 23, 4, "second/things/any")
+	s.MustDBExec(query, 23, 4, "second/things/total")
 
 	// fill `project_az_resources` with some usage data
 	// (we want to see how commitment confirmation reacts to existing usage)
@@ -741,16 +759,21 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	dresden := s.GetProjectID("dresden")
 	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
 	firstCapacityAZTwo := s.GetAZResourceID("first", "capacity", "az-two")
+	firstCapacityTotal := s.GetAZResourceID("first", "capacity", liquid.AvailabilityZoneTotal)
 	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
 	secondCapacityAZTwo := s.GetAZResourceID("second", "capacity", "az-two")
+	secondCapacityTotal := s.GetAZResourceID("second", "capacity", liquid.AvailabilityZoneTotal)
 
 	query = `UPDATE project_az_resources SET usage = $1 WHERE az_resource_id = $2`
 	s.MustDBExec(query, 1, firstCapacityAZOne)
 	s.MustDBExec(query, 1, firstCapacityAZTwo)
+	s.MustDBExec(query, 2, firstCapacityTotal)
 	s.MustDBExec(query, 1, secondCapacityAZOne)
 	s.MustDBExec(query, 1, secondCapacityAZTwo)
+	s.MustDBExec(query, 2, secondCapacityTotal)
 	query = `UPDATE project_az_resources SET usage = $1 WHERE project_id = $2 AND az_resource_id = $3`
 	s.MustDBExec(query, 250, berlin, firstCapacityAZTwo)
+	s.MustDBExec(query, 251, berlin, firstCapacityTotal)
 
 	// fill `project_commitments` with several commitments that each have their confirm_by staggered in amounts of days;
 	// below, we will step through those days
@@ -909,39 +932,33 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	desyncedAt2 := s.Clock.Now()
+	// total project_az_resources: 4, 10, 11
+	// the total az get's a default value of quota=0 so that all reports work, so they are not updated here
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND project_id = 1 AND az_resource_id = 1;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 12 AND project_id = 1 AND az_resource_id = 12;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 13 AND project_id = 1 AND az_resource_id = 13;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 14 AND project_id = 1 AND az_resource_id = 14;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 15 AND project_id = 2 AND az_resource_id = 1;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 17 AND project_id = 2 AND az_resource_id = 3;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 19 AND project_id = 2 AND az_resource_id = 5;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 20 AND project_id = 2 AND az_resource_id = 6;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 21 AND project_id = 2 AND az_resource_id = 7;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 24 AND project_id = 2 AND az_resource_id = 10;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 26 AND project_id = 2 AND az_resource_id = 12;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 27 AND project_id = 2 AND az_resource_id = 13;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 28 AND project_id = 2 AND az_resource_id = 14;
 		UPDATE project_az_resources SET quota = 250 WHERE id = 3 AND project_id = 1 AND az_resource_id = 3;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
+		UPDATE project_az_resources SET quota = 251 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 5 AND project_id = 1 AND az_resource_id = 5;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 6 AND project_id = 1 AND az_resource_id = 6;
-		UPDATE project_az_resources SET quota = 0 WHERE id = 7 AND project_id = 1 AND az_resource_id = 7;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 8 AND project_id = 1 AND az_resource_id = 8;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
-		UPDATE project_resources SET quota = 251 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
-		UPDATE project_resources SET quota = 10 WHERE id = 3 AND project_id = 1 AND resource_id = 3;
-		UPDATE project_resources SET quota = 10 WHERE id = 5 AND project_id = 2 AND resource_id = 1;
-		UPDATE project_resources SET quota = 10 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 3 AND project_id = 2 AND service_id = 1;
@@ -958,8 +975,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 10 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 260 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 260 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		%s
 	`, scrapedAt1.Unix(), timestampUpdates(false))
 
@@ -973,9 +990,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 110 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 360 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'pending' WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 360 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		%s
 	`, scrapedAt1.Unix(), timestampUpdates(false))
 
@@ -992,10 +1009,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 0 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
 		UPDATE project_az_resources SET quota = 20 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
+		UPDATE project_az_resources SET quota = 21 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'pending' WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 21 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%s
 	`, scrapedAt2.Unix(), scrapedAt2.Unix(), timestampUpdates(false))
 
@@ -1009,9 +1026,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 300 WHERE id = 3 AND project_id = 1 AND az_resource_id = 3;
+		UPDATE project_az_resources SET quota = 410 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_commitments SET status = 'pending' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 410 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		%s
 	`, scrapedAt1.Unix(), timestampUpdates(false))
 
@@ -1026,10 +1043,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 22 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
+		UPDATE project_az_resources SET quota = 23 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 0 WHERE id = 8 AND project_id = 1 AND az_resource_id = 8;
 		UPDATE project_commitments SET status = 'pending' WHERE id = 10 AND uuid = '00000000-0000-0000-0000-000000000010' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 23 WHERE id = 3 AND project_id = 1 AND resource_id = 3;
 		%s
 	`, scrapedAt2.Unix(), timestampUpdates(false))
 
@@ -1040,12 +1057,12 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 24 AND project_id = 2 AND az_resource_id = 10;
+		UPDATE project_az_resources SET quota = 22 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 8 AND project_id = 1 AND az_resource_id = 8;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %d WHERE id = 10 AND uuid = '00000000-0000-0000-0000-000000000010' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 10 WHERE id = 3 AND project_id = 1 AND resource_id = 3;
-		UPDATE project_resources SET quota = 22 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%s
 	`, scrapedAt2.Unix(), timestampUpdates(false))
 
@@ -1089,7 +1106,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_az_resources SET quota = 1 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 7 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 250 WHERE id = 3 AND project_id = 1 AND az_resource_id = 3;
+		UPDATE project_az_resources SET quota = 251 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
@@ -1098,8 +1117,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_commitments SET status = 'expired' WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
-		UPDATE project_resources SET quota = 251 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
-		UPDATE project_resources SET quota = 10 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%s
 	`, timestampUpdates(false))
 
@@ -1252,6 +1269,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		CreationContextJSON: json.RawMessage(`{}`),
 		NotifyOnConfirm:     true,
 	})
+	// ensure that quota_desynced_at is set, when updates to the quota are made because of commitments
+	s.MustDBExec("UPDATE project_services SET quota_desynced_at = NULL")
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
@@ -1262,12 +1281,12 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 10 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
+		UPDATE project_az_resources SET quota = 1 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[2]d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:service Resource:resource AZ:az-one', %[2]d);
-		UPDATE project_resources SET quota = 10 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
-		UPDATE project_resources SET quota = 1 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
 		%s
@@ -1299,11 +1318,11 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
+		UPDATE project_az_resources SET quota = 2 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one Creator:dummy Amount:1 Duration:2 days Date:1970-01-03 Service:service Resource:resource AZ:az-one', %[1]d);
-		UPDATE project_resources SET quota = 2 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%[2]s
 	`, scrapedAt2.Unix(), timestampUpdates())
 }

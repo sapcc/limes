@@ -51,9 +51,6 @@ var (
 		WHERE pazr.az_resource_id = azr.id AND azr.az = $2 AND pazr.project_id = $3 AND azr.resource_id = $4
 		AND pazr.quota IS DISTINCT FROM $1
 	`)
-	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND project_id = $2 AND resource_id = $3
-	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services ps
 		SET quota_desynced_at = $1
@@ -173,7 +170,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
 	}
 
-	// write new AZ quotas to database
+	// write new AZ quotas to database (this includes az=total)
 	projectsWithUpdatedQuota := make(map[db.ProjectID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
@@ -187,8 +184,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
 
-				// AZSeparatedTopology does not update resource quota. Therefore the desync needs to be queued right here.
-				if rowsAffected > 0 && resourceInfo.Topology == liquid.AZSeparatedTopology {
+				if rowsAffected > 0 {
 					projectsWithUpdatedQuota[projectID] = struct{}{}
 				}
 			}
@@ -197,42 +193,6 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	})
 	if err != nil {
 		return fmt.Errorf("while writing updated %s/%s AZ quotas to DB: %w", serviceType, resourceName, err)
-	}
-
-	// write overall project quotas to database
-	quotasByProjectID := make(map[db.ProjectID]uint64)
-	for _, azTarget := range target {
-		for projectID, projectTarget := range azTarget {
-			quotasByProjectID[projectID] += projectTarget.Allocated
-		}
-	}
-
-	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
-		for projectID, quota := range quotasByProjectID {
-			// Resources with AZSeparatedTopology will report `backendQuota == nil` during scrape.
-			// If we set anything other than nil here, this would lead to unnecessary quota syncs with the backend,
-			// because backendQuota != quota.
-			quotaToWrite := &quota
-			if resourceInfo.Topology == liquid.AZSeparatedTopology {
-				quotaToWrite = nil
-			}
-
-			result, err := stmt.Exec(quotaToWrite, projectID, resourceID)
-			if err != nil {
-				return fmt.Errorf("in project %d: %w", projectID, err)
-			}
-			rowsAffected, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("in project %d: %w", projectID, err)
-			}
-			if rowsAffected > 0 {
-				projectsWithUpdatedQuota[projectID] = struct{}{}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("while writing updated %s/%s project quotas to DB: %w", serviceType, resourceName, err)
 	}
 
 	// mark project services with changed quota for SyncQuotaToBackendJob
@@ -409,13 +369,28 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 	}
 
+	// lastly, we create one total entry for the result
+	// we create this for any topology, the consumers of project_az_resources are responsible to filter accordingly
+	for projectID := range isProjectID {
+		sumForProject := uint64(0)
+		for az := range isRelevantAZ {
+			sumForProject += target[az][projectID].Allocated
+		}
+		if _, ok := target[liquid.AvailabilityZoneTotal]; !ok {
+			target[liquid.AvailabilityZoneTotal] = make(acpqAZTarget, len(isProjectID))
+		}
+		target[liquid.AvailabilityZoneTotal][projectID] = &acpqProjectAZTarget{
+			Allocated: sumForProject,
+		}
+	}
+
 	return target, allowsQuotaOvercommit
 }
 
 // After increasing Desired, but before increasing Allocated, this decreases
 // Desired in order to fit into project-local quota constraints.
 func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZone]clusterAZAllocationStats, constraints map[db.ProjectID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectID map[db.ProjectID]struct{}, isAZAware bool) {
-	// Quota should not be assgined to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
+	// Quota should not be assigned to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
 	resourceAZs := allAZs
 	if isAZAware {
 		resourceAZs = slices.Clone(allAZs)

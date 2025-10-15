@@ -223,4 +223,33 @@ var sqlMigrations = map[string]string{
 	"067_maxQuotaFromLocalAdmin.down.sql": `
 		ALTER TABLE project_resources ADD COLUMN max_quota_from_local_admin BIGINT;
 	`,
+	"068_remove_project_level_values.down.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN quota                         BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			ADD COLUMN backend_quota                 BIGINT     DEFAULT NULL;
+		UPDATE project_resources pr
+			SET pr.quota = pazr.quota, pr.backend_quota = pazr.backend_quota
+			FROM az_resources azr 
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
+			WHERE azr.resource_id = pr.resource_id AND azr.az = 'total';
+		DELETE FROM project_az_resources WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = 'total');
+		DELETE FROM az_resources WHERE az = 'total';
+	`,
+	"068_remove_project_level_values.up.sql": `
+		-- unfortunately, we need to do a full migration, so that the APIs don't produce weird results after startup
+		INSERT INTO az_resources (resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path)
+			SELECT azr.resource_id, 'total' as az, SUM(azr.raw_capacity), SUM(azr.usage), jsonb_agg(azr.subcapacities::jsonb)::text as subcapacities, SUM(azr.last_nonzero_raw_capacity), REPLACE(azr.path, azr.az, 'total') as path
+			FROM az_resources azr
+			GROUP BY azr.resource_id, azr.path, azr.az;
+		-- historical usage of total az is unused, so we can skip to write a complex statement to fill it
+		INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, physical_usage, subresources, historical_usage, backend_quota)
+			SELECT pazr.project_id, azr_total.id as az_resource_id, SUM(pazr.quota), SUM(pazr.usage), SUM(pazr.physical_usage), jsonb_agg(pazr.subresources::jsonb)::text, '' as historical_usage, SUM(pazr.backend_quota)
+			FROM project_az_resources pazr
+			JOIN az_resources azr ON pazr.az_resource_id = azr.id
+			JOIN az_resources azr_total ON azr.resource_id = azr_total.resource_id AND azr_total.az = 'total'
+			GROUP BY pazr.project_id, azr_total.id;
+		ALTER TABLE project_resources
+			DROP COLUMN quota,
+			DROP COLUMN backend_quota;
+	`,
 }
