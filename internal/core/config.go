@@ -32,7 +32,7 @@ type ClusterConfiguration struct {
 	CatalogURL               string                                 `yaml:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `yaml:"discovery"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `yaml:"liquids"`
-	ResourceBehaviors        []ResourceBehavior                     `yaml:"resource_behavior"`
+	ResourceBehaviors        []util.ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                         `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []QuotaDistributionConfiguration       `yaml:"quota_distribution_configs"`
 	MailNotifications        Option[*MailConfiguration]             `yaml:"mail_notifications"`

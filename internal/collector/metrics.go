@@ -25,6 +25,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -829,21 +830,21 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 // complications to account for behaviors being updated without the underlying ResourceInfo changing.
 type resourceAndRateBehaviorCache struct {
 	cluster   *core.Cluster
-	cache     map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
+	cache     map[db.ServiceType]map[liquid.ResourceName]util.ResourceBehavior
 	rateCache map[db.ServiceType]map[liquid.RateName]core.RateBehavior
 	cbCache   map[db.ServiceType]map[liquid.ResourceName]core.ScopedCommitmentBehavior
 }
 
 func newResourceAndRateBehaviorCache(cluster *core.Cluster) resourceAndRateBehaviorCache {
-	cache := make(map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior)
+	cache := make(map[db.ServiceType]map[liquid.ResourceName]util.ResourceBehavior)
 	rateCache := make(map[db.ServiceType]map[liquid.RateName]core.RateBehavior)
 	cbCache := make(map[db.ServiceType]map[liquid.ResourceName]core.ScopedCommitmentBehavior)
 	return resourceAndRateBehaviorCache{cluster, cache, rateCache, cbCache}
 }
 
-func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
+func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) util.ResourceBehavior {
 	if c.cache[srvType] == nil {
-		c.cache[srvType] = make(map[liquid.ResourceName]core.ResourceBehavior)
+		c.cache[srvType] = make(map[liquid.ResourceName]util.ResourceBehavior)
 	}
 	behavior, exists := c.cache[srvType][resName]
 	if !exists {

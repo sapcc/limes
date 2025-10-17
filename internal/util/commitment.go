@@ -10,13 +10,17 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
+	"github.com/majewsky/gg/options"
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/db"
 )
 
-// Generates a token that is used to transfer a commitment from a source to a target project.
+// GenerateTransferToken generates a token that is used to transfer a commitment from a source to a target project.
 // The token will be attached to the commitment that will be transferred and stored in the database until the transfer is concluded.
 func GenerateTransferToken() string {
 	tokenBytes := make([]byte, 24)
@@ -34,6 +38,10 @@ func GenerateProjectCommitmentUUID() liquid.CommitmentUUID {
 	return liquid.CommitmentUUID(must.Return(uuid.NewV4()).String())
 }
 
+// BuildSplitCommitment prepares a new commitment instance whose creation context
+// indicates that it was split from the given existing commitment. It is used in
+// the implementation of various API endpoints that can implicitly split commitments
+// if necessary.
 func BuildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID) (db.ProjectCommitment, error) {
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
@@ -59,4 +67,48 @@ func BuildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64, now 
 		CreationContextJSON: json.RawMessage(buf),
 		Status:              dbCommitment.Status,
 	}, nil
+}
+
+func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment, timeNow func() time.Time) bool {
+	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
+	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
+			if token.Check("project:edit") {
+				return true
+			}
+		}
+	}
+
+	// afterwards, a more specific permission is required to delete it
+	//
+	// This protects cloud admins making capacity planning decisions based on future commitments
+	// from having their forecasts ruined by project admins suffering from buyer's remorse.
+	return token.Check("project:uncommit")
+}
+
+func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc AZResourceLocation, apiIdentity ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
+	return limesresources.Commitment{
+		ID:               int64(c.ID),
+		UUID:             string(c.UUID),
+		ServiceType:      apiIdentity.ServiceType,
+		ResourceName:     apiIdentity.Name,
+		AvailabilityZone: loc.AvailabilityZone,
+		Amount:           c.Amount,
+		Unit:             unit,
+		Duration:         c.Duration,
+		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
+		CreatorUUID:      c.CreatorUUID,
+		CreatorName:      c.CreatorName,
+		CanBeDeleted:     canBeDeleted,
+		ConfirmBy:        options.Map(c.ConfirmBy, IntoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, IntoUnixEncodedTime).AsPointer(),
+		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
+		TransferStatus:   c.TransferStatus,
+		TransferToken:    c.TransferToken.AsPointer(),
+		Status:           c.Status,
+		NotifyOnConfirm:  c.NotifyOnConfirm,
+		WasRenewed:       c.RenewContextJSON.IsSome(),
+	}
 }

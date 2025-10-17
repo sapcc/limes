@@ -18,6 +18,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
@@ -472,7 +473,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, ser
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, util.ResourceBehavior) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
