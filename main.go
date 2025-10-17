@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -46,6 +45,8 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
+
+	. "github.com/majewsky/gg/option"
 )
 
 func main() {
@@ -180,7 +181,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 	// that for now, and instead construct worker threads in such a way that they
 	// can be terminated at any time without leaving the system in an inconsistent
 	// state, mostly through usage of DB transactions.)
-	c := collector.NewCollector(cluster)
+	c := collector.NewCollector(cluster, generateAuditor(ctx))
 	scrapeJob := c.ScrapeJob(nil)
 	syncQuotaToBackendJob := c.SyncQuotaToBackendJob(nil)
 	for serviceType := range cluster.LiquidConnections {
@@ -235,19 +236,6 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 		printUsageAndExit(1)
 	}
 
-	// connect to Hermes RabbitMQ if requested
-	auditor := audittools.NewNullAuditor()
-	if os.Getenv("LIMES_AUDIT_RABBITMQ_QUEUE_NAME") != "" {
-		auditor = must.Return(audittools.NewAuditor(ctx, audittools.AuditorOpts{
-			EnvPrefix: "LIMES_AUDIT_RABBITMQ",
-			Observer: audittools.Observer{
-				TypeURI: "service/resources",
-				Name:    bininfo.Component(),
-				ID:      audittools.GenerateUUID(),
-			},
-		}))
-	}
-
 	// collect all API endpoints and middlewares
 	tokenValidator := must.Return(api.NewTokenValidator(provider, eo))
 	corsMiddleware := cors.New(cors.Options{
@@ -257,7 +245,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, tokenValidator, auditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID),
+		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
@@ -299,4 +287,20 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
+}
+
+func generateAuditor(ctx context.Context) audittools.Auditor {
+	// connect to Hermes RabbitMQ if requested
+	auditor := audittools.NewNullAuditor()
+	if os.Getenv("LIMES_AUDIT_RABBITMQ_QUEUE_NAME") != "" {
+		auditor = must.Return(audittools.NewAuditor(ctx, audittools.AuditorOpts{
+			EnvPrefix: "LIMES_AUDIT_RABBITMQ",
+			Observer: audittools.Observer{
+				TypeURI: "service/resources",
+				Name:    bininfo.Component(),
+				ID:      audittools.GenerateUUID(),
+			},
+		}))
+	}
+	return auditor
 }

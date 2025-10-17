@@ -10,10 +10,16 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
+	"github.com/majewsky/gg/options"
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // GenerateTransferToken generates a token that is used to transfer a commitment from a source to a target project.
@@ -63,4 +69,52 @@ func BuildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64, now 
 		CreationContextJSON: json.RawMessage(buf),
 		Status:              dbCommitment.Status,
 	}, nil
+}
+
+// CanDeleteCommitment checks whether a user with a certain token can delete a commitment at the current time.
+// This is either a regular user who deletes the commitment within 24 hours of creation or an admin.
+func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment, timeNow func() time.Time) bool {
+	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
+	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
+			if token.Check("project:edit") {
+				return true
+			}
+		}
+	}
+
+	// afterwards, a more specific permission is required to delete it
+	//
+	// This protects cloud admins making capacity planning decisions based on future commitments
+	// from having their forecasts ruined by project admins suffering from buyer's remorse.
+	return token.Check("project:uncommit")
+}
+
+// ConvertCommitmentToDisplayForm transforms a db.ProjectCommitment into a limesresources.Commitment for displaying
+// to the user on the API or usage within the audit log.
+func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, apiIdentity core.ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
+	return limesresources.Commitment{
+		ID:               int64(c.ID),
+		UUID:             string(c.UUID),
+		ServiceType:      apiIdentity.ServiceType,
+		ResourceName:     apiIdentity.Name,
+		AvailabilityZone: loc.AvailabilityZone,
+		Amount:           c.Amount,
+		Unit:             unit,
+		Duration:         c.Duration,
+		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
+		CreatorUUID:      c.CreatorUUID,
+		CreatorName:      c.CreatorName,
+		CanBeDeleted:     canBeDeleted,
+		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime).AsPointer(),
+		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
+		TransferStatus:   c.TransferStatus,
+		TransferToken:    c.TransferToken.AsPointer(),
+		Status:           c.Status,
+		NotifyOnConfirm:  c.NotifyOnConfirm,
+		WasRenewed:       c.RenewContextJSON.IsSome(),
+	}
 }

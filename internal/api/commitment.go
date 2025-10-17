@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -175,7 +176,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		}
 		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
 		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token, resInfo.Unit))
+		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resInfo.Unit))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -297,7 +298,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		if !exists {
 			continue // like above, this is just defense in depth (the DB should be consistent with itself)
 		}
-		c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resInfo.Unit)
+		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resInfo.Unit)
 		// hide some fields that we should not be showing in this very public list
 		c.CreatorUUID = ""
 		c.CreatorName = ""
@@ -309,32 +310,6 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
-}
-
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
-	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
-	return limesresources.Commitment{
-		ID:               int64(c.ID),
-		UUID:             string(c.UUID),
-		ServiceType:      apiIdentity.ServiceType,
-		ResourceName:     apiIdentity.Name,
-		AvailabilityZone: loc.AvailabilityZone,
-		Amount:           c.Amount,
-		Unit:             unit,
-		Duration:         c.Duration,
-		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
-		CreatorUUID:      c.CreatorUUID,
-		CreatorName:      c.CreatorName,
-		CanBeDeleted:     p.canDeleteCommitment(token, c),
-		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime).AsPointer(),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime).AsPointer(),
-		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
-		TransferStatus:   c.TransferStatus,
-		TransferToken:    c.TransferToken.AsPointer(),
-		Status:           c.Status,
-		NotifyOnConfirm:  c.NotifyOnConfirm,
-		WasRenewed:       c.RenewContextJSON.IsSome(),
-	}
 }
 
 // parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
@@ -641,14 +616,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
-	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, *loc, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusCreated,
 		Action:     cadf.CreateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:        dbDomain.UUID,
 			DomainName:      dbDomain.Name,
 			ProjectID:       dbProject.UUID,
@@ -867,8 +842,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token, resourceInfo.Unit)
-	auditEvent := commitmentEventTarget{
+	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
 		ProjectID:       dbProject.UUID,
@@ -1053,8 +1028,8 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create resultset and auditlogs
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token, resourceInfo.Unit)
-	auditEvent := commitmentEventTarget{
+	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
 		ProjectID:       dbProject.UUID,
@@ -1115,7 +1090,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// check authorization for this specific commitment
-	if !p.canDeleteCommitment(token, dbCommitment) {
+	if !datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -1174,14 +1149,14 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,
@@ -1191,25 +1166,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	})
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
-	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
-	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
-		var creationContext db.CommitmentWorkflowContext
-		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
-		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
-			if token.Check("project:edit") {
-				return true
-			}
-		}
-	}
-
-	// afterwards, a more specific permission is required to delete it
-	//
-	// This protects cloud admins making capacity planning decisions based on future commitments
-	// from having their forecasts ruined by project admins suffering from buyer's remorse.
-	return token.Check("project:uncommit")
 }
 
 // StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
@@ -1432,14 +1388,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,
@@ -1521,7 +1477,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1705,14 +1661,14 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    targetDomain.UUID,
 			DomainName:  targetDomain.Name,
 			ProjectID:   targetProject.UUID,
@@ -2035,7 +1991,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auditEvent := commitmentEventTarget{
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
@@ -2055,7 +2011,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		auditEvent.Commitments = append(auditEvent.Commitments,
-			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token, resourceInfo.Unit),
+			datamodel.ConvertCommitmentToDisplayForm(remainingCommitment, sourceLoc, p.Cluster.BehaviorForResourceLocation(sourceLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, remainingCommitment, p.timeNow), resourceInfo.Unit),
 		)
 	}
 
@@ -2090,7 +2046,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
 	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
@@ -2243,14 +2199,14 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,

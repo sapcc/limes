@@ -7,17 +7,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/http"
 	"slices"
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/sapcc/go-api-declarations/cadf"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	. "github.com/majewsky/gg/option"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
@@ -31,11 +36,11 @@ var (
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
-		  FROM services cs
-		  JOIN resources cr ON cr.service_id = cs.id
-		  JOIN az_resources azr ON azr.resource_id = cr.id
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
 		  JOIN project_commitments pc ON pc.az_resource_id = azr.id
-		 WHERE cs.type = $1 AND cr.name = $2 AND azr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
+		 WHERE s.type = $1 AND r.name = $2 AND azr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`))
 
@@ -47,16 +52,19 @@ var (
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests, in reality
 	// the probability of multiple commitments set to transfer at the exact same time is
 	// very small due to the atomicity of the API operation.
-	getTransferCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+	getTransferableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
-		FROM services cs
-		JOIN resources cr ON cr.service_id = cs.id
-		JOIN az_resources azr ON azr.resource_id = cr.id
+		FROM services s
+		JOIN resources r ON r.service_id = s.id
+		JOIN az_resources azr ON azr.resource_id = r.id
 		JOIN project_commitments pc ON pc.az_resource_id = azr.id
-		WHERE cs.type = $1 AND cr.name = $2 AND azr.az = $3 AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
+		WHERE s.type = $1 AND r.name = $2 AND azr.az = $3 AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
 		ORDER BY pc.transfer_started_at ASC, pc.created_at ASC, pc.id ASC
 	`))
 )
+
+const ConfirmAction cadf.Action = "confirm"
+const ConsumeAction cadf.Action = "consume"
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
@@ -127,7 +135,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity. Simultaneously, it
 // releases transferable commitments that can be used to satisfy the pending ones.
-func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string) ([]db.MailNotification, error) {
+func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	// load confirmable commitments
@@ -135,7 +143,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
 	transferredCommitmentIDs := make(map[db.ProjectID]map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	_, err := dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
+	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
@@ -147,7 +155,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 
 	// load transferable commitments
 	var transferableCommitments []db.ProjectCommitment
-	_, err = dbi.Select(&transferableCommitments, getTransferCommitmentsQuery, queryArgs...)
+	_, err = dbi.Select(&transferableCommitments, getTransferableCommitmentsQuery, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("while enumerating transferable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
@@ -174,8 +182,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 
 		// if a commitment was transferred in this iteration already, we do not need to confirm it
 		// if partially transferred, the leftover commitment is added to the transferable commitments and considered separately
-		transfersPerProject, exists := transferredCommitmentIDs[c.ProjectID]
-		if _, exists2 := transfersPerProject[c.ID]; exists && exists2 {
+		if _, exists := transferredCommitmentIDs[c.ProjectID][c.ID]; exists {
 			continue
 		}
 
@@ -194,16 +201,25 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 			if overallTransferredAmount == c.Amount {
 				break
 			}
-			transfersPerProject, exists := transferredCommitmentIDs[t.ProjectID]
-			if _, exists2 := transfersPerProject[t.ID]; t.ProjectID == c.ProjectID || t.ExpiresAt.After(c.ExpiresAt) || (exists && exists2) {
+			// commitments cannot be consumed within the same project, mostly to avoid
+			// easily exploitable loopholes in the commitment confirmation process
+			if t.ProjectID == c.ProjectID {
 				continue
 			}
-
-			// checks passed, a part of this commitment will be consumed, so we will supersede it in any case
-			if !exists {
+			if t.ExpiresAt.After(c.ExpiresAt) {
+				continue
+			}
+			// do not consume a commitment that has already been fully consumed
+			// NOTE: this branch will not be taken for partially consumed commitments, because `transferableCommitments` contains the newly spawned leftover commitment instead
+			if _, exists := transferredCommitmentIDs[t.ProjectID][t.ID]; exists {
+				continue
+			}
+			// all checks passed, so this project get's a transfer
+			if _, exists := transferredCommitmentIDs[t.ProjectID]; !exists {
 				transferredCommitmentIDs[t.ProjectID] = make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
 			}
 
+			// checks passed, a part of this commitment will be consumed, so we will supersede it in any case
 			amountToConsume := c.Amount - overallTransferredAmount
 			if t.Amount > amountToConsume {
 				overallTransferredAmount += amountToConsume
@@ -240,7 +256,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 			t.Status = liquid.CommitmentStatusSuperseded
 			t.SupersededAt = Some(now)
 			supersedeContext := db.CommitmentWorkflowContext{
-				Reason:                 db.CommitmentReasonTransfer,
+				Reason:                 db.CommitmentReasonConsume,
 				RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
 				RelatedCommitmentUUIDs: []liquid.CommitmentUUID{c.UUID},
 			}
@@ -262,14 +278,11 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 		}
 		if value, exists := transferableCommitmentsByID[c.ID]; exists {
-			// in case the commitment get's taken over later, it should keep the status it gets now
+			// in case the commitment gets taken over later, it should keep the status it gets now
 			value.ConfirmedAt = Some(now)
 			value.Status = liquid.CommitmentStatusConfirmed
 		}
-
-		if c.NotifyOnConfirm {
-			confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.ID)
-		}
+		confirmedCommitmentIDs[c.ProjectID] = append(confirmedCommitmentIDs[c.ProjectID], c.ID)
 
 		// block its allocation from being committed again in this loop
 		oldStats := stats.ProjectStats[c.ProjectID]
@@ -280,105 +293,180 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, cluster *core.Cluste
 	}
 
 	// remove duplicates of multiple consecutive transferred commitments
-	transferredCommitmentIDsWithNotification := make(map[db.ProjectID]map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
-	for projectID, transfersPerProject := range transferredCommitmentIDs {
-		if _, exists := transferredCommitmentIDsWithNotification[projectID]; !exists {
-			transferredCommitmentIDsWithNotification[projectID] = make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
-		}
+	for _, projectID := range slices.Compact(slices.Sorted(slices.Values(append(slices.Collect(maps.Keys(confirmedCommitmentIDs)), slices.Collect(maps.Keys(transferredCommitmentIDs))...)))) {
+		notifiableTransfers := make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
+		transfers := transferredCommitmentIDs[projectID]
+		confirmations := confirmedCommitmentIDs[projectID]
 		// we go through the transfers by ID descending, because that enables the linking operation in O(n)
-		for _, cID := range slices.Backward(slices.Sorted(maps.Keys(transfersPerProject))) {
+		// (leftover commitments have a higher ID than the superseded commitment that they were split from)
+		for _, cID := range slices.Backward(slices.Sorted(maps.Keys(transfers))) {
 			// for commitments which get confirmed first and then transferred, we remove the mail for confirmation
-			committedPerProject := confirmedCommitmentIDs[projectID]
-			idx := slices.Index(committedPerProject, cID)
-			if idx != -1 {
-				confirmedCommitmentIDs[projectID] = append(confirmedCommitmentIDs[projectID][:idx], confirmedCommitmentIDs[projectID][idx+1:]...)
-			}
+			confirmations = slices.DeleteFunc(confirmations, func(id db.ProjectCommitmentID) bool { return id == cID })
 
 			// for transfers which have a leftover, we link the transferCommitment to the last leftover via a new data structure
-			transferredLeftover := transfersPerProject[cID]
-			if followingLeftover, exists := transferredCommitmentIDsWithNotification[projectID][transferredLeftover.ID]; exists {
-				transferredCommitmentIDsWithNotification[projectID][cID] = core.CommitmentTransferLeftover{
+			transferredLeftover := transfers[cID]
+			if followingLeftover, exists := notifiableTransfers[transferredLeftover.ID]; exists {
+				notifiableTransfers[cID] = core.CommitmentTransferLeftover{
 					Amount: followingLeftover.Amount,
 					ID:     followingLeftover.ID,
 				}
-				delete(transferredCommitmentIDsWithNotification[projectID], transferredLeftover.ID)
+				delete(notifiableTransfers, transferredLeftover.ID)
 			} else {
-				transferredCommitmentIDsWithNotification[projectID][cID] = transferredLeftover
+				notifiableTransfers[cID] = transferredLeftover
 			}
 		}
-	}
 
-	// prepare mail notifications (this needs to be done in a separate loop because we collate notifications by project)
-	var mails []db.MailNotification
-	apiIdentity := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
-	mailLoc := core.AZResourceLocation{ServiceType: db.ServiceType(apiIdentity.ServiceType), ResourceName: liquid.ResourceName(apiIdentity.Name), AvailabilityZone: loc.AvailabilityZone}
-	if mailConfig, ok := cluster.Config.MailNotifications.Unpack(); ok {
-		for _, projectID := range slices.Compact(slices.Sorted(slices.Values(append(slices.Collect(maps.Keys(confirmedCommitmentIDs)), slices.Collect(maps.Keys(transferredCommitmentIDsWithNotification))...)))) {
-			newMails, err := prepareMailsForProject(mailConfig.Templates, dbi, mailLoc, projectID, confirmedCommitmentIDs[projectID], transferredCommitmentIDsWithNotification[projectID], now)
+		// now, gather the audit events and mail notifications
+		templates := None[core.MailTemplateConfiguration]()
+		if mailConfig, exists := cluster.Config.MailNotifications.Unpack(); exists {
+			templates = Some(mailConfig.Templates)
+		}
+		mails, projectAuditEvents, err := prepareMailsAndAuditsForProject(templates, dbi, loc, unit, cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API, projectID, auditContext, confirmations, notifiableTransfers, now)
+		if err != nil {
+			return nil, err
+		}
+		for _, mail := range mails {
+			err := dbi.Insert(&mail)
 			if err != nil {
 				return nil, err
 			}
-			mails = append(mails, newMails...)
 		}
+		auditEvents = append(auditEvents, projectAuditEvents...)
 	}
 
-	return mails, nil
+	return auditEvents, nil
 }
 
-func prepareMailsForProject(tplConfig core.MailTemplateConfiguration, dbi db.Interface, loc core.AZResourceLocation, projectID db.ProjectID,
-	confirmedCommitmentIDs []db.ProjectCommitmentID, transferredCommitmentIDs map[db.ProjectCommitmentID]core.CommitmentTransferLeftover, now time.Time) (result []db.MailNotification, err error) {
+func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfiguration], dbi db.Interface, loc core.AZResourceLocation, unit limes.Unit, apiIdentity core.ResourceRef, projectID db.ProjectID, auditContext audit.Context,
+	confirmedCommitmentIDs []db.ProjectCommitmentID, transferredCommitmentIDs map[db.ProjectCommitmentID]core.CommitmentTransferLeftover, now time.Time) (mails []db.MailNotification, auditEvents []audittools.Event, err error) {
 
-	var n core.CommitmentGroupNotification
-	err = dbi.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&n.DomainName, &n.ProjectName)
+	var (
+		n           core.CommitmentGroupNotification
+		domainUUID  string
+		projectUUID liquid.ProjectUUID
+	)
+	err = dbi.QueryRow("SELECT d.uuid, d.name, p.uuid, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&domainUUID, &n.DomainName, &projectUUID, &n.ProjectName)
 	if err != nil {
-		return result, err
+		return mails, auditEvents, err
 	}
 
-	commitmentsByID, err := db.BuildIndexOfDBResult(dbi, func(c db.ProjectCommitment) db.ProjectCommitmentID { return c.ID }, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(append(confirmedCommitmentIDs, slices.Collect(maps.Keys(transferredCommitmentIDs))...)))
+	commitmentsByID, err := db.BuildIndexOfDBResult(dbi, func(c db.ProjectCommitment) db.ProjectCommitmentID { return c.ID }, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(slices.AppendSeq(confirmedCommitmentIDs, maps.Keys(transferredCommitmentIDs))))
 	if err != nil {
-		return result, err
+		return mails, auditEvents, err
 	}
+
+	var (
+		auditEventCommitments     []limesresources.Commitment
+		auditEventCommitmentIDs   []db.ProjectCommitmentID
+		auditEventCommitmentUUIDs []liquid.CommitmentUUID
+	)
 	for _, cID := range confirmedCommitmentIDs {
 		c, exists := commitmentsByID[cID]
 		if !exists {
-			return result, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
+			return mails, auditEvents, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
 		}
 		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
+		auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
+		auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)
+		auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
+
+		if !c.NotifyOnConfirm {
+			continue
+		}
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
 			Commitment: c,
 			DateString: confirmedAt.Format(time.DateOnly),
-			Resource:   loc,
+			// TODO: we actually don't want to have api-named props in AZResourceLocation. Replace the template and the code simultaneously.
+			Resource: core.AZResourceLocation{
+				ServiceType:      db.ServiceType(apiIdentity.ServiceType),
+				ResourceName:     liquid.ResourceName(apiIdentity.Name),
+				AvailabilityZone: loc.AvailabilityZone,
+			},
 		})
 	}
-	if len(n.Commitments) != 0 {
-		newNotification, err := tplConfig.ConfirmedCommitments.Render(n, projectID, now)
+	if config, exists := tplConfig.Unpack(); len(n.Commitments) != 0 && exists {
+		newNotification, err := config.ConfirmedCommitments.Render(n, projectID, now)
 		if err != nil {
-			return result, err
+			return mails, auditEvents, err
 		}
-		result = append(result, newNotification)
+		mails = append(mails, newNotification)
+	}
+	if len(auditEventCommitments) != 0 {
+		// push confirmation event
+		auditEvents = append(auditEvents, audittools.Event{
+			Time:       now,
+			Request:    auditContext.Request,
+			User:       auditContext.UserIdentity,
+			ReasonCode: http.StatusOK,
+			Action:     ConfirmAction,
+			Target: audit.CommitmentEventTarget{
+				DomainID:    domainUUID,
+				DomainName:  n.DomainName,
+				ProjectID:   projectUUID,
+				ProjectName: n.ProjectName,
+				WorkflowContext: Some(db.CommitmentWorkflowContext{
+					Reason:                 db.CommitmentReasonConfirm,
+					RelatedCommitmentIDs:   auditEventCommitmentIDs,
+					RelatedCommitmentUUIDs: auditEventCommitmentUUIDs,
+				}),
+				Commitments: auditEventCommitments,
+			},
+		})
 	}
 
+	// reset for transfer notification
+	auditEventCommitments = nil
+	auditEventCommitmentIDs = nil
+	auditEventCommitmentUUIDs = nil
 	n.Commitments = make([]core.CommitmentNotification, 0, len(transferredCommitmentIDs))
 	for cID, leftover := range transferredCommitmentIDs {
 		c, exists := commitmentsByID[cID]
 		if !exists {
-			return result, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
+			return mails, auditEvents, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
 		}
 		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
 			Commitment: c,
 			DateString: confirmedAt.Format(time.DateOnly),
-			Resource:   loc,
-			Leftover:   leftover,
+			Resource: core.AZResourceLocation{
+				ServiceType:      db.ServiceType(apiIdentity.ServiceType),
+				ResourceName:     liquid.ResourceName(apiIdentity.Name),
+				AvailabilityZone: loc.AvailabilityZone,
+			},
+			Leftover: leftover,
+		})
+		auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
+		auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)
+		auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
+	}
+	if config, exists := tplConfig.Unpack(); len(n.Commitments) != 0 && exists {
+		newNotification, err := config.TransferredCommitments.Render(n, projectID, now)
+		if err != nil {
+			return mails, auditEvents, err
+		}
+		mails = append(mails, newNotification)
+	}
+	if len(auditEventCommitments) != 0 {
+		// push transfer event
+		auditEvents = append(auditEvents, audittools.Event{
+			Time:       now,
+			Request:    auditContext.Request,
+			User:       auditContext.UserIdentity,
+			ReasonCode: http.StatusOK,
+			Action:     ConsumeAction,
+			Target: audit.CommitmentEventTarget{
+				DomainID:    domainUUID,
+				DomainName:  n.DomainName,
+				ProjectID:   projectUUID,
+				ProjectName: n.ProjectName,
+				WorkflowContext: Some(db.CommitmentWorkflowContext{
+					Reason:                 db.CommitmentReasonConsume,
+					RelatedCommitmentIDs:   auditEventCommitmentIDs,
+					RelatedCommitmentUUIDs: auditEventCommitmentUUIDs,
+				}),
+				Commitments: auditEventCommitments,
+			},
 		})
 	}
-	if len(n.Commitments) == 0 {
-		return result, nil
-	}
-	newNotification, err := tplConfig.TransferredCommitments.Render(n, projectID, now)
-	if err != nil {
-		return result, err
-	}
-	result = append(result, newNotification)
-	return result, nil
+	return mails, auditEvents, nil
 }

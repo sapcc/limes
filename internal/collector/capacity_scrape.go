@@ -13,10 +13,12 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -300,23 +302,31 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	if resInfo.Topology == liquid.FlatTopology {
 		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 	}
+	var auditevents []audittools.Event
 	for _, az := range committableAZs {
 		loc := core.AZResourceLocation{
 			ServiceType:      serviceType,
 			ResourceName:     resourceName,
 			AvailabilityZone: az,
 		}
-		mails, err := datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken)
+		auditContext := audit.Context{
+			UserIdentity: audit.CollectorUserInfo{
+				TaskName: "capacity-scrape",
+			},
+			Request: audit.CollectorDummyRequest,
+		}
+		azAuditEvents, err := datamodel.ConfirmPendingCommitments(loc, resInfo.Unit, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
 		if err != nil {
 			return err
 		}
-
-		for _, mail := range mails {
-			err := tx.Insert(&mail)
-			if err != nil {
-				return err
-			}
-		}
+		auditevents = append(auditevents, azAuditEvents...)
 	}
-	return tx.Commit()
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	for _, ae := range auditevents {
+		c.Auditor.Record(ae)
+	}
+	return nil
 }

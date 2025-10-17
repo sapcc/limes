@@ -220,12 +220,15 @@ type CommitmentWorkflowContext struct {
 type CommitmentReason string
 
 const (
-	CommitmentReasonCreate   CommitmentReason = "create"
-	CommitmentReasonSplit    CommitmentReason = "split"
-	CommitmentReasonConvert  CommitmentReason = "convert"
-	CommitmentReasonMerge    CommitmentReason = "merge"
-	CommitmentReasonRenew    CommitmentReason = "renew"
-	CommitmentReasonTransfer CommitmentReason = "transfer"
+	CommitmentReasonCreate  CommitmentReason = "create"
+	CommitmentReasonSplit   CommitmentReason = "split"
+	CommitmentReasonConvert CommitmentReason = "convert"
+	CommitmentReasonMerge   CommitmentReason = "merge"
+	CommitmentReasonRenew   CommitmentReason = "renew"
+	CommitmentReasonConsume CommitmentReason = "consume"
+	// this reason is only intended for use in audit events
+	// TODO: audit events should not refer to this enum (maybe structure around liquid.CommitmentChangeRequest instead?)
+	CommitmentReasonConfirm CommitmentReason = "confirm"
 )
 
 // MailNotification contains a record from the `project_mail_notifications` table.

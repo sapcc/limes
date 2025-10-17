@@ -204,6 +204,11 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	return result
 }
 
+// BehaviorForResourceLocation is a shorthand for BehaviorForResource using an AZResourceLocation.
+func (c *Cluster) BehaviorForResourceLocation(loc AZResourceLocation) ResourceBehavior {
+	return c.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+}
+
 // BehaviorForRate returns the RateBehavior for the given rate in
 // the given scope.
 func (c *Cluster) BehaviorForRate(serviceType db.ServiceType, rateName liquid.RateName) RateBehavior {

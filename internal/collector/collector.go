@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -24,6 +25,7 @@ import (
 type Collector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
+	Auditor audittools.Auditor
 	// Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...any)
 	// Usually time.Now, but can be changed inside unit tests.
@@ -39,10 +41,11 @@ type Collector struct {
 }
 
 // NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster) *Collector {
+func NewCollector(cluster *core.Cluster, auditor audittools.Auditor) *Collector {
 	return &Collector{
 		Cluster:                       cluster,
 		DB:                            cluster.DB,
+		Auditor:                       auditor,
 		LogError:                      logg.Error,
 		MeasureTime:                   time.Now,
 		MeasureTimeAtEnd:              time.Now,

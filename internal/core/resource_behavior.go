@@ -65,6 +65,7 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 	}
 }
 
+// interpolateFromNameMatch gets used in Behaviors to get from a name regex to a templated value.
 func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, value S, fullName string) S {
 	if !strings.Contains(string(value), "$") {
 		return value

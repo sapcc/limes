@@ -219,6 +219,7 @@ var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
 	SELECT $1::BIGINT, id, $2::TIMESTAMPTZ, TRUE
 	  FROM services
 	 WHERE type = ANY($3::TEXT[])
+	 ORDER BY id
 `)
 
 // Initialize all the database records for a project (in both `projects` and

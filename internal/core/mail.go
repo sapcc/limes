@@ -33,7 +33,7 @@ type AZResourceLocation struct {
 // CommitmentTransferLeftover contains information about leftover amounts after a commitment transfer.
 type CommitmentTransferLeftover struct {
 	Amount uint64
-	ID     db.ProjectCommitmentID
+	ID     db.ProjectCommitmentID // currently only being used internally, not published in the mail (use UUID for that!)
 }
 
 // CommitmentNotification appears in type CommitmentGroupNotification.
