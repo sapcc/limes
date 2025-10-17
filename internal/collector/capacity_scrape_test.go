@@ -1303,8 +1303,6 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		))
 	}
 
-	// fill `project_az_resources` with some usage data
-	// (we want to see how commitment confirmation reacts to existing usage)
 	berlin := s.GetProjectID("berlin")
 	dresden := s.GetProjectID("dresden")
 	paris := s.GetProjectID("paris")
@@ -1357,8 +1355,11 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		%[4]s
 	`, now.Unix(), UUID1, UUID2, timestampUpdates())
 
-	// now we place a commitment that is in the same project, so it cannot be consumed by the transfer one
-	// this situation can only occur, if the customer wants to get rid of a commitment, which is older than one they placed later
+	// now we place a commitment that is in the same project, so it cannot be consume the transferable one;
+	// this checks that we avoid the loophole where the customer wants to get rid of an
+	// old undeletable commitment by having it be consumed by a newer deletable one;
+	// via API, this situation can only be achieved by first creating the planned commitment
+	// and then setting another one to be transferred
 	UUID3 := add(db.ProjectCommitment{
 		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
 		ProjectID:    berlin,
@@ -1676,7 +1677,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	// now the time progresses again, UUID19 becomes pending, but takes over an amount=1 from UUID18 because it was posted earlier
+	// now the time progresses again, UUID18 becomes pending, but takes over an amount=1 from UUID17 because it was posted earlier
 	// this leads to quota on project=paris
 	now = s.Clock.Now().Add(-5 * time.Second)
 	creation2 := now
@@ -1702,7 +1703,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		%[1]s
 	`, timestampUpdates())
 
-	// we add one more immediately confirmed commitment over 1 now to paris, which will lead to the UUID18 being fully consumed
+	// we add one more immediately confirmed commitment over 1 now to paris, which will lead to the UUID17 being fully consumed
 	UUID21 := add(db.ProjectCommitment{
 		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
 		ProjectID:    paris,
@@ -1894,6 +1895,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		TransferToken:     Some(s.Collector.GenerateTransferToken()),
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
+		NotifyOnConfirm:   true,
 	})
 	UUID6 := add(db.ProjectCommitment{
 		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
@@ -1913,7 +1915,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 7 AND project_id = 1 AND az_resource_id = 7;
 		DELETE FROM project_commitments WHERE id = 5 AND uuid = '%[2]s' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (5, '%[2]s', 2, 7, 'superseded', 1, '10 days', 216030, 'dummy', 'dummy', 302440, 1080030, 302440, '{}', '{"reason": "transfer", "related_ids": [6], "related_uuids": ["%[3]s"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, notify_on_confirm, creation_context_json, supersede_context_json) VALUES (5, '%[2]s', 2, 7, 'superseded', 1, '10 days', 216030, 'dummy', 'dummy', 302440, 1080030, 302440, TRUE, '{}', '{"reason": "transfer", "related_ids": [6], "related_uuids": ["%[3]s"]}');
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 6 AND uuid = '%[3]s' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (4, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:1 Duration:10 days Date:1970-01-04 Service:service Resource:resource AZ:az-one', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (5, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:10 days Date:1970-01-04 Service:service Resource:resource AZ:az-one Leftover:0', %[1]d);
