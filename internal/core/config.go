@@ -32,7 +32,7 @@ type ClusterConfiguration struct {
 	CatalogURL               string                                 `json:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `json:"discovery"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `json:"liquids"`
-	ResourceBehaviors        []ResourceBehavior                     `json:"resource_behavior"`
+	ResourceBehaviors        []util.ResourceBehavior                `json:"resource_behavior"`
 	RateBehaviors            []RateBehavior                         `json:"rate_behavior"`
 	QuotaDistributionConfigs []QuotaDistributionConfiguration       `json:"quota_distribution_configs"`
 	MailNotifications        Option[*MailConfiguration]             `json:"mail_notifications"`

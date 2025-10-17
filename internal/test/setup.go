@@ -280,6 +280,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Collector = &collector.Collector{
 		Cluster:     s.Cluster,
 		DB:          s.DB,
+		Auditor:     s.Auditor,
 		LogError:    t.Errorf,
 		MeasureTime: s.Clock.Now,
 		MeasureTimeAtEnd: func() time.Time {

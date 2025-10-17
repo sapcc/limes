@@ -15,6 +15,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-api-declarations/cadf"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
@@ -1755,12 +1756,9 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
-	var parsedConfig map[string]any
-	err := json.Unmarshal([]byte(commitmentConfigWithoutOvercommitJSON), &parsedConfig)
-	if err != nil {
-		t.Fatal()
-	}
-	parsedConfig["mail_notifications"] = `{
+	var parsedConfig, mailConfig map[string]any
+	must.Succeed(json.Unmarshal([]byte(commitmentConfigWithoutOvercommitJSON), &parsedConfig))
+	must.Succeed(json.Unmarshal([]byte(`{
 		"templates": {
 			"confirmed_commitments": {
 				"subject": "Your recent commitment confirmations",
@@ -1771,9 +1769,10 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 				"body": "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }} Leftover:{{ .Leftover.Amount }}{{ end }}"
 			}
 		}
-	}`
-	config, err := json.Marshal(parsedConfig)
-	s, _ := commonScanCapacityWithCommitmentsSetup(t, string(config))
+	}`), &mailConfig))
+	parsedConfig["mail_notifications"] = mailConfig
+	config := must.Return(json.Marshal(parsedConfig))
+	s, add := commonScanCapacityWithCommitmentsSetup(t, string(config))
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -1840,6 +1839,10 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
 		%[5]s
 	`, scrapedAt1.Unix(), scrapedAt2.Unix(), UUID1, UUID2, timestampUpdates())
+	events := s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2)
+	assert.Equal(t, len(events[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(events[1].Target.Attachments), 2) // last one is the summary
 
 	// day 2: confirm two commitments in the same project -> only one mail will be scheduled regarding both confirmations
 	UUID3 := add(db.ProjectCommitment{
@@ -1876,6 +1879,9 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_resources SET quota = 2 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%[5]s
 	`, scrapedAt2.Unix(), UUID2, UUID3, UUID4, timestampUpdates())
+	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 1)
+	assert.Equal(t, len(events[0].Target.Attachments), 3) // last one is the summary
 
 	// now, we put a commitment which gets confirmed but transferred --> only one mail for the transfer and one for the confirmation
 	UUID5 := add(db.ProjectCommitment{
@@ -1915,6 +1921,11 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
 		%[4]s
 	`, scrapedAt2.Unix(), UUID5, UUID6, timestampUpdates())
+	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })[0].Target.Attachments), 2) // last one is the summary
 
 	// check partial takeover
 	UUID7 := add(db.ProjectCommitment{
@@ -1957,6 +1968,11 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_resources SET quota = 11 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%[5]s
 	`, scrapedAt2.Unix(), UUID7, UUID8, UUID9, timestampUpdates())
+	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })[0].Target.Attachments), 2) // last one is the summary
 
 	// check that 3 more takeovers are summed into 1 takeover mail
 	resultUUIDs := make([]liquid.CommitmentUUID, 3)
@@ -1993,4 +2009,19 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_resources SET quota = 8 WHERE id = 7 AND project_id = 2 AND resource_id = 3;
 		%[10]s
 	`, scrapedAt2.Unix(), UUID7, UUID9, resultUUIDs[0], resultUUIDs[1], resultUUIDs[2], test.GenerateDummyCommitmentUUID(13), test.GenerateDummyCommitmentUUID(14), test.GenerateDummyCommitmentUUID(15), timestampUpdates())
+	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 4) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "transfer" })[0].Target.Attachments), 2) // last one is the summary
+}
+
+func filterSlice[T any](input []T, predicate func(T) bool) []T {
+	var result []T
+	for _, item := range input {
+		if predicate(item) {
+			result = append(result, item)
+		}
+	}
+	return result
 }

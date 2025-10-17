@@ -6,6 +6,11 @@ package util
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,4 +34,23 @@ func (d *MarshalableTimeDuration) UnmarshalJSON(data []byte) error {
 // Into is a short-hand for casting into time.Duration.
 func (d MarshalableTimeDuration) Into() time.Duration {
 	return time.Duration(d)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func IntoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
+	return limes.UnixEncodedTime{Time: t}
+}
+
+func FromUnixEncodedTime(t limes.UnixEncodedTime) time.Time {
+	return t.Time
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// AZResourceLocation is a tuple identifying an AZ resource within a project.
+type AZResourceLocation struct {
+	ServiceType      db.ServiceType
+	ResourceName     liquid.ResourceName
+	AvailabilityZone limes.AvailabilityZone
 }

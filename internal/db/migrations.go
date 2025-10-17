@@ -228,5 +228,6 @@ var sqlMigrations = map[string]string{
 	`,
 	"068_introduce_transfer_started_at.up.sql": `
 		ALTER TABLE project_commitments ADD COLUMN transfer_started_at TIMESTAMPTZ DEFAULT NULL;
+		UPDATE project_commitments SET transfer_started_at = NOW() WHERE transfer_status = 'public' AND transfer_started_at IS NULL;
 	`,
 }

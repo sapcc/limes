@@ -21,6 +21,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // RateLimitUpdater contains most of the business logic for PUT on rate limits.
@@ -267,14 +268,14 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 				User:       token,
 				ReasonCode: statusCode,
 				Action:     cadf.UpdateAction,
-				Target: rateLimitEventTarget{
+				Target: util.RateLimitEventTarget{
 					DomainID:    u.Domain.UUID,
 					DomainName:  u.Domain.Name,
 					ProjectID:   u.Project.UUID,
 					ProjectName: u.Project.Name,
 					ServiceType: apiIdentity.ServiceType,
 					Name:        apiIdentity.Name,
-					Payload: rateLimitChange{
+					Payload: util.RateLimitChange{
 						OldLimit:     req.OldLimit,
 						NewLimit:     req.NewLimit,
 						OldWindow:    req.OldWindow,
