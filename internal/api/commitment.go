@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"

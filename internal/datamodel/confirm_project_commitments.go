@@ -49,7 +49,7 @@ var (
 	// commitments to be confirmed in the order they were posted in for transfer.
 	// The status of a transferable commitment does not matter for this operation.
 	//
-	// The final `BY pc.id` ordering ensures deterministic behavior in tests, in reality
+	// The final `ORDER BY pc.id` ordering ensures deterministic behavior in tests, in reality
 	// the probability of multiple commitments set to transfer at the exact same time is
 	// very small due to the atomicity of the API operation.
 	getTransferableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
@@ -188,13 +188,12 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 
 		// Now we try to consume transferable commitments.
 		// When confirming a commitment, we consume max. the amount that we confirm.
-		// A commitment is only consumed if it's expires_at <= expires_at of the commitment we confirm.
 		// The status of a commitment to be consumed does not matter.
 		// When a commitment is both pending and transferable, the handling depends on the order:
 		// When confirmed first, it might be taken over later anyway.
 		// When transferred first, it does not get confirmed later.
-		// A partial transfer will lead to a separate mail which contains the new ID, so that the customer
-		// can track the whole processing of the transferred commitment.
+		// All transfers will lead to a mail which contains the leftover amount, so that the customer
+		// can track the whole processing of the transferred commitment over time.
 
 		overallTransferredAmount := uint64(0)
 		for idx, t := range transferableCommitments {
@@ -206,6 +205,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 			if t.ProjectID == c.ProjectID {
 				continue
 			}
+			// A commitment is only consumed if it's expires_at <= expires_at of the commitment we confirm.
 			if t.ExpiresAt.After(c.ExpiresAt) {
 				continue
 			}
@@ -214,17 +214,17 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 			if _, exists := transferredCommitmentIDs[t.ProjectID][t.ID]; exists {
 				continue
 			}
-			// all checks passed, so this project get's a transfer
+			// all checks passed, so this project gets at least one transfer
 			if _, exists := transferredCommitmentIDs[t.ProjectID]; !exists {
 				transferredCommitmentIDs[t.ProjectID] = make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
 			}
 
-			// checks passed, a part of this commitment will be consumed, so we will supersede it in any case
+			// at least a part of this commitment will be consumed, so we will supersede it in any case
 			amountToConsume := c.Amount - overallTransferredAmount
 			if t.Amount > amountToConsume {
-				overallTransferredAmount += amountToConsume
 				// the leftover amount to be transferred is not enough to consume the whole commitment
 				// we will place a new commitment for the leftover amount
+				overallTransferredAmount += amountToConsume
 				leftoverCommitment, err := BuildSplitCommitment(t, t.Amount-amountToConsume, now, generateProjectCommitmentUUID)
 				if err != nil {
 					return nil, err
@@ -292,7 +292,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 		}
 	}
 
-	// remove duplicates of multiple consecutive transferred commitments
+	// remove duplicates of multiple consecutive transferred commitments per project
 	for _, projectID := range slices.Compact(slices.Sorted(slices.Values(append(slices.Collect(maps.Keys(confirmedCommitmentIDs)), slices.Collect(maps.Keys(transferredCommitmentIDs))...)))) {
 		notifiableTransfers := make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
 		transfers := transferredCommitmentIDs[projectID]
@@ -316,7 +316,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 			}
 		}
 
-		// now, gather the audit events and mail notifications
+		// gather the audit events and mail notifications for this project
 		templates := None[core.MailTemplateConfiguration]()
 		if mailConfig, exists := cluster.Config.MailNotifications.Unpack(); exists {
 			templates = Some(mailConfig.Templates)
@@ -385,6 +385,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 		})
 	}
 	if config, exists := tplConfig.Unpack(); len(n.Commitments) != 0 && exists {
+		// push mail notifications
 		newNotification, err := config.ConfirmedCommitments.Render(n, projectID, now)
 		if err != nil {
 			return mails, auditEvents, err
@@ -440,6 +441,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 		auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
 	}
 	if config, exists := tplConfig.Unpack(); len(n.Commitments) != 0 && exists {
+		// push mail notifications
 		newNotification, err := config.TransferredCommitments.Render(n, projectID, now)
 		if err != nil {
 			return mails, auditEvents, err
