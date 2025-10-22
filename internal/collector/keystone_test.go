@@ -22,32 +22,37 @@ import (
 )
 
 const (
-	testKeystoneConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			shared:
-				area: shared
-			unshared:
-				area: unshared
-	`
+	testKeystoneConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"shared": {"area": "shared"},
+			"unshared": {"area": "unshared"}
+		}
+	}`
 )
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testKeystoneConfigYAML),
+		test.WithConfig(testKeystoneConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		test.WithMockLiquidClient("unshared", srvInfo),
 		// the functions called from the tests of this setup run in collect task, so we use the LiquidConnections

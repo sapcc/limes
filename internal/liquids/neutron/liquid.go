@@ -23,9 +23,9 @@ import (
 // Logic implements the liquidapi.Logic interface for Neutron.
 type Logic struct {
 	// connections
-	NeutronV2 *gophercloud.ServiceClient `yaml:"-"`
+	NeutronV2 *gophercloud.ServiceClient `json:"-"`
 	// state
-	OwnProjectID string `yaml:"-"`
+	OwnProjectID string `json:"-"`
 }
 
 var neutronNameForResource = map[liquid.ResourceName]string{

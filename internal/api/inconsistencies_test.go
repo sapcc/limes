@@ -13,20 +13,25 @@ import (
 
 func TestInconsistencyReport(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains:
-						- { name: germany, id: uuid-for-germany }
-						- { name: pakistan, id: uuid-for-pakistan }
-					projects:
-						uuid-for-germany: [{ name: dresden, id: uuid-for-dresden, parent_id: uuid-for-germany }]
-						uuid-for-pakistan: [{ name: karachi, id: uuid-for-karachi, parent_id: uuid-for-pakistan }]
-			liquids:
-				shared: { area: shared }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [
+						{"name": "germany", "id": "uuid-for-germany"},
+						{"name": "pakistan", "id": "uuid-for-pakistan"}
+					],
+					"projects": {
+						"uuid-for-germany": [{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}],
+						"uuid-for-pakistan": [{"name": "karachi", "id": "uuid-for-karachi", "parent_id": "uuid-for-pakistan"}]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {"area": "shared"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,

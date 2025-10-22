@@ -14,25 +14,30 @@ import (
 )
 
 const (
-	liquidCapacityTestConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains: [{ name: domain-1, id: uuid-for-domain-1 }]
-				projects:
-					uuid-for-domain-1: [{ name: project-1, id: uuid-for-project-1, parent_id: uuid-for-domain-1 }]
-		liquids:
-			unittest: { area: testing }
-		resource_behavior:
-		- { resource: unittest/capacity, overcommit_factor: 1.5 }
-	`
+	liquidCapacityTestConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [{"name": "domain-1", "id": "uuid-for-domain-1"}],
+				"projects": {
+					"uuid-for-domain-1": [{"name": "project-1", "id": "uuid-for-project-1", "parent_id": "uuid-for-domain-1"}]
+				}
+			}
+		},
+		"liquids": {
+			"unittest": {"area": "testing"}
+		},
+		"resource_behavior": [
+			{"resource": "unittest/capacity", "overcommit_factor": 1.5}
+		]
+	}`
 )
 
 func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Setup) {
 	t.Helper()
 	s = test.NewSetup(t,
-		test.WithConfig(liquidCapacityTestConfigYAML),
+		test.WithConfig(liquidCapacityTestConfigJSON),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 		test.WithPersistedServiceInfo("unittest", srvInfo),

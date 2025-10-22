@@ -4,19 +4,20 @@
 package util
 
 import (
+	"encoding/json"
 	"time"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // MarshalableTimeDuration is a time.Duration that can be unmarshaled
-// from a YAML string using time.ParseDuration.
+// from a JSON string using time.ParseDuration.
 type MarshalableTimeDuration time.Duration
 
-// UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (d *MarshalableTimeDuration) UnmarshalYAML(unmarshal func(any) error) error {
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (d *MarshalableTimeDuration) UnmarshalJSON(data []byte) error {
 	var s string
-	err := unmarshal(&s)
+	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}

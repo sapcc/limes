@@ -20,7 +20,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithConfig(testScrapeBasicConfigJSON),
 		test.WithMockLiquidClient("unittest", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,

@@ -25,6 +25,7 @@ path = [
   "internal/*/fixtures/*.json",
   "internal/*/fixtures/*.prom",
   "internal/*/fixtures/*.sql",
+  "docs/*.json",
 ]
 SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
 SPDX-License-Identifier = "Apache-2.0"
@@ -148,14 +149,6 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
-  "vendor/gopkg.in/yaml.v2/**",
-]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
@@ -652,6 +645,14 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
+path = [
+  "vendor/gopkg.in/yaml.v2/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [

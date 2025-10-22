@@ -17,24 +17,32 @@ import (
 func TestForbidClusterIDHeader(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains:
-						- { name: germany, id: uuid-for-germany }
-						- { name: france,id: uuid-for-france }
-					projects:
-						uuid-for-germany:
-							- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-						uuid-for-france:
-							- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-			liquids:
-				foo:
-					area: testing
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [
+						{"name": "germany", "id": "uuid-for-germany"},
+						{"name": "france", "id": "uuid-for-france"}
+					],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+						],
+						"uuid-for-france": [
+							{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"foo": {
+					"area": "testing"
+				}
+			}
+		}`),
 		test.WithAPIMiddleware(api.ForbidClusterIDHeader),
 		test.WithMockLiquidClient("foo", srvInfo),
 	)

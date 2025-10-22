@@ -14,7 +14,7 @@ coverageTest:
 dockerfile:
   enabled: true
   extraIgnores:
-    - /*.yaml
+    - /*.json
 
 golang:
   autoupdateableDeps: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
@@ -44,6 +44,7 @@ reuse:
         - internal/*/fixtures/*.json
         - internal/*/fixtures/*.prom
         - internal/*/fixtures/*.sql
+        - docs/*.json
       SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
       SPDX-License-Identifier: Apache-2.0
 

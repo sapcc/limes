@@ -29,45 +29,56 @@ import (
 )
 
 const (
-	testScanCapacityConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			shared:
-				area: shared
-			unshared:
-				area: unshared
-	`
+	testScanCapacityConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"shared": {"area": "shared"},
+			"unshared": {"area": "unshared"}
+		}
+	}`
 
-	testScanCapacitySingleLiquidConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			shared:
-				area: shared
-	`
+	testScanCapacitySingleLiquidConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"shared": {"area": "shared"}
+		}
+	}`
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -94,7 +105,7 @@ func Test_ScanCapacity(t *testing.T) {
 		},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacityConfigYAML),
+		test.WithConfig(testScanCapacityConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		test.WithMockLiquidClient("unshared", srvInfo2),
 		// services must be created as a baseline
@@ -241,7 +252,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 		},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
@@ -348,7 +359,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
@@ -437,7 +448,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	srvInfo.Resources["things"] = res
 
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
@@ -523,7 +534,7 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 func Test_ScanCapacityButNoResources(t *testing.T) {
 	// test ScanCapacity on a LIQUID with no resources
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
 		test.WithMockLiquidClient("shared", liquid.ServiceInfo{Version: 1, Resources: nil}),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
@@ -582,11 +593,18 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 func Test_ScanManualCapacity(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
-	testScanCapacityManualConfigYAML := testScanCapacitySingleLiquidConfigYAML + `
-				fixed_capacity_values:
-					things: 1000000`
+	testScanCapacityManualConfigJSON := testScanCapacitySingleLiquidConfigJSON[:len(testScanCapacitySingleLiquidConfigJSON)-1] + `,
+		"liquids": {
+			"shared": {
+				"area": "shared",
+				"fixed_capacity_values": {
+					"things": 1000000
+				}
+			}
+		}
+	}`
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacityManualConfigYAML),
+		test.WithConfig(testScanCapacityManualConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		test.WithLiquidConnections,
 	)
@@ -681,31 +699,43 @@ func commonScanCapacityWithCommitmentsSetup() (srvInfo liquid.ServiceInfo, first
 func Test_ScanCapacityWithCommitments(t *testing.T) {
 	srvInfo, firstCapacityReport, secondCapacityReport := commonScanCapacityWithCommitmentsSetup()
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany:
-							- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
-							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
-			liquids:
-				first:
-					area: first
-					commitment_behavior_per_resource: &commitment-on-capacity
-						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ]}]}}
-				second:
-					area: second
-					commitment_behavior_per_resource: *commitment-on-capacity
-			resource_behavior:
-				# test that overcommit factor is considered when confirming commitments
-				- { resource: first/capacity, overcommit_factor: 10.0 }
-			quota_distribution_configs:
-				# test automatic project quota calculation with non-default settings on */capacity resources
-				- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"first": {
+					"area": "first",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
+					]
+				},
+				"second": {
+					"area": "second",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
+					]
+				}
+			},
+			"resource_behavior": [
+				// test that overcommit factor is considered when confirming commitments
+				{"resource": "first/capacity", "overcommit_factor": 10.0}
+			],
+			"quota_distribution_configs": [
+				// test automatic project quota calculation with non-default settings on */capacity resources
+				{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+			]
+		}`),
 		test.WithMockLiquidClient("first", srvInfo),
 		test.WithMockLiquidClient("second", srvInfo),
 		test.WithLiquidConnections,
@@ -1148,32 +1178,46 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	srvInfo, firstCapacityReport, secondCapacityReport := commonScanCapacityWithCommitmentsSetup()
 
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany:
-							- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
-							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
-			liquids:
-				first:
-					area: first
-					commitment_behavior_per_resource: &commitment-on-capacity
-						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '1 hour', '10 days' ]}]}}
-				second:
-					area: second
-					commitment_behavior_per_resource: *commitment-on-capacity
-			resource_behavior:
-				- { resource: second/capacity, identity_in_v1_api: service/resource }
-			mail_notifications:
-				templates:
-					confirmed_commitments:
-						subject: "Your recent commitment confirmations"
-						body: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"first": {
+					"area": "first",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
+					]
+				},
+				"second": {
+					"area": "second",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
+					]
+				}
+			},
+			"resource_behavior": [
+				{"resource": "second/capacity", "identity_in_v1_api": "service/resource"}
+			],
+			"mail_notifications": {
+				"templates": {
+					"confirmed_commitments": {
+						"subject": "Your recent commitment confirmations",
+						"body": "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+					}
+				}
+			}
+		}`),
 		test.WithMockLiquidClient("first", srvInfo),
 		test.WithMockLiquidClient("second", srvInfo),
 		test.WithLiquidConnections,
