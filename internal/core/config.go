@@ -32,7 +32,7 @@ type ClusterConfiguration struct {
 	CatalogURL               string                                 `yaml:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `yaml:"discovery"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `yaml:"liquids"`
-	ResourceBehaviors        []ResourceBehavior                     `yaml:"resource_behavior"`
+	ResourceBehaviors        []util.ResourceBehavior                `yaml:"resource_behavior"`
 	RateBehaviors            []RateBehavior                         `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []QuotaDistributionConfiguration       `yaml:"quota_distribution_configs"`
 	MailNotifications        Option[*MailConfiguration]             `yaml:"mail_notifications"`
@@ -161,8 +161,9 @@ type MailConfiguration struct {
 // It contains the mail template for each notification case.
 // The templates will be filled with the details collected from the limes collect job.
 type MailTemplateConfiguration struct {
-	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
-	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`
+	ConfirmedCommitments   MailTemplate `yaml:"confirmed_commitments"`
+	ExpiringCommitments    MailTemplate `yaml:"expiring_commitments"`
+	TransferredCommitments MailTemplate `yaml:"transferred_commitments"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.

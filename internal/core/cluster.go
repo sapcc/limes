@@ -68,6 +68,10 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 		if err != nil {
 			errs.Addf("could not parse expiration mail template: %w", err)
 		}
+		err = mailConfig.Templates.TransferredCommitments.Compile()
+		if err != nil {
+			errs.Addf("could not parse transfer mail template: %w", err)
+		}
 	}
 
 	if !fillLiquidConnections {
@@ -179,10 +183,10 @@ func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, reso
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in the given service.
-func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) ResourceBehavior {
+func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) util.ResourceBehavior {
 	// default behavior
-	result := ResourceBehavior{
-		IdentityInV1API: ResourceRef{
+	result := util.ResourceBehavior{
+		IdentityInV1API: util.ResourceRef{
 			// NOTE: This is the only place where these particular cross-type casts are allowed.
 			ServiceType: limes.ServiceType(serviceType),
 			Name:        limesresources.ResourceName(resourceName),
@@ -198,6 +202,11 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	}
 
 	return result
+}
+
+// BehaviorForResourceLocation is a shorthand for BehaviorForResource using an AZResourceLocation.
+func (c *Cluster) BehaviorForResourceLocation(loc util.AZResourceLocation) util.ResourceBehavior {
+	return c.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 }
 
 // BehaviorForRate returns the RateBehavior for the given rate in
