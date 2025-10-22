@@ -38,10 +38,12 @@ func (d MarshalableTimeDuration) Into() time.Duration {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// IntoUnixEncodedTime converts a time to a UnixEncodedTime, used for storage in the DB.
 func IntoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
 	return limes.UnixEncodedTime{Time: t}
 }
 
+// FromUnixEncodedTime converts a time to a UnixEncodedTime, used for reading from the DB.
 func FromUnixEncodedTime(t limes.UnixEncodedTime) time.Time {
 	return t.Time
 }

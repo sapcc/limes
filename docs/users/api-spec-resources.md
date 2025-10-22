@@ -660,8 +660,8 @@ With the following request body, the endpoint can be used to withdraw a commitme
   }
 }
 ```
-This operation only works on commitments that are either set to `transfer_status=unlisted` or on `transfer_status=public` for 24 hours after the commitment was posted for transfer 
-An `amount` is ignored in this case, the whole commitment is withdrawn from transfer.
+This operation only works on commitments that are either a) set to `transfer_status=unlisted` or b) set to `transfer_status=public` _and_ the point of posting was less than 24h in the past _and_ the commitment was not transferred yet. 
+An `amount` given in the request gets ignored in this case, the whole commitment is withdrawn from transfer.
 A commitment previously splitted for transfer is not automatically merged back, this can be done manually with the `/merge` endpoint.
 
 ### POST /v1/domains/:id/projects/:id/transfer-commitment/:id
