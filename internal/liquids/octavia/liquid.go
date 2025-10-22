@@ -21,9 +21,9 @@ import (
 
 type Logic struct {
 	// connections
-	OctaviaV2 *gophercloud.ServiceClient `yaml:"-"`
+	OctaviaV2 *gophercloud.ServiceClient `json:"-"`
 	// state
-	OwnProjectID string `yaml:"-"`
+	OwnProjectID string `json:"-"`
 }
 
 // On reading quota, we will accept any of the given names.

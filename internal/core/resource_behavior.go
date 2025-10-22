@@ -4,6 +4,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -17,11 +18,11 @@ import (
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
-	FullResourceNameRx     regexpext.BoundedRegexp `yaml:"resource"`
-	OvercommitFactor       liquid.OvercommitFactor `yaml:"overcommit_factor"`
-	IdentityInV1API        ResourceRef             `yaml:"identity_in_v1_api"`
-	TranslationRuleInV1API TranslationRule         `yaml:"translation_rule_in_v1_api"`
-	Category               string                  `yaml:"category"`
+	FullResourceNameRx     regexpext.BoundedRegexp `json:"resource"`
+	OvercommitFactor       liquid.OvercommitFactor `json:"overcommit_factor"`
+	IdentityInV1API        ResourceRef             `json:"identity_in_v1_api"`
+	TranslationRuleInV1API TranslationRule         `json:"translation_rule_in_v1_api"`
+	Category               string                  `json:"category"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
@@ -70,7 +71,7 @@ func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, val
 	}
 	rx, err := fullNameRx.Regexp()
 	if err != nil {
-		// defense in depth: this should not happen because the regex should have been validated at UnmarshalYAML time
+		// defense in depth: this should not happen because the regex should have been validated at UnmarshalJSON time
 		return value
 	}
 	match := rx.FindStringSubmatchIndex(fullName)
@@ -82,7 +83,7 @@ func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, val
 }
 
 // RefInService contains a pair of service type and resource or rate name.
-// When read from the configuration YAML, this deserializes from a string in the "service/resource" or "service/rate" format.
+// When read from the configuration JSON, this deserializes from a string in the "service/resource" or "service/rate" format.
 type RefInService[S, R ~string] struct {
 	ServiceType S
 	Name        R
@@ -91,10 +92,10 @@ type RefInService[S, R ~string] struct {
 // ResourceRef is an instance of RefInService. It appears in type ResourceBehavior.
 type ResourceRef = RefInService[limes.ServiceType, limesresources.ResourceName]
 
-// UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (r *RefInService[S, R]) UnmarshalYAML(unmarshal func(any) error) error {
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (r *RefInService[S, R]) UnmarshalJSON(data []byte) error {
 	var in string
-	err := unmarshal(&in)
+	err := json.Unmarshal(data, &in)
 	if err != nil {
 		return err
 	}

@@ -22,26 +22,35 @@ import (
 
 func Test_ExpiringCommitmentNotification(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany:
-							- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
-							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
-			liquids:
-				first: { area: testing }
-			resource_behavior:
-			- { resource: first/capacity, identity_in_v1_api: service/resource }
-			mail_notifications:
-				templates:
-					expiring_commitments:
-						subject: "Information about expiring commitments"
-						body: "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
-`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"first": {"area": "testing"}
+			},
+			"resource_behavior": [
+				{"resource": "first/capacity", "identity_in_v1_api": "service/resource"}
+			],
+			"mail_notifications": {
+				"templates": {
+					"expiring_commitments": {
+						"subject": "Information about expiring commitments",
+						"body": "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }}{{ end }}"
+					}
+				}
+			}
+		}`),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,

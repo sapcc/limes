@@ -130,7 +130,7 @@ func main() {
 
 	// load configuration and connect to cluster
 	dbm := db.InitORM(must.Return(db.Init()))
-	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
+	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo))
 	errs.LogFatalIfError()

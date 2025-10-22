@@ -4,6 +4,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -18,24 +19,23 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/promquery"
 	"github.com/sapcc/go-bits/regexpext"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
 
 // ClusterConfiguration contains all the configuration data for a single
-// cluster. It is instantiated from YAML and then transformed into type
+// cluster. It is instantiated from JSON and then transformed into type
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
-	AvailabilityZones        []limes.AvailabilityZone               `yaml:"availability_zones"`
-	CatalogURL               string                                 `yaml:"catalog_url"`
-	Discovery                DiscoveryConfiguration                 `yaml:"discovery"`
-	Liquids                  map[db.ServiceType]LiquidConfiguration `yaml:"liquids"`
-	ResourceBehaviors        []ResourceBehavior                     `yaml:"resource_behavior"`
-	RateBehaviors            []RateBehavior                         `yaml:"rate_behavior"`
-	QuotaDistributionConfigs []QuotaDistributionConfiguration       `yaml:"quota_distribution_configs"`
-	MailNotifications        Option[*MailConfiguration]             `yaml:"mail_notifications"`
+	AvailabilityZones        []limes.AvailabilityZone               `json:"availability_zones"`
+	CatalogURL               string                                 `json:"catalog_url"`
+	Discovery                DiscoveryConfiguration                 `json:"discovery"`
+	Liquids                  map[db.ServiceType]LiquidConfiguration `json:"liquids"`
+	ResourceBehaviors        []ResourceBehavior                     `json:"resource_behavior"`
+	RateBehaviors            []RateBehavior                         `json:"rate_behavior"`
+	QuotaDistributionConfigs []QuotaDistributionConfiguration       `json:"quota_distribution_configs"`
+	MailNotifications        Option[*MailConfiguration]             `json:"mail_notifications"`
 }
 
 // GetLiquidConfigurationForType returns the LiquidConfiguration or false.
@@ -51,17 +51,17 @@ func (cluster *ClusterConfiguration) GetLiquidConfigurationForType(serviceType d
 // DiscoveryConfiguration describes the method of discovering Keystone domains
 // and projects.
 type DiscoveryConfiguration struct {
-	Method                       string                       `yaml:"method"`
-	ExcludeDomainRx              regexpext.PlainRegexp        `yaml:"except_domains"`
-	IncludeDomainRx              regexpext.PlainRegexp        `yaml:"only_domains"`
-	StaticDiscoveryConfiguration StaticDiscoveryConfiguration `yaml:"static_config"`
+	Method                       string                       `json:"method"`
+	ExcludeDomainRx              regexpext.PlainRegexp        `json:"except_domains"`
+	IncludeDomainRx              regexpext.PlainRegexp        `json:"only_domains"`
+	StaticDiscoveryConfiguration StaticDiscoveryConfiguration `json:"static_config"`
 }
 
 // StaticDiscoveryConfiguration appears in type DiscoveryConfiguration.
 // It contains configuration for the discovery method "static".
 type StaticDiscoveryConfiguration struct {
-	Domains  []KeystoneDomain             `yaml:"domains"`
-	Projects map[string][]KeystoneProject `yaml:"projects"`
+	Domains  []KeystoneDomain             `json:"domains"`
+	Projects map[string][]KeystoneProject `json:"projects"`
 }
 
 // FilterDomains applies the configured ExcludeDomainRx and IncludeDomainRx to
@@ -87,32 +87,32 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 // LiquidConfiguration describes a service that is enabled for a certain cluster by means of a corresponding running liquid.
 // It holds configurations for how to deal with the service on project level (quota, usage, commitment) as well as cluster level (capacity).
 type LiquidConfiguration struct {
-	Area string `yaml:"area"`
+	Area string `json:"area"`
 
 	// FixedCapacityConfiguration and PrometheusCapacityConfiguration are additional means of providing capacity for this
 	// service_type besides the liquid.ServiceCapacityReport. All means are not exclusive and can be combined, as long as
 	// they don't write capacity to the same liquid.ResourceName.
-	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]  `yaml:"fixed_capacity_values"`
-	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration] `yaml:"capacity_values_from_prometheus"`
+	FixedCapacityConfiguration      Option[map[liquid.ResourceName]uint64]  `json:"fixed_capacity_values"`
+	PrometheusCapacityConfiguration Option[PrometheusCapacityConfiguration] `json:"capacity_values_from_prometheus"`
 
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
-	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
+	RateLimits ServiceRateLimitConfiguration `json:"rate_limits"`
 
 	// Use Cluster.CommitmentBehaviorForResource() to access this.
-	CommitmentBehaviorPerResource regexpext.ConfigSet[liquid.ResourceName, CommitmentBehavior] `yaml:"commitment_behavior_per_resource"`
+	CommitmentBehaviorPerResource regexpext.ConfigSet[liquid.ResourceName, CommitmentBehavior] `json:"commitment_behavior_per_resource"`
 }
 
 // PrometheusCapacityConfiguration appears in type LiquidConfiguration.
 type PrometheusCapacityConfiguration struct {
-	APIConfig         promquery.Config               `yaml:"api"`
-	Queries           map[liquid.ResourceName]string `yaml:"queries"`
-	AllowZeroCapacity bool                           `yaml:"allow_zero_capacity"`
+	APIConfig         promquery.Config               `json:"api"`
+	Queries           map[liquid.ResourceName]string `json:"queries"`
+	AllowZeroCapacity bool                           `json:"allow_zero_capacity"`
 }
 
 // ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
 type ServiceRateLimitConfiguration struct {
-	Global         []RateLimitConfiguration `yaml:"global"`
-	ProjectDefault []RateLimitConfiguration `yaml:"project_default"`
+	Global         []RateLimitConfiguration `json:"global"`
+	ProjectDefault []RateLimitConfiguration `json:"project_default"`
 }
 
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
@@ -127,49 +127,49 @@ func (svcRlConfig ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name
 
 // RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	Name   liquid.RateName   `yaml:"name"`
-	Unit   limes.Unit        `yaml:"unit"`
-	Limit  uint64            `yaml:"limit"`
-	Window limesrates.Window `yaml:"window"`
+	Name   liquid.RateName   `json:"name"`
+	Unit   limes.Unit        `json:"unit"`
+	Limit  uint64            `json:"limit"`
+	Window limesrates.Window `json:"window"`
 }
 
 // QuotaDistributionConfiguration contains configuration options for specifying
 // the QuotaDistributionModel of specific resources.
 type QuotaDistributionConfiguration struct {
-	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
-	Model              limesresources.QuotaDistributionModel `yaml:"model"`
+	FullResourceNameRx regexpext.BoundedRegexp               `json:"resource"`
+	Model              limesresources.QuotaDistributionModel `json:"model"`
 	// options for AutogrowQuotaDistribution
-	Autogrow Option[AutogrowQuotaDistributionConfiguration] `yaml:"autogrow"`
+	Autogrow Option[AutogrowQuotaDistributionConfiguration] `json:"autogrow"`
 }
 
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
 type AutogrowQuotaDistributionConfiguration struct {
-	AllowQuotaOvercommitUntilAllocatedPercent float64                      `yaml:"allow_quota_overcommit_until_allocated_percent"`
-	ProjectBaseQuota                          uint64                       `yaml:"project_base_quota"`
-	GrowthMultiplier                          float64                      `yaml:"growth_multiplier"`
-	GrowthMinimum                             uint64                       `yaml:"growth_minimum"`
-	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
+	AllowQuotaOvercommitUntilAllocatedPercent float64                      `json:"allow_quota_overcommit_until_allocated_percent"`
+	ProjectBaseQuota                          uint64                       `json:"project_base_quota"`
+	GrowthMultiplier                          float64                      `json:"growth_multiplier"`
+	GrowthMinimum                             uint64                       `json:"growth_minimum"`
+	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `json:"usage_data_retention_period"`
 }
 
 // MailConfiguration appears in type Configuration.
 type MailConfiguration struct {
-	Endpoint  string                    `yaml:"endpoint"`
-	Templates MailTemplateConfiguration `yaml:"templates"`
+	Endpoint  string                    `json:"endpoint"`
+	Templates MailTemplateConfiguration `json:"templates"`
 }
 
 // MailTemplateConfiguration appears in type Configuration.
 // It contains the mail template for each notification case.
 // The templates will be filled with the details collected from the limes collect job.
 type MailTemplateConfiguration struct {
-	ConfirmedCommitments MailTemplate `yaml:"confirmed_commitments"`
-	ExpiringCommitments  MailTemplate `yaml:"expiring_commitments"`
+	ConfirmedCommitments MailTemplate `json:"confirmed_commitments"`
+	ExpiringCommitments  MailTemplate `json:"expiring_commitments"`
 }
 
-// NewClusterFromYAML reads and validates the configuration in the given YAML document.
+// NewClusterFromJSON reads and validates the configuration in the given JSON document.
 // Errors are logged and will result in program termination, causing the function to not return.
-func NewClusterFromYAML(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
+func NewClusterFromJSON(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
-	err := yaml.UnmarshalStrict(configBytes, &config)
+	err := json.Unmarshal(configBytes, &config)
 	if err != nil {
 		errs.Addf("parse configuration: %w", err)
 		return nil, errs
