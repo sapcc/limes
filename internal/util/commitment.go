@@ -69,6 +69,8 @@ func BuildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64, now 
 	}, nil
 }
 
+// CanDeleteCommitment checks whether a user with a certain token can delete a commitment at the current time.
+// This is either a regular user who deletes the commitment within 24 hours of creation or an admin.
 func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment, timeNow func() time.Time) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
 	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
@@ -88,6 +90,8 @@ func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitm
 	return token.Check("project:uncommit")
 }
 
+// ConvertCommitmentToDisplayForm transforms a db.ProjectCommitment into a limesresources.Commitment for displaying
+// to the user on the API or usage within the audit log.
 func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc AZResourceLocation, apiIdentity ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
