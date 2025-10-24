@@ -16,17 +16,21 @@ import (
 	"github.com/sapcc/limes/internal/test"
 )
 
-const testTranslationConfigYAML = `
-	availability_zones: [ az-one, az-two ]
-	discovery:
-		method: static
-		static_config:
-			domains: [{ name: domainone, id: uuid-for-domainone }]
-			projects:
-				uuid-for-domainone: [{ name: projectone, id: uuid-for-projectone, parent_id: uuid-for-domainone }]
-	liquids:
-		first: { area: first }
-`
+const testTranslationConfigJSON = `{
+	"availability_zones": ["az-one", "az-two"],
+	"discovery": {
+		"method": "static",
+		"static_config": {
+			"domains": [{"name": "domainone", "id": "uuid-for-domainone"}],
+			"projects": {
+				"uuid-for-domainone": [{"name": "projectone", "id": "uuid-for-projectone", "parent_id": "uuid-for-domainone"}]
+			}
+		}
+	},
+	"liquids": {
+		"first": {"area": "first"}
+	}
+}`
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // subcapacity translation
@@ -182,7 +186,7 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 
 func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {
 	s := test.NewSetup(t,
-		test.WithConfig(testTranslationConfigYAML),
+		test.WithConfig(testTranslationConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfo),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
@@ -472,7 +476,7 @@ func TestTranslateNovaSubresources(t *testing.T) {
 
 func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {
 	s := test.NewSetup(t,
-		test.WithConfig(testTranslationConfigYAML),
+		test.WithConfig(testTranslationConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfo),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,

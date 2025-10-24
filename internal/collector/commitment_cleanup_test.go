@@ -20,34 +20,48 @@ import (
 )
 
 const (
-	testCleanupOldCommitmentsConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			unittest:
-				area: testing
-				commitment_behavior_per_resource:
-					- key: capacity
-						value:
-							durations_per_domain: [{ key: '.*', value: [ '1 day', '3 years' ] }]
-	`
+	testCleanupOldCommitmentsConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"unittest": {
+				"area": "testing",
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity",
+						"value": {
+							"durations_per_domain": [
+								{"key": ".*", "value": ["1 day", "3 years"]}
+							]
+						}
+					}
+				]
+			}
+		}
+	}`
 )
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testCleanupOldCommitmentsConfigYAML),
+		test.WithConfig(testCleanupOldCommitmentsConfigJSON),
 		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)

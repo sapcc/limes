@@ -13,8 +13,8 @@ import (
 // RateBehavior contains the configuration options for specialized behavior of
 // a single rate (or a set thereof).
 type RateBehavior struct {
-	FullRateNameRx  regexpext.BoundedRegexp `yaml:"rate"`
-	IdentityInV1API RateRef                 `yaml:"identity_in_v1_api"`
+	FullRateNameRx  regexpext.BoundedRegexp `json:"rate"`
+	IdentityInV1API RateRef                 `json:"identity_in_v1_api"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.

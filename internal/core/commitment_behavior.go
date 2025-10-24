@@ -22,11 +22,11 @@ type CommitmentBehavior struct {
 	// (and thus committability) are allowed to differ per domain.
 	//
 	// If DurationsPerDomain.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
-	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `yaml:"durations_per_domain"`
+	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `json:"durations_per_domain"`
 
-	MinConfirmDate Option[time.Time]                `yaml:"min_confirm_date"`
-	UntilPercent   Option[float64]                  `yaml:"until_percent"`
-	ConversionRule Option[CommitmentConversionRule] `yaml:"conversion_rule"`
+	MinConfirmDate Option[time.Time]                `json:"min_confirm_date"`
+	UntilPercent   Option[float64]                  `json:"until_percent"`
+	ConversionRule Option[CommitmentConversionRule] `json:"conversion_rule"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
@@ -124,8 +124,8 @@ func (b ScopedCommitmentBehavior) ForAPI(now time.Time) Option[limesresources.Co
 // CommitmentConversionRule describes how commitments for a resource may be converted
 // into commitments for other resources with the same rule identifier.
 type CommitmentConversionRule struct {
-	Identifier string `yaml:"identifier"`
-	Weight     uint64 `yaml:"weight"`
+	Identifier string `json:"identifier"`
+	Weight     uint64 `json:"weight"`
 }
 
 // CommitmentConversionRate describes the rate for converting commitments between two compatible resources.

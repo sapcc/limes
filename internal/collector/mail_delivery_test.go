@@ -43,22 +43,26 @@ func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) erro
 func Test_MailDelivery(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany:
-							- { name: walldorf,  id: uuid-for-walldorf,  parent_id: uuid-for-germany }
-							- { name: berlin,    id: uuid-for-berlin,    parent_id: uuid-for-germany }
-							- { name: dresden,   id: uuid-for-dresden,   parent_id: uuid-for-germany }
-							- { name: frankfurt, id: uuid-for-frankfurt, parent_id: uuid-for-germany }
-			liquids:
-				shared:
-					area: testing
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "walldorf", "id": "uuid-for-walldorf", "parent_id": "uuid-for-germany"},
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"},
+							{"name": "frankfurt", "id": "uuid-for-frankfurt", "parent_id": "uuid-for-germany"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {"area": "testing"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", srvInfo),
 		test.WithInitialDiscovery,
 	)
