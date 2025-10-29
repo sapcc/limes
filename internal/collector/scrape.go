@@ -377,15 +377,17 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				// depending on the resource topology, we may or may not have a value in this AZ
+				// depending on the resource topology, we may or may not have a value in this AZ:
+				// no quota: both values are None, always
+				// with quota: backend quota is set for total and specific AZ if az-separated
+				// specific az's get None if not az-separated
+				// the quota is never none, if the resource has quota
 				resInfo := core.InfoForResource(serviceInfo, resourceName)
 				switch {
 				case !resInfo.HasQuota:
-					// reset everything to none, when no quota is supported
 					azRes.BackendQuota = None[int64]()
 					azRes.Quota = None[uint64]()
 				case az == liquid.AvailabilityZoneTotal || resInfo.Topology == liquid.AZSeparatedTopology:
-					// filled accordingly by enrichUsageReportTotals
 					azRes.BackendQuota = data.Quota
 				default:
 					azRes.BackendQuota = None[int64]()
@@ -394,7 +396,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				// check if we need to arrange for SetQuotaJob to look at this project service
 				if resInfo.HasQuota {
 					if azRes.Quota.IsNone() {
-						// apply missing default quota
 						azRes.Quota = Some[uint64](0)
 					}
 					if (resInfo.Topology == liquid.AZSeparatedTopology && az != liquid.AvailabilityZoneTotal) ||
@@ -595,18 +596,33 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// NOTE: We do not do ApplyBackendQuota here: This function is only
 	// called after scraping errors, so ApplyBackendQuota will likely fail, too.
 
+	// get index for finding the proper resource info later
+	resourcesByID, err := db.BuildIndexOfDBResult(tx, func(res db.Resource) db.ResourceID { return res.ID }, `SELECT * FROM resources WHERE service_id = $1`, srv.ID)
+	if err != nil {
+		return err
+	}
+
 	// create dummy project_az_resources; for this, we need the az_resources
 	var azResources []db.AZResource
-	_, err = tx.Select(&azResources, `SELECT * FROM az_resources WHERE resource_id IN (SELECT id FROM resources WHERE service_id = $1) AND az IN ($2, $3) ORDER BY id`, srv.ID, liquid.AvailabilityZoneAny, liquid.AvailabilityZoneTotal)
+	_, err = tx.Select(&azResources, `SELECT * FROM az_resources WHERE resource_id IN (SELECT id FROM resources WHERE service_id = $1) AND az != $2 ORDER BY id`, srv.ID, liquid.AvailabilityZoneUnknown)
 	if err != nil {
 		return err
 	}
 	for _, res := range azResources {
+		resName := resourcesByID[res.ResourceID].Name
+		resInfo := core.InfoForResource(serviceInfo, resName)
+		//  this replicates the logic from writeResourceScrapeResult with the infinite backendQuota (-1)
+		backendQuota := None[int64]()
+		if resInfo.HasQuota &&
+			(slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneTotal, liquid.AvailabilityZoneAny}, res.AvailabilityZone) ||
+				resInfo.Topology == liquid.AZSeparatedTopology) {
+			backendQuota = Some(int64(-1))
+		}
 		err := tx.Insert(&db.ProjectAZResource{
 			ProjectID:    dbProject.ID,
 			AZResourceID: res.ID,
 			Usage:        0,
-			BackendQuota: Some(int64(-1)),
+			BackendQuota: backendQuota,
 		})
 		if err != nil {
 			return err
@@ -647,7 +663,7 @@ func enrichUsageReportTotals(value *liquid.ServiceUsageReport, serviceInfo liqui
 		var (
 			totalUsage         uint64
 			totalPhysicalUsage uint64
-			totalQuota         int64
+			totalQuotaOption   Option[int64]
 		)
 		for _, azValue := range resValue.PerAZ {
 			totalUsage += azValue.Usage
@@ -656,17 +672,14 @@ func enrichUsageReportTotals(value *liquid.ServiceUsageReport, serviceInfo liqui
 			}
 			// defense in depth: the report from the liquid should be consistent with the topology
 			if quota, ok := azValue.Quota.Unpack(); ok && resourceInfo.HasQuota && resourceInfo.Topology == liquid.AZSeparatedTopology {
-				totalQuota += quota
+				totalQuotaOption = Some(totalQuotaOption.UnwrapOr(0) + quota)
 			}
 		}
 		totalPhysicalUsageOption := None[uint64]()
 		if totalPhysicalUsage > 0 {
 			totalPhysicalUsageOption = Some(totalPhysicalUsage)
 		}
-		totalQuotaOption := None[int64]()
-		if totalQuota > 0 {
-			totalQuotaOption = Some(totalQuota)
-		}
+		// if we have a non-az-separated resource with quota, we take the total that the report provides instead of the sum
 		// defense in depth: the report from the liquid should be consistent with the topology
 		if resourceInfo.HasQuota && resourceInfo.Topology != liquid.AZSeparatedTopology {
 			totalQuotaOption = resValue.Quota
