@@ -439,12 +439,11 @@ within the same service: (Replace service types and resource names as necessary.
 
 1. Stop all processes that might write into the Limes DB (specifically, `limes serve` and `limes collect`) to avoid
    interference in the next step.
-2. Update the `name` columns in the resources tables of the DB:
+2. Update the `name` column in the resources table of the DB (the `project`-tables depend on the cluster level tables):
    ```sql
-   UPDATE resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
+   UPDATE resources SET name = 'baremetal_large', path = 'instances/baremetal_large' WHERE name = 'thebigbox'
       AND service_id IN (SELECT id FROM services WHERE type = 'compute');
-   UPDATE project_resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
-      AND service_id IN (SELECT id FROM project_services WHERE type = 'compute');
+   UPDATE az_resources SET path = REPLACE(path, 'instances/thebigbox','instances/baremetal_large') WHERE path LIKE 'instances/thebigbox%';
    ```
 3. Apply configuration matching the new resource name to all relevant processes (specifically, the Limes core components
    and the respective liquid).
@@ -460,28 +459,27 @@ with the following sequence:
    ```sql
    INSERT INTO services (type) VALUES ('neutron')
        ON CONFLICT DO NOTHING;
-   INSERT INTO project_services (project_id, type, next_scrape_at, rates_next_scrape_at)
-       SELECT id, 'neutron', NOW(), NOW() FROM projects
+   INSERT INTO project_services (project_id, service_id, next_scrape_at, rates_next_scrape_at)
+       SELECT p.id, s.id, NOW(), NOW() FROM projects p 
+       JOIN services s ON s.type = 'neutron'
        ON CONFLICT DO NOTHING;
    ```
-2. Attach the existing resource records to the new service records:
+2. Attach the existing resource records to the new service records (the `project`-tables depend on the cluster level tables):
    ```sql
    UPDATE resources
-       SET service_id = (SELECT id FROM services WHERE type = 'neutron')
+       SET service_id = (SELECT id FROM services WHERE type = 'neutron'),
+           path = REPLACE(path, 'network/','neutron/')
        WHERE name = 'routers' AND service_id = (SELECT id FROM services WHERE type = 'network');
-
-   UPDATE project_resources res SET service_id = (
-       SELECT new.id FROM project_services new JOIN project_services old ON old.project_id = new.project_id
-       WHERE old.id = res.service_id AND old.type = 'network' AND new.type = 'neutron'
-   ) WHERE name = 'routers' AND service_id IN (SELECT id FROM project_services WHERE type = 'network');
+   UPDATE az_resources 
+       SET path = REPLACE(path, 'network/','neutron/')
+       WHERE path LIKE 'network/routers%';
    ```
-   If the resource name also changes, add `SET name = 'newname'` to each UPDATE statement.
+   If the resource name also changes, add `SET name = 'newname'` and adjust the `paths` accordingly.
    If multiple resources need to be moved from the same old service type to the same new service type, you can replace
    `WHERE name = 'routers'` by a list match, e.g. `WHERE name IN ('routers','floating_ips','networks')`.
-3. If this was the last resource in the old service type, clean up the old service type:
+3. If this was the last resource in the old service type, clean up the old service type (will be cascaded to the project level tables):
    ```sql
    DELETE FROM services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM resources);
-   DELETE FROM project_services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM project_resources);
    ```
 
 Alternatively, if an entire service is renamed without changing its resource structure, then the following simplified
@@ -490,7 +488,8 @@ database update process can be substituted instead: (This example renames servic
 1. Update the `type` columns in the services tables of the DB:
    ```sql
    UPDATE services SET type = 'swift' WHERE type = 'object-store';
-   UPDATE project_services SET type = 'swift' WHERE type = 'object-store';
+   UPDATE resources SET path = REPLACE(path, 'object-store/','swift/') WHERE path LIKE 'object-store/%';
+   UPDATE az_resources SET path = REPLACE(path, 'object-store/','swift/') WHERE path LIKE 'object-store/%';
    ```
 
 ### Quota distribution models
