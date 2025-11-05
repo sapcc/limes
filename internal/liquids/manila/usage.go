@@ -253,7 +253,7 @@ type QuotaSetDetail struct {
 	Snapshots         QuotaDetail `json:"snapshots"`
 	Gigabytes         QuotaDetail `json:"gigabytes"`
 	SnapshotGigabytes QuotaDetail `json:"snapshot_gigabytes"`
-	ShareNetworks     QuotaDetail `json:"share_networks,omitempty"`
+	ShareNetworks     QuotaDetail `json:"share_networks"`
 	Replicas          QuotaDetail `json:"share_replicas"`
 	ReplicaGigabytes  QuotaDetail `json:"replica_gigabytes"`
 }
