@@ -22,13 +22,14 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Nova.
 type Logic struct {
 	// configuration
-	HypervisorSelection HypervisorSelection `json:"hypervisor_selection"`
+	HypervisorSelection hypervisorSelection `json:"hypervisor_selection"`
 	FlavorSelection     FlavorSelection     `json:"flavor_selection"`
 	WithSubresources    bool                `json:"with_subresources"`
 	WithSubcapacities   bool                `json:"with_subcapacities"`
-	BinpackBehavior     BinpackBehavior     `json:"binpack_behavior"`
+	BinpackBehavior     binpackBehavior     `json:"binpack_behavior"`
 	IgnoredTraits       []string            `json:"ignored_traits"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `json:"-"`
@@ -79,7 +80,7 @@ func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceCli
 	}
 
 	var body struct {
-		//NOTE: cannot use map[string]int64 here because this object contains the
+		// NOTE: cannot use map[string]int64 here because this object contains the
 		// field "id": "default" (curse you, untyped JSON)
 		QuotaClassSet map[string]any `json:"quota_class_set"`
 	}
@@ -216,7 +217,7 @@ func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.Commitmen
 	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }
 
-func (l *Logic) IsIgnoredFlavor(flavorName string) bool {
+func (l *Logic) isIgnoredFlavor(flavorName string) bool {
 	return slices.Contains(l.ignoredFlavorNames.Get(), flavorName)
 }
 
@@ -225,6 +226,7 @@ func (l *Logic) IsIgnoredFlavor(flavorName string) bool {
 
 type novaQuotaUpdateOpts map[string]uint64
 
+// ToComputeQuotaUpdateMap implements the quotasets.UpdateOptsBuilder interface.
 func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota_set": opts}, nil
 }

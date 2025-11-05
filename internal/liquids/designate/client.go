@@ -12,22 +12,23 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
+// Client is a gophercloud.ServiceClient for the Designate API.
 type Client struct {
 	*gophercloud.ServiceClient
 }
 
-func NewClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
+func newClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
 	sc, err := openstack.NewDNSV2(provider, eo)
 	return &Client{ServiceClient: sc}, err
 }
 
-type QuotaSet struct {
+type quotaSet struct {
 	Zones             int64 `json:"zones"`
 	RecordsetsPerZone int64 `json:"zone_recordsets"`
 	RecordsPerZone    int64 `json:"zone_records"`
 }
 
-func (c *Client) GetQuota(ctx context.Context, projectUUID string) (qs QuotaSet, err error) {
+func (c *Client) getQuota(ctx context.Context, projectUUID string) (qs quotaSet, err error) {
 	url := c.ServiceURL("quotas", projectUUID)
 	opts := gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
@@ -39,7 +40,7 @@ func (c *Client) GetQuota(ctx context.Context, projectUUID string) (qs QuotaSet,
 	return
 }
 
-func (c *Client) SetQuota(ctx context.Context, projectUUID string, qs QuotaSet) error {
+func (c *Client) setQuota(ctx context.Context, projectUUID string, qs quotaSet) error {
 	url := c.ServiceURL("quotas", projectUUID)
 	opts := gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
@@ -49,7 +50,7 @@ func (c *Client) SetQuota(ctx context.Context, projectUUID string, qs QuotaSet) 
 	return err
 }
 
-func (c *Client) ListZoneIDs(ctx context.Context, projectUUID string) ([]string, error) {
+func (c *Client) listZoneIDs(ctx context.Context, projectUUID string) ([]string, error) {
 	pager := zones.List(c.ServiceClient, zones.ListOpts{})
 	pager.Headers = map[string]string{
 		"X-Auth-All-Projects":    "false",
@@ -70,7 +71,7 @@ func (c *Client) ListZoneIDs(ctx context.Context, projectUUID string) ([]string,
 	return ids, err
 }
 
-func (c *Client) CountZoneRecordsets(ctx context.Context, projectUUID, zoneID string) (uint64, error) {
+func (c *Client) countZoneRecordsets(ctx context.Context, projectUUID, zoneID string) (uint64, error) {
 	url := c.ServiceURL("zones", zoneID, "recordsets")
 	url += "?limit=1" // do not need all data about all recordsets, just the total count
 	opts := gophercloud.RequestOpts{

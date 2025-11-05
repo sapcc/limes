@@ -37,12 +37,12 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		if err != nil {
 			return liquid.ServiceUsageReport{}, err
 		}
-		resources[vst.SharesResourceName()] = subresult.Shares
-		resources[vst.SnapshotsResourceName()] = subresult.Snapshots
-		resources[vst.ShareCapacityResourceName()] = subresult.ShareCapacity
-		resources[vst.SnapshotCapacityResourceName()] = subresult.SnapshotCapacity
+		resources[vst.sharesResourceName()] = subresult.Shares
+		resources[vst.snapshotsResourceName()] = subresult.Snapshots
+		resources[vst.shareCapacityResourceName()] = subresult.ShareCapacity
+		resources[vst.snapshotCapacityResourceName()] = subresult.SnapshotCapacity
 		if l.NetappMetrics != nil {
-			resources[vst.SnapmirrorCapacityResourceName()] = subresult.SnapmirrorCapacity
+			resources[vst.snapmirrorCapacityResourceName()] = subresult.SnapmirrorCapacity
 		}
 	}
 
@@ -60,13 +60,13 @@ type shareTypeUsageReport struct {
 	SnapmirrorCapacity *liquid.ResourceUsageReport
 }
 
-func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, vst VirtualShareType, req liquid.ServiceUsageRequest) (shareTypeUsageReport, error) {
+func (l *Logic) scanUsageForShareType(ctx context.Context, projectUUID string, vst virtualShareType, req liquid.ServiceUsageRequest) (shareTypeUsageReport, error) {
 	projectMetadata, ok := req.ProjectMetadata.Unpack()
 	if !ok {
 		return shareTypeUsageReport{}, errors.New("projectMetadata is missing")
 	}
 
-	rst, omit := vst.RealShareTypeIn(projectMetadata)
+	rst, omit := vst.realShareTypeIn(projectMetadata)
 	if omit {
 		return l.reportShareTypeAsForbidden(req), nil
 	}
@@ -179,14 +179,14 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	}
 
 	// collect quotas by share type
-	quotaSets := make(map[RealShareType]QuotaSet)
+	quotaSets := make(map[realShareType]QuotaSet)
 	anyReplicationEnabled := false
 	for _, vst := range l.VirtualShareTypes {
 		quotaSet := QuotaSet{
-			Shares:            req.Resources[vst.SharesResourceName()].Quota,
-			Snapshots:         req.Resources[vst.SnapshotsResourceName()].Quota,
-			Gigabytes:         req.Resources[vst.ShareCapacityResourceName()].Quota,
-			SnapshotGigabytes: req.Resources[vst.SnapshotCapacityResourceName()].Quota,
+			Shares:            req.Resources[vst.sharesResourceName()].Quota,
+			Snapshots:         req.Resources[vst.snapshotsResourceName()].Quota,
+			Gigabytes:         req.Resources[vst.shareCapacityResourceName()].Quota,
+			SnapshotGigabytes: req.Resources[vst.snapshotCapacityResourceName()].Quota,
 		}
 		if vst.ReplicationEnabled {
 			anyReplicationEnabled = true
@@ -194,7 +194,7 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 			quotaSet.ReplicaGigabytes = Some(quotaSet.Gigabytes)
 		}
 
-		rst, omit := vst.RealShareTypeIn(projectMetadata)
+		rst, omit := vst.realShareTypeIn(projectMetadata)
 		if omit {
 			if !quotaSet.IsEmpty() {
 				return fmt.Errorf("share type %q may not be used in this project", vst.Name)
@@ -213,7 +213,7 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		overallQuotas.ReplicaGigabytes = Some[uint64](0)
 	}
 	for _, vst := range l.VirtualShareTypes {
-		rst, omit := vst.RealShareTypeIn(projectMetadata)
+		rst, omit := vst.realShareTypeIn(projectMetadata)
 		if omit {
 			continue
 		}
@@ -290,7 +290,7 @@ func (q QuotaDetail) PrepareForBreakdownInto(allAZs []liquid.AvailabilityZone) *
 
 // Returns the quota for a specific share type in the given project
 // (or the overall quota, if the share type is the empty string).
-func (l *Logic) getQuotaSet(ctx context.Context, projectUUID string, st RealShareType) (QuotaSetDetail, error) {
+func (l *Logic) getQuotaSet(ctx context.Context, projectUUID string, st realShareType) (QuotaSetDetail, error) {
 	url := l.ManilaV2.ServiceURL("quota-sets", projectUUID, "detail")
 	if st != "" {
 		url += "?share_type=" + string(st)
@@ -329,7 +329,7 @@ func (qs QuotaSet) IsEmpty() bool {
 
 // Writes the quota for a specific share type in the given project
 // (or the overall quota, if the share type is the empty string).
-func (l *Logic) putQuotaSet(ctx context.Context, projectUUID string, rst RealShareType, qs QuotaSet) error {
+func (l *Logic) putQuotaSet(ctx context.Context, projectUUID string, rst realShareType, qs QuotaSet) error {
 	if logg.ShowDebug {
 		buf, err := json.Marshal(qs)
 		if err == nil {

@@ -52,7 +52,7 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 	respondwith.JSON(w, http.StatusOK, serviceCapacityRequest)
 }
 
-// p.GetServiceUsageRequest handles GET /admin/liquid/service-usage-request?service_type=:type&project_id=:id.
+// GetServiceUsageRequest handles GET /admin/liquid/service-usage-request?service_type=:type&project_id=:id.
 func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/admin/liquid/service-usage-request")
 	token := p.CheckToken(r)

@@ -11,7 +11,7 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // OpenStack is being a mess once again
 
-// Used for the "total_capacity_gb" field in Cinder and Manila pools,
+// Float64WithStringErrors is used for the "total_capacity_gb" field in Cinder and Manila pools,
 // which may be a string like "infinite", "unknown" or "".
 type Float64WithStringErrors float64
 

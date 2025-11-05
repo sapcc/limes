@@ -20,6 +20,7 @@ type loggingRoundTripper struct {
 	Inner http.RoundTripper
 }
 
+// RoundTrip implements the http.RoundTripper interface.
 func (rt loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	resp, err := rt.Inner.RoundTrip(req)

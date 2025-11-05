@@ -15,8 +15,8 @@ import (
 	"github.com/sapcc/go-bits/logg"
 )
 
-// BinpackBehavior contains configuration parameters for the binpack simulation.
-type BinpackBehavior struct {
+// binpackBehavior contains configuration parameters for the binpack simulation.
+type binpackBehavior struct {
 	// When ranking nodes during placement, do not include the VCPU count dimension in the score.
 	ScoreIgnoresCores bool `json:"score_ignores_cores"`
 	// When ranking nodes during placement, do not include the disk size dimension in the score.
@@ -25,33 +25,33 @@ type BinpackBehavior struct {
 	ScoreIgnoresRAM bool `json:"score_ignores_ram"`
 }
 
-// BinpackHypervisor models an entire Nova hypervisor for the purposes of the
+// binpackHypervisor models an entire Nova hypervisor for the purposes of the
 // binpacking simulation.
 //
 // We assume the Nova hypervisor to be an entire cluster of physical nodes.
 // We cannot see the sizes of the individual nodes in that cluster, only the
 // total capacity and the MaxUnit value on the inventories. We have to make the
 // assumption that the individual nodes are of identical size.
-type BinpackHypervisor struct {
-	Match                MatchingHypervisor
-	Nodes                []*BinpackNode
+type binpackHypervisor struct {
+	Match                matchingHypervisor
+	Nodes                []*binpackNode
 	AcceptsPooledFlavors bool
 }
 
-// BinpackHypervisors adds methods to type []BinpackHypervisor.
-type BinpackHypervisors []BinpackHypervisor
+// binpackHypervisors adds methods to type []binpackHypervisor.
+type binpackHypervisors []binpackHypervisor
 
-// BinpackNode appears in type BinpackHypervisor.
-type BinpackNode struct {
-	Capacity  BinpackVector[uint64]
-	Instances []BinpackInstance
+// binpackNode appears in type binpackHypervisor.
+type binpackNode struct {
+	Capacity  binpackVector[uint64]
+	Instances []binpackInstance
 }
 
-// BinpackInstance appears in type BinpackNode. It describes a single instance
+// binpackInstance appears in type binpackNode. It describes a single instance
 // that has been placed on the node as part of the binpacking simulation.
-type BinpackInstance struct {
+type binpackInstance struct {
 	FlavorName string
-	Size       BinpackVector[uint64]
+	Size       binpackVector[uint64]
 	Reason     string // one of "used", "committed", "pending", "padding" (in descending priority), only for debug logging
 }
 
@@ -74,26 +74,26 @@ func guessNodeCountFromMetric(metric string, inv resourceproviders.Inventory) (u
 	return nodeCount, nil
 }
 
-// PrepareHypervisorForBinpacking converts a MatchingHypervisor into a BinpackHypervisor.
-func PrepareHypervisorForBinpacking(h MatchingHypervisor, pooledExtraSpecs map[string]string) (BinpackHypervisor, error) {
+// prepareHypervisorForBinpacking converts a matchingHypervisor into a binpackHypervisor.
+func prepareHypervisorForBinpacking(h matchingHypervisor, pooledExtraSpecs map[string]string) (binpackHypervisor, error) {
 	// compute node count based on the assumption of equal-size nodes:
 	//     nodeCount = (total - reserved) / maxUnit
 	nodeCountAccordingToVCPU, err := guessNodeCountFromMetric("VCPU", h.Inventories["VCPU"])
 	if err != nil {
-		return BinpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.Description(), err)
+		return binpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.description(), err)
 	}
 	nodeCountAccordingToRAM, err := guessNodeCountFromMetric("MEMORY_MB", h.Inventories["MEMORY_MB"])
 	if err != nil {
-		return BinpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.Description(), err)
+		return binpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.description(), err)
 	}
 
 	// as a sanity check, all metrics must agree on the same node count
 	if nodeCountAccordingToVCPU != nodeCountAccordingToRAM {
 		vcpuInventory := h.Inventories["VCPU"]
 		ramInventory := h.Inventories["MEMORY_MB"]
-		return BinpackHypervisor{}, fmt.Errorf(
+		return binpackHypervisor{}, fmt.Errorf(
 			"cannot deduce node count for %s: guessing %d based on VCPU (total = %d, reserved = %d, maxUnit = %d), but %d based on MEMORY_MB (total = %d, reserved = %d, maxUnit = %d)",
-			h.Hypervisor.Description(),
+			h.Hypervisor.description(),
 			nodeCountAccordingToVCPU, vcpuInventory.Total, vcpuInventory.Reserved, vcpuInventory.MaxUnit,
 			nodeCountAccordingToRAM, ramInventory.Total, ramInventory.Reserved, ramInventory.MaxUnit,
 		)
@@ -101,12 +101,12 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor, pooledExtraSpecs map[s
 
 	nodeCount := nodeCountAccordingToVCPU
 	if nodeCount == 0 {
-		return BinpackHypervisor{}, fmt.Errorf("node count for %s is zero", h.Hypervisor.Description())
+		return binpackHypervisor{}, fmt.Errorf("node count for %s is zero", h.Hypervisor.description())
 	}
 
 	// break down capacity into equal-sized nodes
-	nodeTemplate := BinpackNode{
-		Capacity: BinpackVector[uint64]{
+	nodeTemplate := binpackNode{
+		Capacity: binpackVector[uint64]{
 			VCPUs:    liquidapi.AtLeastZero(h.Inventories["VCPU"].MaxUnit),
 			MemoryMB: liquidapi.AtLeastZero(h.Inventories["MEMORY_MB"].MaxUnit),
 			// We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
@@ -117,9 +117,9 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor, pooledExtraSpecs map[s
 			LocalGB: liquidapi.SaturatingSub(h.Inventories["DISK_GB"].Total, h.Inventories["DISK_GB"].Reserved) / nodeCount,
 		},
 	}
-	result := BinpackHypervisor{
+	result := binpackHypervisor{
 		Match:                h,
-		Nodes:                make([]*BinpackNode, int(nodeCount)), //nolint:gosec // uint64 -> int conversion is okay, if there is more than 2^63 elements, we have other problems
+		Nodes:                make([]*binpackNode, int(nodeCount)), //nolint:gosec // uint64 -> int conversion is okay, if there is more than 2^63 elements, we have other problems
 		AcceptsPooledFlavors: FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h),
 	}
 	for idx := range result.Nodes {
@@ -129,10 +129,10 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor, pooledExtraSpecs map[s
 	return result, nil
 }
 
-// RenderDebugView prints an overview of the placements in this hypervisor on several logg.Debug lines.
-func (h BinpackHypervisor) RenderDebugView(az liquid.AvailabilityZone) {
+// renderDebugView prints an overview of the placements in this hypervisor on several logg.Debug lines.
+func (h binpackHypervisor) renderDebugView(az liquid.AvailabilityZone) {
 	shortID := h.Match.Hypervisor.Service.Host
-	logg.Debug("[%s][%s] %s", az, shortID, h.Match.Hypervisor.Description())
+	logg.Debug("[%s][%s] %s", az, shortID, h.Match.Hypervisor.description())
 	for idx, n := range h.Nodes {
 		var placements []string
 		for _, i := range n.Instances {
@@ -143,10 +143,10 @@ func (h BinpackHypervisor) RenderDebugView(az liquid.AvailabilityZone) {
 	}
 }
 
-// PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, skipTraitMatch bool, count uint64) (ok bool) {
+// placeSeveralInstances calls placeOneInstance multiple times.
+func (hh binpackHypervisors) placeSeveralInstances(f flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity binpackVector[uint64], bb binpackBehavior, skipTraitMatch bool, count uint64) (ok bool) {
 	for range count {
-		ok = hh.PlaceOneInstance(f, reason, coresOvercommitFactor, blockedCapacity, bb, skipTraitMatch)
+		ok = hh.placeOneInstance(f, reason, coresOvercommitFactor, blockedCapacity, bb, skipTraitMatch)
 		if !ok {
 			// if we don't have space for this instance, we won't have space for any following ones
 			return false
@@ -155,9 +155,9 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason stri
 	return true
 }
 
-// PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
+// placeOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, skipTraitMatch bool) (ok bool) {
+func (hh binpackHypervisors) placeOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity binpackVector[uint64], bb binpackBehavior, skipTraitMatch bool) (ok bool) {
 	// This function implements the vector dot binpacking method described in [Mayank] (section III,
 	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//
@@ -172,23 +172,23 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	//
 	// [Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
-	vmSize := BinpackVector[uint64]{
+	vmSize := binpackVector[uint64]{
 		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(liquidapi.AtLeastZero(flavor.VCPUs)),
 		MemoryMB: liquidapi.AtLeastZero(flavor.RAM),
 		LocalGB:  liquidapi.AtLeastZero(flavor.Disk),
 	}
 
 	// ensure that placing this instance does not encroach on the overall blocked capacity
-	var totalFree BinpackVector[uint64]
+	var totalFree binpackVector[uint64]
 	for _, hypervisor := range hh {
 		for _, node := range hypervisor.Nodes {
-			totalFree = totalFree.Add(node.free())
+			totalFree = totalFree.add(node.free())
 		}
 	}
-	exceedsCapacity := !blockedCapacity.Add(vmSize).FitsIn(totalFree)
+	exceedsCapacity := !blockedCapacity.add(vmSize).fitsIn(totalFree)
 
 	var (
-		bestNode  *BinpackNode
+		bestNode  *binpackNode
 		bestScore = 0.0
 	)
 	for _, hypervisor := range hh {
@@ -203,17 +203,17 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 		for _, node := range hypervisor.Nodes {
 			// skip nodes that cannot fit this instance at all
 			nodeFree := node.free()
-			if !vmSize.FitsIn(nodeFree) {
+			if !vmSize.fitsIn(nodeFree) {
 				continue
 			}
 
 			// calculate score as cos(S, F)^2 (maximizing the square of the cosine is the same as
 			// maximizing just the cosine, but replaces expensive sqrt() in the denominator with cheap
 			// squaring in the nominator)
-			s := vmSize.Div(node.Capacity)
-			f := nodeFree.Div(node.Capacity)
-			dotProduct := s.Dot(f, bb)
-			score := dotProduct * dotProduct / (s.Dot(s, bb) * f.Dot(f, bb))
+			s := vmSize.div(node.Capacity)
+			f := nodeFree.div(node.Capacity)
+			dotProduct := s.dot(f, bb)
+			score := dotProduct * dotProduct / (s.dot(s, bb) * f.dot(f, bb))
 			// Always favor nodes on nongeneral-purpose hypervisors if they have capacity
 			// Upperbound of score calculation is 1.0
 			if !hypervisor.AcceptsPooledFlavors {
@@ -237,7 +237,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 		logg.Debug("refusing to place %s with %s because no node has enough space", flavor.Name, vmSize.String())
 		return false
 	} else {
-		bestNode.Instances = append(bestNode.Instances, BinpackInstance{
+		bestNode.Instances = append(bestNode.Instances, binpackInstance{
 			FlavorName: flavor.Name,
 			Size:       vmSize,
 			Reason:     reason,
@@ -246,7 +246,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	}
 }
 
-func (n BinpackNode) usage() (result BinpackVector[uint64]) {
+func (n binpackNode) usage() (result binpackVector[uint64]) {
 	for _, i := range n.Instances {
 		result.VCPUs += i.Size.VCPUs
 		result.MemoryMB += i.Size.MemoryMB
@@ -255,22 +255,22 @@ func (n BinpackNode) usage() (result BinpackVector[uint64]) {
 	return
 }
 
-func (n BinpackNode) free() BinpackVector[uint64] {
-	return n.Capacity.SaturatingSub(n.usage())
+func (n binpackNode) free() binpackVector[uint64] {
+	return n.Capacity.saturatingSub(n.usage())
 }
 
-type BinpackVector[T float64 | uint64] struct {
+type binpackVector[T float64 | uint64] struct {
 	VCPUs    T `json:"vcpus"`
 	MemoryMB T `json:"memory_mib"`
 	LocalGB  T `json:"local_disk_gib"`
 }
 
-func (v BinpackVector[T]) FitsIn(other BinpackVector[T]) bool {
+func (v binpackVector[T]) fitsIn(other binpackVector[T]) bool {
 	return v.VCPUs <= other.VCPUs && v.MemoryMB <= other.MemoryMB && v.LocalGB <= other.LocalGB
 }
 
-func (v BinpackVector[T]) Add(other BinpackVector[T]) BinpackVector[T] {
-	return BinpackVector[T]{
+func (v binpackVector[T]) add(other binpackVector[T]) binpackVector[T] {
+	return binpackVector[T]{
 		VCPUs:    v.VCPUs + other.VCPUs,
 		MemoryMB: v.MemoryMB + other.MemoryMB,
 		LocalGB:  v.LocalGB + other.LocalGB,
@@ -278,8 +278,8 @@ func (v BinpackVector[T]) Add(other BinpackVector[T]) BinpackVector[T] {
 }
 
 // Like Sub, but never goes below zero.
-func (v BinpackVector[T]) SaturatingSub(other BinpackVector[T]) BinpackVector[T] {
-	return BinpackVector[T]{
+func (v binpackVector[T]) saturatingSub(other binpackVector[T]) binpackVector[T] {
+	return binpackVector[T]{
 		// The expression `max(0, v - other)` is rewritten into `max(v, other) - other`
 		// here to protect against underflow for T == uint64.
 		VCPUs:    max(v.VCPUs, other.VCPUs) - other.VCPUs,
@@ -288,39 +288,39 @@ func (v BinpackVector[T]) SaturatingSub(other BinpackVector[T]) BinpackVector[T]
 	}
 }
 
-func (v BinpackVector[T]) Mul(other BinpackVector[T]) BinpackVector[float64] {
-	return BinpackVector[float64]{
+func (v binpackVector[T]) mul(other binpackVector[T]) binpackVector[float64] {
+	return binpackVector[float64]{
 		VCPUs:    float64(v.VCPUs) * float64(other.VCPUs),
 		MemoryMB: float64(v.MemoryMB) * float64(other.MemoryMB),
 		LocalGB:  float64(v.LocalGB) * float64(other.LocalGB),
 	}
 }
 
-func (v BinpackVector[T]) Div(other BinpackVector[T]) BinpackVector[float64] {
-	return BinpackVector[float64]{
+func (v binpackVector[T]) div(other binpackVector[T]) binpackVector[float64] {
+	return binpackVector[float64]{
 		VCPUs:    float64(v.VCPUs) / float64(other.VCPUs),
 		MemoryMB: float64(v.MemoryMB) / float64(other.MemoryMB),
 		LocalGB:  float64(v.LocalGB) / float64(other.LocalGB),
 	}
 }
 
-func (v BinpackVector[T]) AsFloat() BinpackVector[float64] {
-	return BinpackVector[float64]{
+func (v binpackVector[T]) asFloat() binpackVector[float64] {
+	return binpackVector[float64]{
 		VCPUs:    float64(v.VCPUs),
 		MemoryMB: float64(v.MemoryMB),
 		LocalGB:  float64(v.LocalGB),
 	}
 }
 
-func (v BinpackVector[T]) AsUint() BinpackVector[uint64] {
-	return BinpackVector[uint64]{
+func (v binpackVector[T]) asUint() binpackVector[uint64] {
+	return binpackVector[uint64]{
 		VCPUs:    uint64(v.VCPUs),
 		MemoryMB: uint64(v.MemoryMB),
 		LocalGB:  uint64(v.LocalGB),
 	}
 }
 
-func (v BinpackVector[T]) Dot(other BinpackVector[T], bb BinpackBehavior) T {
+func (v binpackVector[T]) dot(other binpackVector[T], bb binpackBehavior) T {
 	score := T(0)
 	if !bb.ScoreIgnoresCores {
 		score += v.VCPUs * other.VCPUs
@@ -334,27 +334,28 @@ func (v BinpackVector[T]) Dot(other BinpackVector[T], bb BinpackBehavior) T {
 	return score
 }
 
-func (v BinpackVector[T]) IsAnyZero() bool {
+func (v binpackVector[T]) isAnyZero() bool {
 	return v.VCPUs == 0 || v.MemoryMB == 0 || v.LocalGB == 0
 }
 
-func (v BinpackVector[T]) String() string {
+// String implements the fmt.Stringer interface.
+func (v binpackVector[T]) String() string {
 	// only used for debug output where T = uint64, so these conversions will not hurt
 	return fmt.Sprintf("%dc/%dm/%dg", uint64(v.VCPUs), uint64(v.MemoryMB), uint64(v.LocalGB))
 }
 
-// TotalCapacity returns the sum of capacity over all hypervisor nodes.
-func (hh BinpackHypervisors) TotalCapacity() (result BinpackVector[uint64]) {
+// totalCapacity returns the sum of capacity over all hypervisor nodes.
+func (hh binpackHypervisors) totalCapacity() (result binpackVector[uint64]) {
 	for _, hypervisor := range hh {
 		for _, node := range hypervisor.Nodes {
-			result = result.Add(node.Capacity)
+			result = result.add(node.Capacity)
 		}
 	}
 	return
 }
 
-// PlacementCountForFlavor returns how many instances have been placed for the given flavor name.
-func (hh BinpackHypervisors) PlacementCountForFlavor(flavorName string) uint64 {
+// placementCountForFlavor returns how many instances have been placed for the given flavor name.
+func (hh binpackHypervisors) placementCountForFlavor(flavorName string) uint64 {
 	var result uint64
 	for _, hypervisor := range hh {
 		for _, node := range hypervisor.Nodes {

@@ -1733,7 +1733,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-// GetCommitmentConversion handles GET /v1/commitment-conversion/{service_type}/{resource_name}
+// GetCommitmentConversions handles GET /v1/commitment-conversion/{service_type}/{resource_name}
 func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitment-conversion/:service_type/:resource_name")
 	token := p.CheckToken(r)
@@ -2113,7 +2113,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-// ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
+// UpdateCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
 func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration")
 	token := p.CheckToken(r)

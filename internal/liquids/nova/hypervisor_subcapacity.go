@@ -10,22 +10,22 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// PooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
-type PooledSubcapacityBuilder struct {
+// pooledSubcapacityBuilder is used to build subcapacity lists for pooled resources.
+type pooledSubcapacityBuilder struct {
 	CoresSubcapacities     []liquid.Subcapacity
 	InstancesSubcapacities []liquid.Subcapacity
 	RAMSubcapacities       []liquid.Subcapacity
 }
 
-type SubcapacityAttributes struct {
+type subcapacityAttributes struct {
 	AggregateName string   `json:"aggregate_name"`
 	Traits        []string `json:"traits"`
 }
 
-func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDiskSize float64) error {
-	pc := h.PartialCapacity()
+func (b *pooledSubcapacityBuilder) addHypervisor(h matchingHypervisor, maxRootDiskSize float64) error {
+	pc := h.partialCapacity()
 
-	attrs := SubcapacityAttributes{
+	attrs := subcapacityAttributes{
 		AggregateName: h.AggregateName,
 		Traits:        h.Traits,
 	}
@@ -34,21 +34,21 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		return fmt.Errorf("while serializing Subcapacity Attributes: %w", err)
 	}
 
-	hvCoresCapa := pc.IntoCapacityData("cores", maxRootDiskSize, nil)
+	hvCoresCapa := pc.intoCapacityData("cores", maxRootDiskSize, nil)
 	b.CoresSubcapacities = append(b.CoresSubcapacities, liquid.Subcapacity{
 		Name:       h.Hypervisor.Service.Host,
 		Capacity:   hvCoresCapa.Capacity,
 		Usage:      hvCoresCapa.Usage,
 		Attributes: json.RawMessage(buf),
 	})
-	hvInstancesCapa := pc.IntoCapacityData("instances", maxRootDiskSize, nil)
+	hvInstancesCapa := pc.intoCapacityData("instances", maxRootDiskSize, nil)
 	b.InstancesSubcapacities = append(b.InstancesSubcapacities, liquid.Subcapacity{
 		Name:       h.Hypervisor.Service.Host,
 		Capacity:   hvInstancesCapa.Capacity,
 		Usage:      hvInstancesCapa.Usage,
 		Attributes: json.RawMessage(buf),
 	})
-	hvRAMCapa := pc.IntoCapacityData("ram", maxRootDiskSize, nil)
+	hvRAMCapa := pc.intoCapacityData("ram", maxRootDiskSize, nil)
 	b.RAMSubcapacities = append(b.RAMSubcapacities, liquid.Subcapacity{
 		Name:       h.Hypervisor.Service.Host,
 		Capacity:   hvRAMCapa.Capacity,

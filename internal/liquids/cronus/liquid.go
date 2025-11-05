@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Cronus.
 type Logic struct {
 	// connections
 	CronusV1 *Client `json:"-"`
@@ -25,7 +26,7 @@ type Logic struct {
 
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	l.CronusV1, err = NewClient(provider, eo)
+	l.CronusV1, err = newClient(provider, eo)
 	return err
 }
 

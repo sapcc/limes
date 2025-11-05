@@ -11,7 +11,6 @@ import (
 
 // MarshalableTimeDuration is a time.Duration that can be unmarshaled
 // from a YAML string using time.ParseDuration.
-
 type MarshalableTimeDuration time.Duration
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Cinder.
 type Logic struct {
 	// configuration
 	WithSubcapacities        bool                    `json:"with_subcapacities"`
@@ -29,47 +30,49 @@ type Logic struct {
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
-	VolumeTypes liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
+	VolumeTypes liquidapi.State[map[volumeType]volumeTypeInfo] `json:"-"`
 
-	VolumeTypeAccess liquidapi.State[map[VolumeType]map[ProjectID]struct{}]
+	VolumeTypeAccess liquidapi.State[map[volumeType]map[ProjectID]struct{}]
 }
 
-// VolumeType is a type with convenience functions for deriving resource names.
-type VolumeType string
+// volumeType is a type with convenience functions for deriving resource names.
+type volumeType string
+
+// ProjectID is a type alias for project IDs.
 type ProjectID string
 
-func (vt VolumeType) CapacityResourceName() liquid.ResourceName {
+func (vt volumeType) capacityResourceName() liquid.ResourceName {
 	return liquid.ResourceName("capacity_" + string(vt))
 }
-func (vt VolumeType) SnapshotsResourceName() liquid.ResourceName {
+func (vt volumeType) snapshotsResourceName() liquid.ResourceName {
 	return liquid.ResourceName("snapshots_" + string(vt))
 }
-func (vt VolumeType) VolumesResourceName() liquid.ResourceName {
+func (vt volumeType) volumesResourceName() liquid.ResourceName {
 	return liquid.ResourceName("volumes_" + string(vt))
 }
 
-func (vt VolumeType) CapacityQuotaName() string {
+func (vt volumeType) capacityQuotaName() string {
 	return "gigabytes_" + string(vt)
 }
-func (vt VolumeType) SnapshotsQuotaName() string {
+func (vt volumeType) snapshotsQuotaName() string {
 	return "snapshots_" + string(vt)
 }
-func (vt VolumeType) VolumesQuotaName() string {
+func (vt volumeType) volumesQuotaName() string {
 	return "volumes_" + string(vt)
 }
 
-// VolumeTypeInfo contains configuration for a VolumeType.
-// We need this for matching pools with their VolumeType.
+// volumeTypeInfo contains configuration for a volumeType.
+// We need this for matching pools with their volumeType.
 
-type VolumeTypeInfo struct {
+type volumeTypeInfo struct {
 	VolumeBackendName string
 	StorageProtocol   string
 	QualityType       string
 	VendorName        string
 }
 
-// String returns a string representation of this VolumeTypeInfo for log messages.
-func (i VolumeTypeInfo) String() string {
+// String implements the fmt.Stringer interface.
+func (i volumeTypeInfo) String() string {
 	return fmt.Sprintf("volume_backend_name = %q, storage_protocol = %q, quality_type = %q ", i.VolumeBackendName, i.StorageProtocol, i.QualityType)
 }
 
@@ -92,8 +95,8 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, err
 	}
 
-	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
-	vtAccess := make(map[VolumeType]map[ProjectID]struct{})
+	volumeTypes := make(map[volumeType]volumeTypeInfo, len(vtSpecs))
+	vtAccess := make(map[volumeType]map[ProjectID]struct{})
 	for _, vtSpec := range vtSpecs {
 		vtIsPrivate := !vtSpec.IsPublic && !vtSpec.PublicAccess
 		if vtIsPrivate && !l.ManagePrivateVolumeTypes.MatchString(vtSpec.Name) {
@@ -103,7 +106,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			continue
 		}
 
-		volumeTypes[VolumeType(vtSpec.Name)] = VolumeTypeInfo{
+		volumeTypes[volumeType(vtSpec.Name)] = volumeTypeInfo{
 			VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
 			StorageProtocol:   vtSpec.ExtraSpecs["storage_protocol"],
 			QualityType:       vtSpec.ExtraSpecs["quality_type"],
@@ -124,7 +127,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			for _, result := range accessResults {
 				accessMap[ProjectID(result.ProjectID)] = struct{}{}
 			}
-			vtAccess[VolumeType(vtSpec.Name)] = accessMap
+			vtAccess[volumeType(vtSpec.Name)] = accessMap
 		}
 	}
 	l.VolumeTypes.Set(volumeTypes)
@@ -146,9 +149,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 3*len(volumeTypes))
 	for vt := range volumeTypes {
-		resources[vt.CapacityResourceName()] = resInfoForCapacity
-		resources[vt.SnapshotsResourceName()] = resInfoForObjects
-		resources[vt.VolumesResourceName()] = resInfoForObjects
+		resources[vt.capacityResourceName()] = resInfoForCapacity
+		resources[vt.snapshotsResourceName()] = resInfoForObjects
+		resources[vt.volumesResourceName()] = resInfoForObjects
 	}
 
 	return liquid.ServiceInfo{
@@ -174,17 +177,17 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	}
 	requestData.QuotaSet = make(map[string]uint64)
 
-	for volumeType := range l.VolumeTypes.Get() {
-		quotaCapacity := req.Resources[volumeType.CapacityResourceName()].Quota
-		requestData.QuotaSet[volumeType.CapacityQuotaName()] = quotaCapacity
+	for vt := range l.VolumeTypes.Get() {
+		quotaCapacity := req.Resources[vt.capacityResourceName()].Quota
+		requestData.QuotaSet[vt.capacityQuotaName()] = quotaCapacity
 		requestData.QuotaSet["gigabytes"] += quotaCapacity
 
-		quotaSnapshots := req.Resources[volumeType.SnapshotsResourceName()].Quota
-		requestData.QuotaSet[volumeType.SnapshotsQuotaName()] = quotaSnapshots
+		quotaSnapshots := req.Resources[vt.snapshotsResourceName()].Quota
+		requestData.QuotaSet[vt.snapshotsQuotaName()] = quotaSnapshots
 		requestData.QuotaSet["snapshots"] += quotaSnapshots
 
-		quotaVolumes := req.Resources[volumeType.VolumesResourceName()].Quota
-		requestData.QuotaSet[volumeType.VolumesQuotaName()] = quotaVolumes
+		quotaVolumes := req.Resources[vt.volumesResourceName()].Quota
+		requestData.QuotaSet[vt.volumesQuotaName()] = quotaVolumes
 		requestData.QuotaSet["volumes"] += quotaVolumes
 	}
 

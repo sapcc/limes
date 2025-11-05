@@ -20,6 +20,9 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// CheckConsistencyJob returns a jobloop.Job that periodically ensures that all
+// services which exist in the configuration exist in the database and that
+// project_services are fully populated in the database.
 func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.CronJob{
 		Metadata: jobloop.JobMetadata{

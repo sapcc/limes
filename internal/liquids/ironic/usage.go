@@ -110,10 +110,10 @@ func (l *Logic) addInstanceToReport(ctx context.Context, resources map[liquid.Re
 
 	// add subresource if requested
 	if l.WithSubresources {
-		builder := liquid.SubresourceBuilder[InstanceAttributes]{
+		builder := liquid.SubresourceBuilder[instanceAttributes]{
 			ID:   instance.ID,
 			Name: instance.Name,
-			Attributes: InstanceAttributes{
+			Attributes: instanceAttributes{
 				Status:   instance.Status,
 				Metadata: instance.Metadata,
 				OSType:   l.OSTypeProber.Get(ctx, instance),
@@ -145,8 +145,8 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 ////////////////////////////////////////////////////////////////////////////////
 // internal types for capacity reporting
 
-// InstanceAttributes is the Attributes payload type for an Ironic-based Nova instance subresource.
-type InstanceAttributes struct {
+// instanceAttributes is the Attributes payload type for an Ironic-based Nova instance subresource.
+type instanceAttributes struct {
 	// base metadata
 	Status   string            `json:"status"`
 	Metadata map[string]string `json:"metadata"`
@@ -160,6 +160,7 @@ type InstanceAttributes struct {
 
 type novaQuotaUpdateOpts map[string]uint64
 
+// ToComputeQuotaUpdateMap implements the quotasets.UpdateOptsBuilder interface.
 func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota_set": opts}, nil
 }

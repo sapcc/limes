@@ -20,6 +20,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Neutron.
 type Logic struct {
 	// connections
 	NeutronV2 *gophercloud.ServiceClient `yaml:"-"`

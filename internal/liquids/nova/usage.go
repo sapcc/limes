@@ -25,6 +25,7 @@ func (l *Logic) pooledResourceName(hwVersion string, base liquid.ResourceName) l
 	return base
 }
 
+// ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
 	var limitsData struct {
 		Limits struct {
@@ -90,7 +91,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		if l.IsIgnoredFlavor(flavorName) {
+		if l.isIgnoredFlavor(flavorName) {
 			continue
 		}
 		resourceName := ResourceNameForFlavor(flavorName)
@@ -133,7 +134,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 		az := attrs.AZ
 
-		if l.IsIgnoredFlavor(attrs.Flavor.Name) {
+		if l.isIgnoredFlavor(attrs.Flavor.Name) {
 			continue
 		}
 

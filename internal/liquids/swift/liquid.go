@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Swift.
 type Logic struct {
 	// connections
 	ResellerAccount *schwift.Account `json:"-"`
@@ -68,7 +69,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	return liquid.ServiceCapacityReport{InfoVersion: serviceInfo.Version}, nil
 }
 
-func (l *Logic) Account(projectUUID string) *schwift.Account {
+func (l *Logic) account(projectUUID string) *schwift.Account {
 	return l.ResellerAccount.SwitchAccount("AUTH_" + projectUUID)
 }
 
@@ -93,7 +94,7 @@ func (l *Logic) emptyUsageReport(serviceInfo liquid.ServiceInfo, forbidden bool)
 // ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
 	// get account metadata
-	account := l.Account(projectUUID)
+	account := l.account(projectUUID)
 	headers, err := account.Headers(ctx)
 	switch {
 	case schwift.Is(err, http.StatusNotFound):
@@ -159,15 +160,15 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quota)
 	// this header brought to you by https://github.com/sapcc/swift-addons
-	headers.Set("X-Account-Project-Domain-Id-Override", projectMetadata.Domain.UUID)
+	headers.Set("X-account-Project-Domain-Id-Override", projectMetadata.Domain.UUID)
 
-	account := l.Account(projectUUID)
+	account := l.account(projectUUID)
 	err := account.Update(ctx, headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quota > 0 {
 		// account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(ctx, headers.ToOpts())
 		if err == nil {
-			logg.Info("Swift Account %s created", projectUUID)
+			logg.Info("Swift account %s created", projectUUID)
 		}
 	}
 	return err

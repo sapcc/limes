@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
+// Logic implements the liquidapi.Logic interface for Ironic.
 type Logic struct {
 	// configuration
 	WithSubcapacities bool                               `json:"with_subcapacities"`
@@ -97,7 +98,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			DiskGiB:   liquidapi.AtLeastZero(flavor.Disk),
 		})
 		if err != nil {
-			return liquid.ServiceInfo{}, fmt.Errorf("while serializing FlavorAttributes: %w", err)
+			return liquid.ServiceInfo{}, fmt.Errorf("while serializing flavorAttributes: %w", err)
 		}
 
 		resources[resourceNameForFlavorName(flavor.Name)] = liquid.ResourceInfo{
