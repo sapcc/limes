@@ -18,7 +18,7 @@ func BuildIndexOfDBResult[R any, K comparable](dbi Interface, keyFunc func(R) K,
 	return result, nil
 }
 
-// buildArrayIndexOfDBResult executes an SQL query and returns a map (index) of the result.
+// BuildArrayIndexOfDBResult executes an SQL query and returns a map (index) of the result.
 // The key should not be unique among the whole result set
 func BuildArrayIndexOfDBResult[R any, K comparable](dbi Interface, keyFunc func(R) K, query string, args ...any) (result map[K][]R, err error) {
 	var resultArray []R

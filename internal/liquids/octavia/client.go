@@ -33,7 +33,7 @@ func getUsage(ctx context.Context, client *gophercloud.ServiceClient, projectUUI
 
 type quotaSet map[string]uint64
 
-// ToQuotaUpdateMap implements the quotas.UpdateOpts interfaces.
+// ToQuotaUpdateMap implements the quotasets.UpdateOptsBuilder interfaces.
 func (q quotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota": map[string]uint64(q)}, nil
 }

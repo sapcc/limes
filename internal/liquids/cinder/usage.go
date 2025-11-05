@@ -21,7 +21,7 @@ import (
 // ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
 	var data struct {
-		QuotaSet map[string]QuotaSetField `json:"quota_set"`
+		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
 	err := quotasets.GetUsage(ctx, l.CinderV3, projectUUID).ExtractInto(&data)
 	if err != nil {
@@ -37,9 +37,9 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 			_, isAllowed := vtAccessMap[volumeType][ProjectID(projectUUID)]
 			isForbidden = !isAllowed
 		}
-		resources[volumeType.CapacityResourceName()] = data.QuotaSet[volumeType.CapacityQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
-		resources[volumeType.SnapshotsResourceName()] = data.QuotaSet[volumeType.SnapshotsQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
-		resources[volumeType.VolumesResourceName()] = data.QuotaSet[volumeType.VolumesQuotaName()].ToResourceReport(req.AllAZs, isForbidden)
+		resources[volumeType.capacityResourceName()] = data.QuotaSet[volumeType.capacityQuotaName()].toResourceReport(req.AllAZs, isForbidden)
+		resources[volumeType.snapshotsResourceName()] = data.QuotaSet[volumeType.snapshotsQuotaName()].toResourceReport(req.AllAZs, isForbidden)
+		resources[volumeType.volumesResourceName()] = data.QuotaSet[volumeType.volumesQuotaName()].toResourceReport(req.AllAZs, isForbidden)
 	}
 
 	// NOTE: We always enumerate volume subresources because we need them for the
@@ -77,9 +77,9 @@ type usageMetrics struct {
 	}
 }
 
-func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) (placementForVolumeUUID map[string]VolumePlacement, err error) {
-	placementForVolumeUUID = make(map[string]VolumePlacement)
-	isKnownVolumeType := make(map[VolumeType]bool)
+func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) (placementForVolumeUUID map[string]volumePlacement, err error) {
+	placementForVolumeUUID = make(map[string]volumePlacement)
+	isKnownVolumeType := make(map[volumeType]bool)
 	for vt := range l.VolumeTypes.Get() {
 		isKnownVolumeType[vt] = true
 	}
@@ -97,8 +97,8 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 
 		for _, volume := range vols {
 			az := liquid.NormalizeAZ(volume.AvailabilityZone, allAZs)
-			vt := VolumeType(volume.VolumeType)
-			placementForVolumeUUID[volume.ID] = VolumePlacement{vt, az}
+			vt := volumeType(volume.VolumeType)
+			placementForVolumeUUID[volume.ID] = volumePlacement{vt, az}
 
 			if !isKnownVolumeType[vt] {
 				logg.Info("volume %s in project %s has unknown volume type %q", volume.ID, projectUUID, volume.VolumeType)
@@ -107,15 +107,15 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 			}
 
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquidapi.AtLeastZero(volume.Size))
-				resources[vt.VolumesResourceName()].AddLocalizedUsage(az, 1)
+				resources[vt.capacityResourceName()].AddLocalizedUsage(az, liquidapi.AtLeastZero(volume.Size))
+				resources[vt.volumesResourceName()].AddLocalizedUsage(az, 1)
 			}
 
 			if l.WithVolumeSubresources {
-				subresource, err := liquid.SubresourceBuilder[VolumeAttributes]{
+				subresource, err := liquid.SubresourceBuilder[volumeAttributes]{
 					ID:   volume.ID,
 					Name: volume.Name,
-					Attributes: VolumeAttributes{
+					Attributes: volumeAttributes{
 						SizeGiB: liquidapi.AtLeastZero(volume.Size),
 						Status:  volume.Status,
 					},
@@ -123,7 +123,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 				if err != nil {
 					return false, err
 				}
-				usageData := resources[vt.VolumesResourceName()].PerAZ[az]
+				usageData := resources[vt.volumesResourceName()].PerAZ[az]
 				usageData.Subresources = append(usageData.Subresources, subresource)
 			}
 		}
@@ -132,8 +132,8 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 	return placementForVolumeUUID, err
 }
 
-func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, placementForVolumeUUID map[string]VolumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) error {
-	isKnownVolumeType := make(map[VolumeType]bool)
+func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, placementForVolumeUUID map[string]volumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) error {
+	isKnownVolumeType := make(map[volumeType]bool)
 	for vt := range l.VolumeTypes.Get() {
 		isKnownVolumeType[vt] = true
 	}
@@ -157,9 +157,9 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 					return false, fmt.Errorf("could not get info on volume %s that owns snapshot %s in project %s: %w",
 						snapshot.VolumeID, snapshot.ID, projectUUID, err)
 				}
-				vt := VolumeType(volume.VolumeType)
+				vt := volumeType(volume.VolumeType)
 				az := liquid.NormalizeAZ(volume.AvailabilityZone, allAZs)
-				placement = VolumePlacement{vt, az}
+				placement = volumePlacement{vt, az}
 			}
 
 			vt := placement.VolumeType
@@ -172,15 +172,15 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 
 			az := placement.AvailabilityZone
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquidapi.AtLeastZero(snapshot.Size))
-				resources[vt.SnapshotsResourceName()].AddLocalizedUsage(az, 1)
+				resources[vt.capacityResourceName()].AddLocalizedUsage(az, liquidapi.AtLeastZero(snapshot.Size))
+				resources[vt.snapshotsResourceName()].AddLocalizedUsage(az, 1)
 			}
 
 			if l.WithSnapshotSubresources {
-				subresource, err := liquid.SubresourceBuilder[SnapshotAttributes]{
+				subresource, err := liquid.SubresourceBuilder[snapshotAttributes]{
 					ID:   snapshot.ID,
 					Name: snapshot.Name,
-					Attributes: SnapshotAttributes{
+					Attributes: snapshotAttributes{
 						SizeGiB:  liquidapi.AtLeastZero(snapshot.Size),
 						Status:   snapshot.Status,
 						VolumeID: snapshot.VolumeID,
@@ -189,7 +189,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 				if err != nil {
 					return false, err
 				}
-				usageData := resources[vt.SnapshotsResourceName()].PerAZ[az]
+				usageData := resources[vt.snapshotsResourceName()].PerAZ[az]
 				usageData.Subresources = append(usageData.Subresources, subresource)
 			}
 		}
@@ -201,19 +201,19 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 ////////////////////////////////////////////////////////////////////////////////
 // internal types for usage measurement and reporting
 
-type VolumePlacement struct {
-	VolumeType       VolumeType
+type volumePlacement struct {
+	VolumeType       volumeType
 	AvailabilityZone liquid.AvailabilityZone
 }
 
-// VolumeAttributes is the Attributes payload for a Cinder volume subresource.
-type VolumeAttributes struct {
+// volumeAttributes is the Attributes payload for a Cinder volume subresource.
+type volumeAttributes struct {
 	SizeGiB uint64 `json:"size_gib"`
 	Status  string `json:"status"`
 }
 
-// SnapshotAttributes is the Attributes payload for a Cinder snapshot subresource.
-type SnapshotAttributes struct {
+// snapshotAttributes is the Attributes payload for a Cinder snapshot subresource.
+type snapshotAttributes struct {
 	SizeGiB  uint64 `json:"size_gib"`
 	Status   string `json:"status"`
 	VolumeID string `json:"volume_id"`
@@ -222,12 +222,13 @@ type SnapshotAttributes struct {
 ////////////////////////////////////////////////////////////////////////////////
 // custom types for Cinder APIs
 
-type QuotaSetField struct {
+type quotaSetField struct {
 	Quota int64
 	Usage uint64
 }
 
-func (f *QuotaSetField) UnmarshalJSON(buf []byte) error {
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 	// The `quota_set` field in the os-quota-sets response is mostly
 	// map[string]quotaSetField, but there is also an "id" key containing a
 	// string. Skip deserialization of that value.
@@ -247,7 +248,7 @@ func (f *QuotaSetField) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-func (f QuotaSetField) ToResourceReport(allAZs []liquid.AvailabilityZone, isForbidden bool) *liquid.ResourceUsageReport {
+func (f quotaSetField) toResourceReport(allAZs []liquid.AvailabilityZone, isForbidden bool) *liquid.ResourceUsageReport {
 	return &liquid.ResourceUsageReport{
 		Quota:     Some(f.Quota),
 		PerAZ:     liquid.AZResourceUsageReport{Usage: f.Usage}.PrepareForBreakdownInto(allAZs),

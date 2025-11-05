@@ -15,7 +15,7 @@ type Client struct {
 	*gophercloud.ServiceClient
 }
 
-func NewClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
+func newClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
 	serviceType := "email-aws"
 	eo.ApplyDefaults(serviceType)
 

@@ -19,14 +19,14 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 )
 
-// HypervisorSelection describes a set of hypervisors.
-type HypervisorSelection struct {
+// hypervisorSelection describes a set of hypervisors.
+type hypervisorSelection struct {
 	// Only match hypervisors with a hypervisor_type attribute matching this pattern.
 	HypervisorTypeRx regexpext.PlainRegexp `json:"hypervisor_type_pattern"`
 	// Only match hypervisors that have any of these traits.
 	// Trait names can include a `!` prefix to invert the match.
 	RequiredTraits []string `json:"required_traits"`
-	// Set the MatchingHypervisor.ShadowedByTrait field on hypervisors that have any of these traits.
+	// Set the matchingHypervisor.ShadowedByTrait field on hypervisors that have any of these traits.
 	// Trait names can include a `!` prefix to invert the match.
 	ShadowingTraits []string `json:"shadowing_traits"`
 	// Only match hypervisors that reside in an aggregate matching this pattern.
@@ -34,16 +34,16 @@ type HypervisorSelection struct {
 	AggregateNameRx regexpext.PlainRegexp `json:"aggregate_name_pattern"`
 }
 
-// ForeachHypervisor lists all Nova hypervisors matching this
-// HypervisorSelection, and calls the given callback once for each of them.
-func (s HypervisorSelection) ForeachHypervisor(ctx context.Context, novaV2, placementV1 *gophercloud.ServiceClient, action func(MatchingHypervisor) error) error {
+// foreachHypervisor lists all Nova hypervisors matching this
+// hypervisorSelection, and calls the given callback once for each of them.
+func (s hypervisorSelection) foreachHypervisor(ctx context.Context, novaV2, placementV1 *gophercloud.ServiceClient, action func(matchingHypervisor) error) error {
 	// enumerate hypervisors
 	page, err := hypervisorsList(novaV2, nil).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing hypervisors: %w", err)
 	}
 	var hypervisorData struct {
-		Hypervisors []Hypervisor `json:"hypervisors"`
+		Hypervisors []hypervisor `json:"hypervisors"`
 	}
 	err = page.(hypervisorPage).ExtractInto(&hypervisorData)
 	if err != nil {
@@ -75,8 +75,8 @@ OUTER:
 	for _, h := range hypervisorData.Hypervisors {
 		// check hypervisor type
 		if !s.HypervisorTypeRx.MatchString(h.HypervisorType) {
-			//NOTE: If no pattern was given, the regex will be empty and thus always match.
-			logg.Debug("ignoring %s because hypervisor_type %q does not match", h.Description(), h.HypervisorType)
+			// NOTE: If no pattern was given, the regex will be empty and thus always match.
+			logg.Debug("ignoring %s because hypervisor_type %q does not match", h.description(), h.HypervisorType)
 			continue
 		}
 
@@ -94,7 +94,7 @@ OUTER:
 		for _, traitRule := range s.RequiredTraits {
 			if !checkTraitRule(traits.Traits, traitRule) {
 				allTraitsStr := strings.Join(traits.Traits, ", ")
-				logg.Debug("ignoring %s because of failed trait match %q (traits are: %s)", h.Description(), traitRule, allTraitsStr)
+				logg.Debug("ignoring %s because of failed trait match %q (traits are: %s)", h.description(), traitRule, allTraitsStr)
 				continue OUTER
 			}
 		}
@@ -117,7 +117,7 @@ OUTER:
 		}
 		for _, metric := range []string{"VCPU", "MEMORY_MB", "DISK_GB"} {
 			if inventories.Inventories[metric].Total == 0 {
-				logg.Debug("ignoring %s because Placement reports zero %s capacity", h.Description(), metric)
+				logg.Debug("ignoring %s because Placement reports zero %s capacity", h.description(), metric)
 				continue OUTER
 			}
 		}
@@ -143,13 +143,13 @@ OUTER:
 		// the mapping from hypervisor to aggregate/AZ must be unique (otherwise the
 		// capacity will be counted either not at all or multiple times)
 		//
-		//NOTE: We leave it to the caller to discard HVs without aggregate or AZ.
+		// NOTE: We leave it to the caller to discard HVs without aggregate or AZ.
 		// This is a state that can happen during buildup, and we want to see it in metrics.
 		if len(matchingAggregates) > 1 {
-			return fmt.Errorf("%s could not be uniquely matched to an aggregate (matching aggregates = %v)", h.Description(), matchingAggregates)
+			return fmt.Errorf("%s could not be uniquely matched to an aggregate (matching aggregates = %v)", h.description(), matchingAggregates)
 		}
 		if len(matchingAZs) > 1 {
-			return fmt.Errorf("%s could not be uniquely matched to an AZ (matching AZs = %v)", h.Description(), matchingAZs)
+			return fmt.Errorf("%s could not be uniquely matched to an AZ (matching AZs = %v)", h.description(), matchingAZs)
 		}
 		var (
 			matchingAggregateName string
@@ -162,7 +162,7 @@ OUTER:
 			matchingAZ = az
 		}
 
-		err = action(MatchingHypervisor{
+		err = action(matchingHypervisor{
 			Hypervisor:       h,
 			AggregateName:    matchingAggregateName,
 			AvailabilityZone: matchingAZ,
@@ -185,48 +185,48 @@ func checkTraitRule(traits []string, rule string) bool {
 	return slices.Contains(traits, trait) != isInverse
 }
 
-// MatchingHypervisor is the callback argument for
-// func HypervisorSelection.ForeachHypervisor().
-type MatchingHypervisor struct {
+// matchingHypervisor is the callback argument for
+// func hypervisorSelection.foreachHypervisor().
+type matchingHypervisor struct {
 	// information from Nova
-	Hypervisor       Hypervisor
+	Hypervisor       hypervisor
 	AggregateName    string
 	AvailabilityZone limes.AvailabilityZone
 	// information from Placement
 	Traits      []string
 	Inventories map[string]resourceproviders.Inventory
 	Usages      map[string]int
-	// information from HypervisorSelection
+	// information from hypervisorSelection
 	ShadowedByTrait string // empty if not shadowed
 }
 
-// CheckTopology logs an error and returns false if the hypervisor is not
+// checkTopology logs an error and returns false if the hypervisor is not
 // associated with an aggregate and AZ.
 //
 // This is not a fatal error: During buildup, new hypervisors may not be mapped
 // to an aggregate to prevent scheduling of instances onto them - we just log
 // an error and ignore this hypervisor's capacity.
-func (h MatchingHypervisor) CheckTopology() bool {
+func (h matchingHypervisor) checkTopology() bool {
 	if h.AggregateName == "" {
-		logg.Error("%s does not belong to any matching aggregates", h.Hypervisor.Description())
+		logg.Error("%s does not belong to any matching aggregates", h.Hypervisor.description())
 		return false
 	}
 	if h.AvailabilityZone == "" {
-		logg.Error("%s could not be matched to any AZ (aggregate = %q)", h.Hypervisor.Description(), h.AggregateName)
+		logg.Error("%s could not be matched to any AZ (aggregate = %q)", h.Hypervisor.description(), h.AggregateName)
 		return false
 	}
 	return true
 }
 
-// PartialCapacity formats this hypervisor's capacity.
-func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
-	makeMetric := func(metric string) PartialCapacityMetric {
-		return PartialCapacityMetric{
+// partialCapacity formats this hypervisor's capacity.
+func (h matchingHypervisor) partialCapacity() partialCapacity {
+	makeMetric := func(metric string) partialCapacityMetric {
+		return partialCapacityMetric{
 			Capacity: liquidapi.SaturatingSub(h.Inventories[metric].Total, h.Inventories[metric].Reserved),
 			Usage:    liquidapi.AtLeastZero(h.Usages[metric]),
 		}
 	}
-	return PartialCapacity{
+	return partialCapacity{
 		VCPUs:              makeMetric("VCPU"),
 		MemoryMB:           makeMetric("MEMORY_MB"),
 		LocalGB:            makeMetric("DISK_GB"),
@@ -235,12 +235,12 @@ func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
 	}
 }
 
-// Hypervisor represents a Nova hypervisor as returned by the Nova API.
+// hypervisor represents a Nova hypervisor as returned by the Nova API.
 //
 // We are not using the hypervisors.Hypervisor type provided by Gophercloud.
 // In our clusters, that type breaks because some hypervisors report unexpected
 // NULL values on fields that we are not even interested in.
-type Hypervisor struct {
+type hypervisor struct {
 	ID                 string `json:"id"`
 	HypervisorHostname string `json:"hypervisor_hostname"`
 	HypervisorType     string `json:"hypervisor_type"`
@@ -253,16 +253,16 @@ type Hypervisor struct {
 	// VCPUsUsed          uint64              `json:"vcpus_used"`
 }
 
-// Description returns a string that identifies this hypervisor in log messages.
-func (h Hypervisor) Description() string {
+// description returns a string that identifies this hypervisor in log messages.
+func (h hypervisor) description() string {
 	return fmt.Sprintf("Nova hypervisor %s with .service.host %q", h.HypervisorHostname, h.Service.Host)
 }
 
-func (h Hypervisor) isInAggregate(aggr aggregates.Aggregate) bool {
+func (h hypervisor) isInAggregate(aggr aggregates.Aggregate) bool {
 	return slices.Contains(aggr.Hosts, h.Service.Host)
 }
 
-func (h Hypervisor) getResourceProviderID(resourceProviders []resourceproviders.ResourceProvider) (string, error) {
+func (h hypervisor) getResourceProviderID(resourceProviders []resourceproviders.ResourceProvider) (string, error) {
 	for _, rp := range resourceProviders {
 		if rp.Name == h.HypervisorHostname {
 			return rp.UUID, nil

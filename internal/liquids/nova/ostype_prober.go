@@ -40,6 +40,7 @@ func NewOSTypeProber(novaV2, cinderV3, glanceV2 *gophercloud.ServiceClient) *OST
 	}
 }
 
+// Get returns the OSType for the given instance.
 func (p *OSTypeProber) Get(ctx context.Context, instance servers.Server) string {
 	if instance.Image == nil {
 		return p.getFromBootVolume(ctx, instance.ID)

@@ -56,6 +56,9 @@ func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 	}
 }
 
+// CanAcceptCommitmentChanges determines whether the given commitment additions
+// and subtractions can be accepted in this resources AZ capacity, which already
+// considers the overcommit factor for the resource.
 func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectID]uint64, behavior core.CommitmentBehavior) bool {
 	// calculate `sum_over_projects(max(committed, usage))` before and after the requested changes
 	var (

@@ -52,21 +52,21 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, serviceInfos map[db.Serv
 
 	for _, dbServiceType := range slices.Sorted(maps.Keys(serviceInfos)) {
 		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
-		if !apiAreas.Matches(srvCfg.Area) {
+		if !apiAreas.matches(srvCfg.Area) {
 			continue
 		}
 
 		for dbResourceName := range serviceInfos[dbServiceType].Resources {
 			apiIdentity := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 
-			if !apiServiceTypes.Matches(string(apiIdentity.ServiceType)) {
+			if !apiServiceTypes.matches(string(apiIdentity.ServiceType)) {
 				continue
 			}
 
 			if f.Includes[dbServiceType] == nil {
 				f.Includes[dbServiceType] = make(map[liquid.ResourceName]bool)
 			}
-			f.Includes[dbServiceType][dbResourceName] = apiResourceNames.Matches(string(apiIdentity.Name))
+			f.Includes[dbServiceType][dbResourceName] = apiResourceNames.matches(string(apiIdentity.Name))
 		}
 	}
 
@@ -78,7 +78,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, serviceInfos map[db.Serv
 
 type apiFilter []string
 
-func (a apiFilter) Matches(value string) bool {
+func (a apiFilter) matches(value string) bool {
 	// A list filter from the URL query can either:
 	// - be empty and match all possible values, or
 	// - be non-empty and match the listed values.

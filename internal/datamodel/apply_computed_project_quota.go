@@ -68,6 +68,8 @@ type projectLocalQuotaConstraints struct {
 	MaxQuota Option[uint64]
 }
 
+// AddMinQuota updates the minimum quota constraint by taking the maximum
+// of the existing and the new value.
 func (c *projectLocalQuotaConstraints) AddMinQuota(value Option[uint64]) {
 	rhs, ok := value.Unpack()
 	if !ok {
@@ -81,6 +83,8 @@ func (c *projectLocalQuotaConstraints) AddMinQuota(value Option[uint64]) {
 	}
 }
 
+// AddMaxQuota updates the maximum quota constraint by taking the minimum
+// of the existing and the new value.
 func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 	rhs, ok := value.Unpack()
 	if !ok {
@@ -412,8 +416,8 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	return target, allowsQuotaOvercommit
 }
 
-// After increasing Desired, but before increasing Allocated, this decreases
-// Desired in order to fit into project-local quota constraints.
+// EnforceConstraints decreases Desired in order to fit into project-local quota constraints
+// after increasing Desired, but before increasing Allocated.
 func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZone]clusterAZAllocationStats, constraints map[db.ProjectID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectID map[db.ProjectID]struct{}, isAZAware bool) {
 	// Quota should not be assgined to ANY AZ on AZ aware resources. This causes unusable quota distribution on manual quota overrides.
 	resourceAZs := allAZs
@@ -494,6 +498,8 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 	}
 }
 
+// TryFulfillDesired tries to increase Allocated towards Desired
+// using any remaining capacity in the cluster.
 func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
 	// in AZs where quota overcommit is allowed, we do not have to be careful
 	for az, azTarget := range target {

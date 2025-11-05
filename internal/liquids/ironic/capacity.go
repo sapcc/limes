@@ -23,7 +23,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
-	allAggregates, err := ExtractAggregates(page)
+	allAggregates, err := extractAggregates(page)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, err
 	}
@@ -63,21 +63,21 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	// Holding them all in memory at once in the AllPages result object creates a very big spike in memory usage.
 	//
 	// To avoid this, this implementation uses EachPage() to pull in only 100 nodes at a time,
-	// and then parses into our own reduced representation in `type Node` which can be stored much more efficiently.
+	// and then parses into our own reduced representation in `type node` which can be stored much more efficiently.
 	// Profiling on a cluster with 1850 Ironic nodes showed the following peak memory usage levels:
 	//
 	// - AllPages:                109.27MB
 	// - EachPage (limit = 1000):  94.11MB
 	// - EachPage (limit = 100):   20.21MB
 	//
-	nodesByFlavorName := make(map[string][]Node)
+	nodesByFlavorName := make(map[string][]node)
 	// set a base value if the value is not provided by config
 	opts := &nodes.ListOpts{
 		Limit: l.NodePageLimit.UnwrapOr(100),
 	}
-	err = ListNodesDetail(l.IronicV1, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
-		var nodes []Node
-		err = ExtractNodesInto(page, &nodes)
+	err = listNodesDetail(l.IronicV1, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+		var nodes []node
+		err = extractNodesInto(page, &nodes)
 		if err != nil {
 			return false, err
 		}
@@ -108,8 +108,8 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.UUID, flavorName)
 
 			// do not consider nodes that have not been made available for provisioning yet
-			if !isAvailableProvisionState[node.StableProvisionState()] {
-				logg.Info("ignoring Ironic node %q (%s) because of state %q", node.Name, node.UUID, node.StableProvisionState())
+			if !isAvailableProvisionState[node.stableProvisionState()] {
+				logg.Info("ignoring Ironic node %q (%s) because of state %q", node.Name, node.UUID, node.stableProvisionState())
 				continue
 			}
 
@@ -118,7 +118,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			if node.Retired {
 				logg.Info("should be ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.UUID)
 				retiredNodeCount++
-				//NOTE: Ignoring of retired capacity is currently disabled pending clarification with billing/controlling on how to proceed.
+				// NOTE: Ignoring of retired capacity is currently disabled pending clarification with billing/controlling on how to proceed.
 				// continue
 			}
 
@@ -203,23 +203,23 @@ var isAvailableProvisionState = map[string]bool{
 ////////////////////////////////////////////////////////////////////////////////
 // custom types for Ironic APIs
 
-// Aggregate is like `aggregates.Aggregate`, but contains attributes missing there.
-type Aggregate struct {
+// aggregate is like `aggregates.Aggregate`, but contains attributes missing there.
+type aggregate struct {
 	AvailabilityZone string `json:"availability_zone"`
 	UUID             string `json:"uuid"`
 }
 
-// ExtractAggregates is like `aggregates.ExtractAggregates()`, but using our custom Aggregate type.
-func ExtractAggregates(p pagination.Page) ([]Aggregate, error) {
+// extractAggregates is like `aggregates.ExtractAggregates()`, but using our custom aggregate type.
+func extractAggregates(p pagination.Page) ([]aggregate, error) {
 	var a struct {
-		Aggregates []Aggregate `json:"aggregates"`
+		Aggregates []aggregate `json:"aggregates"`
 	}
 	err := (p.(aggregates.AggregatesPage)).ExtractInto(&a)
 	return a.Aggregates, err
 }
 
-// Node is like `nodes.Node`, but contains attributes missing there.
-type Node struct {
+// node is like `nodes.Node`, but contains attributes missing there.
+type node struct {
 	UUID                 string  `json:"uuid"`
 	Name                 string  `json:"name"`
 	ProvisionState       string  `json:"provision_state"`
@@ -232,16 +232,16 @@ type Node struct {
 	} `json:"properties"`
 }
 
-func (n Node) StableProvisionState() string {
+func (n node) stableProvisionState() string {
 	if n.TargetProvisionState != nil {
 		return *n.TargetProvisionState
 	}
 	return n.ProvisionState
 }
 
-// ListNodesDetail is like `nodes.ListDetail(client, nil)`,
+// listNodesDetail is like `nodes.ListDetail(client, nil)`,
 // but works around <https://github.com/gophercloud/gophercloud/issues/2431>.
-func ListNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pagination.Pager {
+func listNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pagination.Pager {
 	url := client.ServiceURL("nodes", "detail")
 	if opts != nil {
 		query, err := opts.ToNodeListDetailQuery()
@@ -255,8 +255,8 @@ func ListNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pa
 	})
 }
 
-// ExtractNodesInto is like `nodes.ExtractNodesInto()`, but using our custom page type.
-func ExtractNodesInto(r pagination.Page, v any) error {
+// extractNodesInto is like `nodes.ExtractNodesInto()`, but using our custom page type.
+func extractNodesInto(r pagination.Page, v any) error {
 	return r.(nodePage).ExtractIntoSlicePtr(v, "nodes")
 }
 
@@ -278,5 +278,5 @@ func (r nodePage) NextPageURL() (string, error) {
 		return s.Next, nil
 	}
 	// fallback
-	return r.NodePage.NextPageURL()
+	return r.NextPageURL()
 }

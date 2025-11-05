@@ -309,14 +309,14 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"scrape_errors": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	// Add a scrape error to one specific service with type 'unshared'.
+	// add a scrape error to one specific service with type 'unshared'.
 	s.MustDBExec(
 		`UPDATE project_services SET scrape_error_message = $1 WHERE project_id = 1 AND service_id = $2`,
 		"could not scrape this specific unshared service",
 		s.GetServiceID("unshared"),
 	)
 
-	// Add the same scrape error to all services with type 'shared'. This will ensure that
+	// add the same scrape error to all services with type 'shared'. This will ensure that
 	// they get grouped under a dummy project.
 	s.MustDBExec(
 		`UPDATE project_services SET scrape_error_message = $1 WHERE service_id = $2`,

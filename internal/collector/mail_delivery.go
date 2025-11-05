@@ -17,6 +17,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// MailRequest is an interface for posting to the mail API.
 type MailRequest struct {
 	ProjectID string `json:"project_id"`
 	Subject   string `json:"subject"`

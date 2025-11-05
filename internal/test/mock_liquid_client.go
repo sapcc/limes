@@ -49,6 +49,7 @@ func (l *MockLiquidClient) GetInfo(ctx context.Context) (result liquid.ServiceIn
 	return l.ServiceInfo.get()
 }
 
+// IncrementServiceInfoVersion increments the ServiceInfo version number by 1.
 func (l *MockLiquidClient) IncrementServiceInfoVersion() {
 	l.ServiceInfo.Modify(func(info *liquid.ServiceInfo) { info.Version++ })
 }
@@ -58,6 +59,7 @@ func (l *MockLiquidClient) GetCapacityReport(ctx context.Context, req liquid.Ser
 	return l.CapacityReport.get()
 }
 
+// IncrementCapacityReportInfoVersion increments the CapacityReport InfoVersion by 1.
 func (l *MockLiquidClient) IncrementCapacityReportInfoVersion() {
 	l.CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) { report.InfoVersion++ })
 }
@@ -67,10 +69,12 @@ func (l *MockLiquidClient) GetUsageReport(ctx context.Context, projectUUID strin
 	return l.UsageReport.get()
 }
 
+// IncrementUsageReportInfoVersion increments the UsageReport InfoVersion by 1.
 func (l *MockLiquidClient) IncrementUsageReportInfoVersion() {
 	l.UsageReport.Modify(func(report *liquid.ServiceUsageReport) { report.InfoVersion++ })
 }
 
+// SetQuotaError sets an error to be returned by PutQuota, or clears it if nil is given.
 func (l *MockLiquidClient) SetQuotaError(err error) {
 	l.quotaError = err
 }

@@ -43,23 +43,23 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 	}
 
-	// sort volume types by VolumeTypeInfo (if multiple volume types have the same VolumeTypeInfo, they need to share the same pools)
-	volumeTypesByInfo := make(map[VolumeTypeInfo][]VolumeType)
-	for volumeType, info := range l.VolumeTypes.Get() {
-		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], volumeType)
+	// sort volume types by volumeTypeInfo (if multiple volume types have the same volumeTypeInfo, they need to share the same pools)
+	volumeTypesByInfo := make(map[volumeTypeInfo][]volumeType)
+	for vt, info := range l.VolumeTypes.Get() {
+		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], vt)
 	}
 
 	// sort pools by volume backend name and AZ
-	sortedPools := make(map[VolumeTypeInfo]map[liquid.AvailabilityZone][]StoragePool, len(volumeTypesByInfo))
+	sortedPools := make(map[volumeTypeInfo]map[liquid.AvailabilityZone][]StoragePool, len(volumeTypesByInfo))
 	for info := range volumeTypesByInfo {
 		sortedPools[info] = make(map[liquid.AvailabilityZone][]StoragePool)
 	}
 
 	// regular pool check.
-	poolMatches := make(map[StoragePool]VolumeTypeInfo)
-	remainingPools := make(map[StoragePool]VolumeTypeInfo)
+	poolMatches := make(map[StoragePool]volumeTypeInfo)
+	remainingPools := make(map[StoragePool]volumeTypeInfo)
 	for _, pool := range pools {
-		info := VolumeTypeInfo{
+		info := volumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
 		}
 
@@ -75,7 +75,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// fcd pool check.
 	for pool := range remainingPools {
-		info := VolumeTypeInfo{
+		info := volumeTypeInfo{
 			StorageProtocol: pool.Capabilities.StorageProtocol,
 			QualityType:     pool.Capabilities.QualityType,
 		}
@@ -90,7 +90,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// match private volume types and pools
 	for pool := range remainingPools {
-		info := VolumeTypeInfo{
+		info := volumeTypeInfo{
 			StorageProtocol: pool.Capabilities.StorageProtocol,
 			VendorName:      pool.Capabilities.VendorName,
 		}
@@ -132,27 +132,27 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	}
 	for info, volumeTypes := range volumeTypesByInfo {
 		relevantPools := liquidapi.RestrictToKnownAZs(sortedPools[info], req.AllAZs)
-		relevantDemands := make(map[VolumeType]liquid.ResourceDemand)
-		for _, volumeType := range volumeTypes {
-			relevantDemands[volumeType] = req.DemandByResource[volumeType.CapacityResourceName()]
+		relevantDemands := make(map[volumeType]liquid.ResourceDemand)
+		for _, vt := range volumeTypes {
+			relevantDemands[vt] = req.DemandByResource[vt.capacityResourceName()]
 		}
 
 		reportsByVolumeType, err := l.buildCapacityReportForPoolSet(relevantPools, relevantDemands)
 		if err != nil {
 			return liquid.ServiceCapacityReport{}, err
 		}
-		for volumeType, resReport := range reportsByVolumeType {
-			result.Resources[volumeType.CapacityResourceName()] = resReport
+		for vt, resReport := range reportsByVolumeType {
+			result.Resources[vt.capacityResourceName()] = resReport
 		}
 	}
 	return result, nil
 }
 
-func (l *Logic) buildCapacityReportForPoolSet(pools map[liquid.AvailabilityZone][]StoragePool, demands map[VolumeType]liquid.ResourceDemand) (map[VolumeType]*liquid.ResourceCapacityReport, error) {
+func (l *Logic) buildCapacityReportForPoolSet(pools map[liquid.AvailabilityZone][]StoragePool, demands map[volumeType]liquid.ResourceDemand) (map[volumeType]*liquid.ResourceCapacityReport, error) {
 	// prepare output structure
-	result := make(map[VolumeType]*liquid.ResourceCapacityReport, len(demands))
-	for volumeType := range demands {
-		result[volumeType] = &liquid.ResourceCapacityReport{
+	result := make(map[volumeType]*liquid.ResourceCapacityReport, len(demands))
+	for vt := range demands {
+		result[vt] = &liquid.ResourceCapacityReport{
 			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(pools)),
 		}
 	}
@@ -167,22 +167,22 @@ func (l *Logic) buildCapacityReportForPoolSet(pools map[liquid.AvailabilityZone]
 
 	// fill report, one AZ at a time
 	for az, azPools := range pools {
-		azRawDemands := make(map[VolumeType]liquid.ResourceDemandInAZ)
-		for volumeType, demand := range demands {
-			azRawDemands[volumeType] = demand.OvercommitFactor.ApplyInReverseToDemand(demand.PerAZ[az])
+		azRawDemands := make(map[volumeType]liquid.ResourceDemandInAZ)
+		for vt, demand := range demands {
+			azRawDemands[vt] = demand.OvercommitFactor.ApplyInReverseToDemand(demand.PerAZ[az])
 		}
 		azReports, err := l.buildAZCapacityReportForPoolSet(azPools, azRawDemands, az, mostCommonVolumeType)
 		if err != nil {
 			return nil, err
 		}
-		for volumeType, azResReport := range azReports {
-			result[volumeType].PerAZ[az] = azResReport
+		for vt, azResReport := range azReports {
+			result[vt].PerAZ[az] = azResReport
 		}
 	}
 	return result, nil
 }
 
-func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands map[VolumeType]liquid.ResourceDemandInAZ, az liquid.AvailabilityZone, mostCommonVolumeType VolumeType) (map[VolumeType]*liquid.AZResourceCapacityReport, error) {
+func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands map[volumeType]liquid.ResourceDemandInAZ, az liquid.AvailabilityZone, mostCommonVolumeType volumeType) (map[volumeType]*liquid.AZResourceCapacityReport, error) {
 	var (
 		totalCapacityGiB = uint64(0)
 		totalUsageGiB    = uint64(0)
@@ -221,20 +221,20 @@ func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands 
 	}
 
 	// distribute capacity and usage between the relevant volume types
-	balance := make(map[VolumeType]float64, len(rawDemands))
-	for volumeType := range rawDemands {
-		balance[volumeType] = 1.0
+	balance := make(map[volumeType]float64, len(rawDemands))
+	for vt := range rawDemands {
+		balance[vt] = 1.0
 	}
 	logg.Debug("distributing for AZ %q: capacity = %d between volume types %v", az, totalCapacityGiB, balance)
 	distributedCapacityGiB := liquidapi.DistributeDemandFairly(totalCapacityGiB, rawDemands, balance)
 	logg.Debug("distributing for AZ %q: usage = %d between volume types %v", az, totalUsageGiB, balance)
 	distributedUsageGiB := liquidapi.DistributeDemandFairly(totalUsageGiB, rawDemands, balance)
 
-	result := make(map[VolumeType]*liquid.AZResourceCapacityReport, len(rawDemands))
-	for volumeType := range rawDemands {
-		result[volumeType] = &liquid.AZResourceCapacityReport{
-			Capacity: distributedCapacityGiB[volumeType],
-			Usage:    Some(distributedUsageGiB[volumeType]),
+	result := make(map[volumeType]*liquid.AZResourceCapacityReport, len(rawDemands))
+	for vt := range rawDemands {
+		result[vt] = &liquid.AZResourceCapacityReport{
+			Capacity: distributedCapacityGiB[vt],
+			Usage:    Some(distributedUsageGiB[vt]),
 		}
 	}
 

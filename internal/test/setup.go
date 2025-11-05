@@ -137,6 +137,7 @@ type Setup struct {
 	t *testing.T
 }
 
+// GenerateDummyToken generates a dummy token string.
 func GenerateDummyToken() string {
 	return "dummyToken"
 }

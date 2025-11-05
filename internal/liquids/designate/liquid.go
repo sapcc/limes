@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Designate.
 type Logic struct {
 	// connections
 	DesignateV2 *Client `yaml:"-"`
@@ -21,7 +22,7 @@ type Logic struct {
 
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	l.DesignateV2, err = NewClient(provider, eo)
+	l.DesignateV2, err = newClient(provider, eo)
 	return err
 }
 
@@ -53,13 +54,13 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 // ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
 	// query quotas
-	quotas, err := l.DesignateV2.GetQuota(ctx, projectUUID)
+	quotas, err := l.DesignateV2.getQuota(ctx, projectUUID)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
 
 	// to query usage, start by listing all zones
-	zoneIDs, err := l.DesignateV2.ListZoneIDs(ctx, projectUUID)
+	zoneIDs, err := l.DesignateV2.listZoneIDs(ctx, projectUUID)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
@@ -69,7 +70,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	// but that won't help since the quota applies per individual zone)
 	maxRecordsetsPerZone := uint64(0)
 	for _, zoneID := range zoneIDs {
-		count, err := l.DesignateV2.CountZoneRecordsets(ctx, projectUUID, zoneID)
+		count, err := l.DesignateV2.countZoneRecordsets(ctx, projectUUID, zoneID)
 		if err != nil {
 			return liquid.ServiceUsageReport{}, err
 		}
@@ -99,7 +100,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	return l.DesignateV2.SetQuota(ctx, projectUUID, QuotaSet{
+	return l.DesignateV2.setQuota(ctx, projectUUID, quotaSet{
 		Zones:             int64(req.Resources["zones"].Quota),               //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 		RecordsetsPerZone: int64(req.Resources["recordsets_per_zone"].Quota), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 

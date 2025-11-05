@@ -18,18 +18,18 @@ import (
 	"github.com/sapcc/go-bits/logg"
 )
 
-// PartialCapacity describes compute capacity at a level below the entire
+// partialCapacity describes compute capacity at a level below the entire
 // cluster (e.g. for a single hypervisor, aggregate or AZ).
-type PartialCapacity struct {
-	VCPUs              PartialCapacityMetric
-	MemoryMB           PartialCapacityMetric
-	LocalGB            PartialCapacityMetric
+type partialCapacity struct {
+	VCPUs              partialCapacityMetric
+	MemoryMB           partialCapacityMetric
+	LocalGB            partialCapacityMetric
 	RunningVMs         uint64
 	MatchingAggregates map[string]bool
 	Subcapacities      []any // only filled on AZ level
 }
 
-func (c *PartialCapacity) Add(other PartialCapacity) {
+func (c *partialCapacity) add(other partialCapacity) {
 	c.VCPUs.Capacity += other.VCPUs.Capacity
 	c.VCPUs.Usage += other.VCPUs.Usage
 	c.MemoryMB.Capacity += other.MemoryMB.Capacity
@@ -48,18 +48,18 @@ func (c *PartialCapacity) Add(other PartialCapacity) {
 	}
 }
 
-func (c PartialCapacity) CappedToUsage() PartialCapacity {
-	return PartialCapacity{
-		VCPUs:              c.VCPUs.CappedToUsage(),
-		MemoryMB:           c.MemoryMB.CappedToUsage(),
-		LocalGB:            c.LocalGB.CappedToUsage(),
+func (c partialCapacity) cappedToUsage() partialCapacity {
+	return partialCapacity{
+		VCPUs:              c.VCPUs.cappedToUsage(),
+		MemoryMB:           c.MemoryMB.cappedToUsage(),
+		LocalGB:            c.LocalGB.cappedToUsage(),
 		RunningVMs:         c.RunningVMs,
 		MatchingAggregates: c.MatchingAggregates,
 		Subcapacities:      c.Subcapacities,
 	}
 }
 
-func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) *liquid.AZResourceCapacityReport {
+func (c partialCapacity) intoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) *liquid.AZResourceCapacityReport {
 	switch resourceName {
 	case "cores":
 		return &liquid.AZResourceCapacityReport{
@@ -89,14 +89,14 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 	}
 }
 
-// PartialCapacityMetric appears in type PartialCapacity.
-type PartialCapacityMetric struct {
+// partialCapacityMetric appears in type partialCapacity.
+type partialCapacityMetric struct {
 	Capacity uint64
 	Usage    uint64
 }
 
-func (m PartialCapacityMetric) CappedToUsage() PartialCapacityMetric {
-	return PartialCapacityMetric{
+func (m partialCapacityMetric) cappedToUsage() partialCapacityMetric {
+	return partialCapacityMetric{
 		Capacity: min(m.Capacity, m.Usage),
 		Usage:    m.Usage,
 	}
@@ -171,37 +171,37 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	logg.Debug("demand for binpackable flavors: %#v", demandByFlavorName)
 
 	// enumerate matching hypervisors, prepare data structures for binpacking
-	hypervisorsByAZ := make(map[liquid.AvailabilityZone]BinpackHypervisors)
+	hypervisorsByAZ := make(map[liquid.AvailabilityZone]binpackHypervisors)
 	for _, az := range req.AllAZs {
 		// explicitly initializing entries for each AZ here ensures that we report a result for each AZ
 		// (as required by Limes), even if there is no compute capacity in that AZ
 		hypervisorsByAZ[az] = nil
 	}
-	shadowedHypervisorsByAZ := make(map[liquid.AvailabilityZone][]MatchingHypervisor)
+	shadowedHypervisorsByAZ := make(map[liquid.AvailabilityZone][]matchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
-	err = l.HypervisorSelection.ForeachHypervisor(ctx, l.NovaV2, l.PlacementV1, func(h MatchingHypervisor) error {
+	err = l.HypervisorSelection.foreachHypervisor(ctx, l.NovaV2, l.PlacementV1, func(h matchingHypervisor) error {
 		// ignore HVs that are not associated with an aggregate and AZ
-		if !h.CheckTopology() {
+		if !h.checkTopology() {
 			return nil
 		}
 
 		if h.ShadowedByTrait == "" {
-			bh, err := PrepareHypervisorForBinpacking(h, pooledExtraSpecs)
+			bh, err := prepareHypervisorForBinpacking(h, pooledExtraSpecs)
 			if err != nil {
 				return err
 			}
 			hypervisorsByAZ[h.AvailabilityZone] = append(hypervisorsByAZ[h.AvailabilityZone], bh)
 
-			hc := h.PartialCapacity()
-			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit, traits: %v", h.Hypervisor.Description(), h.AvailabilityZone,
-				BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
-				BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
+			hc := h.partialCapacity()
+			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit, traits: %v", h.Hypervisor.description(), h.AvailabilityZone,
+				binpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
+				binpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
 				len(bh.Nodes), bh.Nodes[0].Capacity, h.Traits,
 			)
 		} else {
 			shadowedHypervisorsByAZ[h.AvailabilityZone] = append(shadowedHypervisorsByAZ[h.AvailabilityZone], h)
 			isShadowedHVHostname[h.Hypervisor.HypervisorHostname] = true
-			logg.Debug("%s in %s is shadowed by trait %s", h.Hypervisor.Description(), h.AvailabilityZone, h.ShadowedByTrait)
+			logg.Debug("%s in %s is shadowed by trait %s", h.Hypervisor.description(), h.AvailabilityZone, h.ShadowedByTrait)
 		}
 
 		return nil
@@ -212,7 +212,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// during binpacking, place instances of large flavors first to achieve optimal results
 	slices.SortFunc(splitFlavors, func(lhs, rhs flavors.Flavor) int {
-		//NOTE: this returns `rhs-lhs` instead of `lhs-rhs` to achieve descending order
+		// NOTE: this returns `rhs-lhs` instead of `lhs-rhs` to achieve descending order
 		if lhs.VCPUs != rhs.VCPUs {
 			return rhs.VCPUs - lhs.VCPUs
 		}
@@ -263,10 +263,10 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			// The number of instances thus placed will be skipped below to avoid double counting.
 			for _, hv := range hypervisorsByAZ[az] {
 				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
-					var zero BinpackVector[uint64]
-					placed := BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresDemand.OvercommitFactor, zero, bb, true)
+					var zero binpackVector[uint64]
+					placed := binpackHypervisors{hv}.placeOneInstance(flavor, "USED", coresDemand.OvercommitFactor, zero, bb, true)
 					if !placed {
-						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
+						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.description())
 					}
 					break
 				}
@@ -288,7 +288,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 
 		// phase 1: block existing usage
-		blockedCapacity := BinpackVector[uint64]{
+		blockedCapacity := binpackVector[uint64]{
 			VCPUs:    coresDemand.OvercommitFactor.ApplyInReverseTo(coresDemand.PerAZ[az].Usage),
 			MemoryMB: ramDemand.PerAZ[az].Usage,
 			LocalGB:  instancesDemand.PerAZ[az].Usage * maxRootDiskSize,
@@ -297,10 +297,10 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		for _, flavor := range splitFlavors {
 			// do not place instances that have already been placed in the simulation,
 			// as well as instances that run on hypervisors that do not participate in the binpacking simulation
-			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Name)
+			placedUsage := hypervisors.placementCountForFlavor(flavor.Name)
 			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Name][az]
 			unplacedUsage := liquidapi.SaturatingSub(demandByFlavorName[flavor.Name].PerAZ[az].Usage, placedUsage+shadowedUsage)
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresDemand.OvercommitFactor, blockedCapacity, bb, false, unplacedUsage) {
+			if !hypervisors.placeSeveralInstances(flavor, "used", coresDemand.OvercommitFactor, blockedCapacity, bb, false, unplacedUsage) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
@@ -311,7 +311,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresDemand.OvercommitFactor, blockedCapacity, bb, false, demandByFlavorName[flavor.Name].PerAZ[az].UnusedCommitments) {
+			if !hypervisors.placeSeveralInstances(flavor, "committed", coresDemand.OvercommitFactor, blockedCapacity, bb, false, demandByFlavorName[flavor.Name].PerAZ[az].UnusedCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
@@ -322,7 +322,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresDemand.OvercommitFactor, blockedCapacity, bb, false, demandByFlavorName[flavor.Name].PerAZ[az].PendingCommitments) {
+			if !hypervisors.placeSeveralInstances(flavor, "pending", coresDemand.OvercommitFactor, blockedCapacity, bb, false, demandByFlavorName[flavor.Name].PerAZ[az].PendingCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
@@ -331,9 +331,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		initiallyPlacedInstances := make(map[string]float64)
 		sumInitiallyPlacedInstances := uint64(0)
 		totalPlacedInstances := make(map[string]float64) // these two will diverge in the final round of placements
-		var splitFlavorsUsage BinpackVector[uint64]
+		var splitFlavorsUsage binpackVector[uint64]
 		for _, flavor := range splitFlavors {
-			count := hypervisors.PlacementCountForFlavor(flavor.Name)
+			count := hypervisors.placementCountForFlavor(flavor.Name)
 			initiallyPlacedInstances[flavor.Name] = max(float64(count), 0.1)
 			sumInitiallyPlacedInstances += count
 			totalPlacedInstances[flavor.Name] = float64(count)
@@ -352,13 +352,13 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		//		                                                  ------------
 		//		                                                        ^ this is in blockedCapacity
 		//
-		totalUsageUntilNow := blockedCapacity.Add(splitFlavorsUsage)
-		if !totalUsageUntilNow.IsAnyZero() {
-			// we can only do this if .Div() does not cause a divide-by-zero, otherwise we continue with blockedCapacity = 0
-			blockedCapacity = hypervisors.TotalCapacity().AsFloat().Mul(blockedCapacity.Div(totalUsageUntilNow)).AsUint()
+		totalUsageUntilNow := blockedCapacity.add(splitFlavorsUsage)
+		if !totalUsageUntilNow.isAnyZero() {
+			// we can only do this if .div() does not cause a divide-by-zero, otherwise we continue with blockedCapacity = 0
+			blockedCapacity = hypervisors.totalCapacity().asFloat().mul(blockedCapacity.div(totalUsageUntilNow)).asUint()
 		}
 		logg.Debug("[%s] usage by split flavors after phase 3: %s", az, splitFlavorsUsage.String())
-		logg.Debug("[%s] blockedCapacity in final fill: %s (totalCapacity = %s)", az, blockedCapacity.String(), hypervisors.TotalCapacity().String())
+		logg.Debug("[%s] blockedCapacity in final fill: %s (totalCapacity = %s)", az, blockedCapacity.String(), hypervisors.totalCapacity().String())
 
 		// Fill up with padding in a fair way as long as there is space left.
 		// This uses the Sainte-Laguë method designed for allocation of parliament
@@ -389,7 +389,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 				// no flavor left that can be placed -> stop
 				break
 			} else {
-				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresDemand.OvercommitFactor, blockedCapacity, bb, false) {
+				if hypervisors.placeOneInstance(*bestFlavor, "padding", coresDemand.OvercommitFactor, blockedCapacity, bb, false) {
 					totalPlacedInstances[bestFlavor.Name]++
 				} else {
 					canPlaceFlavor[bestFlavor.Name] = false
@@ -402,7 +402,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	if logg.ShowDebug {
 		for az, hypervisors := range hypervisorsByAZ {
 			for _, hypervisor := range hypervisors {
-				hypervisor.RenderDebugView(az)
+				hypervisor.renderDebugView(az)
 			}
 		}
 	}
@@ -421,20 +421,20 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	for az, hypervisors := range hypervisorsByAZ {
 		// Only consider hypersivors in the calculation that match all extra specs the pooled flavors agreed on
-		var matchingHypervisors BinpackHypervisors
+		var matchingHypervisors binpackHypervisors
 		for _, h := range hypervisors {
 			if h.AcceptsPooledFlavors {
 				matchingHypervisors = append(matchingHypervisors, h)
 			}
 		}
 		var (
-			azCapacity PartialCapacity
-			builder    PooledSubcapacityBuilder
+			azCapacity partialCapacity
+			builder    pooledSubcapacityBuilder
 		)
 		for _, h := range matchingHypervisors {
-			azCapacity.Add(h.Match.PartialCapacity())
+			azCapacity.add(h.Match.partialCapacity())
 			if l.WithSubcapacities {
-				err = builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
+				err = builder.addHypervisor(h.Match, float64(maxRootDiskSize))
 				if err != nil {
 					return liquid.ServiceCapacityReport{}, fmt.Errorf("could not add hypervisor as subcapacity: %w", err)
 				}
@@ -444,22 +444,22 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			if !FlavorMatchesHypervisor(flavors.Flavor{ExtraSpecs: pooledExtraSpecs}, h) {
 				continue
 			}
-			azCapacity.Add(h.PartialCapacity().CappedToUsage())
+			azCapacity.add(h.partialCapacity().cappedToUsage())
 			if l.WithSubcapacities {
-				err = builder.AddHypervisor(h, float64(maxRootDiskSize))
+				err = builder.addHypervisor(h, float64(maxRootDiskSize))
 				if err != nil {
 					return liquid.ServiceCapacityReport{}, fmt.Errorf("could not add hypervisor as subcapacity: %w", err)
 				}
 			}
 		}
 
-		capacities["cores"].PerAZ[az] = azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities)
-		capacities["instances"].PerAZ[az] = azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities)
-		capacities["ram"].PerAZ[az] = azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities)
+		capacities["cores"].PerAZ[az] = azCapacity.intoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities)
+		capacities["instances"].PerAZ[az] = azCapacity.intoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities)
+		capacities["ram"].PerAZ[az] = azCapacity.intoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities)
 		for _, flavor := range splitFlavors {
-			count := matchingHypervisors.PlacementCountForFlavor(flavor.Name)
+			count := matchingHypervisors.placementCountForFlavor(flavor.Name)
 			capacities["cores"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["cores"].PerAZ[az].Capacity, coresDemand.OvercommitFactor.ApplyInReverseTo(count*liquidapi.AtLeastZero(flavor.VCPUs)))
-			capacities["instances"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["instances"].PerAZ[az].Capacity, count) //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
+			capacities["instances"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["instances"].PerAZ[az].Capacity, count) // TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
 			capacities["ram"].PerAZ[az].Capacity = liquidapi.SaturatingSub(capacities["ram"].PerAZ[az].Capacity, count*liquidapi.AtLeastZero(flavor.RAM))
 		}
 	}
@@ -473,7 +473,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 		for az, hypervisors := range hypervisorsByAZ {
 			capacities[resourceName].PerAZ[az] = &liquid.AZResourceCapacityReport{
-				Capacity: hypervisors.PlacementCountForFlavor(flavor.Name),
+				Capacity: hypervisors.placementCountForFlavor(flavor.Name),
 			}
 		}
 

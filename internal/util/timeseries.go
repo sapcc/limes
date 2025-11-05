@@ -94,7 +94,7 @@ func (s *TimeSeries[T]) AddMeasurement(now time.Time, value T) error {
 	return nil
 }
 
-// PruneOldValues removes all measurements that fall before `now.Add(-retentionPeriod)`.
+// PruneOldValues removes all measurements that fall before `now.add(-retentionPeriod)`.
 func (s *TimeSeries[T]) PruneOldValues(now time.Time, retentionPeriod time.Duration) {
 	cutoff := s.findCutoffIndex(now, retentionPeriod)
 	if cutoff > 0 {

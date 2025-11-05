@@ -340,7 +340,7 @@ type DataMetricsReporter struct {
 	ReportZeroes bool
 }
 
-// This is the same Content-Type that promhttp's GET /metrics implementation reports.
+// ContentTypeForPrometheusMetrics is the same Content-Type that promhttp's GET /metrics implementation reports.
 // If this changes because of a prometheus/client-go upgrade, we will know because our
 // test verifies that promhttp yields this Content-Type. In the case of a change,
 // the output format of promhttp should be carefully reviewed for changes, and then
@@ -841,6 +841,7 @@ func newResourceAndRateBehaviorCache(cluster *core.Cluster) resourceAndRateBehav
 	return resourceAndRateBehaviorCache{cluster, cache, rateCache, cbCache}
 }
 
+// Get returns the cached ResourceBehavior for the given service type and resource name.
 func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
 	if c.cache[srvType] == nil {
 		c.cache[srvType] = make(map[liquid.ResourceName]core.ResourceBehavior)
@@ -853,6 +854,7 @@ func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid
 	return behavior
 }
 
+// GetForRate returns the cached RateBehavior for the given service type and rate name.
 func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateName liquid.RateName) core.RateBehavior {
 	if c.rateCache[srvType] == nil {
 		c.rateCache[srvType] = make(map[liquid.RateName]core.RateBehavior)
@@ -865,6 +867,7 @@ func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateNam
 	return behavior
 }
 
+// GetCommitmentBehavior returns the cached ScopedCommitmentBehavior for the given service type and resource name.
 func (c resourceAndRateBehaviorCache) GetCommitmentBehavior(srvType db.ServiceType, resName liquid.ResourceName) core.ScopedCommitmentBehavior {
 	if c.cbCache[srvType] == nil {
 		c.cbCache[srvType] = make(map[liquid.ResourceName]core.ScopedCommitmentBehavior)

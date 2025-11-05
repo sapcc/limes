@@ -49,11 +49,11 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		},
 	}
 	for _, vst := range l.VirtualShareTypes {
-		shareCapacityDemand := convertToRawDemand(req.DemandByResource[vst.ShareCapacityResourceName()])
-		snapshotCapacityDemand := convertToRawDemand(req.DemandByResource[vst.SnapshotCapacityResourceName()])
+		shareCapacityDemand := convertToRawDemand(req.DemandByResource[vst.shareCapacityResourceName()])
+		snapshotCapacityDemand := convertToRawDemand(req.DemandByResource[vst.snapshotCapacityResourceName()])
 		var snapmirrorCapacityDemand map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ
 		if l.NetappMetrics != nil {
-			snapmirrorCapacityDemand = convertToRawDemand(req.DemandByResource[vst.SnapmirrorCapacityResourceName()])
+			snapmirrorCapacityDemand = convertToRawDemand(req.DemandByResource[vst.snapmirrorCapacityResourceName()])
 		}
 		// ^ NOTE: If l.NetappMetrics == nil, `snapmirrorCapacityDemand[az]` is always zero-valued
 		// and thus no capacity will be allocated to the snapmirror_capacity resource.
@@ -63,12 +63,12 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			return liquid.ServiceCapacityReport{}, err
 		}
 
-		resources[vst.SharesResourceName()] = &subresult.Shares
-		resources[vst.SnapshotsResourceName()] = &subresult.Snapshots
-		resources[vst.ShareCapacityResourceName()] = &subresult.ShareCapacity
-		resources[vst.SnapshotCapacityResourceName()] = &subresult.SnapshotCapacity
+		resources[vst.sharesResourceName()] = &subresult.Shares
+		resources[vst.snapshotsResourceName()] = &subresult.Snapshots
+		resources[vst.shareCapacityResourceName()] = &subresult.ShareCapacity
+		resources[vst.snapshotCapacityResourceName()] = &subresult.SnapshotCapacity
 		if l.NetappMetrics != nil {
-			resources[vst.SnapmirrorCapacityResourceName()] = &subresult.SnapmirrorCapacity
+			resources[vst.snapmirrorCapacityResourceName()] = &subresult.SnapmirrorCapacity
 		}
 	}
 
@@ -102,10 +102,10 @@ type azCapacityForShareType struct {
 	SnapmirrorCapacity liquid.AZResourceCapacityReport
 }
 
-func (l *Logic) scanCapacityForShareType(ctx context.Context, vst VirtualShareType, azForServiceHost map[string]liquid.AvailabilityZone, allAZs []liquid.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ) (capacityForShareType, error) {
+func (l *Logic) scanCapacityForShareType(ctx context.Context, vst virtualShareType, azForServiceHost map[string]liquid.AvailabilityZone, allAZs []liquid.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
 	allPoolsByAZ := make(map[liquid.AvailabilityZone][]*Pool)
-	for _, rst := range vst.AllRealShareTypes() {
+	for _, rst := range vst.allRealShareTypes() {
 		pools, err := l.getPools(ctx, rst)
 		if err != nil {
 			return capacityForShareType{}, err
@@ -159,7 +159,7 @@ func (l *Logic) scanCapacityForShareType(ctx context.Context, vst VirtualShareTy
 	return result, nil
 }
 
-func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint64, az liquid.AvailabilityZone, pools []*Pool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand liquid.ResourceDemandInAZ) (azCapacityForShareType, error) {
+func (l *Logic) scanCapacityForShareTypeAndAZ(vst virtualShareType, azCount uint64, az liquid.AvailabilityZone, pools []*Pool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand liquid.ResourceDemandInAZ) (azCapacityForShareType, error) {
 	// count pools and sum their capacities if they are included
 	var (
 		poolCount           uint64
@@ -324,7 +324,7 @@ func (p Pool) CountsUnusedCapacity() bool {
 }
 
 // Lists all pools for the given real share type.
-func (l *Logic) getPools(ctx context.Context, rst RealShareType) ([]Pool, error) {
+func (l *Logic) getPools(ctx context.Context, rst realShareType) ([]Pool, error) {
 	allPages, err := schedulerstats.ListDetail(l.ManilaV2, poolsListDetailOpts{ShareType: string(rst)}).AllPages(ctx)
 	if err != nil {
 		return nil, err

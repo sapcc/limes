@@ -10,11 +10,12 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 )
 
+// Client is a gophercloud.ServiceClient for the Archer API.
 type Client struct {
 	*gophercloud.ServiceClient
 }
 
-func NewClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
+func newClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*Client, error) {
 	serviceType := "endpoint-services"
 	eo.ApplyDefaults(serviceType)
 
@@ -31,7 +32,7 @@ func NewClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts
 	}, nil
 }
 
-type QuotaSet struct {
+type quotaSet struct {
 	// for both GET and PUT
 	Endpoint int64 `json:"endpoint"`
 	Service  int64 `json:"service"`
@@ -40,7 +41,7 @@ type QuotaSet struct {
 	InUseService  uint64 `json:"in_use_service"`
 }
 
-func (c *Client) GetQuotaSet(ctx context.Context, projectUUID string) (qs QuotaSet, err error) {
+func (c *Client) getQuotaSet(ctx context.Context, projectUUID string) (qs quotaSet, err error) {
 	url := c.ServiceURL("quotas", projectUUID)
 	var r gophercloud.Result
 	_, r.Header, r.Err = gophercloud.ParseResponse(c.Get(ctx, url, &r.Body, nil)) //nolint:bodyclose // already closed by gophercloud
@@ -48,7 +49,7 @@ func (c *Client) GetQuotaSet(ctx context.Context, projectUUID string) (qs QuotaS
 	return
 }
 
-func (c *Client) PutQuotaSet(ctx context.Context, projectUUID string, qs QuotaSet) error {
+func (c *Client) putQuotaSet(ctx context.Context, projectUUID string, qs quotaSet) error {
 	url := c.ServiceURL("quotas", projectUUID)
 	opts := gophercloud.RequestOpts{OkCodes: []int{http.StatusOK}}
 	_, _, err := gophercloud.ParseResponse(c.Put(ctx, url, qs, nil, &opts)) //nolint:bodyclose // already closed by gophercloud

@@ -82,7 +82,7 @@ func ResourceNameForFlavor(flavorName string) liquid.ResourceName {
 }
 
 // FlavorMatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
-func FlavorMatchesHypervisor(f flavors.Flavor, mh MatchingHypervisor) bool {
+func FlavorMatchesHypervisor(f flavors.Flavor, mh matchingHypervisor) bool {
 	// extra specs like `"trait:FOO": "required"` or `"trait:BAR": "forbidden"`
 	// are used by the Nova scheduler to ignore hypervisors that do not (or do)
 	// have the respective traits

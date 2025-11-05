@@ -37,6 +37,7 @@ type JSONListStream[T any] struct {
 	w *bufio.Writer
 }
 
+// NewJSONListStream creates a new JSONListStream instance.
 func NewJSONListStream[T any](w http.ResponseWriter, r *http.Request, outerFieldName string) *JSONListStream[T] {
 	return &JSONListStream[T]{
 		OuterFieldName: outerFieldName,

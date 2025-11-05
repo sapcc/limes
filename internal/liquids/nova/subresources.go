@@ -14,7 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-type FlavorAttributes struct {
+type flavorAttributes struct {
 	Name           string  `json:"name"`
 	VCPUs          uint64  `json:"vcpu"`
 	MemoryMiB      uint64  `json:"ram_mib"`
@@ -23,8 +23,8 @@ type FlavorAttributes struct {
 	HWVersion      string  `json:"-"` // this is only used for sorting the subresource into the right resource
 }
 
-// SubresourceAttributes is the Attributes payload for a Nova instance subresource.
-type SubresourceAttributes struct {
+// subresourceAttributes is the Attributes payload for a Nova instance subresource.
+type subresourceAttributes struct {
 	// base metadata
 	Status   string            `json:"status"`
 	Metadata map[string]string `json:"metadata"`
@@ -32,17 +32,17 @@ type SubresourceAttributes struct {
 	// placement information
 	AZ liquid.AvailabilityZone `json:"-"`
 	// information from flavor
-	Flavor FlavorAttributes `json:"flavor"`
+	Flavor flavorAttributes `json:"flavor"`
 	// information from image
 	OSType string `json:"os_type"`
 }
 
-func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.Server, allAZs []liquid.AvailabilityZone) (res liquid.SubresourceBuilder[SubresourceAttributes], err error) {
+func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.Server, allAZs []liquid.AvailabilityZone) (res liquid.SubresourceBuilder[subresourceAttributes], err error) {
 	// copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
 
-	attrs := SubresourceAttributes{
+	attrs := subresourceAttributes{
 		Status:   instance.Status,
 		AZ:       liquid.NormalizeAZ(instance.AvailabilityZone, allAZs),
 		Metadata: instance.Metadata,
@@ -63,7 +63,7 @@ func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.S
 	}
 
 	// copy attributes from flavor data
-	attrs.Flavor = FlavorAttributes{
+	attrs.Flavor = flavorAttributes{
 		Name:      flavorInfo.OriginalName,
 		VCPUs:     flavorInfo.VCPUs,
 		MemoryMiB: flavorInfo.MemoryMiB,
@@ -84,13 +84,13 @@ func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.S
 	return res, nil
 }
 
-func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone) ([]liquid.SubresourceBuilder[SubresourceAttributes], error) {
+func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone) ([]liquid.SubresourceBuilder[subresourceAttributes], error) {
 	opts := servers.ListOpts{
 		AllTenants: true,
 		TenantID:   projectUUID,
 	}
 
-	var result []liquid.SubresourceBuilder[SubresourceAttributes]
+	var result []liquid.SubresourceBuilder[subresourceAttributes]
 	err := servers.List(l.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		var instances []servers.Server
 		err := servers.ExtractServersInto(page, &instances)

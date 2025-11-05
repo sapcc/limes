@@ -101,11 +101,6 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 	return &tv, err
 }
 
-func (p *v1Provider) OverrideGenerateTransferToken(generateTransferToken func() string) *v1Provider {
-	p.generateTransferToken = generateTransferToken
-	return p
-}
-
 // AddTo implements the httpapi.API interface.
 func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

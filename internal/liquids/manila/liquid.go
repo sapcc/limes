@@ -24,6 +24,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Manila.
 type Logic struct {
 	// configuration
 	CapacityCalculation struct {
@@ -33,7 +34,7 @@ type Logic struct {
 		SnapshotsPerShare uint64  `json:"snapshots_per_share"`
 		WithSubcapacities bool    `json:"with_subcapacities"`
 	} `json:"capacity_calculation"`
-	VirtualShareTypes                   []VirtualShareType `json:"share_types"`
+	VirtualShareTypes                   []virtualShareType `json:"share_types"`
 	PrometheusAPIConfigForAZAwareness   *promquery.Config  `json:"prometheus_api_for_az_awareness"`
 	PrometheusAPIConfigForNetappMetrics *promquery.Config  `json:"prometheus_api_for_netapp_metrics"`
 	// connections
@@ -41,7 +42,7 @@ type Logic struct {
 	AZMetrics     *promquery.BulkQueryCache[azMetricsKey, azMetrics]         `json:"-"`
 	NetappMetrics *promquery.BulkQueryCache[netappMetricsKey, netappMetrics] `json:"-"`
 	// caches
-	ShareTypeIDByName liquidapi.State[map[RealShareType]string] `json:"-"`
+	ShareTypeIDByName liquidapi.State[map[realShareType]string] `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -133,9 +134,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	if err != nil {
 		return liquid.ServiceInfo{}, fmt.Errorf("cannot unmarshal Manila share types: %w", err)
 	}
-	shareTypeIDByName := make(map[RealShareType]string)
+	shareTypeIDByName := make(map[realShareType]string)
 	for _, shareType := range shareTypes {
-		shareTypeIDByName[RealShareType(shareType.Name)] = shareType.ID
+		shareTypeIDByName[realShareType(shareType.Name)] = shareType.ID
 	}
 	l.ShareTypeIDByName.Set(shareTypeIDByName)
 
@@ -173,12 +174,12 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		HasQuota:    true,
 	}
 	for _, vst := range l.VirtualShareTypes {
-		resources[vst.SharesResourceName()] = resInfoForObjects
-		resources[vst.SnapshotsResourceName()] = resInfoForObjects
-		resources[vst.ShareCapacityResourceName()] = resInfoForCapacity
-		resources[vst.SnapshotCapacityResourceName()] = resInfoForCapacity
+		resources[vst.sharesResourceName()] = resInfoForObjects
+		resources[vst.snapshotsResourceName()] = resInfoForObjects
+		resources[vst.shareCapacityResourceName()] = resInfoForCapacity
+		resources[vst.snapshotCapacityResourceName()] = resInfoForCapacity
 		if l.NetappMetrics != nil {
-			resources[vst.SnapmirrorCapacityResourceName()] = resInfoForSnapmirrorCapacity
+			resources[vst.snapmirrorCapacityResourceName()] = resInfoForSnapmirrorCapacity
 		}
 	}
 
@@ -232,14 +233,14 @@ func azMetricsKeyer(sample *model.Sample) azMetricsKey {
 type netappMetricsKey struct {
 	AvailabilityZone liquid.AvailabilityZone
 	ProjectUUID      string
-	ShareTypeName    RealShareType
+	ShareTypeName    realShareType
 }
 
 func netappMetricsKeyer(sample *model.Sample) netappMetricsKey {
 	return netappMetricsKey{
 		AvailabilityZone: liquid.AvailabilityZone(sample.Metric["availability_zone"]),
 		ProjectUUID:      string(sample.Metric["project_id"]),
-		ShareTypeName:    RealShareType(sample.Metric["share_type"]),
+		ShareTypeName:    realShareType(sample.Metric["share_type"]),
 	}
 }
 

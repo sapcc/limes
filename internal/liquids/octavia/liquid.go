@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 )
 
+// Logic implements the liquidapi.Logic interface for Octavia.
 type Logic struct {
 	// connections
 	OctaviaV2 *gophercloud.ServiceClient `yaml:"-"`

@@ -24,7 +24,7 @@ var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
 	ORDER BY d.name, p.name, s.type, ps.scrape_error_message
 `)
 
-type ScrapeError struct {
+type scrapeError struct {
 	Project struct {
 		ID     string `json:"id"`
 		Name   string `json:"name"`
@@ -39,15 +39,16 @@ type ScrapeError struct {
 	Message          string            `json:"message"`
 }
 
-func GetScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
+// GetScrapeErrors retrieves scrape errors from the database according to the given filter.
+func GetScrapeErrors(dbi db.Interface, filter Filter) ([]scrapeError, error) {
 	return getScrapeErrors(dbi, filter, scrapeErrorsQuery)
 }
 
-func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeError, error) {
-	var result []ScrapeError
+func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]scrapeError, error) {
+	var result []scrapeError
 	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var sErr ScrapeError
+		var sErr scrapeError
 		var checkedAtAsTime *time.Time
 		err := rows.Scan(
 			&sErr.Project.Domain.ID, &sErr.Project.Domain.Name, &sErr.Project.ID,
@@ -71,19 +72,19 @@ func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeE
 
 	if len(result) == 0 {
 		// Ensure that empty list gets serialized as `[]` rather than as `null`.
-		return []ScrapeError{}, nil
+		return []scrapeError{}, nil
 	}
 
 	// To avoid excessively large responses, we group identical scrape errors for multiple
 	// project services of the same type into one item.
-	uniqueErrors := make(map[limes.ServiceType]map[string]ScrapeError) // second key is error message
+	uniqueErrors := make(map[limes.ServiceType]map[string]scrapeError) // second key is error message
 	for _, v := range result {
 		if vFromMap, found := uniqueErrors[v.ServiceType][v.Message]; found {
 			// Use the value from map so we can preserve AffectedProject count.
 			v = vFromMap
 		}
 		if _, ok := uniqueErrors[v.ServiceType]; !ok {
-			uniqueErrors[v.ServiceType] = make(map[string]ScrapeError)
+			uniqueErrors[v.ServiceType] = make(map[string]scrapeError)
 		}
 		v.AffectedProjects++
 		uniqueErrors[v.ServiceType][v.Message] = v
