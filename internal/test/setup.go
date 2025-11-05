@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -207,8 +209,9 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	failIfErrs(t, errs)
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it
-	for serviceType, serviceInfo := range params.PersistedServiceInfo {
+	for _, serviceType := range slices.Sorted(maps.Keys(params.PersistedServiceInfo)) {
 		// handle non-configured services for creation of "orphaned" db entries
+		serviceInfo := params.PersistedServiceInfo[serviceType]
 		liquidConfig, exists := s.Cluster.Config.Liquids[serviceType]
 		var rateLimits core.ServiceRateLimitConfiguration
 		if exists {

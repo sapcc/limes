@@ -288,7 +288,7 @@ type Pool struct {
 		AllocatedCapacityGB liquids.Float64WithStringErrors `json:"allocated_capacity_gb"`
 		// CCloud extension fields
 		HardwareState string `json:"hardware_state"`
-	} `json:"capabilities,omitempty"`
+	} `json:"capabilities"`
 }
 
 // CountsUnusedCapacity returns whether this pool has all its capacity count

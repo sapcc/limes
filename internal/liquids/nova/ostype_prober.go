@@ -149,9 +149,9 @@ func (p *OSTypeProber) findFromImage(ctx context.Context, imageID string) (strin
 	// look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
 	osType := ""
 	for _, tag := range result.Tags {
-		if strings.HasPrefix(tag, "ostype:") {
+		if osTypeWithoutPrefix, exists := strings.CutPrefix(tag, "ostype:"); exists {
 			if osType == "" {
-				osType = strings.TrimPrefix(tag, "ostype:")
+				osType = osTypeWithoutPrefix
 			} else {
 				// multiple such tags -> wtf
 				osType = ""
