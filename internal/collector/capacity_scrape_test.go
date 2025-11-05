@@ -5,9 +5,9 @@ package collector_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +21,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
-	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -1137,10 +1136,12 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	})
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustFailT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)), errors.New(sqlext.SimplifyWhitespace(
-		`failed in iteration 2: while scraping service 2: could not delete db.Resource record with key capacity:
-		pq: update or delete on table "az_resources" violates foreign key constraint "project_commitments_az_resource_id_fkey" on table "project_commitments"
-		(additional error while updating DB: pq: update or delete on table "services" violates foreign key constraint "resources_service_id_liquid_version_fkey" on table "resources"`)))
+	err := jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections))
+	assert.ErrEqual(t, err, regexp.MustCompile(
+		// the error is that ON DELETE CASCADE on services -> resources is stopped by ON DELETE RESTRICT on resources -> commitments;
+		// we do not match the specific phrasing of the PostgreSQL error since it may change between versions
+		`^failed in iteration 2: while scraping service 2: could not delete db.Resource record with key capacity:.*"project_commitments_az_resource_id_fkey"`,
+	))
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
