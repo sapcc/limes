@@ -268,7 +268,11 @@ type nodePage struct {
 // next page of results.
 func (r nodePage) NextPageURL() (string, error) {
 	var s struct {
+		// we prefer this field
 		Next string `json:"next"`
+		// this field is used by the default implementation in nodes.NodePage.NextPageURL()
+		// (we only use it as a fallback because this field does not exist in the API responses we have observed in prod)
+		Links []gophercloud.Link `json:"nodes_links"`
 	}
 	err := r.ExtractInto(&s)
 	if err != nil {
@@ -277,6 +281,5 @@ func (r nodePage) NextPageURL() (string, error) {
 	if s.Next != "" {
 		return s.Next, nil
 	}
-	// fallback
-	return r.NextPageURL()
+	return gophercloud.ExtractNextURL(s.Links)
 }
