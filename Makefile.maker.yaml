@@ -4,9 +4,9 @@ metadata:
   url: https://github.com/sapcc/limes
 
 binaries:
-  - name:        limes
+  - name: limes
     fromPackage: .
-    installTo:   bin/
+    installTo: bin/
 
 coverageTest:
   except: '/liquids'
@@ -22,7 +22,11 @@ golang:
 
 golangciLint:
   createConfig: true
-
+  reviveRules:
+    - name: exported
+      arguments:
+        - checkPrivateReceivers
+        - disableChecksOnConstants
 githubWorkflow:
   ci:
     enabled: true
@@ -36,10 +40,10 @@ renovate:
 reuse:
   annotations:
     - paths:
-      - .github/PULL_REQUEST_TEMPLATE
-      - internal/*/fixtures/*.json
-      - internal/*/fixtures/*.prom
-      - internal/*/fixtures/*.sql
+        - .github/PULL_REQUEST_TEMPLATE
+        - internal/*/fixtures/*.json
+        - internal/*/fixtures/*.prom
+        - internal/*/fixtures/*.sql
       SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
       SPDX-License-Identifier: Apache-2.0
 
