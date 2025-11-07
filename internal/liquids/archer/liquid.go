@@ -17,7 +17,7 @@ import (
 // Logic implements the liquidapi.Logic interface for Archer.
 type Logic struct {
 	// connections
-	Archer *Client `yaml:"-"`
+	Archer *Client `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.

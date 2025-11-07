@@ -4,7 +4,6 @@
 package core_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -17,37 +16,48 @@ import (
 )
 
 const (
-	testConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-		liquids:
-			shared:
-				area: shared
-			unshared:
-				area: unshared
-				rate_limits:
-					global:
-						- { name: in_global_and_liquid,  limit: 10, window: 1m }
-						- { name: in_global_and_project, limit: 20, window: 1m }
-						- { name: only_in_global,        limit: 30, window: 1m }
-					project_default:
-						- { name: in_global_and_project, limit: 2, window: 1m }
-						- { name: in_liquid_and_project, limit: 4, window: 1m }
-						- { name: only_in_project,       limit: 5, window: 1m }
-	`
+	testConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"shared": {
+				"area": "shared"
+			},
+			"unshared": {
+				"area": "unshared",
+				"rate_limits": {
+					"global": [
+						{"name": "in_global_and_liquid", "limit": 10, "window": "1m"},
+						{"name": "in_global_and_project", "limit": 20, "window": "1m"},
+						{"name": "only_in_global", "limit": 30, "window": "1m"}
+					],
+					"project_default": [
+						{"name": "in_global_and_project", "limit": 2, "window": "1m"},
+						{"name": "in_liquid_and_project", "limit": 4, "window": "1m"},
+						{"name": "only_in_project", "limit": 5, "window": "1m"}
+					]
+				}
+			}
+		}
+	}`
 )
 
 func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup) {
 	liquidClientFactory := s.Cluster.LiquidClientFactory
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(strings.ReplaceAll(testConfigYAML, "\t", "  ")), s.Clock.Now, s.DB, true)
+	s.Cluster, errs = core.NewClusterFromJSON([]byte(testConfigJSON), s.Clock.Now, s.DB, true)
 	for _, err := range errs {
 		t.Fatal(err)
 	}
@@ -71,7 +81,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	}
 
 	s := test.NewSetup(t,
-		test.WithConfig(testConfigYAML),
+		test.WithConfig(testConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
 		test.WithMockLiquidClient("shared", srvInfoShared),
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),

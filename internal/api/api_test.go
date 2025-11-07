@@ -26,7 +26,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
-	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -41,56 +40,69 @@ func TestMain(m *testing.M) {
 // combinations of "has unit or not", "has limit or not" and "has usage or not"
 // as possible
 const (
-	testConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,  id: uuid-for-france  }
-				projects:
-					uuid-for-germany:
-						- { name: berlin,  id: uuid-for-berlin,  parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin  }
-					uuid-for-france:
-						- { name: paris,   id: uuid-for-paris,   parent_id: uuid-for-france  }
-		liquids:
-			shared:
-				area: shared
-				rate_limits:
-					global:
-						- { name: service/shared/objects:create,    limit: 5000, window: 1s }
-					project_default:
-						- { name: service/shared/objects:create,    limit: 5,    window: 1m }
-						- { name: service/shared/objects:delete,    limit: 1,    window: 1m }
-						- { name: service/shared/objects:update,    limit: 2,    window: 1s }
-						- { name: service/shared/objects:read/list, limit: 3,    window: 1s }
-				commitment_behavior_per_resource:
-					- key: 'capacity|things'
-						value:
-							durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
-							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
-
-			unshared:
-				area: unshared
-				rate_limits:
-					project_default:
-						- name:   service/unshared/instances:create
-							limit:  5
-							window: 1m
-						- name:   service/unshared/instances:delete
-							limit:  1
-							window: 1m
-						- name:   service/unshared/instances:update
-							limit:  2
-							window: 1s
-
-		resource_behavior:
-			# check that category mapping is reported
-			- resource: '.+/capacity_az_separated'
-				category: foo_category
-	`
+	testConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"shared": {
+				"area": "shared",
+				"rate_limits": {
+					"global": [
+						{"name": "service/shared/objects:create", "limit": 5000, "window": "1s"}
+					],
+					"project_default": [
+						{"name": "service/shared/objects:create", "limit": 5, "window": "1m"},
+						{"name": "service/shared/objects:delete", "limit": 1, "window": "1m"},
+						{"name": "service/shared/objects:update", "limit": 2, "window": "1s"},
+						{"name": "service/shared/objects:read/list", "limit": 3, "window": "1s"}
+					]
+				},
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity|things",
+						"value": {
+							"durations_per_domain": [{"key": ".+", "value": ["1 hour", "2 hours"]}],
+							"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
+						}
+					}
+				]
+			},
+			"unshared": {
+				"area": "unshared",
+				"rate_limits": {
+					"project_default": [
+						{"name": "service/unshared/instances:create", "limit": 5, "window": "1m"},
+						{"name": "service/unshared/instances:delete", "limit": 1, "window": "1m"},
+						{"name": "service/unshared/instances:update", "limit": 2, "window": "1s"}
+					]
+				}
+			}
+		},
+		"resource_behavior": [
+			{
+				// check that category mapping is reported
+				"resource": ".+/capacity_az_separated",
+				"category": "foo_category"
+			}
+		]
+	}`
 )
 
 func setupTest(t *testing.T) test.Setup {
@@ -111,7 +123,7 @@ func setupTest(t *testing.T) test.Setup {
 		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testConfigYAML),
+		test.WithConfig(testConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
 		test.WithPersistedServiceInfo("unshared", srvInfoUnshared),
 		test.WithInitialDiscovery,
@@ -279,20 +291,25 @@ func setupTest(t *testing.T) test.Setup {
 
 func Test_ScrapeErrorOperations(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany:
-							- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-							- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-germany }
-			liquids:
-				shared: { area: shared }
-				unshared: { area: unshared }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [
+							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}
+						]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {"area": "shared"},
+				"unshared": {"area": "unshared"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
@@ -845,16 +862,19 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 
 func Test_EmptyProjectList(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects: { uuid-for-germany: [] }
-			liquids:
-				first: { area: first }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {"uuid-for-germany": []}
+				}
+			},
+			"liquids": {
+				"first": {"area": "first"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
@@ -886,7 +906,7 @@ func Test_LargeProjectList(t *testing.T) {
 		}
 	}
 
-	configStr := string(must.Return(yaml.Marshal(core.ClusterConfiguration{
+	configStr := string(must.Return(json.Marshal(core.ClusterConfiguration{
 		AvailabilityZones: []limes.AvailabilityZone{"az-one", "az-two"},
 		Discovery: core.DiscoveryConfiguration{
 			Method: "static",
@@ -1008,17 +1028,21 @@ func Test_LargeProjectList(t *testing.T) {
 
 func Test_PutMaxQuotaOnProject(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
-			liquids:
-				shared: { area: shared }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {"area": "shared"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
@@ -1125,23 +1149,32 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 func Test_PutQuotaAutogrowth(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
-			liquids:
-				shared:
-					area: shared
-					commitment_behavior_per_resource:
-						- key: 'capacity|things'
-							value:
-								durations_per_domain: [{ key: '.+', value: ["1 hour", "2 hours"] }]
-				unshared: { area: unshared }
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {
+					"area": "shared",
+					"commitment_behavior_per_resource": [
+						{
+							"key": "capacity|things",
+							"value": {
+								"durations_per_domain": [{"key": ".+", "value": ["1 hour", "2 hours"]}]
+							}
+						}
+					]
+				},
+				"unshared": {"area": "unshared"}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
@@ -1285,26 +1318,34 @@ func TestResourceRenaming(t *testing.T) {
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
 	s := test.NewSetup(t,
-		test.WithConfig(`
-			availability_zones: [ az-one, az-two ]
-			discovery:
-				method: static
-				static_config:
-					domains: [{ name: germany, id: uuid-for-germany }]
-					projects:
-						uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
-			liquids:
-				shared:
-					area: shared
-					commitment_behavior_per_resource:
-						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '2 seconds' ]}]}}
-						- { key: things,   value: { durations_per_domain: [{ key: '.*', value: [ '3 seconds' ]}]}}
-				unshared:
-					area: unshared
-					commitment_behavior_per_resource:
-						- { key: capacity, value: { durations_per_domain: [{ key: '.*', value: [ '4 seconds' ]}]}}
-						- { key: things,   value: { durations_per_domain: [{ key: '.*', value: [ '5 seconds' ]}]}}
-		`),
+		test.WithConfig(`{
+			"availability_zones": ["az-one", "az-two"],
+			"discovery": {
+				"method": "static",
+				"static_config": {
+					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+					"projects": {
+						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+					}
+				}
+			},
+			"liquids": {
+				"shared": {
+					"area": "shared",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["2 seconds"]}]}},
+						{"key": "things", "value": {"durations_per_domain": [{"key": ".*", "value": ["3 seconds"]}]}}
+					]
+				},
+				"unshared": {
+					"area": "unshared",
+					"commitment_behavior_per_resource": [
+						{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["4 seconds"]}]}},
+						{"key": "things", "value": {"durations_per_domain": [{"key": ".*", "value": ["5 seconds"]}]}}
+					]
+				}
+			}
+		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
 		test.WithInitialDiscovery,
@@ -1518,22 +1559,30 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 	return true
 }
 
-const testAZSeparatedConfigYAML = `
-	availability_zones: [ az-one, az-two ]
-	discovery:
-		method: static
-		static_config:
-			domains: [{ name: germany, id: uuid-for-germany }]
-			projects:
-				uuid-for-germany: [{ name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }]
-	liquids:
-		shared:
-			area: shared
-	resource_behavior:
-		# check that category mapping is reported
-		- resource: '.+/capacity_az_separated'
-			category: foo_category
-`
+const testAZSeparatedConfigJSON = `{
+	"availability_zones": ["az-one", "az-two"],
+	"discovery": {
+		"method": "static",
+		"static_config": {
+			"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+			"projects": {
+				"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+			}
+		}
+	},
+	"liquids": {
+		"shared": {
+			"area": "shared"
+		}
+	},
+	"resource_behavior": [
+		{
+			// check that category mapping is reported
+			"resource": ".+/capacity_az_separated",
+			"category": "foo_category"
+		}
+	]
+}`
 
 func Test_SeparatedTopologyOperations(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
@@ -1547,7 +1596,7 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testAZSeparatedConfigYAML),
+		test.WithConfig(testAZSeparatedConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfo),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,

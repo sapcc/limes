@@ -17,7 +17,7 @@ import (
 // Logic implements the liquidapi.Logic interface for Designate.
 type Logic struct {
 	// connections
-	DesignateV2 *Client `yaml:"-"`
+	DesignateV2 *Client `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.

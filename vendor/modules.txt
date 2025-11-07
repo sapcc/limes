@@ -99,6 +99,7 @@ github.com/lib/pq/oid
 github.com/lib/pq/scram
 # github.com/majewsky/gg v1.3.0
 ## explicit; go 1.24
+github.com/majewsky/gg/jsonmatch
 github.com/majewsky/gg/option
 github.com/majewsky/gg/options
 # github.com/majewsky/schwift/v2 v2.0.0
@@ -225,6 +226,3 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/yaml.v2 v2.4.0
-## explicit; go 1.15
-gopkg.in/yaml.v2

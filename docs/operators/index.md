@@ -71,8 +71,8 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 4. Start both the API service and the container service once for each cluster.
 
    ```bash
-   $ limes serve /path/to/config.yaml
-   $ limes collect /path/to/config.yaml
+   $ limes serve /path/to/config.json
+   $ limes collect /path/to/config.json
    ```
 
    There should be only one instance of the collector service. The API service can be scaled out by simply starting

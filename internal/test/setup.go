@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +36,7 @@ import (
 )
 
 type setupParams struct {
-	ConfigYAML               string
+	ConfigJSON               string
 	APIMiddlewares           []httpapi.API
 	WithInitialDiscovery     bool
 	WithEmptyRecordsAsNeeded bool
@@ -49,12 +49,26 @@ type setupParams struct {
 type SetupOption func(*setupParams)
 
 // WithConfig is a SetupOption that initializes the test cluster from a
-// configuration provided as YAML. This option is effectively required, as an
+// configuration provided as JSON. This option is effectively required, as an
 // empty cluster configuration is not allowed.
-func WithConfig(yamlStr string) SetupOption {
+func WithConfig(jsonStr string) SetupOption {
 	return func(params *setupParams) {
-		params.ConfigYAML = normalizeInlineYAML(yamlStr)
+		params.ConfigJSON = RemoveCommentsFromJSON(jsonStr)
 	}
+}
+
+// RemoveCommentsFromJSON removes C-style comments from JSON literals.
+// It is intended only for use with JSON literals that appear in test code.
+// Its implementation is very simple and not intended for use with untrusted inputs.
+func RemoveCommentsFromJSON(jsonStr string) string {
+	singleLineCommentRegex := regexp.MustCompile(`//[^\n]*`)
+	multiLineCommentRegex := regexp.MustCompile(`(?s)/\*.*?\*/`)
+	emptyLineRegex := regexp.MustCompile(`\n\s*\n`)
+
+	result := singleLineCommentRegex.ReplaceAllString(jsonStr, "")
+	result = multiLineCommentRegex.ReplaceAllString(result, "")
+	result = emptyLineRegex.ReplaceAllString(result, "\n")
+	return result
 }
 
 // WithAPIMiddleware is a SetupOption that attaches a custom middleware to the
@@ -111,13 +125,6 @@ func WithEmptyRecordsAsNeeded(params *setupParams) {
 // "discovery.static_config", by running the ScanDomainsAndProjectsJob.
 func WithInitialDiscovery(params *setupParams) {
 	params.WithInitialDiscovery = true
-}
-
-func normalizeInlineYAML(yamlStr string) string {
-	// In the source code, we usually use tabs for YAML indentation because the
-	// code is indented with tabs, and mixed indentation confuses some editors.
-	// But YAML insists on using spaces for indentation.
-	return strings.ReplaceAll(yamlStr, "\t", "  ")
 }
 
 // Setup contains all the pieces that are needed for most tests.
@@ -205,7 +212,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// we need the Cluster for the availability zones, so create it first
 	var errs errext.ErrorSet
-	s.Cluster, errs = core.NewClusterFromYAML([]byte(params.ConfigYAML), s.Clock.Now, s.DB, params.WithLiquidConnections)
+	s.Cluster, errs = core.NewClusterFromJSON([]byte(params.ConfigJSON), s.Clock.Now, s.DB, params.WithLiquidConnections)
 	failIfErrs(t, errs)
 
 	// persistedServiceInfo is saved to the DB first, so that Cluster.Connect can be checked with it

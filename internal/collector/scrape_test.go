@@ -64,31 +64,39 @@ func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 }
 
 const (
-	testScrapeBasicConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-		liquids:
-			unittest:
-				area: testing
-				# to check how they are merged with the ServiceInfo of the liquids
-				rate_limits:
-					global:
-						- name: xOtherRate
-							limit:  5000
-							window: 1s
-		quota_distribution_configs:
-			# this is only used to check that historical_usage is tracked
-			- { resource: unittest/capacity, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
-			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
-	`
+	testScrapeBasicConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"unittest": {
+				"area": "testing",
+				// to check how they are merged with the ServiceInfo of the liquids
+				"rate_limits": {
+					"global": [
+						{"name": "xOtherRate", "limit": 5000, "window": "1s"}
+					]
+				}
+			}
+		},
+		"quota_distribution_configs": [
+			// this is only used to check that historical_usage is tracked
+			{"resource": "unittest/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "usage_data_retention_period": "48h"}},
+			{"resource": "unittest/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "usage_data_retention_period": "48h"}}
+		]
+	}`
 )
 
 func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job) {
@@ -119,7 +127,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		},
 	}
 	s = test.NewSetup(t,
-		test.WithConfig(testScrapeBasicConfigYAML),
+		test.WithConfig(testScrapeBasicConfigJSON),
 		test.WithMockLiquidClient("unittest", srvInfo),
 		test.WithLiquidConnections,
 	)
@@ -638,20 +646,27 @@ func Test_ScrapeFailure(t *testing.T) {
 }
 
 const (
-	testNoopConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-		liquids:
-			noop:
-				area: testing
-	`
+	testNoopConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"noop": {
+				"area": "testing"
+			}
+		}
+	}`
 )
 
 func Test_ScrapeButNoResources(t *testing.T) {
@@ -660,7 +675,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testNoopConfigYAML),
+		test.WithConfig(testNoopConfigJSON),
 		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)
@@ -701,7 +716,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		},
 	}
 	s := test.NewSetup(t,
-		test.WithConfig(testNoopConfigYAML),
+		test.WithConfig(testNoopConfigJSON),
 		test.WithMockLiquidClient("noop", srvInfo),
 		test.WithLiquidConnections,
 	)

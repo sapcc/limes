@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # Configuration options
 
 Limes accepts configuration options via environment variables for some components and
-requires a configuration file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
+requires a configuration file ([see below](#configuration-file)) for cluster options in the [JSON format][json].
 
 Use the table of contents icon
 <img src="https://github.com/github/docs/raw/main/contributing/images/table-of-contents.png" width="25" height="25" />
@@ -30,7 +30,7 @@ on the top left corner of this document to get to a specific section of this gui
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
-| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.json` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 
 ### Audit trail
 
@@ -99,20 +99,27 @@ the v1 API. The values are either numbers (to override quotas on counted resourc
 
 ## Configuration file
 
-A configuration file in YAML format must be provided that describes things like the set of available backend services (liquids) and the quota/capacity scraping behavior. A minimal config file could look like this:
+A configuration file in JSON format must be provided that describes things like the set of available backend services (liquids) and the quota/capacity scraping behavior. A minimal config file could look like this:
 
-```yaml
-availability_zones:
-  - east-1
-  - west-1
-  - west-2
-liquids:
-  ironic:
-    area: compute
-  nova:
-    area: compute
-  neutron:
-    area: network
+```json
+{
+  "availability_zones": [
+    "east-1", 
+    "west-1", 
+    "west-2"
+  ],
+  "liquids": {
+    "ironic": {
+      "area": "compute"
+    },
+    "nova": {
+      "area": "compute"
+    },
+    "neutron": {
+      "area": "network"
+    }
+  }
+}
 ```
 
 The following fields and sections are supported:
@@ -162,27 +169,43 @@ The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`
 
 ### Liquid configuration/ Service Types
 
-```yaml
-liquids:
-  nova:
-    area: compute
-    commitment_behavior_per_resource:
-    - key: 'cores|ram'
-      value:
-         durations_per_domain:
-         - { key: '.*', value: [ '7 days', '1 year', '3 years' ] }
-    fixed_capacity_values:
-      server_groups: 100000
-      server_group_members: 400000
-    capacity_values_from_prometheus:
-       api:
-          url: https://prometheus.example.com
-          cert:    /path/to/client.pem
-          key:     /path/to/client-key.pem
-          ca_cert: /path/to/server-ca.pem
-       queries:
-          cores:     sum by (az) (hypervisor_cores)
-          ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
+```json
+{
+  "liquids": {
+    "nova": {
+      "area": "compute",
+      "commitment_behavior_per_resource": [
+        {
+          "key": "cores|ram",
+          "value": {
+            "durations_per_domain": [
+              {
+                "key": ".*",
+                "value": ["7 days", "1 year", "3 years"]
+              }
+            ]
+          }
+        }
+      ],
+      "fixed_capacity_values": {
+        "server_groups": 100000,
+        "server_group_members": 400000
+      },
+      "capacity_values_from_prometheus": {
+        "api": {
+          "url": "https://prometheus.example.com",
+          "cert": "/path/to/client.pem",
+          "key": "/path/to/client-key.pem",
+          "ca_cert": "/path/to/server-ca.pem"
+        },
+        "queries": {
+          "cores": "sum by (az) (hypervisor_cores)",
+          "ram": "sum by (az) (hypervisor_ram_gigabytes) * 1024"
+        }
+      }
+    }
+  }
+}
 ```
 
 A liquid is a server which implements the [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid) REST interface that
@@ -225,13 +248,18 @@ if any of the 3 options (liquid, manual, prometheus) fails.
 
 #### Capacity from fixed values
 
-```yaml
-liquids:
-nova:
-  area: compute
-  fixed_capacity_values:
-     server_groups: 100000
-     server_group_members: 400000
+```json
+{
+  "liquids": {
+    "nova": {
+      "area": "compute",
+      "fixed_capacity_values": {
+        "server_groups": 100000,
+        "server_group_members": 400000
+      }
+    }
+  }
+}
 ```
 
 The `fixed_capacity_values` path does not query any backend service for capacity data. It just reports the capacity data
@@ -243,19 +271,26 @@ allows to track capacity values along with other configuration in a Git reposito
 
 #### Capacity from Prometheus
 
-```yaml
-liquids:
-nova:
-  area: compute
-  capacity_values_from_prometheus:
-     api:
-        url: https://prometheus.example.com
-        cert:    /path/to/client.pem
-        key:     /path/to/client-key.pem
-        ca_cert: /path/to/server-ca.pem
-     queries:
-        cores:     sum by (az) (hypervisor_cores)
-        ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
+```json
+{
+  "liquids": {
+    "nova": {
+      "area": "compute",
+      "capacity_values_from_prometheus": {
+        "api": {
+          "url": "https://prometheus.example.com",
+          "cert": "/path/to/client.pem",
+          "key": "/path/to/client-key.pem",
+          "ca_cert": "/path/to/server-ca.pem"
+        },
+        "queries": {
+          "cores": "sum by (az) (hypervisor_cores)",
+          "ram": "sum by (az) (hypervisor_ram_gigabytes) * 1024"
+        }
+      }
+    }
+  }
+}
 ```
 
 Like the `fixed_capacity_values` path, this path can provide capacity values for arbitrary resources. A [Prometheus][prom]
@@ -274,20 +309,27 @@ will be used by the HTTP client to make requests to the Prometheus API.
 
 For example, the following configuration can be used with [swift-health-exporter][she] to find the net capacity of a Swift cluster with 3 replicas:
 
-```yaml
-liquids:
-  swift:
-    capacity_values_from_prometheus:
-      api: 
-        url: https://prometheus.example.com
-      queries:
-        capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
+```json
+{
+  "liquids": {
+    "swift": {
+      "capacity_values_from_prometheus": {
+        "api": {
+          "url": "https://prometheus.example.com"
+        },
+        "queries": {
+          "capacity": "min(swift_cluster_storage_capacity_bytes < inf) / 3"
+        }
+      }
+    }
+  }
+}
 ```
 
-[yaml]:   http://yaml.org/
+[json]:   https://www.json.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
-[ex-pol]: ../example-policy.yaml
+[ex-pol]: ../example-policy.json
 [prom]:   https://prometheus.io
 [she]:    https://github.com/sapcc/swift-health-exporter
 
@@ -295,11 +337,14 @@ liquids:
 
 Every field that is documented to be "a ConfigSet keyed on some string identifier" is structured as a list of key and value pairs, like so:
 
-```yaml
-example_set:
-  - { key: 'foo.*', value: 23 }
-  - { key: '.+bar', value: 42 }
-  - { key: five,    value:  5 }
+```json
+{
+  "example_set": [
+    {"key": "foo.*", "value": 23},
+    {"key": ".+bar", "value": 42},
+    {"key": "five", "value": 5}
+  ]
+}
 ```
 
 The keys in the set are [regexes](https://pkg.go.dev/regexp/syntax) that are matched against the identifier in question.
@@ -325,24 +370,46 @@ Some special behaviors for resources can be configured in the `resource_behavior
 
 For example:
 
-```yaml
-resource_behavior:
-  # matches both sharev2/share_capacity and sharev2/snapshot_capacity
-  - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
-  # starting in 2024, offer commitments for Cinder storage
-  - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_min_confirm_date: 2024-01-01T00:00:00Z }
-  # an Ironic flavor has been renamed from "thebigbox" to "baremetal_large"
-  - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
+```json5
+{
+  "resource_behavior": [
+    {
+      // matches both sharev2/share_capacity and sharev2/snapshot_capacity
+      "resource": "sharev2/.*_capacity",
+      "overcommit_factor": 2
+    },
+    {
+      // starting in 2024, offer commitments for Cinder storage
+      "resource": "volumev2/capacity",
+      "commitment_durations": ["1 year", "2 years", "3 years"],
+      "commitment_min_confirm_date": "2024-01-01T00:00:00Z"
+    },
+    {
+      // an Ironic flavor has been renamed from "thebigbox" to "baremetal_large"
+      "resource": "compute/instances_baremetal_large",
+      "identity_in_v1_api": "compute/instances_thebigbox"
+    }
+  ]
+}
 ```
 
 The fields `category` and `identity_in_v1_api` can be templated with placeholders `$1`, `$2`, etc., which will be filled with the respective match groups from the `resource` regex. For example:
 
-```yaml
-resource_behavior:
-  # this entire service was renamed
-  - { resource: 'volumev2/(.*)', identity_in_v1_api: 'cinder/$1' }
-  # this service contains sets of resources for each share type
-  - { resource: 'manila/(shares|snapshots|share_capacity|snapshot_capacity)_(.+)', category: 'share_type_$2' }
+```json5
+{
+  "resource_behavior": [
+    {
+      // this entire service was renamed  
+      "resource": "volumev2/(.*)",
+      "identity_in_v1_api": "cinder/$1"
+    },
+    {
+      // this service contains sets of resources for each share type
+      "resource": "manila/(shares|snapshots|share_capacity|snapshot_capacity)_(.+)",
+      "category": "share_type_$2"
+    }
+  ]
+}
 ```
 
 #### Resource renaming
@@ -356,9 +423,15 @@ this might break users of the Limes API that rely on the existing resource name.
 applied to mask the internal name change from API users until an announcement can be made to switch over to the new name
 on the API at a later date:
 
-```yaml
-resource_behavior:
-  - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
+```json
+{
+  "resource_behavior": [
+    {
+      "resource": "compute/instances_baremetal_large",
+      "identity_in_v1_api": "compute/instances_thebigbox"
+    }
+  ]
+}
 ```
 
 On the subject of resource renaming, here is a playbook-level explanation of how to actually rename resources like this
@@ -490,26 +563,39 @@ This section lists all supported discovery methods for Keystone domains and proj
 
 ### Method: `list` (default)
 
-```yaml
-discovery:
-  method: list
+```json
+{
+  "discovery": {
+    "method": "list"
+  }
+}
 ```
 
 When this method is configured, Limes will simply list all Keystone domains and projects with the standard API calls, equivalent to what the CLI commands `openstack domain list` and `openstack project list --domain $DOMAIN_ID` do.
 
 ### Method: `static`
 
-```yaml
-discovery:
-  method: static
-  params:
-    domains:
-    - id: 455080d9-6699-4f46-a755-2b2f8459c147
-      name: Default
-      projects:
-      - id: 98c34016-ea71-4b41-bb04-2e52209453d1
-        name: admin
-        parent_id: 455080d9-6699-4f46-a755-2b2f8459c147
+```json
+{
+  "discovery": {
+    "method": "static",
+    "params": {
+      "domains": [
+        {
+          "id": "455080d9-6699-4f46-a755-2b2f8459c147",
+          "name": "Default",
+          "projects": [
+            {
+              "id": "98c34016-ea71-4b41-bb04-2e52209453d1",
+              "name": "admin",
+              "parent_id": "455080d9-6699-4f46-a755-2b2f8459c147"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
 ```
 
 When this method is configured, Limes will not talk to Keystone and instead just assume that exactly those domains and projects exist which are specified in the `discovery.params` config section, like in the example shown above. This method is not useful for most deployments, but can be helpful in case of migrations.
@@ -529,16 +615,27 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 
 Example configuration:
 
-```yaml
-liquids:
-  - type: object-store
-    rates:
-      global:
-       - name:   services/swift/account/container/object:create
-         limit:  1000000
-         window: "1s"
-      project_default:
-       - name:   services/swift/account/container/object:create
-         limit:  1000
-         window: "1s"
+```json
+{
+  "liquids": {
+    "object-store": {
+      "rates": {
+        "global": [
+          {
+            "name": "services/swift/account/container/object:create",
+            "limit": 1000000,
+            "window": "1s"
+          }
+        ],
+        "project_default": [
+          {
+            "name": "services/swift/account/container/object:create", 
+            "limit": 1000,
+            "window": "1s"
+          }
+        ]
+      }
+    }
+  }
+}
 ```

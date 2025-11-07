@@ -20,52 +20,61 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	testQuotaOverridesNoRenamingConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			first:
-				area: first
-			second:
-				area: second
-	`
+	testQuotaOverridesNoRenamingConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"first": {"area": "first"},
+			"second": {"area": "second"}
+		}
+	}`
 
-	testQuotaOverridesWithRenamingConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: static
-			static_config:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-					- { name: france,id: uuid-for-france }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
-					uuid-for-france:
-						- { name: paris, id: uuid-for-paris, parent_id: uuid-for-france}
-		liquids:
-			first:
-				area: first
-			second:
-				area: second
-		resource_behavior:
-		- resource: first/capacity
-			identity_in_v1_api: capacities/first
-		- resource: (first)/thi(ngs)
-			identity_in_v1_api: thi$2/$1
-	`
+	testQuotaOverridesWithRenamingConfigJSON = `{
+		"availability_zones": ["az-one", "az-two"],
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [
+					{"name": "germany", "id": "uuid-for-germany"},
+					{"name": "france", "id": "uuid-for-france"}
+				],
+				"projects": {
+					"uuid-for-germany": [
+						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
+						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
+					],
+					"uuid-for-france": [
+						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+					]
+				}
+			}
+		},
+		"liquids": {
+			"first": {"area": "first"},
+			"second": {"area": "second"}
+		},
+		"resource_behavior": [
+			{"resource": "first/capacity", "identity_in_v1_api": "capacities/first"},
+			{"resource": "(first)/thi(ngs)", "identity_in_v1_api": "thi$2/$1"}
+		]
+	}`
 )
 
 var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid.ResourceName]uint64{
@@ -105,7 +114,7 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-no-renaming.json")
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testQuotaOverridesNoRenamingConfigYAML),
+		test.WithConfig(testQuotaOverridesNoRenamingConfigJSON),
 		test.WithMockLiquidClient("first", srvInfo),
 		test.WithMockLiquidClient("second", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
@@ -122,7 +131,7 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-with-renaming.json")
 	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
-		test.WithConfig(testQuotaOverridesWithRenamingConfigYAML),
+		test.WithConfig(testQuotaOverridesWithRenamingConfigJSON),
 		test.WithMockLiquidClient("first", srvInfo),
 		test.WithMockLiquidClient("second", srvInfo),
 		// here, we use the LiquidConnections, as this runs within the collect task
