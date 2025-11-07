@@ -531,7 +531,7 @@ func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo()
 
 	s := test.NewSetup(t,
-		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
 		test.WithMockLiquidClient("shared", srvInfo),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
