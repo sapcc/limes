@@ -201,6 +201,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 			if !azResExists && !slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, azRes.AvailabilityZone) && resourceTopology != liquid.FlatTopology && !anyAZexists {
 				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", azRes.AvailabilityZone, res.Name, service.Type)
 			}
+			// the unknown AZ is the only one which can vanish from the report, we treat this as capacity=0 and usage=NULL
+			if !azResExists && azRes.AvailabilityZone == liquid.AvailabilityZoneUnknown {
+				azResExists = true
+				azResourceData = &liquid.AZResourceCapacityReport{}
+			}
+
 			if !azResExists {
 				continue
 			}

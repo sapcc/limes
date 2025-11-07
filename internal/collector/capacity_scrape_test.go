@@ -515,6 +515,73 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 }
 
+func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
+	// setup just "capacity"
+	srvInfo := test.DefaultLiquidServiceInfo()
+
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacitySingleLiquidConfigYAML),
+		test.WithMockLiquidClient("shared", srvInfo),
+		// services must be created as a baseline
+		test.WithLiquidConnections,
+	)
+
+	job := s.Collector.CapacityScrapeJob(s.Registry)
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	// we setup a capacity report with an AZ "unknown" which will later vanish
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one":  {Capacity: 4, Usage: Some[uint64](0)},
+					"az-two":  {Capacity: 5, Usage: Some[uint64](0)},
+					"unknown": {Capacity: 6, Usage: Some[uint64](0)},
+				},
+			},
+		},
+	})
+
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET raw_capacity = 4, usage = 0, last_nonzero_raw_capacity = 4 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 6, usage = 0, last_nonzero_raw_capacity = 6 WHERE id = 4 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+
+	// the unknown availability zone can vanish, when e.g. a bareMetal capacity receives the proper AZ information
+	// this is simulated by the next step
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"capacity": {
+				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
+					"az-one": {Capacity: 10, Usage: Some[uint64](0)},
+					"az-two": {Capacity: 5, Usage: Some[uint64](0)},
+				},
+			},
+		},
+	})
+
+	// we expect capacity=0 and usage=NULL
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET raw_capacity = 10, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 0, usage = NULL WHERE id = 4 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
+		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+}
+
 func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 	t.Helper()
 	s.MustDBExec(`UPDATE services SET next_scrape_at = $1`, s.Clock.Now())
