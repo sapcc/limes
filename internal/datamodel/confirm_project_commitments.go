@@ -27,6 +27,13 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// commitmentTransferLeftover describes how much of a commitment is left over after part (or all) of it was consumed
+// by a transfer. It is used in the commitment transfer algorithm.
+type commitmentTransferLeftover struct {
+	Amount uint64
+	ID     db.ProjectCommitmentID // currently only being used internally, not published in the mail (use UUID for that!)
+}
+
 var (
 	// Commitments are confirmed in a chronological order, wherein `created_at`
 	// has a higher priority than `confirm_by` to ensure that commitments created
@@ -141,7 +148,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 	// load confirmable commitments
 	var confirmableCommitments []db.ProjectCommitment
 	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
-	transferredCommitmentIDs := make(map[db.ProjectID]map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
+	transferredCommitmentIDs := make(map[db.ProjectID]map[db.ProjectCommitmentID]commitmentTransferLeftover)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
 	if err != nil {
@@ -216,7 +223,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 			}
 			// all checks passed, so this project gets at least one transfer
 			if _, exists := transferredCommitmentIDs[t.ProjectID]; !exists {
-				transferredCommitmentIDs[t.ProjectID] = make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
+				transferredCommitmentIDs[t.ProjectID] = make(map[db.ProjectCommitmentID]commitmentTransferLeftover)
 			}
 
 			// at least a part of this commitment will be consumed, so we will supersede it in any case
@@ -239,14 +246,14 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 
 				transferableCommitments[idx] = leftoverCommitment
 				transferableCommitmentsByID[leftoverCommitment.ID] = &leftoverCommitment
-				transferredCommitmentIDs[t.ProjectID][t.ID] = core.CommitmentTransferLeftover{
+				transferredCommitmentIDs[t.ProjectID][t.ID] = commitmentTransferLeftover{
 					Amount: t.Amount - amountToConsume,
 					ID:     leftoverCommitment.ID,
 				}
 			} else {
 				// the transferable commitment is fully consumed
 				overallTransferredAmount += t.Amount
-				transferredCommitmentIDs[t.ProjectID][t.ID] = core.CommitmentTransferLeftover{}
+				transferredCommitmentIDs[t.ProjectID][t.ID] = commitmentTransferLeftover{}
 			}
 
 			// supersede consumed commitment
@@ -294,7 +301,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 
 	// remove duplicates of multiple consecutive transferred commitments per project
 	for _, projectID := range slices.Compact(slices.Sorted(slices.Values(append(slices.Collect(maps.Keys(confirmedCommitmentIDs)), slices.Collect(maps.Keys(transferredCommitmentIDs))...)))) {
-		notifiableTransfers := make(map[db.ProjectCommitmentID]core.CommitmentTransferLeftover)
+		notifiableTransfers := make(map[db.ProjectCommitmentID]commitmentTransferLeftover)
 		transfers := transferredCommitmentIDs[projectID]
 		confirmations := confirmedCommitmentIDs[projectID]
 		// we go through the transfers by ID descending, because that enables the linking operation in O(n)
@@ -306,7 +313,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 			// for transfers which have a leftover, we link the transferCommitment to the last leftover via a new data structure
 			transferredLeftover := transfers[cID]
 			if followingLeftover, exists := notifiableTransfers[transferredLeftover.ID]; exists {
-				notifiableTransfers[cID] = core.CommitmentTransferLeftover{
+				notifiableTransfers[cID] = commitmentTransferLeftover{
 					Amount: followingLeftover.Amount,
 					ID:     followingLeftover.ID,
 				}
@@ -338,7 +345,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 }
 
 func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfiguration], dbi db.Interface, loc core.AZResourceLocation, unit limes.Unit, apiIdentity core.ResourceRef, projectID db.ProjectID, auditContext audit.Context,
-	confirmedCommitmentIDs []db.ProjectCommitmentID, transferredCommitmentIDs map[db.ProjectCommitmentID]core.CommitmentTransferLeftover, now time.Time) (mails []db.MailNotification, auditEvents []audittools.Event, err error) {
+	confirmedCommitmentIDs []db.ProjectCommitmentID, transferredCommitmentIDs map[db.ProjectCommitmentID]commitmentTransferLeftover, now time.Time) (mails []db.MailNotification, auditEvents []audittools.Event, err error) {
 
 	var (
 		n           core.CommitmentGroupNotification
@@ -434,7 +441,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 				ResourceName:     liquid.ResourceName(apiIdentity.Name),
 				AvailabilityZone: loc.AvailabilityZone,
 			},
-			Leftover: leftover,
+			LeftoverAmount: leftover.Amount,
 		})
 		auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
 		auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)

@@ -1767,7 +1767,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 			},
 			"transferred_commitments": {
 				"subject": "Your recent commitment transfers",
-				"body": "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }} Leftover:{{ .Leftover.Amount }}{{ end }}"
+				"body": "Domain:{{ .DomainName }} Project:{{ .ProjectName }}{{ range .Commitments }} Creator:{{ .Commitment.CreatorName }} Amount:{{ .Commitment.Amount }} Duration:{{ .Commitment.Duration }} Date:{{ .DateString }} Service:{{ .Resource.ServiceType }} Resource:{{ .Resource.ResourceName }} AZ:{{ .Resource.AvailabilityZone }} Leftover:{{ .LeftoverAmount }}{{ end }}"
 			}
 		}
 	}`), &mailConfig))
