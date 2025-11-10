@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -308,11 +309,11 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 			ResourceName:     resourceName,
 			AvailabilityZone: az,
 		}
-		auditContext := util.AuditContext{
-			UserIdentity: util.CollectorUserInfo{
+		auditContext := audit.Context{
+			UserIdentity: audit.CollectorUserInfo{
 				TaskName: "capacity-scrape",
 			},
-			Request: util.CollectorDummyRequest,
+			Request: audit.CollectorDummyRequest,
 		}
 		azAuditEvents, err := datamodel.ConfirmPendingCommitments(loc, resInfo.Unit, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
 		if err != nil {

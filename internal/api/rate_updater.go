@@ -18,10 +18,10 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // RateLimitUpdater contains most of the business logic for PUT on rate limits.
@@ -268,14 +268,14 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 				User:       token,
 				ReasonCode: statusCode,
 				Action:     cadf.UpdateAction,
-				Target: util.RateLimitEventTarget{
+				Target: audit.RateLimitEventTarget{
 					DomainID:    u.Domain.UUID,
 					DomainName:  u.Domain.Name,
 					ProjectID:   u.Project.UUID,
 					ProjectName: u.Project.Name,
 					ServiceType: apiIdentity.ServiceType,
 					Name:        apiIdentity.Name,
-					Payload: util.RateLimitChange{
+					Payload: audit.RateLimitChange{
 						OldLimit:     req.OldLimit,
 						NewLimit:     req.NewLimit,
 						OldWindow:    req.OldWindow,

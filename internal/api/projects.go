@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -212,7 +213,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 
 	// validate request
 	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
-	requested := make(map[db.ServiceType]map[liquid.ResourceName]*util.MaxQuotaChange)
+	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.MaxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
 			dbServiceType, dbResourceName, exists := nm.MapFromV1API(srvRequest.Type, resRequest.Name)
@@ -223,10 +224,10 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			}
 
 			if requested[dbServiceType] == nil {
-				requested[dbServiceType] = make(map[liquid.ResourceName]*util.MaxQuotaChange)
+				requested[dbServiceType] = make(map[liquid.ResourceName]*audit.MaxQuotaChange)
 			}
 			if resRequest.MaxQuota == nil {
-				requested[dbServiceType][dbResourceName] = &util.MaxQuotaChange{NewValue: None[uint64]()}
+				requested[dbServiceType][dbResourceName] = &audit.MaxQuotaChange{NewValue: None[uint64]()}
 			} else {
 				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
 				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
@@ -250,7 +251,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return
 				}
-				requested[dbServiceType][dbResourceName] = &util.MaxQuotaChange{NewValue: Some(convertedMaxQuota)}
+				requested[dbServiceType][dbResourceName] = &audit.MaxQuotaChange{NewValue: Some(convertedMaxQuota)}
 			}
 		}
 	}
@@ -307,7 +308,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					User:       token,
 					ReasonCode: http.StatusAccepted,
 					Action:     cadf.UpdateAction,
-					Target: util.MaxQuotaEventTarget{
+					Target: audit.MaxQuotaEventTarget{
 						DomainID:        dbDomain.UUID,
 						DomainName:      dbDomain.Name,
 						ProjectID:       dbProject.UUID, // is empty for domain quota updates, see above
@@ -364,7 +365,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 
 	// validate request
 	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
-	requested := make(map[db.ServiceType]map[liquid.ResourceName]*util.AutogrowthChange)
+	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.AutogrowthChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
 			dbServiceType, dbResourceName, exists := nm.MapFromV1API(srvRequest.Type, resRequest.Name)
@@ -397,10 +398,10 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 			}
 
 			if requested[dbServiceType] == nil {
-				requested[dbServiceType] = make(map[liquid.ResourceName]*util.AutogrowthChange)
+				requested[dbServiceType] = make(map[liquid.ResourceName]*audit.AutogrowthChange)
 			}
 
-			requested[dbServiceType][dbResourceName] = &util.AutogrowthChange{ForbidAutogrowth: forbidAutogrowth}
+			requested[dbServiceType][dbResourceName] = &audit.AutogrowthChange{ForbidAutogrowth: forbidAutogrowth}
 		}
 	}
 
@@ -455,7 +456,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 					User:       token,
 					ReasonCode: http.StatusAccepted,
 					Action:     cadf.UpdateAction,
-					Target: util.AutogrowthEventTarget{
+					Target: audit.AutogrowthEventTarget{
 						DomainID:         dbDomain.UUID,
 						DomainName:       dbDomain.Name,
 						ProjectID:        dbProject.UUID,

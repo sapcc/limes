@@ -22,6 +22,7 @@ import (
 
 	. "github.com/majewsky/gg/option"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
@@ -71,7 +72,7 @@ var (
 )
 
 const ConfirmAction cadf.Action = "confirm"
-const TransferAction cadf.Action = "transfer"
+const ConsumeAction cadf.Action = "consume"
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
@@ -142,7 +143,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity. Simultaneously, it
 // releases transferable commitments that can be used to satisfy the pending ones.
-func ConfirmPendingCommitments(loc util.AZResourceLocation, unit limes.Unit, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext util.AuditContext) (auditEvents []audittools.Event, err error) {
+func ConfirmPendingCommitments(loc util.AZResourceLocation, unit limes.Unit, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
 
 	// load confirmable commitments
@@ -232,7 +233,7 @@ func ConfirmPendingCommitments(loc util.AZResourceLocation, unit limes.Unit, clu
 				// the leftover amount to be transferred is not enough to consume the whole commitment
 				// we will place a new commitment for the leftover amount
 				overallTransferredAmount += amountToConsume
-				leftoverCommitment, err := util.BuildSplitCommitment(t, t.Amount-amountToConsume, now, generateProjectCommitmentUUID)
+				leftoverCommitment, err := BuildSplitCommitment(t, t.Amount-amountToConsume, now, generateProjectCommitmentUUID)
 				if err != nil {
 					return nil, err
 				}
@@ -263,7 +264,7 @@ func ConfirmPendingCommitments(loc util.AZResourceLocation, unit limes.Unit, clu
 			t.Status = liquid.CommitmentStatusSuperseded
 			t.SupersededAt = Some(now)
 			supersedeContext := db.CommitmentWorkflowContext{
-				Reason:                 db.CommitmentReasonTransfer,
+				Reason:                 db.CommitmentReasonConsume,
 				RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
 				RelatedCommitmentUUIDs: []liquid.CommitmentUUID{c.UUID},
 			}
@@ -344,7 +345,7 @@ func ConfirmPendingCommitments(loc util.AZResourceLocation, unit limes.Unit, clu
 	return auditEvents, nil
 }
 
-func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfiguration], dbi db.Interface, loc util.AZResourceLocation, unit limes.Unit, apiIdentity util.ResourceRef, projectID db.ProjectID, auditContext util.AuditContext,
+func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfiguration], dbi db.Interface, loc util.AZResourceLocation, unit limes.Unit, apiIdentity util.ResourceRef, projectID db.ProjectID, auditContext audit.Context,
 	confirmedCommitmentIDs []db.ProjectCommitmentID, transferredCommitmentIDs map[db.ProjectCommitmentID]commitmentTransferLeftover, now time.Time) (mails []db.MailNotification, auditEvents []audittools.Event, err error) {
 
 	var (
@@ -373,7 +374,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 			return mails, auditEvents, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
 		}
 		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
-		auditEventCommitments = append(auditEventCommitments, util.ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
+		auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
 		auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)
 		auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
 
@@ -407,7 +408,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 			User:       auditContext.UserIdentity,
 			ReasonCode: http.StatusOK,
 			Action:     ConfirmAction,
-			Target: util.CommitmentEventTarget{
+			Target: audit.CommitmentEventTarget{
 				DomainID:    domainUUID,
 				DomainName:  n.DomainName,
 				ProjectID:   projectUUID,
@@ -443,7 +444,7 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 			},
 			LeftoverAmount: leftover.Amount,
 		})
-		auditEventCommitments = append(auditEventCommitments, util.ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
+		auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, loc, apiIdentity, false, unit))
 		auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)
 		auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
 	}
@@ -462,14 +463,14 @@ func prepareMailsAndAuditsForProject(tplConfig Option[core.MailTemplateConfigura
 			Request:    auditContext.Request,
 			User:       auditContext.UserIdentity,
 			ReasonCode: http.StatusOK,
-			Action:     TransferAction,
-			Target: util.CommitmentEventTarget{
+			Action:     ConsumeAction,
+			Target: audit.CommitmentEventTarget{
 				DomainID:    domainUUID,
 				DomainName:  n.DomainName,
 				ProjectID:   projectUUID,
 				ProjectName: n.ProjectName,
 				WorkflowContext: Some(db.CommitmentWorkflowContext{
-					Reason:                 db.CommitmentReasonTransfer,
+					Reason:                 db.CommitmentReasonConsume,
 					RelatedCommitmentIDs:   auditEventCommitmentIDs,
 					RelatedCommitmentUUIDs: auditEventCommitmentUUIDs,
 				}),

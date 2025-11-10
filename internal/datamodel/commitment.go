@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package util
+package datamodel
 
 import (
 	"crypto/rand"
@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // GenerateTransferToken generates a token that is used to transfer a commitment from a source to a target project.
@@ -92,7 +93,7 @@ func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitm
 
 // ConvertCommitmentToDisplayForm transforms a db.ProjectCommitment into a limesresources.Commitment for displaying
 // to the user on the API or usage within the audit log.
-func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc AZResourceLocation, apiIdentity ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
+func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc util.AZResourceLocation, apiIdentity util.ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
 		UUID:             string(c.UUID),
@@ -106,8 +107,8 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc AZResourceLocati
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
 		CanBeDeleted:     canBeDeleted,
-		ConfirmBy:        options.Map(c.ConfirmBy, IntoUnixEncodedTime).AsPointer(),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, IntoUnixEncodedTime).AsPointer(),
+		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime).AsPointer(),
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken.AsPointer(),

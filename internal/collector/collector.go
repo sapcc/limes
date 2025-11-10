@@ -13,7 +13,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/util"
+	"github.com/sapcc/limes/internal/datamodel"
 )
 
 // Collector provides methods that implement the collection jobs performed by
@@ -50,8 +50,8 @@ func NewCollector(cluster *core.Cluster, auditor audittools.Auditor) *Collector 
 		MeasureTime:                   time.Now,
 		MeasureTimeAtEnd:              time.Now,
 		AddJitter:                     addJitter,
-		GenerateProjectCommitmentUUID: util.GenerateProjectCommitmentUUID,
-		GenerateTransferToken:         util.GenerateTransferToken,
+		GenerateProjectCommitmentUUID: datamodel.GenerateProjectCommitmentUUID,
+		GenerateTransferToken:         datamodel.GenerateTransferToken,
 	}
 }
 

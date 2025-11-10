@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2019 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package util
+package audit
 
 import (
 	"fmt"
@@ -187,9 +187,9 @@ var CollectorDummyRequest = &http.Request{URL: &url.URL{
 	Path:   "limes-collect",
 }}
 
-// AuditContext collects the above arguments that business logic methods
+// Context collects the above arguments that business logic methods
 // need only for generating audit events.
-type AuditContext struct {
+type Context struct {
 	UserIdentity audittools.UserInfo
 	Request      *http.Request
 }

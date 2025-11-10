@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -33,6 +32,7 @@ import (
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/liquids/archer"
 	"github.com/sapcc/limes/internal/liquids/cinder"
@@ -45,6 +45,8 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
+
+	. "github.com/majewsky/gg/option"
 )
 
 func main() {
@@ -243,7 +245,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, util.GenerateTransferToken, util.GenerateProjectCommitmentUUID),
+		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
