@@ -587,6 +587,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
+
 	if commitmentChangeRequest.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeResponse.RejectionReason != "" {
@@ -596,6 +598,30 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.Status = liquid.CommitmentStatusConfirmed
+
+		// handle public transfer commitments (does not alter the confirmed commitment)
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		err = transferableCommitmentCache.CheckAndConsume(dbCommitment)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		mailTemplate := None[core.MailTemplate]()
+		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
+			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
+		}
+		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, resourceInfo.Unit, audit.Context{
+			UserIdentity: token,
+			Request:      r,
+		}, mailTemplate)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		for _, event := range ae {
+			p.auditor.Record(event)
+		}
 	} else {
 		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
 		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
@@ -614,7 +640,6 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
 	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, *loc, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,

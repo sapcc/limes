@@ -10,9 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/cadf"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -877,6 +880,71 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": notificationReq},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
+}
+
+// here, we only test a very basic case. The same code of the TransferableCommitmentCache
+// is used by ScrapeCapacity, so the extensive testing of all the different edge cases
+// happens there. This is only to prevent that we unintentionally break the integration with
+// the API
+func TestTransferCommitmentConsumption(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsJSON)
+	// move clock forward past the min_confirm_date
+	s.Clock.StepBy(14 * day)
+
+	dresden := s.GetProjectID("dresden")
+	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
+	uuid := s.Collector.GenerateProjectCommitmentUUID()
+	s.MustDBInsert(&db.ProjectCommitment{
+		CreatorUUID:         "dummy",
+		CreatorName:         "dummy",
+		CreationContextJSON: json.RawMessage(`{}`),
+		ExpiresAt:           s.Clock.Now().Add(time.Hour),
+		Status:              liquid.CommitmentStatusPlanned,
+		UUID:                uuid,
+		ProjectID:           dresden,
+		AZResourceID:        firstCapacityAZOne,
+		Amount:              1,
+		CreatedAt:           s.Clock.Now(),
+		Duration:            must.Return(limesresources.ParseCommitmentDuration("1 hour")),
+		TransferToken:       Some(s.Collector.GenerateTransferToken()),
+		TransferStatus:      limesresources.CommitmentTransferStatusPublic,
+		TransferStartedAt:   Some(s.Clock.Now()),
+	})
+	tr, _ := easypg.NewTracker(t, s.DB.Db)
+	tr.DBChanges().Ignore()
+
+	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
+	request := func(amount uint64) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "first",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            amount,
+				"duration":          "2 hours",
+			},
+		}
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(2),
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	events := s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2)
+	assert.Equal(t, events[0].Action, datamodel.ConsumeAction)
+	assert.Equal(t, len(events[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, events[1].Action, cadf.CreateAction)
+	assert.Equal(t, len(events[1].Target.Attachments), 2) // last one is the summary
+
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_commitments WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = 'dummyToken-1';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '%[1]s', 2, 2, 'superseded', 1, '1 hour', %[3]d, 'dummy', 'dummy', %[4]d, %[3]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["%[2]s"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (2, '%[2]s', 1, 2, 'confirmed', 2, '2 hours', %[3]d, 'uuid-for-alice', 'alice@Default', %[3]d, %[5]d, '{"reason": "create"}');
+		UPDATE services SET next_scrape_at = %[3]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+    `, uuid, test.GenerateDummyCommitmentUUID(2), s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
