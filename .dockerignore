@@ -20,5 +20,5 @@
 /report.html
 /shell.nix
 /testing/
-/*.json
+/config-*.json
 /.testdb/
