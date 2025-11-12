@@ -5,10 +5,5 @@ build/
 /.testdb
 *.actual
 
-# custom configuration files used during development
-/*.yaml
-/*.yml
-/*.json
-/*.env
-!Makefile.maker.yaml
-!.golangci.yaml
+# custom configuration files used during development (config for running `limes liquid` locally)
+/config-*.json
