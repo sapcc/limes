@@ -14,7 +14,7 @@ coverageTest:
 dockerfile:
   enabled: true
   extraIgnores:
-    - /*.json
+    - /config-*.json
 
 golang:
   autoupdateableDeps: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
