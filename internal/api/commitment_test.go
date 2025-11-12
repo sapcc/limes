@@ -880,33 +880,6 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": notificationReq},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
-
-	// to check the behavior with a commitment being set to transfer_status = "public", we create one and modify it
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         request(1),
-		ExpectStatus: http.StatusCreated,
-	}.Check(t, s.Handler)
-	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1",
-		limesresources.CommitmentTransferStatusPublic,
-	)
-
-	// now, /can-confirm and /new both reject
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
-		Body:         request(1),
-		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("cannot request new commitments, when one or more commitments are in transfer_status public\n"),
-	}.Check(t, s.Handler)
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         request(1),
-		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("cannot request new commitments, when one or more commitments are in transfer_status public\n"),
-	}.Check(t, s.Handler)
 }
 
 // here, we only test a very basic case. The same code of the TransferableCommitmentCache
@@ -1414,19 +1387,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 
-	// try to withdraw after 24 hours - forbidden
-	s.TokenValidator.Enforcer.AllowUncommit = false
-	s.Clock.StepBy(25 * time.Hour)
-	assert.HTTPRequest{
-		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
-		ExpectStatus: http.StatusForbidden,
-		ExpectBody:   assert.StringData("withdrawing from a public commitment transfer is only possible for 24 hours after posting\n"),
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
-	}.Check(t, s.Handler)
-
-	// withdraw within 24 hours - success
-	s.Clock.StepBy(-25 * time.Hour)
+	// withdraw
 	delete(resp1, "transfer_status")
 	delete(resp1, "transfer_token")
 	assert.HTTPRequest{
