@@ -543,7 +543,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 }
 
-func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
+func Test_ScanCapacityAZVanishes(t *testing.T) {
 	// setup just "capacity"
 	srvInfo := test.DefaultLiquidServiceInfo()
 
@@ -585,8 +585,7 @@ func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 
-	// the unknown availability zone can vanish, when e.g. a bareMetal capacity receives the proper AZ information
-	// this is simulated by the next step
+	// The unknown availability zone can vanish, when e.g. a bareMetal capacity receives the proper AZ information.
 	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
