@@ -223,4 +223,52 @@ var sqlMigrations = map[string]string{
 	"067_maxQuotaFromLocalAdmin.down.sql": `
 		ALTER TABLE project_resources ADD COLUMN max_quota_from_local_admin BIGINT;
 	`,
+	"068_remove_project_level_values.down.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN quota                         BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			ADD COLUMN backend_quota                 BIGINT     DEFAULT NULL;
+		UPDATE project_resources pr
+			SET pr.quota = pazr.quota, pr.backend_quota = pazr.backend_quota
+			FROM az_resources azr 
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
+			WHERE azr.resource_id = pr.resource_id AND azr.az = 'total';
+		DELETE FROM project_az_resources WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = 'total');
+		DELETE FROM az_resources WHERE az = 'total';
+	`,
+	"068_remove_project_level_values.up.sql": `
+		-- Unfortunately, we need to do a full migration so that the APIs don't produce weird results after startup.
+		INSERT INTO az_resources (resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path)
+			SELECT azr.resource_id, 'total' as az, SUM(raw_capacity), SUM(usage), MIN(azr_subcapacities.subcapacities), SUM(last_nonzero_raw_capacity), REPLACE(azr.path, azr.az, 'total') AS path
+            FROM (
+            	SELECT
+				REPLACE(path, az, 'total') AS new_path,				
+				COALESCE(jsonb_agg(new_subcapacities) FILTER (WHERE (new_subcapacities != '{}'))::text, '') AS subcapacities
+				FROM az_resources, LATERAL jsonb_array_elements(CASE WHEN subcapacities != '' THEN subcapacities ELSE '[{}]' END ::jsonb) AS new_subcapacities
+				GROUP BY REPLACE(path, az, 'total')
+            ) azr_subcapacities
+            JOIN az_resources azr ON azr_subcapacities.new_path = REPLACE(azr.path, azr.az, 'total')
+			GROUP BY azr.resource_id, REPLACE(azr.path, azr.az, 'total');
+		-- Historical usage of total az is unused, so we can skip to write a complex statement to fill it.
+		-- Ee take the quota and backend_quota from the project_resources, because they might deviate from the sum 
+		-- for the topology az-aware.
+		INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, physical_usage, subresources, historical_usage, backend_quota)
+			SELECT pazr.project_id, azr_total.id AS az_resource_id, pr.quota, SUM(pazr.usage), SUM(pazr.physical_usage),
+			MIN(pazr_subresources.subresources), '' as historical_usage, pr.backend_quota
+			FROM (
+				SELECT azr.resource_id, pazr.project_id,
+				COALESCE(jsonb_agg(new_subresources) FILTER (WHERE (new_subresources != '{}'))::text, '') AS subresources
+				FROM project_az_resources AS pazr
+				JOIN az_resources azr ON pazr.az_resource_id = azr.id
+				CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN pazr.subresources != '' THEN pazr.subresources ELSE '[{}]' END ::jsonb) AS new_subresources
+				GROUP BY azr.resource_id, pazr.project_id
+			) pazr_subresources
+			JOIN az_resources azr ON pazr_subresources.resource_id = azr.resource_id
+			JOIN project_az_resources pazr ON pazr.project_id = pazr_subresources.project_id AND pazr.az_resource_id = azr.id
+			JOIN az_resources azr_total ON azr.resource_id = azr_total.resource_id AND azr_total.az = 'total'
+			JOIN project_resources pr ON pr.project_id = pazr.project_id AND pr.resource_id = azr.resource_id
+			GROUP BY pazr.project_id, azr_total.id, pr.quota, pr.backend_quota;
+		ALTER TABLE project_resources
+			DROP COLUMN quota,
+			DROP COLUMN backend_quota;
+	`,
 }
