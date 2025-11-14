@@ -141,7 +141,6 @@ func setupTest(t *testing.T) test.Setup {
 	unshared := s.GetServiceID("unshared")
 
 	sharedCapacity := s.GetResourceID("shared", "capacity")
-	unsharedThings := s.GetResourceID("unshared", "things")
 
 	sharedCapacityAny := s.GetAZResourceID("shared", "capacity", limes.AvailabilityZoneAny)
 	sharedCapacityAZOne := s.GetAZResourceID("shared", "capacity", "az-one")
@@ -190,8 +189,8 @@ func setupTest(t *testing.T) test.Setup {
 
 	// fill `project_resources` (most have quota = 10, some test special cases)
 	s.MustDBExec(`UPDATE project_az_resources SET quota = 10, backend_quota = 10 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = $1)`, liquid.AvailabilityZoneTotal)
-	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = 100 WHERE project_id = $1 AND az_resource_id IN (SELECT id FROM az_resources WHERE resource_id = $2 AND az = $3)`, dresden, sharedCapacity, liquid.AvailabilityZoneTotal)
-	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = -1 WHERE project_id = $1 AND az_resource_id IN (SELECT id FROM az_resources WHERE resource_id = $2 AND az = $3)`, paris, unsharedThings, liquid.AvailabilityZoneTotal)
+	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = 100 WHERE project_id = $1 AND az_resource_id = $2`, dresden, sharedCapacityTotal)
+	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = -1 WHERE project_id = $1 AND az_resource_id = $2`, paris, unsharedThingsTotal)
 	s.MustDBExec(`UPDATE project_resources SET max_quota_from_outside_admin = 200 WHERE project_id = $1 AND resource_id = $2`, paris, sharedCapacity)
 
 	// fill `project_az_resources` subresources (only in Berlin)

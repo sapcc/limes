@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -25,7 +26,6 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	 WHERE %s
 `)
 
-// NOTE: The select emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
@@ -184,10 +184,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if resource.PerAZ == nil {
 				resource.PerAZ = make(limesresources.DomainAZResourceReports)
 			}
-			sanitizedQuota := uint64(0)
-			if quota != nil {
-				sanitizedQuota = *quota
-			}
+			sanitizedQuota := options.FromPointer(quota).UnwrapOr(0)
 			resource.PerAZ[az] = &limesresources.DomainAZResourceReport{
 				Quota:             &sanitizedQuota,
 				Usage:             *usage,

@@ -391,13 +391,13 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// lastly, we create one total entry for the result
 	// we create this for any topology, the consumers of project_az_resources are responsible to filter accordingly
+	if _, ok := target[liquid.AvailabilityZoneTotal]; !ok {
+		target[liquid.AvailabilityZoneTotal] = make(acpqAZTarget, len(isProjectID))
+	}
 	for projectID := range isProjectID {
 		sumForProject := uint64(0)
 		for az := range isRelevantAZ {
 			sumForProject += target[az][projectID].Allocated
-		}
-		if _, ok := target[liquid.AvailabilityZoneTotal]; !ok {
-			target[liquid.AvailabilityZoneTotal] = make(acpqAZTarget, len(isProjectID))
 		}
 		target[liquid.AvailabilityZoneTotal][projectID] = &acpqProjectAZTarget{
 			Allocated: sumForProject,

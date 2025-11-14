@@ -93,7 +93,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 
 	// for each resource...
 	var result []db.ProjectResource
-	hasBackendQuotaDrift := false
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
 		// skip project_resources that we do not know about (we do not delete them
@@ -139,16 +138,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 			}
 		}
 		result = append(result, res)
-	}
-
-	// if this update caused `quota != backend_quota` anywhere,
-	// request SetQuotaJob to take over (unless we already have an open request)
-	if hasBackendQuotaDrift {
-		query := `UPDATE project_services ps SET quota_desynced_at = $1 FROM services s WHERE s.id = ps.service_id AND s.id = $2 AND ps.project_id = $3 AND quota_desynced_at IS NULL`
-		_, err := dbi.Exec(query, now, srv.ID, project.ID)
-		if err != nil {
-			return nil, fmt.Errorf("while scheduling backend sync for %s quotas: %w", srv.Type, err)
-		}
 	}
 
 	return result, nil

@@ -193,7 +193,6 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		}
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
-			// NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
 			resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity))
 			if *resource.Capacity != *rawCapacity {
 				resource.RawCapacity = pointerTo(*rawCapacity)
@@ -215,7 +214,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			}
 			resource.CapacityPerAZ[*availabilityZone] = &azReport
 
-			// we take the subcapacities from the AZ entries, so that we know from which AZ they come
+			// only the az-entries have subcapacities!=''
 			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
 				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
 				if translate != nil {
@@ -312,15 +311,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 
 	// epilogue: perform some operations on the finished report
-	nm := core.BuildResourceNameMapping(cluster, serviceInfos)
-	for apiServiceType, service := range report.Services {
-		for apiResourceName, resource := range service.Resources {
-			_, _, exists := nm.MapFromV1API(apiServiceType, apiResourceName)
-			if !exists {
-				// defense in depth: should not happen; we should not have created entries for non-existent resources
-				continue
-			}
-
+	for _, service := range report.Services {
+		for _, resource := range service.Resources {
 			if skipAZBreakdown(resource.CapacityPerAZ) {
 				resource.CapacityPerAZ = nil
 			}

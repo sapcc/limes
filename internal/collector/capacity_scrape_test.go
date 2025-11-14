@@ -544,9 +544,10 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	)
 }
 
-func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
+func Test_ScanCapacityAZVanishes(t *testing.T) {
 	// setup just "capacity"
 	srvInfo := test.DefaultLiquidServiceInfo()
+	delete(srvInfo.Resources, "things")
 
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
@@ -586,15 +587,15 @@ func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 
-	// the unknown availability zone can vanish, when e.g. a bareMetal capacity receives the proper AZ information
-	// this is simulated by the next step
+	// The unknown availability zone can vanish, when e.g. a bareMetal capacity receives the proper AZ information.
+	// The capacity of a normal az can become 0, but it cannot vanish from the report.
 	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
 		InfoVersion: 1,
 		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
 			"capacity": {
 				PerAZ: map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport{
 					"az-one": {Capacity: 10, Usage: Some[uint64](0)},
-					"az-two": {Capacity: 5, Usage: Some[uint64](0)},
+					"az-two": {Capacity: 0, Usage: Some[uint64](0)},
 				},
 			},
 		},
@@ -605,6 +606,8 @@ func Test_ScanCapacityUnknownAZVanishes(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 0, usage = NULL WHERE id = 5 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
