@@ -32,7 +32,7 @@ type ClusterConfiguration struct {
 	CatalogURL               string                                 `json:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `json:"discovery"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `json:"liquids"`
-	ResourceBehaviors        []ResourceBehavior                     `json:"resource_behavior"`
+	ResourceBehaviors        []util.ResourceBehavior                `json:"resource_behavior"`
 	RateBehaviors            []RateBehavior                         `json:"rate_behavior"`
 	QuotaDistributionConfigs []QuotaDistributionConfiguration       `json:"quota_distribution_configs"`
 	MailNotifications        Option[*MailConfiguration]             `json:"mail_notifications"`
@@ -161,8 +161,9 @@ type MailConfiguration struct {
 // It contains the mail template for each notification case.
 // The templates will be filled with the details collected from the limes collect job.
 type MailTemplateConfiguration struct {
-	ConfirmedCommitments MailTemplate `json:"confirmed_commitments"`
-	ExpiringCommitments  MailTemplate `json:"expiring_commitments"`
+	ConfirmedCommitments   MailTemplate `json:"confirmed_commitments"`
+	ExpiringCommitments    MailTemplate `json:"expiring_commitments"`
+	TransferredCommitments MailTemplate `json:"transferred_commitments"`
 }
 
 // NewClusterFromJSON reads and validates the configuration in the given JSON document.

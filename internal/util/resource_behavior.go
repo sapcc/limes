@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package core
+package util
 
 import (
 	"encoding/json"
@@ -54,18 +54,19 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 		b.OvercommitFactor = other.OvercommitFactor
 	}
 	if other.IdentityInV1API != (ResourceRef{}) {
-		b.IdentityInV1API.ServiceType = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.ServiceType, fullResourceName)
-		b.IdentityInV1API.Name = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.Name, fullResourceName)
+		b.IdentityInV1API.ServiceType = InterpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.ServiceType, fullResourceName)
+		b.IdentityInV1API.Name = InterpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.Name, fullResourceName)
 	}
 	if !other.TranslationRuleInV1API.IsEmpty() {
 		b.TranslationRuleInV1API = other.TranslationRuleInV1API
 	}
 	if other.Category != "" {
-		b.Category = interpolateFromNameMatch(other.FullResourceNameRx, other.Category, fullResourceName)
+		b.Category = InterpolateFromNameMatch(other.FullResourceNameRx, other.Category, fullResourceName)
 	}
 }
 
-func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, value S, fullName string) S {
+// InterpolateFromNameMatch gets used in Behaviors to get from a name regex to a templated value.
+func InterpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, value S, fullName string) S {
 	if !strings.Contains(string(value), "$") {
 		return value
 	}

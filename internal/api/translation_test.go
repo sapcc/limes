@@ -12,8 +12,8 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/util"
 )
 
 const testTranslationConfigJSON = `{
@@ -192,9 +192,9 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 		test.WithEmptyRecordsAsNeeded,
 	)
 
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
+		TranslationRuleInV1API: must.Return(util.NewTranslationRule(ruleID)),
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
@@ -482,9 +482,9 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		test.WithEmptyRecordsAsNeeded,
 	)
 
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
+		TranslationRuleInV1API: must.Return(util.NewTranslationRule(ruleID)),
 	}}
 
 	s.MustDBExec(

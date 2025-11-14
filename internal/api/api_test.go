@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/util"
 )
 
 func TestMain(m *testing.M) {
@@ -403,7 +404,7 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check rendering of overcommit factors
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{
 		{
 			FullResourceNameRx: "shared/things",
 			OvercommitFactor:   2.5,
@@ -1459,9 +1460,9 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// rename resources within a service
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{{
 		FullResourceNameRx: "shared/things",
-		IdentityInV1API:    core.ResourceRef{ServiceType: "shared", Name: "items"},
+		IdentityInV1API:    util.ResourceRef{ServiceType: "shared", Name: "items"},
 	}}
 	expect("?",
 		"2 seconds: shared/capacity",
@@ -1481,9 +1482,9 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resource to a different, existing service
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{{
 		FullResourceNameRx: "shared/things",
-		IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", Name: "other_things"},
+		IdentityInV1API:    util.ResourceRef{ServiceType: "unshared", Name: "other_things"},
 	}}
 	expect("?",
 		"2 seconds: shared/capacity",
@@ -1507,10 +1508,10 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resource to a different, new service
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+	s.Cluster.Config.ResourceBehaviors = []util.ResourceBehavior{
 		{
 			FullResourceNameRx: "shared/capacity",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "all"},
+			IdentityInV1API:    util.ResourceRef{ServiceType: "shared_capacity", Name: "all"},
 		},
 	}
 	expect("?",

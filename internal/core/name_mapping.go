@@ -13,13 +13,14 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // ResourceNameMapping contains an efficient pre-computed mapping between
 // API-level and DB-level service and resource identifiers.
 type ResourceNameMapping struct {
-	fromAPIToDB map[ResourceRef]dbResourceRef
-	fromDBToAPI map[dbResourceRef]ResourceRef
+	fromAPIToDB map[util.ResourceRef]dbResourceRef
+	fromDBToAPI map[dbResourceRef]util.ResourceRef
 }
 
 type dbResourceRef struct {
@@ -42,8 +43,8 @@ type dbRateRef struct {
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
 func BuildResourceNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liquid.ServiceInfo) ResourceNameMapping {
 	nm := ResourceNameMapping{
-		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
-		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
+		fromAPIToDB: make(map[util.ResourceRef]dbResourceRef),
+		fromDBToAPI: make(map[dbResourceRef]util.ResourceRef),
 	}
 	for dbServiceType, serviceInfo := range serviceInfos {
 		for dbResourceName := range serviceInfo.Resources {
@@ -89,7 +90,7 @@ func BuildRateNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liqu
 // MapFromV1API maps API-level identifiers for a resource into DB-level identifiers.
 // False is returned if the given resource does not exist.
 func (nm ResourceNameMapping) MapFromV1API(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (db.ServiceType, liquid.ResourceName, bool) {
-	ref, ok := nm.fromAPIToDB[ResourceRef{serviceType, resourceName}]
+	ref, ok := nm.fromAPIToDB[util.ResourceRef{ServiceType: serviceType, Name: resourceName}]
 	if !ok {
 		return "", "", false
 	}
@@ -108,7 +109,7 @@ func (nm ResourceNameMapping) MapToV1API(serviceType db.ServiceType, resourceNam
 
 // MapFromV1API maps API-level identifiers for a rate into DB-level identifiers.
 func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, liquid.RateName, bool) {
-	ref, ok := nm.fromAPIToDB[RateRef{serviceType, rateName}]
+	ref, ok := nm.fromAPIToDB[RateRef{ServiceType: serviceType, Name: rateName}]
 	if !ok {
 		return "", "", false
 	}

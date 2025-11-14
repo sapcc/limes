@@ -8,6 +8,8 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 // RateBehavior contains the configuration options for specialized behavior of
@@ -30,12 +32,12 @@ func (b *RateBehavior) Validate(path string) (errs errext.ErrorSet) {
 }
 
 // RateRef is an instance of RefInService. It appears in type RateBehavior.
-type RateRef = RefInService[limes.ServiceType, limesrates.RateName]
+type RateRef = util.RefInService[limes.ServiceType, limesrates.RateName]
 
 // Merge computes the union of both given resource behaviors.
 func (b *RateBehavior) Merge(other RateBehavior, fullRateName string) {
 	if other.IdentityInV1API != (RateRef{}) {
-		b.IdentityInV1API.ServiceType = interpolateFromNameMatch(other.FullRateNameRx, other.IdentityInV1API.ServiceType, fullRateName)
-		b.IdentityInV1API.Name = interpolateFromNameMatch(other.FullRateNameRx, other.IdentityInV1API.Name, fullRateName)
+		b.IdentityInV1API.ServiceType = util.InterpolateFromNameMatch(other.FullRateNameRx, other.IdentityInV1API.ServiceType, fullRateName)
+		b.IdentityInV1API.Name = util.InterpolateFromNameMatch(other.FullRateNameRx, other.IdentityInV1API.Name, fullRateName)
 	}
 }
