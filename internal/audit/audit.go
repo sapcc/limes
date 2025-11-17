@@ -172,7 +172,7 @@ type CollectorUserInfo struct {
 // AsInitiator implements the audittools.UserInfo interface.
 func (u CollectorUserInfo) AsInitiator(_ cadf.Host) cadf.Resource {
 	res := cadf.Resource{
-		TypeURI: "service/docker-registry/collector-task",
+		TypeURI: "service/resources/collector-task",
 		Name:    u.TaskName,
 		Domain:  "limes",
 		ID:      u.TaskName,

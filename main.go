@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -45,8 +46,6 @@ import (
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
-
-	. "github.com/majewsky/gg/option"
 )
 
 func main() {
@@ -159,6 +158,22 @@ Usage:
 func printUsageAndExit(exitCode int) {
 	fmt.Fprintln(os.Stderr, strings.ReplaceAll(usageMessage, "%s", os.Args[0]))
 	os.Exit(exitCode)
+}
+
+func generateAuditor(ctx context.Context) audittools.Auditor {
+	// connect to Hermes RabbitMQ if requested
+	if os.Getenv("LIMES_AUDIT_RABBITMQ_QUEUE_NAME") == "" {
+		return audittools.NewNullAuditor()
+	} else {
+		return must.Return(audittools.NewAuditor(ctx, audittools.AuditorOpts{
+			EnvPrefix: "LIMES_AUDIT_RABBITMQ",
+			Observer: audittools.Observer{
+				TypeURI: "service/resources",
+				Name:    bininfo.Component(),
+				ID:      audittools.GenerateUUID(),
+			},
+		}))
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -287,20 +302,4 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
-}
-
-func generateAuditor(ctx context.Context) audittools.Auditor {
-	// connect to Hermes RabbitMQ if requested
-	auditor := audittools.NewNullAuditor()
-	if os.Getenv("LIMES_AUDIT_RABBITMQ_QUEUE_NAME") != "" {
-		auditor = must.Return(audittools.NewAuditor(ctx, audittools.AuditorOpts{
-			EnvPrefix: "LIMES_AUDIT_RABBITMQ",
-			Observer: audittools.Observer{
-				TypeURI: "service/resources",
-				Name:    bininfo.Component(),
-				ID:      audittools.GenerateUUID(),
-			},
-		}))
-	}
-	return auditor
 }

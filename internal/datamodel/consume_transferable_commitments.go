@@ -199,10 +199,8 @@ func (t *TransferableCommitmentCache) ConfirmTransferableCommitmentIfExists(id d
 // has already been transferred. This can be used to skip confirmation of already
 // transferred commitments.
 func (t *TransferableCommitmentCache) CommitmentWasTransferred(id db.ProjectCommitmentID, projectID db.ProjectID) bool {
-	if _, exists := t.transferredCommitmentIDs[projectID][id]; exists {
-		return true
-	}
-	return false
+	_, exists := t.transferredCommitmentIDs[projectID][id]
+	return exists
 }
 
 func (t *TransferableCommitmentCache) getTransferredCommitmentsForProject(projectID db.ProjectID) map[db.ProjectCommitmentID]commitmentTransferLeftover {
