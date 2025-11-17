@@ -1530,7 +1530,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       3,
-		CreatedAt:    s.Clock.Now().Add(-1 * time.Hour), // before the transfer commitment,
+		CreatedAt:    creation.Add(-1 * time.Hour), // before the transfer commitment
 		Duration:     committedForTwentyDays,
 	})
 	tr.DBChanges().Ignore()
@@ -1642,7 +1642,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	// now uuid17 is confirmed - as the confirmation of uuid18 is later, nothing else happens
+	// now uuid16 is confirmed - as the confirmation of uuid18 is later, nothing else happens
 	now = s.Clock.Now().Add(-5 * time.Second)
 	confirmation = now
 	tr.DBChanges().AssertEqualf(`
@@ -1655,11 +1655,13 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	// now the time progresses, uuid18 becomes pending and takes over amount=2 from uuid17 --> quota in berlin reduces by 2
-	// a leftover for amount=1 is created for the not-taken-over part of uuid17
+	// now the time progresses, uuid17 becomes pending and takes over amount=2 from uuid16 --> quota in berlin reduces by 2
+	// a leftover for amount=1 is created for the not-taken-over part of uuid16
 	now = s.Clock.Now().Add(-5 * time.Second)
 	confirmation2 := now
 	creation3 := now
+
+	uuid19 := test.GenerateDummyCommitmentUUID(19)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 18 WHERE id = 12 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
@@ -1670,7 +1672,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_resources SET quota = 3 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET quota = 19 WHERE id = 5 AND project_id = 2 AND resource_id = 1;
 		%[10]s
-	`, now.Unix(), creation.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid17, test.GenerateDummyCommitmentUUID(19), timestampUpdates())
+	`, now.Unix(), creation.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid17, uuid19, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1680,6 +1682,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	now = s.Clock.Now().Add(-5 * time.Second)
 	creation2 := now
 
+	uuid20 := test.GenerateDummyCommitmentUUID(20)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 17 WHERE id = 12 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND project_id = 3 AND az_resource_id = 2;
@@ -1691,7 +1694,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_resources SET quota = 1 WHERE id = 9 AND project_id = 3 AND resource_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 5 AND project_id = 3 AND service_id = 1;
 		%[10]s
-	`, now.Unix(), creation.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid18, test.GenerateDummyCommitmentUUID(20), timestampUpdates())
+	`, now.Unix(), creation.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid18, uuid20, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1725,7 +1728,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_resources SET quota = 17 WHERE id = 5 AND project_id = 2 AND resource_id = 1;
 		UPDATE project_resources SET quota = 2 WHERE id = 9 AND project_id = 3 AND resource_id = 1;
 		%[10]s
-	`, now.Unix(), creation2.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, test.GenerateDummyCommitmentUUID(20), uuid21, timestampUpdates())
+	`, now.Unix(), creation2.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid20, uuid21, timestampUpdates())
 
 	// now we add one commitment larger than the rest of uuid16 (which is uuid19), consuming it fully
 	uuid22 := add(db.ProjectCommitment{
@@ -1751,7 +1754,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_resources SET quota = 2 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET quota = 4 WHERE id = 9 AND project_id = 3 AND resource_id = 1;
 		%[10]s
-	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, test.GenerateDummyCommitmentUUID(19), uuid22, timestampUpdates())
+	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid19, uuid22, timestampUpdates())
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
