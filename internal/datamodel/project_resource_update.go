@@ -9,7 +9,6 @@ import (
 	"slices"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
@@ -109,7 +108,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 			)
 			continue
 		}
-		resInfo := *state.Info
 
 		// setup a copy of `state.Original` (or a new resource) that we can write into
 		res := db.ProjectResource{
@@ -120,14 +118,12 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 			res = *state.Original
 		}
 
-		// update in place while enforcing validation rules
-		validateResourceConstraints(&res, resInfo)
+		// update in place
 		if u.UpdateResource != nil {
 			err := u.UpdateResource(&res, resName)
 			if err != nil {
 				return nil, err
 			}
-			validateResourceConstraints(&res, resInfo)
 		}
 
 		// insert or update resource if changes have been made
@@ -143,15 +139,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 			}
 		}
 		result = append(result, res)
-
-		// check if we need to arrange for SetQuotaJob to look at this project service
-		if resInfo.HasQuota && resInfo.Topology != liquid.AZSeparatedTopology {
-			backendQuota := res.BackendQuota.UnwrapOr(-1)
-			quota := res.Quota.UnwrapOr(0) // definitely not None, it was set above in validateResourceConstraints()
-			if backendQuota < 0 || uint64(backendQuota) != quota {
-				hasBackendQuotaDrift = true
-			}
-		}
 	}
 
 	// if this update caused `quota != backend_quota` anywhere,
@@ -165,16 +152,4 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, serviceInfo liquid.ServiceI
 	}
 
 	return result, nil
-}
-
-// Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(res *db.ProjectResource, resInfo liquid.ResourceInfo) {
-	if !resInfo.HasQuota || resInfo.Topology == liquid.AZSeparatedTopology {
-		// ensure that NoQuota resources do not contain any quota values
-		res.Quota = None[uint64]()
-		res.BackendQuota = None[int64]()
-	} else if res.Quota.IsNone() {
-		// apply missing default quota
-		res.Quota = Some[uint64](0)
-	}
 }

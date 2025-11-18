@@ -24,6 +24,8 @@
                   "usage": 1
                 }
               },
+              "quota": 10,
+              "usable_quota": 10,
               "usage": 2
             }
           ],

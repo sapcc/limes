@@ -34,7 +34,7 @@
                 "capacity": 0
               }
             ],
-            "domains_quota": 0,
+            "domains_quota": 10,
             "usage": 2
           }
         ],
