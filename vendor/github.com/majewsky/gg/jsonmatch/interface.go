@@ -36,11 +36,7 @@
 //			},
 //		}
 //		for _, diff := range expected.DiffAgainst(resp.Body.Bytes()) {
-//			if diff.Pointer == "" {
-//				t.Errorf("%s: expected %s, but got %s", diff.Kind, diff.ExpectedJSON, diff.ActualJSON)
-//			} else {
-//				t.Errorf("%s at %s: expected %s, but got %s", diff.Kind, diff.Pointer, diff.ExpectedJSON, diff.ActualJSON)
-//			}
+//			t.Error(diff.String())
 //		}
 //	}
 //
@@ -137,6 +133,7 @@ package jsonmatch
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 )
 
 // Diffable is the common interface of types Object, Array, Scalar and Null from this package.
@@ -237,6 +234,15 @@ type Diff struct {
 	ExpectedJSON string
 	// A serialization of the respective part of the Diffable.
 	ActualJSON string
+}
+
+// String returns a simple and complete string representation of the contents of this Diff.
+func (d Diff) String() string {
+	if d.Pointer == "" {
+		return fmt.Sprintf("%s: expected %s, but got %s", d.Kind, d.ExpectedJSON, d.ActualJSON)
+	} else {
+		return fmt.Sprintf("%s at %s: expected %s, but got %s", d.Kind, d.Pointer, d.ExpectedJSON, d.ActualJSON)
+	}
 }
 
 // Pointer is a JSON pointer (RFC 6901) that references a particular JSON value relative to the root of the encoded JSON payload that was given to DiffAgainst().

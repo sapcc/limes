@@ -288,6 +288,14 @@ SPDX-License-Identifier = "BSD-3-Clause"
 
 [[annotations]]
 path = [
+  "vendor/github.com/golang-jwt/jwt/v5/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [
   "vendor/github.com/golang-migrate/migrate/v4/**",
 ]
 precedence = "aggregate"
@@ -297,6 +305,14 @@ SPDX-License-Identifier = "MIT"
 [[annotations]]
 path = [
   "vendor/github.com/google/go-cmp/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Other"
+SPDX-License-Identifier = "BSD-3-Clause"
+
+[[annotations]]
+path = [
+  "vendor/github.com/google/uuid/**",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Other"
