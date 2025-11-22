@@ -223,4 +223,11 @@ var sqlMigrations = map[string]string{
 	"067_maxQuotaFromLocalAdmin.down.sql": `
 		ALTER TABLE project_resources ADD COLUMN max_quota_from_local_admin BIGINT;
 	`,
+	"068_introduce_transfer_started_at.down.sql": `
+		ALTER TABLE project_commitments DROP COLUMN transfer_started_at;
+	`,
+	"068_introduce_transfer_started_at.up.sql": `
+		ALTER TABLE project_commitments ADD COLUMN transfer_started_at TIMESTAMPTZ DEFAULT NULL;
+		UPDATE project_commitments SET transfer_started_at = NOW() WHERE transfer_status = 'public' AND transfer_started_at IS NULL;
+	`,
 }

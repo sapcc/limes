@@ -89,7 +89,7 @@ func BuildRateNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liqu
 // MapFromV1API maps API-level identifiers for a resource into DB-level identifiers.
 // False is returned if the given resource does not exist.
 func (nm ResourceNameMapping) MapFromV1API(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (db.ServiceType, liquid.ResourceName, bool) {
-	ref, ok := nm.fromAPIToDB[ResourceRef{serviceType, resourceName}]
+	ref, ok := nm.fromAPIToDB[ResourceRef{ServiceType: serviceType, Name: resourceName}]
 	if !ok {
 		return "", "", false
 	}
@@ -108,7 +108,7 @@ func (nm ResourceNameMapping) MapToV1API(serviceType db.ServiceType, resourceNam
 
 // MapFromV1API maps API-level identifiers for a rate into DB-level identifiers.
 func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, liquid.RateName, bool) {
-	ref, ok := nm.fromAPIToDB[RateRef{serviceType, rateName}]
+	ref, ok := nm.fromAPIToDB[RateRef{ServiceType: serviceType, Name: rateName}]
 	if !ok {
 		return "", "", false
 	}

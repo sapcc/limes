@@ -140,15 +140,24 @@ type Setup struct {
 	LiquidClients              map[db.ServiceType]*MockLiquidClient
 	Handler                    http.Handler
 	CurrentProjectCommitmentID *uint64
+	CurrentTransferTokenNumber *uint64
 	Collector                  *collector.Collector
 
 	// for t.Fatal() in helper functions
 	t *testing.T
 }
 
-// GenerateDummyToken generates a dummy token string.
-func GenerateDummyToken() string {
-	return "dummyToken"
+// GenerateDummyTransferToken generates a token string from an ID for testing.
+func GenerateDummyTransferToken(idx uint64) string {
+	return "dummyToken-" + strconv.FormatUint(idx, 10)
+}
+
+func transferTokenGenerator() (generator func() string, currentTransferTokenNumber *uint64) {
+	idx := uint64(0)
+	return func() string {
+		idx++
+		return GenerateDummyTransferToken(idx)
+	}, &idx
 }
 
 // GenerateDummyCommitmentUUID generates a deterministic UUID from the given ID.
@@ -257,11 +266,13 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
 	s.Auditor = audittools.NewMockAuditor()
 
-	generator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
+	projectCommitmentUUIDGenerator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
+	transferTokenGenerator, currentTransferTokenNumber := transferTokenGenerator()
 	s.CurrentProjectCommitmentID = currentProjectCommitmentID
+	s.CurrentTransferTokenNumber = currentTransferTokenNumber
 	s.Handler = httpapi.Compose(
 		append(params.APIMiddlewares,
-			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken, generator),
+			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator),
 			httpapi.WithoutLogging(),
 		)...,
 	)
@@ -269,13 +280,16 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Collector = &collector.Collector{
 		Cluster:     s.Cluster,
 		DB:          s.DB,
+		Auditor:     s.Auditor,
 		LogError:    t.Errorf,
 		MeasureTime: s.Clock.Now,
 		MeasureTimeAtEnd: func() time.Time {
 			s.Clock.StepBy(5 * time.Second)
 			return s.Clock.Now()
 		},
-		AddJitter: NoJitter,
+		AddJitter:                     NoJitter,
+		GenerateProjectCommitmentUUID: projectCommitmentUUIDGenerator,
+		GenerateTransferToken:         transferTokenGenerator,
 	}
 
 	if params.WithInitialDiscovery {
