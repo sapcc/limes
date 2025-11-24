@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2019 SAP SE or an SAP affiliate company
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package audit
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
 
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
@@ -12,29 +14,31 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/db"
 )
 
-// maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
-type maxQuotaEventTarget struct {
+// MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
+type MaxQuotaEventTarget struct {
 	DomainID        string
 	DomainName      string
 	ProjectID       liquid.ProjectUUID
 	ProjectName     string
 	ServiceType     limes.ServiceType
 	ResourceName    limesresources.ResourceName
-	RequestedChange maxQuotaChange
+	RequestedChange MaxQuotaChange
 }
 
-type maxQuotaChange struct {
+// MaxQuotaChange appears in type MaxQuotaEventTarget.
+type MaxQuotaChange struct {
 	OldValue Option[uint64] `json:"oldMaxQuota"`
 	NewValue Option[uint64] `json:"newMaxQuota"`
 }
 
 // Render implements the audittools.Target interface.
-func (t maxQuotaEventTarget) Render() cadf.Resource {
+func (t MaxQuotaEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),
@@ -48,21 +52,25 @@ func (t maxQuotaEventTarget) Render() cadf.Resource {
 	}
 }
 
-type autogrowthEventTarget struct {
+// AutogrowthEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding the forbid-autogrowth flag.
+type AutogrowthEventTarget struct {
 	DomainID         string
 	DomainName       string
 	ProjectID        liquid.ProjectUUID
 	ProjectName      string
 	ServiceType      limes.ServiceType
 	ResourceName     limesresources.ResourceName
-	AutogrowthChange autogrowthChange
+	AutogrowthChange AutogrowthChange
 }
-type autogrowthChange struct {
+
+// AutogrowthChange appears in type AutogrowthEventTarget.
+type AutogrowthChange struct {
 	ForbidAutogrowth bool `json:"forbid_autogrowth"`
 }
 
 // Render implements the audittools.Target interface.
-func (t autogrowthEventTarget) Render() cadf.Resource {
+func (t AutogrowthEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),
@@ -76,20 +84,20 @@ func (t autogrowthEventTarget) Render() cadf.Resource {
 	}
 }
 
-// rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
+// RateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding rate limits
-type rateLimitEventTarget struct {
+type RateLimitEventTarget struct {
 	DomainID    string
 	DomainName  string
 	ProjectID   liquid.ProjectUUID
 	ProjectName string
 	ServiceType limes.ServiceType
 	Name        limesrates.RateName
-	Payload     rateLimitChange
+	Payload     RateLimitChange
 }
 
-// rateLimitChange appears in type rateLimitEventTarget.
-type rateLimitChange struct {
+// RateLimitChange appears in type rateLimitEventTarget.
+type RateLimitChange struct {
 	Unit         limes.Unit        `json:"unit,omitempty"`
 	OldLimit     uint64            `json:"oldLimit"`
 	NewLimit     uint64            `json:"newLimit"`
@@ -99,7 +107,7 @@ type rateLimitChange struct {
 }
 
 // Render implements the audittools.Target interface.
-func (t rateLimitEventTarget) Render() cadf.Resource {
+func (t RateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
 		ID:          string(t.ProjectID),
@@ -113,9 +121,9 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 	}
 }
 
-// commitmentEventTarget contains the structure for rendering a cadf.Event.Target for
+// CommitmentEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding commitments.
-type commitmentEventTarget struct {
+type CommitmentEventTarget struct {
 	DomainID        string
 	DomainName      string
 	ProjectID       liquid.ProjectUUID
@@ -125,7 +133,7 @@ type commitmentEventTarget struct {
 }
 
 // Render implements the audittools.Target interface.
-func (t commitmentEventTarget) Render() cadf.Resource {
+func (t CommitmentEventTarget) Render() cadf.Resource {
 	if len(t.Commitments) == 0 {
 		panic("commitmentEventTarget must contain at least one commitment")
 	}
@@ -152,4 +160,36 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		res.Attachments = append(res.Attachments, attachment)
 	}
 	return res
+}
+
+// CollectorUserInfo is an audittools.UserInfo representing a
+// collector task (which does not have a corresponding OpenStack user).
+// It is used to fill the audit events generated by the collector.
+type CollectorUserInfo struct {
+	TaskName string
+}
+
+// AsInitiator implements the audittools.UserInfo interface.
+func (u CollectorUserInfo) AsInitiator(_ cadf.Host) cadf.Resource {
+	res := cadf.Resource{
+		TypeURI: "service/resources/collector-task",
+		Name:    u.TaskName,
+		Domain:  "limes",
+		ID:      u.TaskName,
+	}
+	return res
+}
+
+// CollectorDummyRequest can be put in the Request field of an audittools.Event.
+var CollectorDummyRequest = &http.Request{URL: &url.URL{
+	Scheme: "http",
+	Host:   "localhost",
+	Path:   "limes-collect",
+}}
+
+// Context collects the above arguments that business logic methods
+// need only for generating audit events.
+type Context struct {
+	UserIdentity audittools.UserInfo
+	Request      *http.Request
 }

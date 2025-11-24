@@ -25,17 +25,18 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
+	"github.com/sapcc/limes/internal/util"
 )
 
 var (
@@ -174,7 +175,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		}
 		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
 		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token, resInfo.Unit))
+		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resInfo.Unit))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -296,7 +297,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		if !exists {
 			continue // like above, this is just defense in depth (the DB should be consistent with itself)
 		}
-		c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resInfo.Unit)
+		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resInfo.Unit)
 		// hide some fields that we should not be showing in this very public list
 		c.CreatorUUID = ""
 		c.CreatorName = ""
@@ -308,32 +309,6 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
-}
-
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, token *gopherpolicy.Token, unit limes.Unit) limesresources.Commitment {
-	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
-	return limesresources.Commitment{
-		ID:               int64(c.ID),
-		UUID:             string(c.UUID),
-		ServiceType:      apiIdentity.ServiceType,
-		ResourceName:     apiIdentity.Name,
-		AvailabilityZone: loc.AvailabilityZone,
-		Amount:           c.Amount,
-		Unit:             unit,
-		Duration:         c.Duration,
-		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
-		CreatorUUID:      c.CreatorUUID,
-		CreatorName:      c.CreatorName,
-		CanBeDeleted:     p.canDeleteCommitment(token, c),
-		ConfirmBy:        options.Map(c.ConfirmBy, intoUnixEncodedTime).AsPointer(),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, intoUnixEncodedTime).AsPointer(),
-		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
-		TransferStatus:   c.TransferStatus,
-		TransferToken:    c.TransferToken.AsPointer(),
-		Status:           c.Status,
-		NotifyOnConfirm:  c.NotifyOnConfirm,
-		WasRenewed:       c.RenewContextJSON.IsSome(),
-	}
 }
 
 // parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
@@ -532,7 +507,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
 		return
 	}
-	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
+	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), util.FromUnixEncodedTime)
 	canConfirmErrMsg := behavior.CanConfirmCommitmentsAt(confirmBy.UnwrapOr(now))
 	if canConfirmErrMsg != "" {
 		http.Error(w, canConfirmErrMsg, http.StatusUnprocessableEntity)
@@ -612,6 +587,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
+
 	if commitmentChangeRequest.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeResponse.RejectionReason != "" {
@@ -621,6 +598,30 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.Status = liquid.CommitmentStatusConfirmed
+
+		// handle public transfer commitments (does not alter the confirmed commitment)
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		err = transferableCommitmentCache.CheckAndConsume(dbCommitment)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		mailTemplate := None[core.MailTemplate]()
+		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
+			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
+		}
+		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, resourceInfo.Unit, audit.Context{
+			UserIdentity: token,
+			Request:      r,
+		}, mailTemplate)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		for _, event := range ae {
+			p.auditor.Record(event)
+		}
 	} else {
 		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
 		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
@@ -639,15 +640,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
-	commitment := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token, resourceInfo.Unit)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, *loc, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusCreated,
 		Action:     cadf.CreateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:        dbDomain.UUID,
 			DomainName:      dbDomain.Name,
 			ProjectID:       dbProject.UUID,
@@ -866,8 +866,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbMergedCommitment, loc, token, resourceInfo.Unit)
-	auditEvent := commitmentEventTarget{
+	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
 		ProjectID:       dbProject.UUID,
@@ -1052,8 +1052,8 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create resultset and auditlogs
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbRenewedCommitment, loc, token, resourceInfo.Unit)
-	auditEvent := commitmentEventTarget{
+	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:        dbDomain.UUID,
 		DomainName:      dbDomain.Name,
 		ProjectID:       dbProject.UUID,
@@ -1114,7 +1114,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// check authorization for this specific commitment
-	if !p.canDeleteCommitment(token, dbCommitment) {
+	if !datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -1173,14 +1173,14 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,
@@ -1190,25 +1190,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	})
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
-	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
-	if commitment.Status == liquid.CommitmentStatusPlanned || commitment.Status == liquid.CommitmentStatusPending || commitment.Status == liquid.CommitmentStatusConfirmed {
-		var creationContext db.CommitmentWorkflowContext
-		err := json.Unmarshal(commitment.CreationContextJSON, &creationContext)
-		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
-			if token.Check("project:edit") {
-				return true
-			}
-		}
-	}
-
-	// afterwards, a more specific permission is required to delete it
-	//
-	// This protects cloud admins making capacity planning decisions based on future commitments
-	// from having their forecasts ruined by project admins suffering from buyer's remorse.
-	return token.Check("project:uncommit")
 }
 
 // StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
@@ -1264,10 +1245,24 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Deny requests with a greater amount than the commitment.
-	if req.Amount > dbCommitment.Amount {
-		http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+	// Deny requests which do not change the current transfer status.
+	if dbCommitment.TransferStatus == req.TransferStatus {
+		http.Error(w, "transfer_status is already set to desired value", http.StatusBadRequest)
 		return
+	}
+
+	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		// In order to prevent confusion, only commitments in a certain status can be marked as transferable.
+		if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, dbCommitment.Status) {
+			http.Error(w, "expired or superseded commitments cannot be transferred", http.StatusBadRequest)
+			return
+		}
+
+		// Deny requests with a greater amount than the commitment.
+		if req.Amount > dbCommitment.Amount {
+			http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+			return
+		}
 	}
 
 	var (
@@ -1297,8 +1292,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	// when moving into CommitmentTransferStatusNone, the token is cleared;
 	// otherwise a new token is generated and filled in for the transfer
 	transferToken := None[string]()
+	transferStartedAt := None[time.Time]()
 	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
 		transferToken = Some(p.generateTransferToken())
+		transferStartedAt = Some(p.timeNow())
 	}
 
 	// Mark whole commitment or a newly created, splitted one as transferrable.
@@ -1308,9 +1305,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	if req.Amount == dbCommitment.Amount {
+	if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = transferToken
+		dbCommitment.TransferStartedAt = transferStartedAt
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1319,13 +1317,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		now := p.timeNow()
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
-		transferCommitment, err := p.buildSplitCommitment(dbCommitment, transferAmount)
+		transferCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, transferAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
 		transferCommitment.TransferStatus = req.TransferStatus
 		transferCommitment.TransferToken = transferToken
-		remainingCommitment, err := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		transferCommitment.TransferStartedAt = transferStartedAt
+		remainingCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1413,14 +1412,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,
@@ -1429,34 +1428,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		},
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
-}
-
-func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) (db.ProjectCommitment, error) {
-	now := p.timeNow()
-	creationContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonSplit,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
-	}
-	buf, err := json.Marshal(creationContext)
-	if err != nil {
-		return db.ProjectCommitment{}, err
-	}
-	return db.ProjectCommitment{
-		UUID:                p.generateProjectCommitmentUUID(),
-		ProjectID:           dbCommitment.ProjectID,
-		AZResourceID:        dbCommitment.AZResourceID,
-		Amount:              amount,
-		Duration:            dbCommitment.Duration,
-		CreatedAt:           now,
-		CreatorUUID:         dbCommitment.CreatorUUID,
-		CreatorName:         dbCommitment.CreatorName,
-		ConfirmBy:           dbCommitment.ConfirmBy,
-		ConfirmedAt:         dbCommitment.ConfirmedAt,
-		ExpiresAt:           dbCommitment.ExpiresAt,
-		CreationContextJSON: json.RawMessage(buf),
-		Status:              dbCommitment.Status,
-	}, nil
 }
 
 func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.AZResourceID, amount uint64) (db.ProjectCommitment, error) {
@@ -1530,7 +1501,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1714,14 +1685,14 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    targetDomain.UUID,
 			DomainName:  targetDomain.Name,
 			ProjectID:   targetProject.UUID,
@@ -1944,6 +1915,11 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
+	// do not allow conversions on commitments in transfer
+	if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
+		http.Error(w, "commitments in transfer cannot be converted", http.StatusUnprocessableEntity)
+		return
+	}
 	targetLoc := core.AZResourceLocation{
 		ServiceType:      sourceLoc.ServiceType,
 		ResourceName:     targetResourceName,
@@ -1966,7 +1942,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// when there is a remaining amount, we must request to add this
 	if remainingAmount > 0 {
-		remainingCommitment, err = p.buildSplitCommitment(dbCommitment, remainingAmount)
+		remainingCommitment, err = datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -2039,7 +2015,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auditEvent := commitmentEventTarget{
+	auditEvent := audit.CommitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
@@ -2059,7 +2035,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		auditEvent.Commitments = append(auditEvent.Commitments,
-			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token, resourceInfo.Unit),
+			datamodel.ConvertCommitmentToDisplayForm(remainingCommitment, sourceLoc, p.Cluster.BehaviorForResourceLocation(sourceLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, remainingCommitment, p.timeNow), resourceInfo.Unit),
 		)
 	}
 
@@ -2094,7 +2070,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
 	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonSplit,
@@ -2247,14 +2223,14 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token, resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
-		Target: commitmentEventTarget{
+		Target: audit.CommitmentEventTarget{
 			DomainID:    dbDomain.UUID,
 			DomainName:  dbDomain.Name,
 			ProjectID:   dbProject.UUID,

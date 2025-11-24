@@ -8,9 +8,12 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 )
 
 // Collector provides methods that implement the collection jobs performed by
@@ -22,6 +25,7 @@ import (
 type Collector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
+	Auditor audittools.Auditor
 	// Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...any)
 	// Usually time.Now, but can be changed inside unit tests.
@@ -31,17 +35,23 @@ type Collector struct {
 	MeasureTimeAtEnd func() time.Time
 	// Usually addJitter, but can be changed inside unit tests.
 	AddJitter func(time.Duration) time.Duration
+	// used when partially transferring a publicly posted commitment
+	GenerateProjectCommitmentUUID func() liquid.CommitmentUUID
+	GenerateTransferToken         func() string
 }
 
 // NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster) *Collector {
+func NewCollector(cluster *core.Cluster, auditor audittools.Auditor) *Collector {
 	return &Collector{
-		Cluster:          cluster,
-		DB:               cluster.DB,
-		LogError:         logg.Error,
-		MeasureTime:      time.Now,
-		MeasureTimeAtEnd: time.Now,
-		AddJitter:        addJitter,
+		Cluster:                       cluster,
+		DB:                            cluster.DB,
+		Auditor:                       auditor,
+		LogError:                      logg.Error,
+		MeasureTime:                   time.Now,
+		MeasureTimeAtEnd:              time.Now,
+		AddJitter:                     addJitter,
+		GenerateProjectCommitmentUUID: datamodel.GenerateProjectCommitmentUUID,
+		GenerateTransferToken:         datamodel.GenerateTransferToken,
 	}
 }
 
@@ -51,7 +61,7 @@ func NewCollector(cluster *core.Cluster) *Collector {
 // over time without corrupting the individual schedules too much.
 func addJitter(duration time.Duration) time.Duration {
 	//nolint:gosec // This is not crypto-relevant, so math/rand is okay.
-	r := rand.Float64() //NOTE: 0 <= r < 1
+	r := rand.Float64() // NOTE: 0 <= r < 1
 	return time.Duration(float64(duration) * (0.9 + 0.2*r))
 }
 

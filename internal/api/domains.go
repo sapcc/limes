@@ -67,7 +67,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := collector.NewCollector(p.Cluster)
+	c := collector.NewCollector(p.Cluster, p.auditor)
 	newDomainUUIDs, err := c.ScanDomains(r.Context(), collector.ScanDomainsOpts{})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
