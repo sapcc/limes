@@ -303,26 +303,18 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		// fills all ProjectResource entries (for each pair of service and resource name)
 		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
-			WITH tmp AS (
-				SELECT r.id AS id, CASE
-					WHEN NOT r.has_quota THEN NULL
-					WHEN r.topology = {{liquid.AZSeparatedTopology}} THEN NULL
-					ELSE 0
-				END AS default_quota FROM resources r
-			)
-			INSERT INTO project_resources (project_id, resource_id, quota, backend_quota) SELECT
+			INSERT INTO project_resources (project_id, resource_id) 
+			SELECT
 				p.id              AS project_id,
-				tmp.id            AS resource_id,
-				tmp.default_quota AS quota,
-				tmp.default_quota AS backend_quota
-			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
+				r.id              AS resource_id
+			FROM resources r CROSS JOIN projects p ORDER BY p.id, r.id
 		`))
 
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
 			WITH tmp AS (
 				SELECT azr.id AS id, CASE
 					WHEN NOT r.has_quota THEN NULL
-					WHEN r.topology != {{liquid.AZSeparatedTopology}} THEN NULL
+					WHEN r.topology != {{liquid.AZSeparatedTopology}} AND azr.az != {{liquid.AvailabilityZoneTotal}} THEN NULL
 					WHEN azr.az = {{liquid.AvailabilityZoneUnknown}} THEN NULL
 					ELSE 0
 				END AS default_quota FROM az_resources azr JOIN resources r ON azr.resource_id = r.id
