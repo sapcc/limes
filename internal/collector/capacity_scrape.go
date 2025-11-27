@@ -74,13 +74,21 @@ var (
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
 	// simple checks on the enum value in `status`.
+	//
+	// When moving to expired or superseded state, the transfer status, token and time are cleared.
 	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		UPDATE project_commitments
 		   SET status = CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
 		                     WHEN expires_at <= $3          THEN {{liquid.CommitmentStatusExpired}}
 		                     WHEN confirm_by > $3           THEN {{liquid.CommitmentStatusPlanned}}
 		                     WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
-		                     ELSE {{liquid.CommitmentStatusConfirmed}} END
+		                     ELSE {{liquid.CommitmentStatusConfirmed}} END,
+		       transfer_status = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN {{limesresources.CommitmentTransferStatusNone}}
+		                              ELSE transfer_status END,
+		       transfer_token = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN NULL
+		                             ELSE transfer_token END,
+		       transfer_started_at = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN NULL
+		                                  ELSE transfer_started_at END
 		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) AND az_resource_id IN (
 			SELECT azr.id
 			  FROM services s
