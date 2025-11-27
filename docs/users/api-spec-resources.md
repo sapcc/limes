@@ -92,6 +92,33 @@ Commitments follow a simple state machine:
 * `confirmed -> expired`: Once the commitment's duration elapses, the price discount and capacity guarantee elapse.
   The duration until expiry counts starting from the state transition into `confirmed`.
 
+#### Transferring Commitments
+
+As plans can change, it is obvious that some commitments will remain or become unused. In this situation, they cause
+cost for the project owner without any benefit. To help with this effect, commitments can be transferred between
+projects in two ways:
+
+* `unlisted` (private): The user is provided with a secret `transfer_token`, when initiating the transfer. The 
+  commitment is not discoverable by other project owners. Instead, the user can complete the transfer to the other
+  project by providing the `transfer_token`. The commitment then belongs to the new project and will not affect quota
+  and cost in the old project any longer.
+* `public`: Commitments in this transfer status are discoverable by the [`GET /v1/public-commitments`](#get-v1public-commitments)
+  endpoint. Any project owner can then complete the transfer to their own project as if it was an `unlisted` commitment.
+  This functionality is commonly referred to as "commitment marketplace" by cloud providers. When a commitment is
+  transferred in this way.
+  
+  **Important**: Limes will consider commitments posted as `public` for _automatic consumption_ by new commitments
+  which are being created independently of the marketplace. This means that on confirmation of a new commitment,
+  the operation automatically releases `public` commitments. This follows the business rules that the new commitment
+  must expire later than the posted commitment and it will only be released up to the amount of the new commitment.
+  This works also step by step: The not-consumed part will be considered for consumption again and again, until it is
+  fully consumed. The background for this behavior is that commitments are built mainly for managing private cloud, where there is no 
+
+Other than the automatic consumption of public commitments, a billing system connected to Limes should handle a
+commitment in transfer (not consumed yet) as if it was not in transfer. This means that it will not cause cost
+in the old project as long as it was not confirmed, but will cause cost if it was already confirmed prior to posting
+it for transfer. Only commitments which are already expired or superseded cannot be transferred.
+
 ### Subresources
 
 For some resources, Limes can report **subresources**. Subresources are a way to break down the project-level usage of
@@ -632,6 +659,7 @@ Returns 200 (OK) on success, and a JSON document like `{"result":true}` or `{"re
 The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
 
 ### POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
+
 Prepares a commitment to be transferred from a source project to a target project. Requires a project-admin token, and a request body that is a JSON document like:
 ```json
 {
@@ -665,6 +693,7 @@ An `amount` is ignored in this case, the whole commitment is withdrawn from tran
 A commitment previously splitted for transfer is not automatically merged back, this can be done manually with the `/merge` endpoint.
 
 ### POST /v1/domains/:id/projects/:id/transfer-commitment/:id
+
 Transfers the commitment from a source project to a target project.
 Requires a project-admin token.
 Requires a transfer token in the request header:
@@ -675,8 +704,12 @@ On success the API clears the `transfer_token` and `transfer_status` from the co
 After that, it returns the commitment as a JSON document.
 
 ### GET /v1/commitments/:token
+
 To ensure that a commitment can be checked for its `resource` type or `availability zone` before it gets transferred to a target project, this endpoint fetches the target commitment by its respective token.
 
+### GET /v1/public-commitments
+
+Returns a list of commitments which are in `transfer_status=public`, ready to be consumed by the user with `/transfer-commitment`.
 
 ### GET /v1/commitment-conversion/:service\_type/:resource\_name
 
