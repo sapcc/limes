@@ -800,6 +800,9 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.Status = liquid.CommitmentStatusSuperseded
+		dbCommitment.TransferStatus = limesresources.CommitmentTransferStatusNone
+		dbCommitment.TransferToken = None[string]()
+		dbCommitment.TransferStartedAt = None[time.Time]()
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
