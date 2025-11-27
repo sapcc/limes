@@ -157,7 +157,7 @@ import (
 //		{ Kind: "value mismatch", Pointer: "/things/1/id", ExpectedJSON: "2", ActualJSON: "3" },
 //	}
 //
-// However, the implementation will only recurse into substructures of the following well-known types: jsonmatch.Object, map[string]any, jsonmatch.Array, []any, []map[string]any.
+// However, the implementation will only recurse into substructures of the following well-known types: jsonmatch.Object, map[string]any, jsonmatch.Array, []any, []jsonmatch.Object, []map[string]any.
 // Any other map, array, slice, struct or pointer type will be treated as a black box:
 // If its JSON serialization differs from that of the respective section of the actual payload, a diff will be generated for its entirety only, not for any specific subfields.
 type Diffable interface {
