@@ -38,8 +38,18 @@ type Usage struct {
 	DataTransferIn  uint64 `json:"data_transfer_in"`
 	DataTransferOut uint64 `json:"data_transfer_out"`
 	Recipients      uint64 `json:"recipients"`
-	StartDate       string `json:"start"`
-	EndDate         string `json:"end"`
+
+	MessagesSentAWS         uint64 `json:"messages_sent_aws"`
+	MessagesReceivedAWS     uint64 `json:"messages_received_aws"`
+	DataSentAWS             uint64 `json:"data_sent_aws"`
+	DataReceivedAWS         uint64 `json:"data_received_aws"`
+	MessagesSentPostfix     uint64 `json:"messages_sent_postfix"`
+	MessagesReceivedPostfix uint64 `json:"messages_received_postfix"`
+	DataSentPostfix         uint64 `json:"data_sent_postfix"`
+	DataReceivedPostfix     uint64 `json:"data_received_postfix"`
+
+	StartDate string `json:"start"`
+	EndDate   string `json:"end"`
 }
 
 // GetUsage returns usage data for a single project.

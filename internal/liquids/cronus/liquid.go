@@ -35,10 +35,18 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version: 1,
 		Rates: map[liquid.RateName]liquid.RateInfo{
-			"attachment_size":   {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
-			"data_transfer_in":  {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
-			"data_transfer_out": {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
-			"recipients":        {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"attachment_size":           {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_transfer_in":          {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_transfer_out":         {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"recipients":                {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"messages_sent_aws":         {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"messages_received_aws":     {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"data_sent_aws":             {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_received_aws":         {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"messages_sent_postfix":     {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"messages_received_postfix": {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitNone},
+			"data_sent_postfix":         {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
+			"data_received_postfix":     {HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
 		},
 	}, nil
 }
@@ -52,10 +60,18 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 // The payload format for this liquid's SerializedState.
 type cronusState struct {
 	PreviousTotals struct {
-		AttachmentsSize *big.Int `json:"attachments_size"`
-		DataTransferIn  *big.Int `json:"data_transfer_in"`
-		DataTransferOut *big.Int `json:"data_transfer_out"`
-		Recipients      *big.Int `json:"recipients"`
+		AttachmentsSize         *big.Int `json:"attachments_size"`
+		DataTransferIn          *big.Int `json:"data_transfer_in"`
+		DataTransferOut         *big.Int `json:"data_transfer_out"`
+		Recipients              *big.Int `json:"recipients"`
+		MessagesSentAWS         *big.Int `json:"messages_sent_aws"`
+		MessagesReceivedAWS     *big.Int `json:"messages_received_aws"`
+		DataSentAWS             *big.Int `json:"data_sent_aws"`
+		DataReceivedAWS         *big.Int `json:"data_received_aws"`
+		MessagesSentPostfix     *big.Int `json:"messages_sent_postfix"`
+		MessagesReceivedPostfix *big.Int `json:"messages_received_postfix"`
+		DataSentPostfix         *big.Int `json:"data_sent_postfix"`
+		DataReceivedPostfix     *big.Int `json:"data_received_postfix"`
 	} `json:"previous_totals"`
 	CurrentPeriod struct {
 		StartDate string `json:"start"`
@@ -72,11 +88,44 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		state.PreviousTotals.DataTransferIn = big.NewInt(0)
 		state.PreviousTotals.DataTransferOut = big.NewInt(0)
 		state.PreviousTotals.Recipients = big.NewInt(0)
+		state.PreviousTotals.MessagesSentAWS = big.NewInt(0)
+		state.PreviousTotals.MessagesReceivedAWS = big.NewInt(0)
+		state.PreviousTotals.DataSentAWS = big.NewInt(0)
+		state.PreviousTotals.DataReceivedAWS = big.NewInt(0)
+		state.PreviousTotals.MessagesSentPostfix = big.NewInt(0)
+		state.PreviousTotals.MessagesReceivedPostfix = big.NewInt(0)
+		state.PreviousTotals.DataSentPostfix = big.NewInt(0)
+		state.PreviousTotals.DataReceivedPostfix = big.NewInt(0)
 		state.CurrentPeriod.StartDate = "1970-01-01"
 	} else {
 		err := json.Unmarshal([]byte(req.SerializedState), &state)
 		if err != nil {
 			return liquid.ServiceUsageReport{}, fmt.Errorf("cannot decode prevSerializedState: %w", err)
+		}
+		// These were added later, init them to 0 when missing in the previous state
+		if state.PreviousTotals.DataSentAWS == nil {
+			state.PreviousTotals.DataSentAWS = big.NewInt(0)
+		}
+		if state.PreviousTotals.DataReceivedAWS == nil {
+			state.PreviousTotals.DataReceivedAWS = big.NewInt(0)
+		}
+		if state.PreviousTotals.MessagesSentAWS == nil {
+			state.PreviousTotals.MessagesSentAWS = big.NewInt(0)
+		}
+		if state.PreviousTotals.MessagesReceivedAWS == nil {
+			state.PreviousTotals.MessagesReceivedAWS = big.NewInt(0)
+		}
+		if state.PreviousTotals.DataSentPostfix == nil {
+			state.PreviousTotals.DataSentPostfix = big.NewInt(0)
+		}
+		if state.PreviousTotals.DataReceivedPostfix == nil {
+			state.PreviousTotals.DataReceivedPostfix = big.NewInt(0)
+		}
+		if state.PreviousTotals.MessagesSentPostfix == nil {
+			state.PreviousTotals.MessagesSentPostfix = big.NewInt(0)
+		}
+		if state.PreviousTotals.MessagesReceivedPostfix == nil {
+			state.PreviousTotals.MessagesReceivedPostfix = big.NewInt(0)
 		}
 	}
 
@@ -109,6 +158,14 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		state.PreviousTotals.DataTransferIn = bigintPlusUint64(state.PreviousTotals.DataTransferIn, prevUsage.DataTransferIn)
 		state.PreviousTotals.DataTransferOut = bigintPlusUint64(state.PreviousTotals.DataTransferOut, prevUsage.DataTransferOut)
 		state.PreviousTotals.Recipients = bigintPlusUint64(state.PreviousTotals.Recipients, prevUsage.Recipients)
+		state.PreviousTotals.DataSentAWS = bigintPlusUint64(state.PreviousTotals.DataSentAWS, prevUsage.DataSentAWS)
+		state.PreviousTotals.DataReceivedAWS = bigintPlusUint64(state.PreviousTotals.DataReceivedAWS, prevUsage.DataReceivedAWS)
+		state.PreviousTotals.MessagesSentAWS = bigintPlusUint64(state.PreviousTotals.MessagesSentAWS, prevUsage.MessagesSentAWS)
+		state.PreviousTotals.MessagesReceivedAWS = bigintPlusUint64(state.PreviousTotals.MessagesReceivedAWS, prevUsage.MessagesReceivedAWS)
+		state.PreviousTotals.DataSentPostfix = bigintPlusUint64(state.PreviousTotals.DataSentPostfix, prevUsage.DataSentPostfix)
+		state.PreviousTotals.DataReceivedPostfix = bigintPlusUint64(state.PreviousTotals.DataReceivedPostfix, prevUsage.DataReceivedPostfix)
+		state.PreviousTotals.MessagesSentPostfix = bigintPlusUint64(state.PreviousTotals.MessagesSentPostfix, prevUsage.MessagesSentPostfix)
+		state.PreviousTotals.MessagesReceivedPostfix = bigintPlusUint64(state.PreviousTotals.MessagesReceivedPostfix, prevUsage.MessagesReceivedPostfix)
 		state.CurrentPeriod.StartDate = currentUsage.StartDate
 
 		newSerializedStateBytes, err := json.Marshal(state)
@@ -130,10 +187,18 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	return liquid.ServiceUsageReport{
 		InfoVersion: serviceInfo.Version,
 		Rates: map[liquid.RateName]*liquid.RateUsageReport{
-			"attachment_size":   buildRateReport(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
-			"data_transfer_in":  buildRateReport(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
-			"data_transfer_out": buildRateReport(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),
-			"recipients":        buildRateReport(state.PreviousTotals.Recipients, currentUsage.Recipients),
+			"attachment_size":           buildRateReport(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
+			"data_transfer_in":          buildRateReport(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
+			"data_transfer_out":         buildRateReport(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),
+			"recipients":                buildRateReport(state.PreviousTotals.Recipients, currentUsage.Recipients),
+			"messages_sent_aws":         buildRateReport(state.PreviousTotals.MessagesSentAWS, currentUsage.MessagesSentAWS),
+			"messages_received_aws":     buildRateReport(state.PreviousTotals.MessagesReceivedAWS, currentUsage.MessagesReceivedAWS),
+			"data_sent_aws":             buildRateReport(state.PreviousTotals.DataSentAWS, currentUsage.DataSentAWS),
+			"data_received_aws":         buildRateReport(state.PreviousTotals.DataReceivedAWS, currentUsage.DataReceivedAWS),
+			"messages_sent_postfix":     buildRateReport(state.PreviousTotals.MessagesSentPostfix, currentUsage.MessagesSentPostfix),
+			"messages_received_postfix": buildRateReport(state.PreviousTotals.MessagesReceivedPostfix, currentUsage.MessagesReceivedPostfix),
+			"data_sent_postfix":         buildRateReport(state.PreviousTotals.DataSentPostfix, currentUsage.DataSentPostfix),
+			"data_received_postfix":     buildRateReport(state.PreviousTotals.DataReceivedPostfix, currentUsage.DataReceivedPostfix),
 		},
 		SerializedState: newSerializedState,
 	}, nil
