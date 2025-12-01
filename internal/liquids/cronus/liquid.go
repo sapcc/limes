@@ -24,10 +24,15 @@ type Logic struct {
 	CronusV1 *Client `json:"-"`
 }
 
-type Version string
+// version contains a version string for the serialized state stored in limes.
+type version string
 
-const versionV0 Version = "v0"
-const versionV1 Version = "v1"
+// versionV0 contains the rates attachment_size, data_transfer_in, data_transfer_out, and recipients
+const versionV0 version = "v0"
+
+// VersionV1 contains the rates messages_sent_aws, messages_received_aws, data_sent_aws, data_received_aws,
+// messages_sent_postfix, messages_received_postfix, data_sent_postfix, data_received_postfix
+const versionV1 version = "v1"
 
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
@@ -81,7 +86,7 @@ type cronusState struct {
 	CurrentPeriod struct {
 		StartDate string `json:"start"`
 	} `json:"current_period"`
-	Version Option[Version] `json:"version"`
+	Version Option[version] `json:"version"`
 }
 
 // ScanUsage implements the liquidapi.Logic interface.
