@@ -24,6 +24,11 @@ type Logic struct {
 	CronusV1 *Client `json:"-"`
 }
 
+type Version string
+
+const VersionV0 Version = "v0"
+const VersionV1 Version = "v1"
+
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	l.CronusV1, err = newClient(provider, eo)
@@ -76,6 +81,7 @@ type cronusState struct {
 	CurrentPeriod struct {
 		StartDate string `json:"start"`
 	} `json:"current_period"`
+	Version Option[Version] `json:"version"`
 }
 
 // ScanUsage implements the liquidapi.Logic interface.
@@ -102,30 +108,16 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		if err != nil {
 			return liquid.ServiceUsageReport{}, fmt.Errorf("cannot decode prevSerializedState: %w", err)
 		}
-		// These were added later, init them to 0 when missing in the previous state
-		if state.PreviousTotals.DataSentAWS == nil {
-			state.PreviousTotals.DataSentAWS = big.NewInt(0)
-		}
-		if state.PreviousTotals.DataReceivedAWS == nil {
-			state.PreviousTotals.DataReceivedAWS = big.NewInt(0)
-		}
-		if state.PreviousTotals.MessagesSentAWS == nil {
+		if state.Version.UnwrapOr(VersionV0) == VersionV0 {
+			// Update v0 -> v1
 			state.PreviousTotals.MessagesSentAWS = big.NewInt(0)
-		}
-		if state.PreviousTotals.MessagesReceivedAWS == nil {
 			state.PreviousTotals.MessagesReceivedAWS = big.NewInt(0)
-		}
-		if state.PreviousTotals.DataSentPostfix == nil {
-			state.PreviousTotals.DataSentPostfix = big.NewInt(0)
-		}
-		if state.PreviousTotals.DataReceivedPostfix == nil {
-			state.PreviousTotals.DataReceivedPostfix = big.NewInt(0)
-		}
-		if state.PreviousTotals.MessagesSentPostfix == nil {
+			state.PreviousTotals.DataSentAWS = big.NewInt(0)
+			state.PreviousTotals.DataReceivedAWS = big.NewInt(0)
 			state.PreviousTotals.MessagesSentPostfix = big.NewInt(0)
-		}
-		if state.PreviousTotals.MessagesReceivedPostfix == nil {
 			state.PreviousTotals.MessagesReceivedPostfix = big.NewInt(0)
+			state.PreviousTotals.DataSentPostfix = big.NewInt(0)
+			state.PreviousTotals.DataReceivedPostfix = big.NewInt(0)
 		}
 	}
 
@@ -167,6 +159,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		state.PreviousTotals.MessagesSentPostfix = bigintPlusUint64(state.PreviousTotals.MessagesSentPostfix, prevUsage.MessagesSentPostfix)
 		state.PreviousTotals.MessagesReceivedPostfix = bigintPlusUint64(state.PreviousTotals.MessagesReceivedPostfix, prevUsage.MessagesReceivedPostfix)
 		state.CurrentPeriod.StartDate = currentUsage.StartDate
+		state.Version = Some(VersionV1)
 
 		newSerializedStateBytes, err := json.Marshal(state)
 		if err != nil {
