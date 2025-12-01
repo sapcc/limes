@@ -26,8 +26,8 @@ type Logic struct {
 
 type Version string
 
-const VersionV0 Version = "v0"
-const VersionV1 Version = "v1"
+const versionV0 Version = "v0"
+const versionV1 Version = "v1"
 
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
@@ -108,7 +108,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		if err != nil {
 			return liquid.ServiceUsageReport{}, fmt.Errorf("cannot decode prevSerializedState: %w", err)
 		}
-		if state.Version.UnwrapOr(VersionV0) == VersionV0 {
+		if state.Version.UnwrapOr(versionV0) == versionV0 {
 			// Update v0 -> v1
 			state.PreviousTotals.MessagesSentAWS = big.NewInt(0)
 			state.PreviousTotals.MessagesReceivedAWS = big.NewInt(0)
@@ -159,7 +159,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		state.PreviousTotals.MessagesSentPostfix = bigintPlusUint64(state.PreviousTotals.MessagesSentPostfix, prevUsage.MessagesSentPostfix)
 		state.PreviousTotals.MessagesReceivedPostfix = bigintPlusUint64(state.PreviousTotals.MessagesReceivedPostfix, prevUsage.MessagesReceivedPostfix)
 		state.CurrentPeriod.StartDate = currentUsage.StartDate
-		state.Version = Some(VersionV1)
+		state.Version = Some(versionV1)
 
 		newSerializedStateBytes, err := json.Marshal(state)
 		if err != nil {
