@@ -377,29 +377,26 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				// depending on the resource topology, we may or may not have a value in this AZ:
-				// no quota: both values are None, always
-				// with quota: backend quota is set for total and specific AZ if az-separated
-				// specific az's get None if not az-separated
-				// the quota is never none, if the resource has quota
+				// for the quota values, we want to
+				// a) reset both to None when HasQuota is false
+				// b) set a default quota of 0 if not set previously
+				// c) set backendQuota for the applicable cases according to topology, otherwise set None (important for topology switch)
+				// d) check for backendQuota drift
 				resInfo := core.InfoForResource(serviceInfo, resourceName)
-				switch {
-				case !resInfo.HasQuota:
+				if !resInfo.HasQuota {
 					azRes.BackendQuota = None[int64]()
 					azRes.Quota = None[uint64]()
-				case az == liquid.AvailabilityZoneTotal || resInfo.Topology == liquid.AZSeparatedTopology:
-					azRes.BackendQuota = data.Quota
-				default:
-					azRes.BackendQuota = None[int64]()
-				}
-
-				// check if we need to arrange for SetQuotaJob to look at this project service
-				if resInfo.HasQuota {
-					if azRes.Quota.IsNone() {
+				} else {
+					if datamodel.AZHasQuotaForTopology(resInfo.Topology, az) && azRes.Quota.IsNone() {
 						azRes.Quota = Some[uint64](0)
 					}
-					if (resInfo.Topology == liquid.AZSeparatedTopology && az != liquid.AvailabilityZoneTotal) ||
-						(resInfo.Topology != liquid.AZSeparatedTopology && az == liquid.AvailabilityZoneTotal) {
+					if datamodel.AZHasBackendQuotaForTopology(resInfo.Topology, az) {
+						azRes.BackendQuota = data.Quota
+					} else {
+						azRes.BackendQuota = None[int64]()
+					}
+					if datamodel.AZHasBackendQuotaForTopology(resInfo.Topology, az) {
+						// check if we need to arrange for SetQuotaJob to look at this project service
 						backendQuota := azRes.BackendQuota.UnwrapOr(-1)
 						quota := azRes.Quota.UnwrapOr(0)
 						if backendQuota < 0 || uint64(backendQuota) != quota {
@@ -613,16 +610,19 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 		resInfo := core.InfoForResource(serviceInfo, resName)
 		//  this replicates the logic from writeResourceScrapeResult with the infinite backendQuota (-1)
 		backendQuota := None[int64]()
-		if resInfo.HasQuota &&
-			(slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneTotal, liquid.AvailabilityZoneAny}, res.AvailabilityZone) ||
-				resInfo.Topology == liquid.AZSeparatedTopology) {
+		quota := None[uint64]()
+		if resInfo.HasQuota && datamodel.AZHasBackendQuotaForTopology(resInfo.Topology, res.AvailabilityZone) {
 			backendQuota = Some(int64(-1))
+		}
+		if resInfo.HasQuota && datamodel.AZHasQuotaForTopology(resInfo.Topology, res.AvailabilityZone) {
+			quota = Some[uint64](0)
 		}
 		err := tx.Insert(&db.ProjectAZResource{
 			ProjectID:    dbProject.ID,
 			AZResourceID: res.ID,
 			Usage:        0,
 			BackendQuota: backendQuota,
+			Quota:        quota,
 		})
 		if err != nil {
 			return err

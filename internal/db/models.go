@@ -133,7 +133,7 @@ type ProjectAZResource struct {
 	ID           ProjectAZResourceID `db:"id"`
 	ProjectID    ProjectID           `db:"project_id"`
 	AZResourceID AZResourceID        `db:"az_resource_id"`
-	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
+	// None if hasQuota=false OR (az=total AND topology=az-separated) OR az=unknown
 	Quota Option[uint64] `db:"quota"`
 	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
 	BackendQuota  Option[int64]  `db:"backend_quota"`

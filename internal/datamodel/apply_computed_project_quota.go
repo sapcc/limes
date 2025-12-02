@@ -188,9 +188,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
 
-				if rowsAffected > 0 &&
-					((resourceInfo.Topology == liquid.AZSeparatedTopology && az != liquid.AvailabilityZoneTotal) ||
-						(resourceInfo.Topology != liquid.AZSeparatedTopology && az == liquid.AvailabilityZoneTotal)) {
+				if rowsAffected > 0 && AZHasBackendQuotaForTopology(resourceInfo.Topology, az) {
 					projectsWithUpdatedQuota[projectID] = struct{}{}
 				}
 			}

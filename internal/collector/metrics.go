@@ -430,7 +430,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		FROM services s
 		JOIN resources r ON r.service_id = s.id
 		JOIN az_resources azr ON azr.resource_id = r.id
-		JOIN project_commitments pc ON pc.az_resource_id = azr.id AND pc.status = 'confirmed'
+		JOIN project_commitments pc ON pc.az_resource_id = azr.id AND pc.status = {{liquid.CommitmentStatusConfirmed}}
 		JOIN projects p ON p.id = pc.project_id
 		GROUP BY p.domain_id, p.id, s.type, r.name
 	)
@@ -452,7 +452,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 	WITH project_commitment_sums_by_status AS (
 	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE status NOT IN ('superseded', 'expired')
+	   WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
 	   GROUP BY az_resource_id, project_id, status
 	), project_commitment_sums AS (
 	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status

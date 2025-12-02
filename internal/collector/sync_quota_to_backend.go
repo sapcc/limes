@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -157,18 +158,18 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return nil
 		}
 
+		// skip AZ-specific quotas if the backend does not support them
+		if !datamodel.AZHasBackendQuotaForTopology(resInfo.Topology, availabilityZone) {
+			return nil
+		}
 		targetQuota, targetQuotaExists := targetQuotaPtr.Unpack()
 		if !targetQuotaExists {
-			return fmt.Errorf("found unexpected NULL value in project_az_resources.quota for id = %d", projectAZResourceID)
+			return fmt.Errorf("found unexpected NULL value in project_az_resources.quota for %s/%s/%s", serviceType, resourceName, availabilityZone)
 		}
 		currentQuota, currentQuotaExists := currentQuotaPtr.Unpack()
 		// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
 		if resInfo.Topology == liquid.AZSeparatedTopology && (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && !currentQuotaExists {
-			return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentQuota)
-		}
-		// skip AZ-specific quotas if the backend does not support them (but the quota of az-separated total is still set to backend_quota)
-		if resInfo.Topology != liquid.AZSeparatedTopology && availabilityZone != liquid.AvailabilityZoneTotal {
-			return nil
+			return fmt.Errorf("detected invalid AZ %q for resource %s/%s with topology %s (backend quota was nil)", availabilityZone, serviceType, resourceName, resInfo.Topology)
 		}
 		projectAZResourceIDs = append(projectAZResourceIDs, projectAZResourceID)
 		if targetAZQuotasInDB[resourceName] == nil {
