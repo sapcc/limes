@@ -710,7 +710,10 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		commitmentUUIDs[i] = dbCommitments[i].UUID
 	}
 
-	// Verify that all commitments agree on resource and AZ and are confirmed
+	// Verify that all commitments...:
+	// - agree on resource and AZ
+	// - are confirmed
+	// - are not in transfer
 	azResourceID := dbCommitments[0].AZResourceID
 	for _, dbCommitment := range dbCommitments {
 		if dbCommitment.AZResourceID != azResourceID {
@@ -719,6 +722,11 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		}
 		if dbCommitment.Status != liquid.CommitmentStatusConfirmed {
 			http.Error(w, "only confirmed commitments may be merged", http.StatusConflict)
+			return
+		}
+		// do not allow conversions on commitments in transfer
+		if dbCommitment.TransferStatus != limesresources.CommitmentTransferStatusNone {
+			http.Error(w, "commitments in transfer cannot be merged", http.StatusUnprocessableEntity)
 			return
 		}
 	}
