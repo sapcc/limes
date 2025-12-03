@@ -2366,7 +2366,7 @@ func evaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.Respon
 // DeleteProjectCommitmentAsCloudAdmin handles DELETE /v1/commitments/:id.
 func (p *v1Provider) DeleteProjectCommitmentAsCloudAdmin(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:id")
-	if !p.prepareClusterAdminRequest(w, r) {
+	if !p.prepareClusterAdminCommitmentEditRequest(w, r) {
 		return
 	}
 	p.DeleteProjectCommitment(w, r)
@@ -2375,13 +2375,13 @@ func (p *v1Provider) DeleteProjectCommitmentAsCloudAdmin(w http.ResponseWriter, 
 // StartCommitmentTransferAsCloudAdmin handles POST /v1/commitments/:id/start-transfer
 func (p *v1Provider) StartCommitmentTransferAsCloudAdmin(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:id/start-transfer")
-	if !p.prepareClusterAdminRequest(w, r) {
+	if !p.prepareClusterAdminCommitmentEditRequest(w, r) {
 		return
 	}
 	p.StartCommitmentTransfer(w, r)
 }
 
-func (p *v1Provider) prepareClusterAdminRequest(w http.ResponseWriter, r *http.Request) bool {
+func (p *v1Provider) prepareClusterAdminCommitmentEditRequest(w http.ResponseWriter, r *http.Request) bool {
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:edit") {
 		return false
