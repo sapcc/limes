@@ -2362,3 +2362,45 @@ func evaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.Respon
 		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
 	}
 }
+
+// DeleteProjectCommitmentAsCloudAdmin handles DELETE /v1/commitments/:id.
+func (p *v1Provider) DeleteProjectCommitmentAsCloudAdmin(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/:id")
+	if !p.prepareClusterAdminRequest(w, r) {
+		return
+	}
+	p.DeleteProjectCommitment(w, r)
+}
+
+// StartCommitmentTransferAsCloudAdmin handles POST /v1/commitments/:id/start-transfer
+func (p *v1Provider) StartCommitmentTransferAsCloudAdmin(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/:id/start-transfer")
+	if !p.prepareClusterAdminRequest(w, r) {
+		return
+	}
+	p.StartCommitmentTransfer(w, r)
+}
+
+func (p *v1Provider) prepareClusterAdminRequest(w http.ResponseWriter, r *http.Request) bool {
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:admin") {
+		return false
+	}
+	commitmentID := mux.Vars(r)["id"]
+	if commitmentID == "" {
+		http.Error(w, "commitment ID missing", http.StatusBadRequest)
+		return false
+	}
+	var request struct {
+		ProjectUUID liquid.ProjectUUID `db:"projectUUID"`
+		DomainUUID  string             `db:"domainUUID"`
+	}
+	err := p.DB.SelectOne(&request, `SELECT p.uuid projectUUID, d.uuid domainUUID FROM project_commitments pc JOIN projects p ON p.id = pc.project_id JOIN domains d ON d.id = p.domain_id where pc.id = $1`, commitmentID)
+	if err != nil {
+		http.Error(w, "unable to resolve the requested commitment", http.StatusBadRequest)
+		return false
+	}
+	mux.Vars(r)["project_id"] = string(request.ProjectUUID)
+	mux.Vars(r)["domain_id"] = request.DomainUUID
+	return true
+}

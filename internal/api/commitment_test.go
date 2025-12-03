@@ -2927,3 +2927,99 @@ func Test_RenewCommitments(t *testing.T) {
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 }
+
+func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	var transferToken = test.GenerateDummyTransferToken(1)
+
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+		"transfer_status":   "",
+		"transfer_token":    "",
+	}
+
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+		"status":            "confirmed",
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+
+	// Happy path
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
+
+	// Access forbidden
+	s.TokenValidator.Enforcer.AllowEdit = false
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/commitments/1/start-transfer",
+		ExpectStatus: http.StatusForbidden,
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowEdit = true
+
+	// Commitment does not exist
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/commitments/99/start-transfer",
+		ExpectBody:   assert.StringData("unable to resolve the requested commitment\n"),
+		ExpectStatus: http.StatusBadRequest,
+	}.Check(t, s.Handler)
+
+	// Delete a non existing commitment
+	assert.HTTPRequest{
+		Method:       "DELETE",
+		Path:         "/v1/commitments/99",
+		ExpectBody:   assert.StringData("unable to resolve the requested commitment\n"),
+		ExpectStatus: http.StatusBadRequest,
+	}.Check(t, s.Handler)
+
+	// Acess forbidden
+	s.TokenValidator.Enforcer.AllowEdit = false
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/commitments/1/start-transfer",
+		ExpectStatus: http.StatusForbidden,
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowEdit = true
+
+	// Successfully delete the commitment
+	assert.HTTPRequest{
+		Method:       "DELETE",
+		Path:         "/v1/commitments/1",
+		ExpectBody:   assert.StringData(""),
+		ExpectStatus: http.StatusNoContent,
+	}.Check(t, s.Handler)
+}
