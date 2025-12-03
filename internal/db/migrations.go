@@ -226,16 +226,18 @@ var sqlMigrations = map[string]string{
 	"068_introduce_transfer_started_at.down.sql": `
 		ALTER TABLE project_commitments DROP COLUMN transfer_started_at;
 	`,
-	"068_introduce_transfer_started_at.up.sql": `
+	"068_introduce_transfer_started_at.up.sql": ExpandEnumPlaceholders(`
 		ALTER TABLE project_commitments ADD COLUMN transfer_started_at TIMESTAMPTZ DEFAULT NULL;
-		UPDATE project_commitments SET transfer_started_at = NOW() WHERE transfer_status = 'public' AND transfer_started_at IS NULL;
-	`,
+		UPDATE project_commitments SET transfer_started_at = NOW() WHERE transfer_status = {{limesresources.CommitmentTransferStatusPublic}} AND transfer_started_at IS NULL;
+	`),
 	"069_transfer_status_check_constraint.down.sql": `
 		ALTER TABLE project_commitments DROP CONSTRAINT transfer_status_check;
 	`,
-	"069_transfer_status_check_constraint.up.sql": `
-		ALTER TABLE project_commitments 
-		ADD CONSTRAINT transfer_status_check 
-		CHECK (status NOT IN ('superseded', 'expired') OR transfer_status = '');
-	`,
+	"069_transfer_status_check_constraint.up.sql": ExpandEnumPlaceholders(`
+		UPDATE project_commitments
+			SET transfer_status = {{limesresources.CommitmentTransferStatusNone}}, transfer_token = NULL, transfer_started_at = NULL
+			WHERE status IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}});
+		ALTER TABLE project_commitments
+			ADD CONSTRAINT transfer_status_check CHECK (status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) OR transfer_status = {{limesresources.CommitmentTransferStatusNone}});
+	`),
 }
