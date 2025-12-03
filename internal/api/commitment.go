@@ -2383,7 +2383,7 @@ func (p *v1Provider) StartCommitmentTransferAsCloudAdmin(w http.ResponseWriter, 
 
 func (p *v1Provider) prepareClusterAdminRequest(w http.ResponseWriter, r *http.Request) bool {
 	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:admin") {
+	if !token.Require(w, "cluster:edit") {
 		return false
 	}
 	commitmentID := mux.Vars(r)["id"]
