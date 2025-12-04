@@ -18,6 +18,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/liquids/nova"
@@ -26,11 +27,12 @@ import (
 // Logic implements the liquidapi.Logic interface for Ironic.
 type Logic struct {
 	// configuration
-	WithSubcapacities bool                               `json:"with_subcapacities"`
-	WithSubresources  bool                               `json:"with_subresources"`
-	NodeToAZOverrides map[string]liquid.AvailabilityZone `json:"node_to_az_overrides"`
-	NodePageLimit     Option[int]                        `json:"node_page_limit"`
-	InstancePageLimit Option[int]                        `json:"instance_page_limit"`
+	WithSubcapacities bool                                         `json:"with_subcapacities"`
+	WithSubresources  bool                                         `json:"with_subresources"`
+	NodeToAZOverrides map[string]liquid.AvailabilityZone           `json:"node_to_az_overrides"`
+	NodePageLimit     Option[int]                                  `json:"node_page_limit"`
+	InstancePageLimit Option[int]                                  `json:"instance_page_limit"`
+	RestrictedFlavors map[string]regexpext.ConfigSet[string, bool] `json:"restricted_flavors"`
 	// connections
 	NovaV2       *gophercloud.ServiceClient `json:"-"`
 	IronicV1     *gophercloud.ServiceClient `json:"-"`
@@ -123,6 +125,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 				Help: "Number of available/active Ironic nodes without matching flavor.",
 			},
 		},
+		UsageReportNeedsProjectMetadata: true,
 	}, nil
 }
 

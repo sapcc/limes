@@ -1945,6 +1945,34 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, commitmentChangeRequest)
 }
 
+func TestTransferCommitmentForbiddenResource(t *testing.T) {
+	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"service_type": "second", "resource_name": "capacity", "availability_zone": "az-one", "amount": 5, "duration": "1 hour"}},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 5, "transfer_status": "unlisted"}},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE WHERE project_id = $1 AND resource_id = $2`, s.GetProjectID("dresden"), s.GetResourceID("second", "capacity"))
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": test.GenerateDummyTransferToken(1)},
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource second/capacity is not enabled in the target project\n"),
+	}.Check(t, s.Handler)
+}
+
 func Test_GetCommitmentConversion(t *testing.T) {
 	s := setupCommitmentTest(t, testConvertCommitmentsJSON)
 
