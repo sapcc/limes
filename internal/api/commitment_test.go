@@ -272,30 +272,37 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 	s.MustDBExec(query, 40, 6, `fourth/capacity_b/az-two`)
 
 	// fill `project_resources`: only boring placeholder values
-	query = `UPDATE project_resources SET quota = $1, backend_quota = $1 WHERE resource_id = $2`
-	s.MustDBExec(query, 10, s.GetResourceID("first", "capacity"))
-	s.MustDBExec(query, 10, s.GetResourceID("first", "things"))
-	s.MustDBExec(query, 10, s.GetResourceID("second", "capacity"))
-	s.MustDBExec(query, 10, s.GetResourceID("second", "things"))
-	s.MustDBExec(query, 10, s.GetResourceID("fourth", "capacity_a"))
-	s.MustDBExec(query, 10, s.GetResourceID("fourth", "capacity_b"))
+	query = `UPDATE project_az_resources SET quota = $1, backend_quota = $1 WHERE az_resource_id = $2`
+	s.MustDBExec(query, 10, s.GetAZResourceID("first", "capacity", liquid.AvailabilityZoneTotal))
+	s.MustDBExec(query, 10, s.GetAZResourceID("first", "things", liquid.AvailabilityZoneTotal))
+	s.MustDBExec(query, 10, s.GetAZResourceID("second", "capacity", liquid.AvailabilityZoneTotal))
+	s.MustDBExec(query, 10, s.GetAZResourceID("second", "things", liquid.AvailabilityZoneTotal))
+	s.MustDBExec(query, 10, s.GetAZResourceID("fourth", "capacity_a", liquid.AvailabilityZoneTotal))
+	s.MustDBExec(query, 10, s.GetAZResourceID("fourth", "capacity_b", liquid.AvailabilityZoneTotal))
 
 	// fill `project_az_resources`
 	query = `UPDATE project_az_resources SET usage = $1 WHERE az_resource_id = $2`
 	s.MustDBExec(query, 2, s.GetAZResourceID("first", "capacity", "az-one"))
 	s.MustDBExec(query, 2, s.GetAZResourceID("first", "capacity", "az-two"))
+	s.MustDBExec(query, 4, s.GetAZResourceID("first", "capacity", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 2, s.GetAZResourceID("first", "things", liquid.AvailabilityZoneAny))
+	s.MustDBExec(query, 2, s.GetAZResourceID("first", "things", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 1, s.GetAZResourceID("first", "other", "az-one"))
 	s.MustDBExec(query, 1, s.GetAZResourceID("first", "other", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("first", "other", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 2, s.GetAZResourceID("second", "capacity", "az-one"))
 	s.MustDBExec(query, 2, s.GetAZResourceID("second", "capacity", "az-two"))
+	s.MustDBExec(query, 4, s.GetAZResourceID("second", "capacity", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 2, s.GetAZResourceID("second", "things", liquid.AvailabilityZoneAny))
 	s.MustDBExec(query, 1, s.GetAZResourceID("second", "other", "az-one"))
 	s.MustDBExec(query, 1, s.GetAZResourceID("second", "other", "az-two"))
+	s.MustDBExec(query, 2, s.GetAZResourceID("second", "other", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_a", "az-one"))
 	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_a", "az-two"))
+	s.MustDBExec(query, 4, s.GetAZResourceID("fourth", "capacity_a", liquid.AvailabilityZoneTotal))
 	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_b", "az-one"))
 	s.MustDBExec(query, 2, s.GetAZResourceID("fourth", "capacity_b", "az-two"))
+	s.MustDBExec(query, 4, s.GetAZResourceID("fourth", "capacity_b", liquid.AvailabilityZoneTotal))
 
 	return s
 }

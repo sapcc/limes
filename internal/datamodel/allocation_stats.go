@@ -112,13 +112,13 @@ type projectAZAllocationStats struct {
 }
 
 var (
-	getRawCapacityInResourceQuery = sqlext.SimplifyWhitespace(`
+	getRawCapacityInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT azr.az, azr.raw_capacity, azr.last_nonzero_raw_capacity IS NOT NULL
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  JOIN az_resources azr ON azr.resource_id = r.id
-		  WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3)
-	`)
+		  WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3) AND azr.az != {{liquid.AvailabilityZoneTotal}}
+	`))
 
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pazr.project_id, azr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
@@ -127,7 +127,7 @@ var (
 		  JOIN az_resources azr ON azr.resource_id = r.id
 		  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id
 		  LEFT OUTER JOIN project_commitments pc ON pc.az_resource_id = azr.id AND pc.project_id = pazr.project_id AND pc.status = {{liquid.CommitmentStatusConfirmed}}
-		 WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3)
+		 WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3) AND azr.az != {{liquid.AvailabilityZoneTotal}}
 		 GROUP BY pazr.project_id, azr.az, pazr.usage, pazr.historical_usage
 	`))
 )

@@ -27,11 +27,11 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
-	SELECT s.type, r.name, azr.az,
-	       SUM(pazr.usage), SUM(COALESCE(pazr.physical_usage, pazr.usage)), COUNT(pazr.physical_usage) > 0,
-	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)),
-	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))),
-	       MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
+	SELECT s.type, r.name, azr.az, SUM(pazr.usage),
+		   SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage, COUNT(pazr.physical_usage) > 0 as show_physical_usage,
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)) AS unused_commitments,
+	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))) AS uncommitted_usage,
+	       SUM(pazr.quota) AS quota, MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -43,25 +43,16 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	 GROUP BY s.type, r.name, azr.az
 `))
 
-var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
-	SELECT s.type, r.name, SUM(pr.quota)
-	  FROM services s
-	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN project_resources pr ON pr.resource_id = r.id
-	 WHERE TRUE {{AND s.type = $service_type}}
-	 GROUP BY s.type, r.name
-`)
-
-var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
+var clusterReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, azr.raw_capacity, azr.usage, azr.subcapacities, s.scraped_at
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  LEFT OUTER JOIN az_resources azr ON azr.resource_id = r.id
 	 WHERE TRUE {{AND s.type = $service_type}}
 	 ORDER BY azr.az
-`)
+`))
 
-var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
 	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
@@ -74,7 +65,7 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = azr.id
 	 WHERE TRUE {{AND s.type = $service_type}}
 	 GROUP BY s.type, r.name, azr.az, pcs.duration
@@ -113,11 +104,12 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			showPhysicalUsage *bool
 			unusedCommitments *uint64
 			uncommittedUsage  *uint64
+			quota             *uint64
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 		)
 		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
-			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments, &uncommittedUsage,
+			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments, &uncommittedUsage, &quota,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
@@ -134,16 +126,22 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			return nil
 		}
 
-		resource.Usage += *usage
-		if *showPhysicalUsage {
-			sumPhysicalUsage := *physicalUsage
-			if resource.PhysicalUsage != nil {
-				sumPhysicalUsage += *resource.PhysicalUsage
+		if *availabilityZone == liquid.AvailabilityZoneTotal {
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+
+			resource.Usage = *usage
+			if quota != nil && !resource.NoQuota && resInfo.Topology != liquid.AZSeparatedTopology {
+				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
+				// the sum of all project quotas, since quotas only exist on project level by now.
+				resource.DomainsQuota = quota
 			}
-			resource.PhysicalUsage = &sumPhysicalUsage
+			if *showPhysicalUsage {
+				resource.PhysicalUsage = physicalUsage
+			}
 		}
 
-		if filter.WithAZBreakdown {
+		if *availabilityZone != liquid.AvailabilityZoneTotal && filter.WithAZBreakdown {
 			if resource.PerAZ == nil {
 				resource.PerAZ = make(limesresources.ClusterAZResourceReports)
 			}
@@ -164,53 +162,23 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		return nil, err
 	}
 
-	// second query: collect quota data (this is a separate query because we need
-	// to stop at the resource level and not break down by AZ)
+	// second query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
-	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			dbServiceType  db.ServiceType
-			dbResourceName liquid.ResourceName
-			quota          *uint64
-		)
-		err := rows.Scan(&dbServiceType, &dbResourceName, &quota)
-		if err != nil {
-			return err
-		}
-		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
-			return nil
-		}
-		_, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
-
-		if quota != nil && !resource.NoQuota {
-			// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
-			// the sum of all project quotas, since quotas only exist on project level by now.
-			resource.DomainsQuota = quota
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// third query: collect capacity data for these clusters
-	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 	if !filter.WithSubcapacities {
 		queryStr = strings.Replace(queryStr, "azr.subcapacities", "''", 1)
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			dbServiceType     db.ServiceType
-			dbResourceName    liquid.ResourceName
-			availabilityZone  *limes.AvailabilityZone
-			rawCapacityInAZ   *uint64
-			usageInAZ         *uint64
-			subcapacitiesInAZ *string
-			scrapedAt         *time.Time
+			dbServiceType    db.ServiceType
+			dbResourceName   liquid.ResourceName
+			availabilityZone *limes.AvailabilityZone
+			rawCapacity      *uint64
+			usage            *uint64
+			subcapacities    *string
+			scrapedAt        *time.Time
 		)
 		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
-			&rawCapacityInAZ, &usageInAZ, &subcapacitiesInAZ, &scrapedAt)
+			&rawCapacity, &usage, &subcapacities, &scrapedAt)
 		if err != nil {
 			return err
 		}
@@ -218,42 +186,48 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			return nil
 		}
 		_, resource, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
+		overcommitFactor := behavior.OvercommitFactor
 
-		// NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
-		if resource.RawCapacity == nil {
-			resource.RawCapacity = rawCapacityInAZ
-		} else if rawCapacityInAZ != nil {
-			resource.RawCapacity = pointerTo(*resource.RawCapacity + *rawCapacityInAZ)
+		if availabilityZone == nil {
+			return nil
 		}
-		if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
-			translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
-			if translate != nil {
-				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-				*subcapacitiesInAZ, err = translate(*subcapacitiesInAZ, *availabilityZone, dbResourceName, resInfo)
-				if err != nil {
-					return fmt.Errorf("could not apply TranslationRule to subcapacities in %s/%s/%s: %w",
-						dbServiceType, dbResourceName, *availabilityZone, err)
-				}
+
+		if *availabilityZone == liquid.AvailabilityZoneTotal {
+			resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity))
+			if *resource.Capacity != *rawCapacity {
+				resource.RawCapacity = pointerTo(*rawCapacity)
 			}
-			mergeJSONListInto(&resource.Subcapacities, *subcapacitiesInAZ)
 		}
 
-		if availabilityZone != nil && rawCapacityInAZ != nil {
+		if rawCapacity != nil && *availabilityZone != liquid.AvailabilityZoneTotal {
 			azReport := limesresources.ClusterAvailabilityZoneReport{
 				Name:  *availabilityZone,
-				Usage: unwrapOrDefault(usageInAZ, 0),
+				Usage: unwrapOrDefault(usage, 0),
 			}
-			overcommitFactor := behavior.OvercommitFactor
-			azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
-			if azReport.Capacity != *rawCapacityInAZ {
-				azReport.RawCapacity = *rawCapacityInAZ
+			azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacity)
+			if azReport.Capacity != *rawCapacity {
+				azReport.RawCapacity = *rawCapacity
 			}
 
 			if resource.CapacityPerAZ == nil {
 				resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
 			}
 			resource.CapacityPerAZ[*availabilityZone] = &azReport
+
+			// only the az-entries have subcapacities!=''
+			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
+				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
+				if translate != nil {
+					serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+					resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+					*subcapacities, err = translate(*subcapacities, *availabilityZone, dbResourceName, resInfo)
+					if err != nil {
+						return fmt.Errorf("could not apply TranslationRule to subcapacities in %s/%s/%s: %w",
+							dbServiceType, dbResourceName, *availabilityZone, err)
+					}
+				}
+				mergeJSONListInto(&resource.Subcapacities, *subcapacities)
+			}
 
 			if filter.WithAZBreakdown {
 				if resource.PerAZ == nil {
@@ -266,8 +240,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				}
 				azReportV2.Capacity = azReport.Capacity
 				azReportV2.RawCapacity = azReport.RawCapacity
-				azReportV2.Usage = usageInAZ
-				azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacitiesInAZ, ""))
+				azReportV2.Usage = usage
+				azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacities, ""))
 			}
 		}
 
@@ -281,8 +255,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 
 	if filter.WithAZBreakdown {
-		// fourth query: collect commitment data that is broken down by commitment duration
-		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
+		// third query: collect commitment data that is broken down by commitment duration
+		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
 				dbServiceType   db.ServiceType
@@ -336,24 +310,9 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		}
 	}
 
-	// epilogue: perform some calculations that require the full sum over all AZs to be done
-	nm := core.BuildResourceNameMapping(cluster, serviceInfos)
-	for apiServiceType, service := range report.Services {
-		for apiResourceName, resource := range service.Resources {
-			dbServiceType, dbResourceName, exists := nm.MapFromV1API(apiServiceType, apiResourceName)
-			if !exists {
-				// defense in depth: should not happen; we should not have created entries for non-existent resources
-				continue
-			}
-
-			overcommitFactor := cluster.BehaviorForResource(dbServiceType, dbResourceName).OvercommitFactor
-			if overcommitFactor == 0 {
-				resource.Capacity = resource.RawCapacity
-				resource.RawCapacity = nil
-			} else if resource.RawCapacity != nil {
-				resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*resource.RawCapacity))
-			}
-
+	// epilogue: perform some operations on the finished report
+	for _, service := range report.Services {
+		for _, resource := range service.Resources {
 			if skipAZBreakdown(resource.CapacityPerAZ) {
 				resource.CapacityPerAZ = nil
 			}

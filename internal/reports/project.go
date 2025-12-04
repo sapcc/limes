@@ -38,8 +38,8 @@ var (
 	 ORDER BY p.uuid
 `)
 
-	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, s.type, ps.scraped_at, r.name, pr.quota, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pr.backend_quota, pazr.subresources
+	projectReportResourcesQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+	SELECT p.id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -50,7 +50,7 @@ var (
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
 	 WHERE %s {{AND s.type = $service_type}}
 	 ORDER BY p.uuid, azr.az
-`)
+`))
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, pc.duration,
@@ -59,7 +59,7 @@ var (
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPlanned}}), 0) AS planned
 	  FROM services s
 	  JOIN resources r on r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id
+	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
 	  JOIN project_commitments pc ON pc.az_resource_id = azr.id
 	 WHERE pc.project_id = $1
 	 GROUP BY s.type, r.name, azr.az, pc.duration
@@ -122,21 +122,20 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			dbServiceType            db.ServiceType
 			scrapedAt                *time.Time
 			dbResourceName           liquid.ResourceName
-			quota                    *uint64
 			maxQuotaFromOutsideAdmin *uint64
 			ForbidAutogrowth         bool
 			az                       *limes.AvailabilityZone
-			azQuota                  *uint64
-			azUsage                  *uint64
-			azPhysicalUsage          *uint64
-			azHistoricalUsage        *string
+			quota                    *uint64
+			usage                    *uint64
+			physicalUsage            *uint64
+			historicalUsage          *string
 			backendQuota             *int64
-			azSubresources           *string
+			subresources             *string
 		)
 		err := rows.Scan(
 			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&quota, &maxQuotaFromOutsideAdmin, &ForbidAutogrowth,
-			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
+			&maxQuotaFromOutsideAdmin, &ForbidAutogrowth,
+			&az, &quota, &usage, &physicalUsage, &historicalUsage, &backendQuota, &subresources,
 		)
 		if err != nil {
 			return err
@@ -207,78 +206,83 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			if filter.WithAZBreakdown {
 				resReport.PerAZ = make(limesresources.ProjectAZResourceReports)
 			}
-
-			if !resReport.NoQuota {
-				qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
-				resReport.QuotaDistributionModel = qdConfig.Model
-				if quota != nil {
-					resReport.Quota = quota
-					resReport.UsableQuota = quota
-					if maxQuotaFromOutsideAdmin != nil {
-						resReport.MaxQuota = maxQuotaFromOutsideAdmin
-					}
-					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
-						resReport.BackendQuota = backendQuota
-					}
-					resReport.ForbidAutogrowth = ForbidAutogrowth
-				}
-			}
-
 			srvReport.Resources[apiIdentity.Name] = resReport
 		}
 
 		// fill data from project_az_resources into resource report
-		if az == nil {
-			return nil // no project_az_resources available
-		}
-		resReport.Usage += *azUsage
-		if azPhysicalUsage != nil {
-			sum := unwrapOrDefault(resReport.PhysicalUsage, 0) + *azPhysicalUsage
-			resReport.PhysicalUsage = &sum
-		}
-		if azSubresources != nil {
-			translate := behavior.TranslationRuleInV1API.TranslateSubresources
-			if translate != nil {
-				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-				*azSubresources, err = translate(*azSubresources, *az, dbResourceName, resInfo)
-				if err != nil {
-					return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
-						dbServiceType, dbResourceName, *az, currentProjectID, err)
-				}
-			}
-			mergeJSONListInto(&resReport.Subresources, *azSubresources)
-		}
+		// start with special handling of "total" AZ
+		if *az == liquid.AvailabilityZoneTotal {
+			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
+			resReport.QuotaDistributionModel = qdConfig.Model
 
-		if filter.WithAZBreakdown {
-			resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
-				Quota:         azQuota,
-				Committed:     nil, // will be filled by finalizeProjectResourceReport()
-				Usage:         *azUsage,
-				PhysicalUsage: azPhysicalUsage,
-				Subresources:  json.RawMessage(*azSubresources),
+			resReport.Usage = *usage
+			if physicalUsage != nil {
+				resReport.PhysicalUsage = physicalUsage
 			}
 
-			if *azHistoricalUsage != "" {
-				var duration limesresources.CommitmentDuration
-				autogrowCfg, ok := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
-				if ok {
-					duration = limesresources.CommitmentDuration{
-						Short: autogrowCfg.UsageDataRetentionPeriod.Into(),
-					}
-				} else {
-					duration = limesresources.CommitmentDuration{
-						Short: 0,
+			if !resReport.NoQuota && quota != nil {
+				if resInfo.Topology != liquid.AZSeparatedTopology {
+					resReport.Quota = quota
+					resReport.UsableQuota = quota
+					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
+						resReport.BackendQuota = backendQuota
 					}
 				}
-				ts, err := util.ParseTimeSeries[uint64](*azHistoricalUsage)
-				if err != nil {
-					return err
+				if maxQuotaFromOutsideAdmin != nil {
+					resReport.MaxQuota = maxQuotaFromOutsideAdmin
 				}
-				resReport.PerAZ[*az].HistoricalUsage = &limesresources.HistoricalReport{
-					MinUsage: ts.MinOr(resReport.Usage),
-					MaxUsage: ts.MaxOr(resReport.Usage),
-					Duration: duration,
+				resReport.ForbidAutogrowth = ForbidAutogrowth
+			}
+		}
+
+		if *az != liquid.AvailabilityZoneTotal {
+			// we take the subresources from the AZ entries, so that we know from which AZ they come
+			if subresources != nil {
+				translate := behavior.TranslationRuleInV1API.TranslateSubresources
+				if translate != nil {
+					serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
+					resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+					*subresources, err = translate(*subresources, *az, dbResourceName, resInfo)
+					if err != nil {
+						return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
+							dbServiceType, dbResourceName, *az, currentProjectID, err)
+					}
+				}
+				mergeJSONListInto(&resReport.Subresources, *subresources)
+			}
+
+			if filter.WithAZBreakdown {
+				resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
+					Quota:         quota,
+					Committed:     nil, // will be filled by finalizeProjectResourceReport()
+					Usage:         *usage,
+					PhysicalUsage: physicalUsage,
+					Subresources:  json.RawMessage(*subresources),
+				}
+
+				if *historicalUsage != "" {
+					var duration limesresources.CommitmentDuration
+					autogrowCfg, ok := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
+					if ok {
+						duration = limesresources.CommitmentDuration{
+							Short: autogrowCfg.UsageDataRetentionPeriod.Into(),
+						}
+					} else {
+						duration = limesresources.CommitmentDuration{
+							Short: 0,
+						}
+					}
+					ts, err := util.ParseTimeSeries[uint64](*historicalUsage)
+					if err != nil {
+						return err
+					}
+					resReport.PerAZ[*az].HistoricalUsage = &limesresources.HistoricalReport{
+						MinUsage: ts.MinOr(resReport.Usage),
+						MaxUsage: ts.MaxOr(resReport.Usage),
+						Duration: duration,
+					}
 				}
 			}
 		}

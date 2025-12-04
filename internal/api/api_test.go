@@ -141,16 +141,19 @@ func setupTest(t *testing.T) test.Setup {
 	unshared := s.GetServiceID("unshared")
 
 	sharedCapacity := s.GetResourceID("shared", "capacity")
-	unsharedThings := s.GetResourceID("unshared", "things")
 
 	sharedCapacityAny := s.GetAZResourceID("shared", "capacity", limes.AvailabilityZoneAny)
 	sharedCapacityAZOne := s.GetAZResourceID("shared", "capacity", "az-one")
 	sharedCapacityAZTwo := s.GetAZResourceID("shared", "capacity", "az-two")
+	sharedCapacityTotal := s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal)
 	sharedThingsAny := s.GetAZResourceID("shared", "things", limes.AvailabilityZoneAny)
+	sharedThingsTotal := s.GetAZResourceID("shared", "things", liquid.AvailabilityZoneTotal)
 	unsharedCapacityAny := s.GetAZResourceID("unshared", "capacity", limes.AvailabilityZoneAny)
 	unsharedCapacityAZOne := s.GetAZResourceID("unshared", "capacity", "az-one")
 	unsharedCapacityAZTwo := s.GetAZResourceID("unshared", "capacity", "az-two")
+	unsharedCapacityTotal := s.GetAZResourceID("unshared", "capacity", liquid.AvailabilityZoneTotal)
 	unsharedThingsAny := s.GetAZResourceID("unshared", "things", limes.AvailabilityZoneAny)
+	unsharedThingsTotal := s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneTotal)
 
 	sharedObjectsCreate := s.GetRateID("shared", "service/shared/objects:create")
 	sharedObjectsDelete := s.GetRateID("shared", "service/shared/objects:delete")
@@ -168,9 +171,12 @@ func setupTest(t *testing.T) test.Setup {
 	// fill `az_resources` (unshared/capacity has zero capacity)
 	query = `UPDATE az_resources SET raw_capacity = $1, last_nonzero_raw_capacity = $1, usage = $2, subcapacities = $3 WHERE path = $4`
 	s.MustDBExec(query, 139, 45, `[{"smaller_half":46},{"larger_half":93}]`, "unshared/things/any")
+	s.MustDBExec(query, 139, 45, `[{"smaller_half":46},{"larger_half":93}]`, "unshared/things/total")
 	s.MustDBExec(query, 246, 158, `[{"smaller_half":82},{"larger_half":164}]`, "shared/things/any")
+	s.MustDBExec(query, 246, 158, `[{"smaller_half":82},{"larger_half":164}]`, "shared/things/total")
 	s.MustDBExec(query, 90, 12, "", "shared/capacity/az-one")
 	s.MustDBExec(query, 95, 15, "", "shared/capacity/az-two")
+	s.MustDBExec(query, 185, 27, "", "shared/capacity/total")
 
 	// fill `project_services`
 	query = `UPDATE project_services SET stale = FALSE, scraped_at = $1, checked_at = $1 WHERE project_id = $2 AND service_id = $3`
@@ -182,15 +188,17 @@ func setupTest(t *testing.T) test.Setup {
 	s.MustDBExec(query, unix(66), paris, shared)
 
 	// fill `project_resources` (most have quota = 10, some test special cases)
-	s.MustDBExec(`UPDATE project_resources SET quota = 10, backend_quota = 10`)
-	s.MustDBExec(`UPDATE project_resources SET backend_quota = 100 WHERE project_id = $1 AND resource_id = $2`, dresden, sharedCapacity)
-	s.MustDBExec(`UPDATE project_resources SET backend_quota = -1 WHERE project_id = $1 AND resource_id = $2`, paris, unsharedThings)
+	s.MustDBExec(`UPDATE project_az_resources SET quota = 10, backend_quota = 10 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = $1)`, liquid.AvailabilityZoneTotal)
+	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = 100 WHERE project_id = $1 AND az_resource_id = $2`, dresden, sharedCapacityTotal)
+	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = -1 WHERE project_id = $1 AND az_resource_id = $2`, paris, unsharedThingsTotal)
 	s.MustDBExec(`UPDATE project_resources SET max_quota_from_outside_admin = 200 WHERE project_id = $1 AND resource_id = $2`, paris, sharedCapacity)
 
 	// fill `project_az_resources` subresources (only in Berlin)
 	query = `UPDATE project_az_resources SET subresources = $1 WHERE project_id = $2 AND az_resource_id = $3`
 	s.MustDBExec(query, `[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]`, berlin, unsharedThingsAny)
+	s.MustDBExec(query, `[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]`, berlin, unsharedThingsTotal)
 	s.MustDBExec(query, `[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]`, berlin, sharedThingsAny)
+	s.MustDBExec(query, `[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]`, berlin, sharedThingsTotal)
 
 	// fill `project_az_resources` usage:
 	// - every resource has usage = 2 per project, but split between AZs for "capacity"
@@ -198,10 +206,14 @@ func setupTest(t *testing.T) test.Setup {
 	query = `UPDATE project_az_resources SET usage = $1 WHERE az_resource_id = $2`
 	s.MustDBExec(query, 1, sharedCapacityAZOne)
 	s.MustDBExec(query, 1, sharedCapacityAZTwo)
+	s.MustDBExec(query, 2, sharedCapacityTotal)
 	s.MustDBExec(query, 2, sharedThingsAny)
+	s.MustDBExec(query, 2, sharedThingsTotal)
 	s.MustDBExec(query, 1, unsharedCapacityAZOne)
 	s.MustDBExec(query, 1, unsharedCapacityAZTwo)
+	s.MustDBExec(query, 2, unsharedCapacityTotal)
 	s.MustDBExec(query, 2, unsharedThingsAny)
+	s.MustDBExec(query, 2, unsharedThingsTotal)
 
 	// fill `project_az_resources` quota:
 	// - in most cases, the even quota of 10 from above gets split evenly between relevant AZs
@@ -220,17 +232,23 @@ func setupTest(t *testing.T) test.Setup {
 	s.MustDBExec(query, 4, dresden, sharedCapacityAny)
 	s.MustDBExec(query, 3, dresden, sharedCapacityAZOne)
 	s.MustDBExec(query, 3, dresden, sharedCapacityAZTwo)
+	s.MustDBExec(query, 10, dresden, sharedCapacityTotal)
 	s.MustDBExec(query, 4, dresden, unsharedCapacityAny)
 	s.MustDBExec(query, 3, dresden, unsharedCapacityAZOne)
 	s.MustDBExec(query, 3, dresden, unsharedCapacityAZTwo)
-	s.MustDBExec(`UPDATE project_az_resources SET quota = NULL WHERE project_id = $1`, paris)
+	s.MustDBExec(query, 10, dresden, unsharedCapacityTotal)
+	// TODO: what situation did the following line simulate?
+	//   I know it should create the situation from L208, but this did not modify project_resources, so it was counted in with the old logic.
+	// s.MustDBExec(`UPDATE project_az_resources SET quota = NULL WHERE project_id = $1`, paris)
 
 	// fill `project_az_resources` physical usage: only Paris (aggregation should consider physical_usage = usage in the other projects)
 	query = `UPDATE project_az_resources SET physical_usage = $1 WHERE project_id = $2 AND az_resource_id = $3`
 	s.MustDBExec(query, 0, paris, sharedCapacityAZOne)
 	s.MustDBExec(query, 1, paris, sharedCapacityAZTwo)
+	s.MustDBExec(query, 1, paris, sharedCapacityTotal)
 	s.MustDBExec(query, 0, paris, unsharedCapacityAZOne)
 	s.MustDBExec(query, 1, paris, unsharedCapacityAZTwo)
+	s.MustDBExec(query, 1, paris, unsharedCapacityTotal)
 
 	// fill `project_rates`:
 	// - Berlin has custom rate limits
@@ -475,6 +493,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// check ListDomains with new API features enabled
+	// TODO: Why did some of the "per_az" not have the quota? This query was not touched, so I don't understand why.
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
@@ -934,12 +953,12 @@ func Test_LargeProjectList(t *testing.T) {
 	queries := []string{
 		`UPDATE project_services SET scraped_at = TO_TIMESTAMP($1) AT LOCAL WHERE project_id = (SELECT id FROM projects WHERE uuid = $2)`,
 		fmt.Sprintf(
-			`UPDATE project_resources SET quota = $1, backend_quota = $1 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND resource_id = %d`,
-			s.GetResourceID("unshared", "things"),
+			`UPDATE project_az_resources SET quota = $1, backend_quota = $1 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND az_resource_id IN (%d, %d)`,
+			s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneAny), s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneTotal),
 		),
 		fmt.Sprintf(
-			`UPDATE project_az_resources SET usage = $1 / 2 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND az_resource_id = %d`,
-			s.GetAZResourceID("unshared", "things", "any"),
+			`UPDATE project_az_resources SET usage = $1 / 2 WHERE project_id = (SELECT id FROM projects WHERE uuid = $2) AND az_resource_id IN (%d, %d)`,
+			s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneAny), s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneTotal),
 		),
 	}
 	for _, query := range queries {
@@ -1295,12 +1314,9 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t)
 
-	s.MustDBExec(
-		`UPDATE project_az_resources SET usage = 2, historical_usage = $1 WHERE project_id = $2 AND az_resource_id = $3`,
-		`{"t":[1719399600, 1719486000],"v":[1, 5]}`,
-		s.GetProjectID("berlin"),
-		s.GetAZResourceID("shared", "capacity", "az-one"),
-	)
+	query := `UPDATE project_az_resources SET usage = $1, historical_usage = $2 WHERE project_id = $3 AND az_resource_id = $4`
+	s.MustDBExec(query, 2, `{"t":[1719399600, 1719486000],"v":[1, 5]}`, s.GetProjectID("berlin"), s.GetAZResourceID("shared", "capacity", "az-one"))
+	s.MustDBExec(query, 3, `{"t":[1719399600, 1719486000],"v":[2, 6]}`, s.GetProjectID("berlin"), s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal))
 
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1610,6 +1626,11 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 			SELECT id FROM az_resources WHERE az = $1 OR az = $2
 		)
 	`, "az-one", "az-two")
+	s.MustDBExec(`
+		UPDATE project_az_resources SET backend_quota = 10, quota = 10, usage = 2 WHERE az_resource_id IN (
+			SELECT id FROM az_resources WHERE az = $1
+		)
+	`, liquid.AvailabilityZoneTotal)
 
 	// This test ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
 	assert.HTTPRequest{

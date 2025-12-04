@@ -19,18 +19,18 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-//NOTE:
+// NOTE:
 //
-//- This suite only tests the functional core in acpqComputeQuotas().
+// - This suite only tests the functional core in acpqComputeQuotas().
 //  The full function is covered by the capacity scrape test.
-//- Project IDs are chosen in the range 400..499 to make them
+// - Project IDs are chosen in the range 400..499 to make them
 //  visually distinctive from other integer literals.
 
 func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 	// This basic test for a non-AZ-aware resource does not give out all capacity,
 	// so it does not matter whether quota overcommit is allowed or not.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 250,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// 401 is a boring base case
@@ -53,7 +53,15 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 	}
 	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
-			"any": {
+			liquid.AvailabilityZoneAny: {
+				401: {Allocated: 36}, // 30 * 1.2 = 36
+				402: {Allocated: 54}, // 45 * 1.2 = 54
+				403: {Allocated: 20},
+				404: {Allocated: 72}, // 60 * 1.2 = 72
+				405: {Allocated: 10},
+				406: {Allocated: 10},
+			},
+			liquid.AvailabilityZoneTotal: {
 				401: {Allocated: 36}, // 30 * 1.2 = 36
 				402: {Allocated: 54}, // 45 * 1.2 = 54
 				403: {Allocated: 20},
@@ -85,6 +93,8 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				// 406 and 407 test the application of base quota in "any"
 				406: constantUsage(0),
 				407: constantUsage(2),
+				// 408 tests that unknown usage causes equally distributed quota in a "real" AZ --> never ever, we want quota in unknown
+				408: constantUsage(0),
 			},
 		},
 		"az-two": {
@@ -97,10 +107,11 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: constantUsage(40),
 				406: constantUsage(0),
 				407: constantUsage(1),
+				408: constantUsage(0),
 			},
 		},
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -110,6 +121,14 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {},
 				406: {},
 				407: {},
+				408: {},
+			},
+		},
+		// unknown only appears, when it exists
+		liquid.AvailabilityZoneUnknown: {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				408: constantUsage(20),
 			},
 		},
 	}
@@ -127,6 +146,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 72}, // 60 * 1.2 = 72
 				406: {Allocated: 0},
 				407: {Allocated: 3}, // 2 * 1.2 = 2.4 rounded to 3 (guaranteed minimum growth)
+				408: {Allocated: 10},
 			},
 			"az-two": {
 				401: {Allocated: 24},
@@ -136,8 +156,9 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 48}, // 40 * 1.2 = 48
 				406: {Allocated: 0},
 				407: {Allocated: 2}, // 1 * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth)
+				408: {Allocated: 10},
 			},
-			"any": {
+			liquid.AvailabilityZoneAny: {
 				401: {Allocated: 0},
 				402: {Allocated: 0},
 				403: {Allocated: 0},
@@ -145,6 +166,17 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 0},
 				406: {Allocated: 10},
 				407: {Allocated: 5},
+				408: {Allocated: 0},
+			},
+			liquid.AvailabilityZoneTotal: {
+				401: {Allocated: 48},  // 24 + 24
+				402: {Allocated: 24},  // 24 + 0
+				403: {Allocated: 55},  // 33 + 22
+				404: {Allocated: 35},  // 20 + 15
+				405: {Allocated: 120}, // 72 + 48
+				406: {Allocated: 10},  // 0 + 0 + 10
+				407: {Allocated: 10},  // 3 + 2 + 5
+				408: {Allocated: 20},  // 10 + 10 + 0
 			},
 		}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 	}
@@ -208,6 +240,15 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 				406: {Allocated: 10}, // Basequota
 				407: {Allocated: 10}, // Basequota
 			},
+			liquid.AvailabilityZoneTotal: {
+				401: {Allocated: 48}, // 24 + 24
+				402: {Allocated: 24},
+				403: {Allocated: 55},  // 33 + 22
+				404: {Allocated: 35},  // 20 + 15
+				405: {Allocated: 120}, // 72 + 48
+				406: {Allocated: 20},  // 10 + 10
+				407: {Allocated: 20},  // 10 + 10
+			},
 		}, liquid.ResourceInfo{Topology: liquid.AZSeparatedTopology})
 	}
 }
@@ -217,7 +258,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 	// All stages use the same basic scenario, except that capacity will be
 	// different in each stage.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0, // set below
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				// explained below
@@ -236,12 +277,12 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 
 	// Stage 1: There is enough capacity for the minimum quotas and the desired
 	// quotas, but not for the base quotas.
-	input["any"] = clusterAZAllocationStats{
+	input[liquid.AvailabilityZoneAny] = clusterAZAllocationStats{
 		Capacity:     141,
-		ProjectStats: input["any"].ProjectStats,
+		ProjectStats: input[liquid.AvailabilityZoneAny].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			// 401 and 402 have existing usage and thus are allowed to grow first
 			401: {Allocated: 36}, // 20 * 1.8 = 36
 			402: {Allocated: 90}, // 50 * 1.8 = 90
@@ -251,16 +292,23 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 5},
 			405: {Allocated: 5},
 		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 36},
+			402: {Allocated: 90},
+			403: {Allocated: 5},
+			404: {Allocated: 5},
+			405: {Allocated: 5},
+		},
 	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 2: There is enough capacity for the minimum quotas, but not for the
 	// desired quotas.
-	input["any"] = clusterAZAllocationStats{
+	input[liquid.AvailabilityZoneAny] = clusterAZAllocationStats{
 		Capacity:     100,
-		ProjectStats: input["any"].ProjectStats,
+		ProjectStats: input[liquid.AvailabilityZoneAny].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			// 401 and 402 have minimum quotas of 20 and 70, respectively;
 			// the rest is distributed fairly
 			401: {Allocated: 24}, // 20 * 1.8 = 36 desired (16 more than minimum) -> +4 granted
@@ -270,16 +318,23 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 24},
+			402: {Allocated: 76},
+			403: {Allocated: 0},
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
 	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 3: There is enough capacity for the hard minimum quotas, but not for
 	// the soft minimum quotas.
-	input["any"] = clusterAZAllocationStats{
+	input[liquid.AvailabilityZoneAny] = clusterAZAllocationStats{
 		Capacity:     80,
-		ProjectStats: input["any"].ProjectStats,
+		ProjectStats: input[liquid.AvailabilityZoneAny].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			// 401 and 402 have hard minimum quotas of 20 and 50, respectively;
 			// the rest is distributed fairly
 			401: {Allocated: 20}, // 20 soft minimum (0 more than hard minimum) -> +0 granted
@@ -289,20 +344,34 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 20},
+			402: {Allocated: 60},
+			403: {Allocated: 0},
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
 	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 
 	// Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
-	input["any"] = clusterAZAllocationStats{
+	input[liquid.AvailabilityZoneAny] = clusterAZAllocationStats{
 		Capacity:     20,
-		ProjectStats: input["any"].ProjectStats,
+		ProjectStats: input[liquid.AvailabilityZoneAny].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			// 401 and 402 have hard minimum quotas of 20 and 50, respectively;
 			// those are always granted, even if we overrun the capacity
 			401: {Allocated: 20},
 			402: {Allocated: 50},
 			// we cannot even think about giving out base quotas
+			403: {Allocated: 0},
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 20},
+			402: {Allocated: 50},
 			403: {Allocated: 0},
 			404: {Allocated: 0},
 			405: {Allocated: 0},
@@ -325,7 +394,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			},
 		},
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -351,12 +420,19 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {},
 			405: {},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {},
 			402: {},
 			403: {Allocated: 4},
 			404: {Allocated: 10},
 			405: {Allocated: 10},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 36}, // 36 + 0
+			402: {Allocated: 60}, // 60 + 0
+			403: {Allocated: 10}, // 6 + 4
+			404: {Allocated: 10}, // 10 + 0
+			405: {Allocated: 10}, // 10 + 0
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
@@ -370,11 +446,18 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {},
 			405: {},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			// there is no capacity left over after growth quota, so base quota is not given out
 			401: {},
 			402: {},
 			403: {},
+			404: {},
+			405: {},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 35},
+			402: {Allocated: 59},
+			403: {Allocated: 6},
 			404: {},
 			405: {},
 		},
@@ -399,7 +482,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			},
 		},
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -422,15 +505,19 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 40},
 			402: {Allocated: 60},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 36},
 			402: {Allocated: 16},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 100}, // 24 + 40 + 36
+			402: {Allocated: 100}, // 24 + 60 + 16
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
 	// test with MinQuota constraints
 	//
-	//NOTE: The balance between AZs is really bad here, but I don't see a good
+	// NOTE: The balance between AZs is really bad here, but I don't see a good
 	// way to do better here. The fairest way (as in "fair balance between AZs")
 	// would require waiting for the final result and then adjusting that, but if
 	// we don't block minimum quota early on, we may not be able to fulfil it in
@@ -448,9 +535,13 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 110}, // hard minimum 40, soft minimum 40 -> hard minimum adjusted to 110
 			402: {Allocated: 60},  // hard minimum 40, soft minimum 60 -> hard minimum adjusted to 59; then final desired quota 60
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
 			402: {Allocated: 16},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 200}, // 90 + 110 + 0
+			402: {Allocated: 100}, // 24 + 60 + 16
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
@@ -468,9 +559,13 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 40}, // hard minimum 40, soft minimum 40 -> unchanged (cannot go below hard minimum)
 			402: {Allocated: 50}, // hard minimum 40, soft minimum 60 -> 50
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 60}, // 20 + 40 + 0
+			402: {Allocated: 70}, // 20 + 50 + 0
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
@@ -488,9 +583,13 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			401: {Allocated: 40},
 			402: {Allocated: 60},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 26},
 			402: {Allocated: 6},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 90}, // 24 + 40 + 26
+			402: {Allocated: 90}, // 24 + 60 + 6
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
@@ -532,7 +631,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 				405: constantUsage(0),
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -576,12 +675,19 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 3},
 			402: {Allocated: 3},
 			403: {Allocated: 0},
 			404: {Allocated: 5},
 			405: {Allocated: 5},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 5},  // 2 + 0 + 0 + 3
+			402: {Allocated: 5},  // 0 + 0 + 2 + 3
+			403: {Allocated: 22}, // 14 + 0 + 8 + 0
+			404: {Allocated: 5},  // 0 + 0 + 0 + 5
+			405: {Allocated: 5},  // 0 + 0 + 0 + 5
 		},
 	}
 	expectACPQResult(t, input, cfg, nil, expected, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
@@ -615,13 +721,20 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 		404: {Allocated: 0},
 		405: {Allocated: 0},
 	}
-	expected["any"] = acpqAZTarget{
+	expected[liquid.AvailabilityZoneAny] = acpqAZTarget{
 		// after assigning AZ-aware quotas, there is 4 unused capacity in az-three, which gets distributed as base quota
 		401: {Allocated: 1},
 		402: {Allocated: 1},
 		403: {Allocated: 0},
 		404: {Allocated: 1},
 		405: {Allocated: 1},
+	}
+	expected[liquid.AvailabilityZoneTotal] = acpqAZTarget{
+		401: {Allocated: 3},  // 2 + 0 + 0 + 1
+		402: {Allocated: 3},  // 0 + 0 + 2 + 1
+		403: {Allocated: 23}, // 14 + 1 + 8 + 0
+		404: {Allocated: 1},  // 0 + 0 + 0 + 1
+		405: {Allocated: 1},  // 0 + 0 + 0 + 1
 	}
 	expectACPQResult(t, input, cfg, nil, expected, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
@@ -680,6 +793,10 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
 	}, resourceInfo)
 }
 
@@ -709,7 +826,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 				402: {},
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -740,9 +857,13 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 3},
 			402: {Allocated: 5},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 3},
+			402: {Allocated: 5},
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
@@ -771,7 +892,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 				402: {},
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -798,9 +919,13 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 2},
 			402: {Allocated: 4},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 3}, // 0 + 1 + 2 + 0
+			402: {Allocated: 5}, // 0 + 1 + 4 + 0
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 
@@ -830,7 +955,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 				402: {},
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -857,9 +982,13 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 			401: {Allocated: 2},
 			402: {Allocated: 4},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 3}, // 0 + 1 + 2 + 0
+			402: {Allocated: 6}, // 0 + 2 + 4 + 0
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 }
@@ -892,7 +1021,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 				402: {},
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -921,8 +1050,12 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: val},
 			402: {Allocated: 0},
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
@@ -951,7 +1084,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 				402: {},
 			},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			Capacity: 0,
 			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
 				401: {},
@@ -977,8 +1110,12 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 			401: {Allocated: 0},
 			402: {Allocated: 0},
 		},
-		"any": {
+		liquid.AvailabilityZoneAny: {
 			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: val},
 			402: {Allocated: 0},
 		},
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
