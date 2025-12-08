@@ -5,6 +5,7 @@ package ironic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
@@ -31,6 +32,12 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		return liquid.ServiceUsageReport{}, err
 	}
 
+	projectMetadata, ok := req.ProjectMetadata.Unpack()
+	if !ok {
+		return liquid.ServiceUsageReport{}, errors.New("projectMetadata is missing")
+	}
+	fullName := fmt.Sprintf(`%s/%s`, projectMetadata.Domain.Name, projectMetadata.Name)
+
 	// build basic report structure
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport, len(serviceInfo.Resources))
 	hasUsage := false
@@ -38,9 +45,16 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		flavorName := flavorNameForResource(resName)
 		flavorLimits := limitsData.Limits.AbsolutePerFlavor[flavorName]
 
+		// Deny access to flavors which are marked as restricted in the config,
+		// if there is no explicit exception for the project.
+		allowList, exists := l.RestrictedFlavors[flavorName]
+		forbidden := exists &&
+			!allowList.Pick(fullName).UnwrapOr(false)
+
 		resReport := liquid.ResourceUsageReport{
-			Quota: Some(flavorLimits.MaxTotalInstances),
-			PerAZ: liquid.AZResourceUsageReport{Usage: flavorLimits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
+			Forbidden: forbidden,
+			Quota:     Some(flavorLimits.MaxTotalInstances),
+			PerAZ:     liquid.AZResourceUsageReport{Usage: flavorLimits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 		}
 		if flavorLimits.TotalInstancesUsed > 0 {
 			hasUsage = true
