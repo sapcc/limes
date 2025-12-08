@@ -47,30 +47,29 @@ type MismatchProjectQuota struct {
 	BackendQuota int64                       `json:"backend_quota"`
 }
 
-var ospqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota, SUM(pazr.usage)
+var ospqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pazr.quota, pazr.usage
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
-	  JOIN project_resources pr ON pr.project_id = p.id
-	  JOIN resources r ON pr.resource_id = r.id {{AND r.name = $resource_name}}
+	  JOIN project_az_resources pazr ON pazr.project_id = p.id
+	  JOIN az_resources azr ON pazr.az_resource_id = azr.id AND azr.az = {{liquid.AvailabilityZoneTotal}}
+	  JOIN resources r ON azr.resource_id = r.id {{AND r.name = $resource_name}}
 	  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
-	  JOIN az_resources azr ON azr.resource_id = r.id
-	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
-	 GROUP BY d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota
-	HAVING SUM(pazr.usage) > pr.quota
+	WHERE pazr.usage > pazr.quota
 	 ORDER BY d.name, p.name, s.type, r.name
-`)
+`))
 
-var mmpqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pr.quota, pr.backend_quota
+var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pazr.quota, pazr.backend_quota
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
-	  JOIN project_resources pr ON pr.project_id = p.id 
-	  JOIN resources r ON pr.resource_id = r.id {{AND r.name = $resource_name}}
+	  JOIN project_az_resources pazr ON pazr.project_id = p.id
+	  JOIN az_resources azr ON azr.id = pazr.az_resource_id AND azr.az = {{liquid.AvailabilityZoneTotal}}
+	  JOIN resources r ON azr.resource_id = r.id {{AND r.name = $resource_name}}
 	  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
-	WHERE pr.backend_quota != pr.quota
+	WHERE pazr.backend_quota != pazr.quota
 	ORDER BY d.name, p.name, s.type, r.name
-`)
+`))
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*Inconsistencies, error) {

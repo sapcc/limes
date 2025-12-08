@@ -6,6 +6,7 @@ package api_test
 import (
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/test"
@@ -38,13 +39,19 @@ func TestInconsistencyReport(t *testing.T) {
 	)
 
 	// initially, we will put in some numbers that do not have any inconsistencies
-	s.MustDBExec(`UPDATE project_resources SET quota = 30, backend_quota = 30`)
+	s.MustDBExec(`UPDATE project_az_resources SET quota = 30, backend_quota = 30 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = $1)`, liquid.AvailabilityZoneTotal)
 	s.MustDBExec(`UPDATE project_az_resources SET usage = 9 WHERE az_resource_id IN ($1, $2)`,
 		s.GetAZResourceID("shared", "capacity", "az-one"),
 		s.GetAZResourceID("shared", "capacity", "az-two"),
 	)
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 18 WHERE az_resource_id = $1`,
+		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
+	)
 	s.MustDBExec(`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
 		s.GetAZResourceID("shared", "things", "any"),
+	)
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
+		s.GetAZResourceID("shared", "things", liquid.AvailabilityZoneTotal),
 	)
 
 	assert.HTTPRequest{
@@ -61,13 +68,13 @@ func TestInconsistencyReport(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// now put in some inconsistencies
-	s.MustDBExec(`UPDATE project_resources SET backend_quota = 10 WHERE project_id = $1 AND resource_id = $2`,
+	s.MustDBExec(`UPDATE project_az_resources SET backend_quota = 10 WHERE project_id = $1 AND az_resource_id = $2`,
 		s.GetProjectID("dresden"),
-		s.GetResourceID("shared", "capacity"),
+		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
 	)
-	s.MustDBExec(`UPDATE project_resources SET quota = 14, backend_quota = 14 WHERE project_id = $1 AND resource_id = $2`,
+	s.MustDBExec(`UPDATE project_az_resources SET quota = 14, backend_quota = 14 WHERE project_id = $1 AND az_resource_id = $2`,
 		s.GetProjectID("karachi"),
-		s.GetResourceID("shared", "capacity"),
+		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
 	)
 
 	assert.HTTPRequest{

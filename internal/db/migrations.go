@@ -240,4 +240,34 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments
 			ADD CONSTRAINT transfer_status_check CHECK (status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) OR transfer_status = {{limesresources.CommitmentTransferStatusNone}});
 	`),
+	"070_remove_project_level_values.down.sql": ExpandEnumPlaceholders(`
+		ALTER TABLE project_resources
+			ADD COLUMN quota                         BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			ADD COLUMN backend_quota                 BIGINT     DEFAULT NULL;
+		UPDATE project_resources pr
+			SET pr.quota = pazr.quota, pr.backend_quota = pazr.backend_quota
+			FROM az_resources azr
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
+			WHERE azr.resource_id = pr.resource_id AND azr.az = {{liquid.AvailabilityZoneTotal}};
+		DELETE FROM project_az_resources WHERE az_resource_id IN (SELECT id FROM az_resources WHERE az = {{liquid.AvailabilityZoneTotal}});
+		DELETE FROM az_resources WHERE az = {{liquid.AvailabilityZoneTotal}};
+	`),
+	"070_remove_project_level_values.up.sql": ExpandEnumPlaceholders(`
+		-- We do a migration of the used values here, so that the APIs don't produce garbage after migration
+		-- We skip fields subcapacities, subresources, historical usage, last_nonzero_raw_capacity as they only make sense when az-attributed or are unused.
+		INSERT INTO az_resources (resource_id, az, raw_capacity, usage, subcapacities, last_nonzero_raw_capacity, path)
+			SELECT azr.resource_id, {{liquid.AvailabilityZoneTotal}} as az, SUM(raw_capacity), SUM(usage), '' AS subcapacities, NULL AS last_nonzero_raw_capacity, REPLACE(azr.path, azr.az, {{liquid.AvailabilityZoneTotal}}) AS path
+			FROM az_resources azr
+			GROUP BY azr.resource_id, REPLACE(azr.path, azr.az, {{liquid.AvailabilityZoneTotal}});
+		INSERT INTO project_az_resources (project_id, az_resource_id, quota, usage, physical_usage, subresources, historical_usage, backend_quota)
+			SELECT pazr.project_id, azr_total.id AS az_resource_id, pr.quota, SUM(pazr.usage), SUM(pazr.physical_usage), '' AS subresources, '' as historical_usage, pr.backend_quota
+			FROM az_resources azr
+			JOIN az_resources azr_total ON azr.resource_id = azr_total.resource_id AND azr_total.az = {{liquid.AvailabilityZoneTotal}}
+			JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id
+			JOIN project_resources pr ON pr.project_id = pazr.project_id AND pr.resource_id = azr.resource_id
+			GROUP BY pazr.project_id, azr_total.id, pr.quota, pr.backend_quota;
+		ALTER TABLE project_resources
+			DROP COLUMN quota,
+			DROP COLUMN backend_quota;
+	`),
 }
