@@ -48,6 +48,11 @@ reuse:
       SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
       SPDX-License-Identifier: Apache-2.0
 
+typos:
+  extendWords:
+    UPDAT: UPDAT # part of "UPDATEs" in a comment
+    thi: thi # part of a regex thi$2/$1 from things
+
 verbatim: |
   copy-fixtures:
     find -name '*.actual' | xargs -I{} bash -c 'mv {} $$(echo {} | sed "s/.actual//g")'

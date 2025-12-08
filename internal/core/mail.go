@@ -84,7 +84,7 @@ func (t MailTemplate) getMailContent(m CommitmentGroupNotification) (string, err
 	var ioBuffer bytes.Buffer
 	tpl := t.Compiled
 	if tpl == nil {
-		return "", errors.New("mail: body is empty. Check the accessiblity of the mail template")
+		return "", errors.New("mail: body is empty. Check the accessibility of the mail template")
 	}
 
 	err := tpl.Execute(&ioBuffer, m)

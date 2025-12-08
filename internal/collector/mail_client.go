@@ -17,7 +17,7 @@ type MailClient interface {
 	PostMail(ctx context.Context, req MailRequest) error
 }
 
-// mailClientImpl is an implmentation of MailClient.
+// mailClientImpl is an implementation of MailClient.
 //
 // It sends mails using the OpenStack service type "mailClient"
 // as specified in the Limes documentation.

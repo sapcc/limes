@@ -138,7 +138,7 @@ func ConfirmPendingCommitments(loc core.AZResourceLocation, unit limes.Unit, clu
 		return nil, nil
 	}
 
-	// initate cache of transferable commitments
+	// initiate cache of transferable commitments
 	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, loc, now, generateProjectCommitmentUUID, generateTransferToken)
 	if err != nil {
 		return nil, err

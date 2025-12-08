@@ -173,7 +173,7 @@ CREATE FUNCTION cluster_az_resources_project_commitments_trigger_function()
 	BEGIN
 		DELETE FROM project_commitments
 			WHERE az_resource_id = OLD.id
-			AND state IN ('expired', 'superseeded');
+			AND state IN ('expired', 'superseded');
 		RETURN OLD;
 	END;
 	$$ LANGUAGE plpgsql;
