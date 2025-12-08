@@ -585,13 +585,20 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 
 	// create all project_resources, but do not set any particular values
 	_, err = datamodel.ProjectResourceUpdate{
+		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+			// until we know better, we will assume Forbidden = true to ensure that
+			// quota does not get distributed into projects that cannot accept it
+			resInfo := core.InfoForResource(serviceInfo, resName)
+			if resInfo.HasQuota {
+				res.Forbidden = true
+			}
+			return nil
+		},
 		LogError: c.LogError,
 	}.Run(tx, serviceInfo, c.MeasureTime(), dbDomain, dbProject, srv)
 	if err != nil {
 		return err
 	}
-	// NOTE: We do not do ApplyBackendQuota here: This function is only
-	// called after scraping errors, so ApplyBackendQuota will likely fail, too.
 
 	// get index for finding the proper resource info later
 	resourcesByID, err := db.BuildIndexOfDBResult(tx, func(res db.Resource) db.ResourceID { return res.ID }, `SELECT * FROM resources WHERE service_id = $1`, srv.ID)

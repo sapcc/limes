@@ -268,7 +268,7 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
 func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, resInfo liquid.ResourceInfo) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
-	// in order to be able to handle usage in az=unknown as constraint, we always initialize the map
+	// in order to be able to handle usage in az=unknown via constraint (see below), we always initialize the map
 	if constraints == nil {
 		constraints = make(map[db.ProjectID]projectLocalQuotaConstraints)
 	}
@@ -286,6 +286,9 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		for projectID, projectStats := range azStats.ProjectStats {
 			isProjectID[projectID] = struct{}{}
 			if az == limes.AvailabilityZoneUnknown && projectStats.Usage > 0 {
+				// usage in az=unknown must be considered when distributing quota
+				// (to ensure that quota >= usage), but we cannot give quota in az=unknown;
+				// instead, we let EnforceConstraints() provide sufficient quota in relevant AZs
 				if constraint, exists := constraints[projectID]; !exists {
 					constraints[projectID] = projectLocalQuotaConstraints{MinQuota: Some(projectStats.Usage)}
 				} else if projectStats.Usage > constraint.MinQuota.UnwrapOr(0) {

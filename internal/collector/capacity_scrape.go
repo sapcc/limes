@@ -181,8 +181,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	var dbAZResources []db.AZResource
 	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbResourceIDs}, 0)
-	_, err = tx.Select(&dbAZResources, `SELECT * FROM az_resources WHERE `+whereClause+
-		` ORDER BY CASE WHEN az != 'total' THEN 0 ELSE 1 END`, queryArgs...)
+	_, err = tx.Select(&dbAZResources, `SELECT * FROM az_resources WHERE `+whereClause, queryArgs...)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing AZ resources: %w", err)
 	}

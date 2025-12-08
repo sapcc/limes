@@ -588,10 +588,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (7, 1, 8, 0, 0);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, backend_quota) VALUES (8, 1, 9, 0, 0, -1);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (9, 2, 1, 0, 0);
-		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
-		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 1, 2);
-		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 2, 1);
-		INSERT INTO project_resources (id, project_id, resource_id) VALUES (4, 2, 2);
+		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (1, 1, 1, TRUE);
+		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (2, 1, 2, TRUE);
+		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (3, 2, 1, TRUE);
+		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (4, 2, 2, TRUE);
 		UPDATE project_services SET scraped_at = 0, stale = FALSE, checked_at = %[1]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = 0, stale = FALSE, checked_at = %[3]d, scrape_error_message = 'GetUsageReport failed as requested', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
@@ -645,6 +645,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 2, 1, '1024');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 2, '2048');
+		UPDATE project_resources SET forbidden = FALSE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+		UPDATE project_resources SET forbidden = FALSE WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+		UPDATE project_resources SET forbidden = FALSE WHERE id = 3 AND project_id = 2 AND resource_id = 1;
+		UPDATE project_resources SET forbidden = FALSE WHERE id = 4 AND project_id = 2 AND resource_id = 2;
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
@@ -773,7 +777,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (2, 1, 2, 0, 0);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (3, 1, 3, 0, 0);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, backend_quota) VALUES (4, 1, 4, 0, 0, -1);
-		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
+		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (1, 1, 1, TRUE);
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 1, 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
