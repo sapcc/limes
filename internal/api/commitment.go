@@ -1306,7 +1306,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		transferStartedAt = Some(p.timeNow())
 	}
 
-	// Mark whole commitment or a newly created, splitted one as transferrable.
+	// Mark whole commitment or a newly created, split one as transferable.
 	tx, err := p.DB.Begin()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return

@@ -452,7 +452,7 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 			}
 
 			// phase 2: if not enough quota could be assigned due to capacity constraints,
-			// iniate second distribution round with distribution proportionally to the available capacity.
+			// initiate second distribution round with distribution proportionally to the available capacity.
 			// Since min quota should be enforced, more quota than available capacity may be distributed
 			if missingQuota > 0 {
 				capacityScalePerAZ := make(map[limes.AvailabilityZone]uint64)

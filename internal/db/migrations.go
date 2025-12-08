@@ -179,7 +179,7 @@ var sqlMigrations = map[string]string{
 			BEGIN
 				DELETE FROM project_commitments
 					WHERE az_resource_id = OLD.id
-					AND state IN ('expired', 'superseeded');
+					AND state IN ('expired', 'superseded');
 				RETURN OLD;
 			END;
 			$$ LANGUAGE plpgsql;
@@ -200,7 +200,7 @@ var sqlMigrations = map[string]string{
 			BEGIN
 				DELETE FROM project_commitments
 					WHERE az_resource_id = OLD.id
-					AND status IN ('expired', 'superseeded');
+					AND status IN ('expired', 'superseded');
 				RETURN OLD;
 			END;
 			$$ LANGUAGE plpgsql;

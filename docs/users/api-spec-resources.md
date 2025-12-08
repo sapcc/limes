@@ -669,9 +669,9 @@ Prepares a commitment to be transferred from a source project to a target projec
   }
 }
 ```
-If the amount to transfer is equal to the commitment, the whole commitment will be marked as transferrable. If the amount is less than the commitment, the commitment will be split in two and the requested amount will be marked as transferrable.
+If the amount to transfer is equal to the commitment, the whole commitment will be marked as transferable. If the amount is less than the commitment, the commitment will be split in two and the requested amount will be marked as transferable.
 The transfer status indicates if the commitment stays `unlisted` (private) or `public`.
-The response is a JSON of the commitment including the following fields that identify a commitment in its transferrable state:
+The response is a JSON of the commitment including the following fields that identify a commitment in its transferable state:
 ```json
 {
   "commitment": {
@@ -690,7 +690,7 @@ With the following request body, the endpoint can be used to withdraw a commitme
 ```
 This operation only works on commitments that were not transferred yet.
 An `amount` is ignored in this case, the whole commitment is withdrawn from transfer.
-A commitment previously splitted for transfer is not automatically merged back, this can be done manually with the `/merge` endpoint.
+A commitment previously split for transfer is not automatically merged back, this can be done manually with the `/merge` endpoint.
 
 ### POST /v1/domains/:id/projects/:id/transfer-commitment/:id
 

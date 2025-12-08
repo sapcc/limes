@@ -2688,8 +2688,8 @@ func Test_MergeCommitments(t *testing.T) {
 	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusNone)
 
 	// Do not merge commitments with statuses other than "active"
-	unmergableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
-	for _, status := range unmergableStatuses {
+	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
+	for _, status := range unmergeableStatuses {
 		s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
 		assert.HTTPRequest{
 			Method:       http.MethodPost,
@@ -3041,7 +3041,7 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 		ExpectStatus: http.StatusBadRequest,
 	}.Check(t, s.Handler)
 
-	// Acess forbidden
+	// access forbidden
 	s.TokenValidator.Enforcer.AllowEdit = false
 	assert.HTTPRequest{
 		Method:       "POST",

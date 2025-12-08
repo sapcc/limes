@@ -280,7 +280,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 		return err
 	}
 	if result > 0 {
-		return errors.New("project has commitments which are not superseeded or expired")
+		return errors.New("project has commitments which are not superseded or expired")
 	}
 
 	// it is fine to delete a project that only has superseded and expired commitments on it

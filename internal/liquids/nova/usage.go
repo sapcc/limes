@@ -153,7 +153,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 			azData := resources[instanceResourceName].PerAZ[az]
 			subres, err := subresBuilder.Finalize()
 			if err != nil {
-				return liquid.ServiceUsageReport{}, fmt.Errorf("could not serialze attributes of subresource: %w", err)
+				return liquid.ServiceUsageReport{}, fmt.Errorf("could not serialize attributes of subresource: %w", err)
 			}
 			azData.Subresources = append(azData.Subresources, subres)
 		}
