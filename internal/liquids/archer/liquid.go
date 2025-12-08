@@ -76,8 +76,8 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	return l.Archer.putQuotaSet(ctx, projectUUID, quotaSet{
-		Endpoint: int64(req.Resources["endpoints"].Quota),
-		Service:  int64(req.Resources["services"].Quota),
+		Endpoint: int64(req.Resources["endpoints"].Quota), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
+		Service:  int64(req.Resources["services"].Quota),  //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 	})
 }
 
