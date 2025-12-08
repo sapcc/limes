@@ -354,21 +354,15 @@ func enrichCapacityReportTotals(value *liquid.ServiceCapacityReport) {
 			continue
 		}
 
-		var (
-			totalCapacity    uint64
-			totalUsageOption Option[uint64]
-		)
+		var total liquid.AZResourceCapacityReport
 		for _, azValue := range resValue.PerAZ {
-			totalCapacity += azValue.Capacity
+			total.Capacity += azValue.Capacity
 			if usage, ok := azValue.Usage.Unpack(); ok {
-				totalUsageOption = Some(totalUsageOption.UnwrapOr(0) + usage)
+				total.Usage = Some(total.Usage.UnwrapOr(0) + usage)
 			}
 		}
-		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &liquid.AZResourceCapacityReport{
-			Capacity: totalCapacity,
-			Usage:    totalUsageOption,
-		}
 
+		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &total
 		value.Resources[resName] = resValue
 	}
 }

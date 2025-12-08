@@ -660,36 +660,24 @@ func enrichUsageReportTotals(value *liquid.ServiceUsageReport, serviceInfo liqui
 		}
 
 		resourceInfo := core.InfoForResource(serviceInfo, resName)
-		var (
-			totalUsage         uint64
-			totalPhysicalUsage uint64
-			totalQuotaOption   Option[int64]
-		)
+		var total liquid.AZResourceUsageReport
 		for _, azValue := range resValue.PerAZ {
-			totalUsage += azValue.Usage
-			if physicalUsage, ok := azValue.PhysicalUsage.Unpack(); ok {
-				totalPhysicalUsage += physicalUsage
+			total.Usage += azValue.Usage
+			if physicalUsage, ok := azValue.PhysicalUsage.Unpack(); ok && physicalUsage > 0 {
+				total.PhysicalUsage = Some(total.PhysicalUsage.UnwrapOr(0) + physicalUsage)
 			}
 			// defense in depth: the report from the liquid should be consistent with the topology
 			if quota, ok := azValue.Quota.Unpack(); ok && resourceInfo.HasQuota && resourceInfo.Topology == liquid.AZSeparatedTopology {
-				totalQuotaOption = Some(totalQuotaOption.UnwrapOr(0) + quota)
+				total.Quota = Some(total.Quota.UnwrapOr(0) + quota)
 			}
-		}
-		totalPhysicalUsageOption := None[uint64]()
-		if totalPhysicalUsage > 0 {
-			totalPhysicalUsageOption = Some(totalPhysicalUsage)
 		}
 		// if we have a non-az-separated resource with quota, we take the total that the report provides instead of the sum
 		// defense in depth: the report from the liquid should be consistent with the topology
 		if resourceInfo.HasQuota && resourceInfo.Topology != liquid.AZSeparatedTopology {
-			totalQuotaOption = resValue.Quota
-		}
-		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &liquid.AZResourceUsageReport{
-			Usage:         totalUsage,
-			PhysicalUsage: totalPhysicalUsageOption,
-			Quota:         totalQuotaOption,
+			total.Quota = resValue.Quota
 		}
 
+		resValue.PerAZ[liquid.AvailabilityZoneTotal] = &total
 		value.Resources[resName] = resValue
 	}
 }
