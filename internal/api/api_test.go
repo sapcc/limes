@@ -641,6 +641,16 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
+	// check ListProjects does not report commitment duration if the forbidden flag is set
+	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE`)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-forbidden.json"),
+	}.Check(t, s.Handler)
+	s.MustDBExec(`UPDATE project_resources SET forbidden = FALSE`)
+
 	// check ListProjectRates
 	assert.HTTPRequest{
 		Method:       "GET",

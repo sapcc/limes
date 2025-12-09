@@ -39,7 +39,7 @@ var (
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT p.id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
+	SELECT p.id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, pr.forbidden, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -124,6 +124,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			dbResourceName           liquid.ResourceName
 			maxQuotaFromOutsideAdmin *uint64
 			ForbidAutogrowth         bool
+			forbidden                bool
 			az                       *limes.AvailabilityZone
 			quota                    *uint64
 			usage                    *uint64
@@ -134,7 +135,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		)
 		err := rows.Scan(
 			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&maxQuotaFromOutsideAdmin, &ForbidAutogrowth,
+			&maxQuotaFromOutsideAdmin, &ForbidAutogrowth, &forbidden,
 			&az, &quota, &usage, &physicalUsage, &historicalUsage, &backendQuota, &subresources,
 		)
 		if err != nil {
@@ -197,10 +198,13 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
 			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
-				Usage:            0,
-				CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),
+				ResourceInfo: behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
+				Usage:        0,
 				// all other fields are set below
+			}
+
+			if !forbidden {
+				resReport.CommitmentConfig = cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer()
 			}
 
 			if filter.WithAZBreakdown {
