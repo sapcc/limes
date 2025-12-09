@@ -5,7 +5,9 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/dlmiddlecote/sqlstats"
 	gorp "github.com/go-gorp/gorp/v3"
@@ -15,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
+	"github.com/sapcc/go-bits/syncext"
 )
 
 // Configuration returns the easypg.Configuration object that func Init() needs to initialize the DB connection.
@@ -73,4 +76,42 @@ type Interface interface {
 	Update(args ...any) (int64, error)
 	Delete(args ...any) (int64, error)
 	Select(i any, query string, args ...any) ([]any, error)
+}
+
+var olapSemaphore = syncext.NewSemaphore(2)
+
+// RunOLAPQueries executes a DB transaction with increased `work_mem` setting.
+// As the name implies, this is useful for OLAP queries that perform expensive
+// joins and aggregations in a way that benefits from having more RAM available
+// than the default.
+//
+// This should only be used sparingly; each process is only allowed to run two
+// such queries at the same time to limit the total memory usage on the DB server.
+func RunOLAPQueries(dbm *gorp.DbMap, action func(tx *gorp.Transaction) error) error {
+	return olapSemaphore.RunFallible(func() error {
+		// since we don't have direct control over the connections which live in
+		// database/sql.Conn's connection pool, we can only limit the effect of the
+		// `SET work_mem TO ...` statement to the intended action by wrapping it in a
+		// transaction
+		tx, err := dbm.Begin()
+		if err != nil {
+			return err
+		}
+		defer sqlext.RollbackUnlessCommitted(tx)
+
+		// the SET statement does not accept a placeholder for its argument, so we
+		// need to do the ugly thing and escape by hand
+		workMemStr := osext.GetenvOrDefault("LIMES_DB_WORKMEM_FOR_OLAP", "128MB")
+		_, err = tx.Exec(fmt.Sprintf(`SET LOCAL work_mem TO '%s'`, strings.ReplaceAll(workMemStr, "'", "''")))
+		if err != nil {
+			return fmt.Errorf("could not set work_mem = %q for OLAP query: %w", workMemStr, err)
+		}
+
+		err = action(tx)
+		if err != nil {
+			return err
+		}
+
+		return tx.Rollback()
+	})
 }

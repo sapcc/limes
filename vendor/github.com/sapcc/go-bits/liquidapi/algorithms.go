@@ -74,7 +74,7 @@ func DistributeFairly[K comparable](total uint64, requested map[K]uint64) map[K]
 		// so this crash message is here to generate test cases as necessary
 		logg.Fatal("too many missing allocations in DistributeFairly for input: total = %d, requested = %#v", total, requested)
 	}
-	for _, key := range keys[len(keys)-int(missing):] {
+	for _, key := range keys[len(keys)-int(missing):] { //nolint:gosec // algorithm ensures that no overflow happens on uint64 -> int cast
 		fair[key] += 1
 	}
 	return fair
