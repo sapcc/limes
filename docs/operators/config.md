@@ -23,6 +23,7 @@ on the top left corner of this document to get to a specific section of this gui
 | `LIMES_DB_HOSTNAME` | `localhost` | Hostname of the database server. |
 | `LIMES_DB_PORT` | `5432` | Port on which the PostgreSQL service is running on. |
 | `LIMES_DB_CONNECTION_OPTIONS` | *(optional)* | Database connection options. |
+| `LIMES_DB_WORKMEM_FOR_OLAP` | `128MB` | For certain OLAP-style queries with large aggregations or complex joins, Limes will adjust the `work_mem` setting for the respective database connection to the provided value. Most queries that Limes does are OLTP-style, so setting `work_mem` rather small should be fine. To avoid spiky memory usage on the DB server, Limes will make efforts to not run too many OLAP queries at once. |
 | `OS_...` | *(required)* | A full set of OpenStack auth environment variables for Limes's service user. See [the documentation of the NewProviderClient function](https://pkg.go.dev/github.com/sapcc/go-bits/gophercloudext#NewProviderClient) for which variables are allowed. |
 
 ## Environment variables for `limes serve` only
