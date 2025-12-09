@@ -26,10 +26,11 @@ import (
 // since they represent individual steps of ApplyComputedProjectQuota.
 
 var (
-	acpqGetResourceIDQuery = sqlext.SimplifyWhitespace(`
-		SELECT r.id
+	acpqGetClusterwideIDsQuery = sqlext.SimplifyWhitespace(`
+		SELECT s.id, r.id, azr.id, azr.az
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
 		 WHERE s.type = $1 AND r.name = $2
 	`)
 
@@ -45,18 +46,14 @@ var (
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources pazr
+		UPDATE project_az_resources
 		SET quota = $1
-		FROM az_resources azr
-		WHERE pazr.az_resource_id = azr.id AND azr.az = $2 AND pazr.project_id = $3 AND azr.resource_id = $4
-		AND pazr.quota IS DISTINCT FROM $1
+		WHERE project_id = $2 AND az_resource_id = $3 AND quota IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_services ps
+		UPDATE project_services
 		SET quota_desynced_at = $1
-		FROM services s
-		WHERE ps.service_id = s.id AND ps.project_id = $2 AND s.type = $3
-		AND quota_desynced_at IS NULL
+		WHERE project_id = $2 AND service_id = $3 AND quota_desynced_at IS NULL
 	`)
 )
 
@@ -117,10 +114,24 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// to avoid excessive joins, convert serviceType+resourceName into a ResourceID only once
-	var resourceID db.ResourceID
-	err = tx.QueryRow(acpqGetResourceIDQuery, serviceType, resourceName).Scan(&resourceID)
+	var (
+		serviceID        db.ServiceID
+		resourceID       db.ResourceID
+		azResourceIDByAZ = make(map[liquid.AvailabilityZone]db.AZResourceID)
+	)
+	err = sqlext.ForeachRow(tx, acpqGetClusterwideIDsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
+		var (
+			azResourceID db.AZResourceID
+			az           liquid.AvailabilityZone
+		)
+		err := rows.Scan(&serviceID, &resourceID, &azResourceID, &az)
+		if err == nil {
+			azResourceIDByAZ[az] = azResourceID
+		}
+		return err
+	})
 	if err != nil {
-		return fmt.Errorf("could not find resources.id: %w", err)
+		return fmt.Errorf("could not find IDs for services/resources/azresources records: %w", err)
 	}
 
 	// collect required data (TODO: pass `resourceID` into here to simplify queries over there too?)
@@ -178,8 +189,12 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	projectsWithUpdatedQuota := make(map[db.ProjectID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
+			azResourceID, exists := azResourceIDByAZ[az]
+			if !exists {
+				return fmt.Errorf("no az_resources entry for %s/%s/%s", serviceType, resourceName, az)
+			}
 			for projectID, projectTarget := range azTarget {
-				result, err := stmt.Exec(projectTarget.Allocated, az, projectID, resourceID)
+				result, err := stmt.Exec(projectTarget.Allocated, projectID, azResourceID)
 				if err != nil {
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
@@ -202,7 +217,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	// mark project services with changed quota for SyncQuotaToBackendJob
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectServicesQuery, func(stmt *sql.Stmt) error {
 		for projectID := range projectsWithUpdatedQuota {
-			_, err := stmt.Exec(now, projectID, serviceType)
+			_, err := stmt.Exec(now, projectID, serviceID)
 			if err != nil {
 				return fmt.Errorf("in project %d: %w", projectID, err)
 			}
