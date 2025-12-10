@@ -94,7 +94,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				406: constantUsage(0),
 				407: constantUsage(2),
 				// 408 tests that unknown usage causes equally distributed quota in a "real" AZ --> never ever, we want quota in unknown
-				408: constantUsage(0),
+				408: constantUsage(10),
 			},
 		},
 		"az-two": {
@@ -107,7 +107,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: constantUsage(40),
 				406: constantUsage(0),
 				407: constantUsage(1),
-				408: constantUsage(0),
+				408: constantUsage(10),
 			},
 		},
 		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
@@ -146,7 +146,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 72}, // 60 * 1.2 = 72
 				406: {Allocated: 0},
 				407: {Allocated: 3}, // 2 * 1.2 = 2.4 rounded to 3 (guaranteed minimum growth)
-				408: {Allocated: 10},
+				408: {Allocated: 20},
 			},
 			"az-two": {
 				401: {Allocated: 24},
@@ -156,7 +156,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 48}, // 40 * 1.2 = 48
 				406: {Allocated: 0},
 				407: {Allocated: 2}, // 1 * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth)
-				408: {Allocated: 10},
+				408: {Allocated: 20},
 			},
 			liquid.AvailabilityZoneAny: {
 				401: {Allocated: 0},
@@ -176,7 +176,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 120}, // 72 + 48
 				406: {Allocated: 10},  // 0 + 0 + 10
 				407: {Allocated: 10},  // 3 + 2 + 5
-				408: {Allocated: 20},  // 10 + 10 + 0
+				408: {Allocated: 40},  // 20 + 20 + 0
 			},
 		}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
 	}
