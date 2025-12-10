@@ -1,0 +1,107 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "name": "berlin",
+      "parent_id": "uuid-for-germany",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 22
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 11
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-dresden",
+      "name": "dresden",
+      "parent_id": "uuid-for-berlin",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2,
+              "backend_quota": 100
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 44
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "autogrow",
+              "quota": 10,
+              "usable_quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 33
+        }
+      ]
+    }
+  ]
+}
