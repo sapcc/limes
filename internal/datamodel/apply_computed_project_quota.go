@@ -290,9 +290,12 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// enumerate which project IDs and AZs are relevant
 	// ("Relevant" AZs are all that have allocation stats available.)
+	// additionally, we prepare the special handling for projects which have usage in az=unknown
 	isProjectID := make(map[db.ProjectID]struct{})
 	isRelevantAZ := make(map[limes.AvailabilityZone]struct{}, len(stats))
 	var allAZsInOrder []limes.AvailabilityZone
+	usagePerProjectID := make(map[db.ProjectID]uint64)
+	projectIDsWithAZUnknownUsage := make(map[db.ProjectID]struct{})
 	for az, azStats := range stats {
 		if az != limes.AvailabilityZoneUnknown {
 			isRelevantAZ[az] = struct{}{}
@@ -300,18 +303,23 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 		for projectID, projectStats := range azStats.ProjectStats {
 			isProjectID[projectID] = struct{}{}
+			usagePerProjectID[projectID] += projectStats.Usage
 			if az == limes.AvailabilityZoneUnknown && projectStats.Usage > 0 {
-				// usage in az=unknown must be considered when distributing quota
-				// (to ensure that quota >= usage), but we cannot give quota in az=unknown;
-				// instead, we let EnforceConstraints() provide sufficient quota in relevant AZs
-				if constraint, exists := constraints[projectID]; !exists {
-					constraints[projectID] = projectLocalQuotaConstraints{MinQuota: Some(projectStats.Usage)}
-				} else if projectStats.Usage > constraint.MinQuota.UnwrapOr(0) {
-					constraint.MinQuota = Some(projectStats.Usage)
-				}
+				projectIDsWithAZUnknownUsage[projectID] = struct{}{}
 			}
 		}
 	}
+	for projectID := range projectIDsWithAZUnknownUsage {
+		// usage in az=unknown must be considered when distributing quota
+		// (to ensure that quota >= usage), but we cannot give quota in az=unknown;
+		// instead, we let EnforceConstraints() provide sufficient quota in relevant AZs
+		if constraint, exists := constraints[projectID]; !exists {
+			constraints[projectID] = projectLocalQuotaConstraints{MinQuota: Some(usagePerProjectID[projectID])}
+		} else if usagePerProjectID[projectID] > constraint.MinQuota.UnwrapOr(0) {
+			constraint.MinQuota = Some(usagePerProjectID[projectID])
+		}
+	}
+
 	slices.Sort(allAZsInOrder)
 	if cfg.ProjectBaseQuota > 0 && resInfo.Topology != liquid.AZSeparatedTopology {
 		// base quota is given out in the pseudo-AZ "any", so we need to calculate quota for "any", too
