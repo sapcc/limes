@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -114,6 +115,19 @@ func main() {
 		return
 	}
 
+	// the test harness for Keystone API calls also branches off early for similar reasons;
+	// we do not need a configuration file or a DB connection here, either
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "test-list-domains":
+			taskTestListDomains(ctx, os.Args[2:])
+			return
+		case "test-list-projects":
+			taskTestListProjects(ctx, os.Args[2:])
+			return
+		}
+	}
+
 	// first two arguments must be task name and configuration file
 	if slices.Contains(os.Args, "--help") {
 		printUsageAndExit(0)
@@ -153,6 +167,8 @@ var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve|serve-data-metrics) <config-file>
 \t%s liquid <service-type>
+\t%s test-list-domains
+\t%s test-list-projects <domain-name-or-uuid>
 `), `\t`, "\t") + "\n"
 
 func printUsageAndExit(exitCode int) {
@@ -302,4 +318,49 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// task: test-list-domains and test-list-projects
+
+func testQueryUsingDiscoveryPlugin(ctx context.Context, query func(core.DiscoveryPlugin) (any, error)) {
+	provider, eo, err := gophercloudext.NewProviderClient(ctx, nil)
+	must.Succeed(err)
+
+	plugin := must.Return(core.NewDiscoveryPlugin(core.DiscoveryConfiguration{Method: "list"}))
+	must.Succeed(plugin.Init(ctx, provider, eo))
+
+	result := must.Return(query(plugin))
+	buf := must.Return(json.MarshalIndent(result, "", "  "))
+	fmt.Println(string(buf))
+}
+
+func taskTestListDomains(ctx context.Context, args []string) {
+	if len(args) != 0 {
+		printUsageAndExit(1)
+	}
+
+	testQueryUsingDiscoveryPlugin(ctx, func(plugin core.DiscoveryPlugin) (any, error) {
+		return plugin.ListDomains(ctx)
+	})
+}
+
+func taskTestListProjects(ctx context.Context, args []string) {
+	if len(args) != 1 {
+		printUsageAndExit(1)
+	}
+	domainNameOrUUID := args[0]
+
+	testQueryUsingDiscoveryPlugin(ctx, func(plugin core.DiscoveryPlugin) (any, error) {
+		domains, err := plugin.ListDomains(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("while listing domains: %w", err)
+		}
+		for _, domain := range domains {
+			if domain.UUID == domainNameOrUUID || domain.Name == domainNameOrUUID {
+				return plugin.ListProjects(ctx, domain)
+			}
+		}
+		return nil, fmt.Errorf("no domain found with a name or UUID of %q", domainNameOrUUID)
+	})
 }

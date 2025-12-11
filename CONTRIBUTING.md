@@ -106,6 +106,18 @@ It's also highly recommended to use the `--compare` flag to have limesctl run th
 When refactoring, you want to check that the diff is empty.
 When adding new logic, you want to check that the diff matches what you expect.
 
+## Testing calls against Keystone
+
+Keystone integration is not mediated via LIQUID and goes through the `core.DiscoveryPlugin` interface instead.
+To test this interface's method calls, run one of
+
+```sh
+make && ./build/limes test-list-domains
+make && ./build/limes test-list-projects <domain-name-or-uuid>
+```
+
+with `OS_*` variables containing OpenStack credentials that allow access to the respective Keystone API calls.
+
 ## Code structure
 
 Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve`, `limes collect` and `limes serve-data-metrics`).
@@ -119,8 +131,7 @@ The bulk of the source code is below `internal/`, organized into packages as fol
 | `internal/db` | no | database connection handling, schema definitions, ORM model classes, utility functions |
 | `internal/core` | yes | core interfaces (DiscoveryPlugin, QuotaPlugin, CapacityPlugin) and data structures (Configuration, Cluster), config parsing and validation |
 | `internal/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
-| `internal/plugins` | no | implementations of QuotaPlugin and CapacityPlugin (**deprecated**) |
-| `internal/datamodel` | yes | higher-level functions that operate on the ORM model classes (not in `internal/db` because of dependency on stuff from `internal/limes` |
+| `internal/datamodel` | yes | higher-level functions that operate on the ORM model classes (not in `internal/db` because of dependency on stuff from `internal/limes`) |
 | `internal/collector` | yes | functionality of `limes collect` and `limes serve-data-metrics` |
 | `internal/reports` | no | helper for `internal/api`: rendering of reports for GET requests |
 | `internal/api` | yes | functionality of `limes serve` |
