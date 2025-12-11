@@ -317,6 +317,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			constraints[projectID] = projectLocalQuotaConstraints{MinQuota: Some(usagePerProjectID[projectID])}
 		} else if usagePerProjectID[projectID] > constraint.MinQuota.UnwrapOr(0) {
 			constraint.MinQuota = Some(usagePerProjectID[projectID])
+			constraints[projectID] = constraint
 		}
 	}
 

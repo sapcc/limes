@@ -137,7 +137,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
-		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		expectACPQResult(t, input, cfg, map[db.ProjectID]projectLocalQuotaConstraints{408: {MinQuota: Some(uint64(12))}}, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},
 				402: {Allocated: 24},
