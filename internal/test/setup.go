@@ -386,6 +386,16 @@ func (s Setup) GetProjectID(name string) (result db.ProjectID) {
 	return result
 }
 
+// GetProjectUUID is a helper function for finding the UUID of a db.Project record.
+func (s Setup) GetProjectUUID(name string) (result liquid.ProjectUUID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT uuid FROM projects WHERE name = $1`, name).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find projects.uuid for name = %q: %s", name, err.Error())
+	}
+	return result
+}
+
 // MustDBExec is a shorthand for s.DB.Exec() + t.Fatal() on error.
 func (s Setup) MustDBExec(query string, args ...any) {
 	s.t.Helper()

@@ -260,7 +260,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// for all resources thus updated, try to confirm pending commitments
 	for _, res := range dbResources {
-		err := c.confirmPendingCommitmentsIfNecessary(service.Type, res.Name, serviceInfos)
+		err := c.confirmPendingCommitmentsIfNecessary(ctx, service.Type, res.Name, serviceInfos)
 		if err != nil {
 			return err
 		}
@@ -292,7 +292,7 @@ func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.L
 	return capacityData, srv, serializedMetrics, nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
+func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, serviceType db.ServiceType, resourceName liquid.ResourceName, serviceInfos map[db.ServiceType]liquid.ServiceInfo) error {
 	behavior := c.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
 	serviceInfo := core.InfoForService(serviceInfos, serviceType)
 	resInfo := core.InfoForResource(serviceInfo, resourceName)
@@ -327,7 +327,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 			},
 			Request: audit.CollectorDummyRequest,
 		}
-		azAuditEvents, err := datamodel.ConfirmPendingCommitments(loc, resInfo.Unit, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
+		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, loc, resInfo.Unit, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
 		if err != nil {
 			return err
 		}
