@@ -5,7 +5,6 @@ package api
 
 import (
 	"cmp"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -426,13 +425,13 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	newStatus := liquid.CommitmentStatusConfirmed
 	totalConfirmedAfter := totalConfirmed + req.Amount
 
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		DryRun:      true,
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -559,7 +558,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -582,7 +581,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), commitmentChangeRequest, loc.ServiceType, *serviceInfo, p.DB)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), commitmentChangeRequest, loc.ServiceType, *serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -845,12 +844,12 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 			ExpiresAt: dbCommitment.ExpiresAt,
 		})
 	}
-	_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	_, err = datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1021,12 +1020,12 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// TODO: for now, this is CommitmentChangeRequest.RequiresConfirmation() = false, because totalConfirmed stays and guaranteed is not used yet.
 	// when we change this, we need to evaluate the response of the liquid
-	_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	_, err = datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1142,12 +1141,12 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		totalConfirmedAfter -= dbCommitment.Amount
 	}
 
-	_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	_, err = datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1345,12 +1344,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		_, err = p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+		_, err = datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 			AZ:          loc.AvailabilityZone,
 			InfoVersion: serviceInfo.Version,
 			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 				dbProject.UUID: {
-					ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 						loc.ResourceName: {
 							TotalConfirmedBefore: totalConfirmed,
@@ -1619,12 +1618,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// check move is allowed
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			sourceProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
@@ -1646,7 +1645,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				},
 			},
 			targetProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: targetTotalConfirmed,
@@ -1980,7 +1979,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					sourceLoc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
@@ -2011,7 +2010,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), commitmentChangeRequest, sourceLoc.ServiceType, serviceInfo, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), commitmentChangeRequest, sourceLoc.ServiceType, serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2184,12 +2183,12 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	// might only reject in the remote-case, locally we accept extensions as limes does not know future capacity
-	commitmentChangeResponse, err := p.DelegateChangeCommitments(r.Context(), liquid.CommitmentChangeRequest{
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(p.Cluster, r.Context(), liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: liquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -2248,113 +2247,6 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
-}
-
-// DelegateChangeCommitments decides whether LiquidClient.ChangeCommitments() should be called,
-// depending on the setting of liquid.ResourceInfo.HandlesCommitments. If not, it routes the
-// operation to be performed locally on the database. In case the LiquidConnection is not filled,
-// a LiquidClient is instantiated on the fly to perform the operation. It utilizes a given ServiceInfo so that no
-// double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
-	localCommitmentChanges := liquid.CommitmentChangeRequest{
-		DryRun:      req.DryRun,
-		AZ:          req.AZ,
-		InfoVersion: req.InfoVersion,
-		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
-	}
-	remoteCommitmentChanges := liquid.CommitmentChangeRequest{
-		DryRun:      req.DryRun,
-		AZ:          req.AZ,
-		InfoVersion: req.InfoVersion,
-		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
-	}
-	for projectUUID, projectCommitmentChangeset := range req.ByProject {
-		for resourceName, resourceCommitmentChangeset := range projectCommitmentChangeset.ByResource {
-			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
-			for i, commitment := range resourceCommitmentChangeset.Commitments {
-				commitment.ExpiresAt = commitment.ExpiresAt.Local()
-				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.Local)
-				resourceCommitmentChangeset.Commitments[i] = commitment
-			}
-
-			if serviceInfo.Resources[resourceName].HandlesCommitments {
-				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
-				if !exists {
-					remoteCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
-						ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
-					}
-				}
-				remoteCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
-				continue
-			}
-			_, exists := localCommitmentChanges.ByProject[projectUUID]
-			if !exists {
-				localCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
-					ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
-				}
-			}
-			localCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
-		}
-	}
-	for projectUUID, projectCommitmentChangeset := range localCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
-			pcs := projectCommitmentChangeset
-			pcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
-			localCommitmentChanges.ByProject[projectUUID] = pcs
-		}
-	}
-	for projectUUID, remoteCommitmentChangeset := range remoteCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
-			rcs := remoteCommitmentChangeset
-			rcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
-			remoteCommitmentChanges.ByProject[projectUUID] = rcs
-		}
-	}
-
-	// check remote
-	if len(remoteCommitmentChanges.ByProject) != 0 {
-		var liquidClient core.LiquidClient
-		c := p.Cluster
-		if len(c.LiquidConnections) == 0 {
-			// find the right ServiceType
-			liquidClient, err = c.LiquidClientFactory(serviceType)
-			if err != nil {
-				return result, err
-			}
-		} else {
-			liquidClient = c.LiquidConnections[serviceType].LiquidClient
-		}
-		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
-		if err != nil {
-			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
-		}
-		if commitmentChangeResponse.RejectionReason != "" {
-			return commitmentChangeResponse, nil
-		}
-	}
-
-	// check local
-	if len(localCommitmentChanges.ByProject) != 0 {
-		canAcceptLocally, err := datamodel.CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, p.Cluster, dbi)
-		if err != nil {
-			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
-		}
-		if !canAcceptLocally {
-			return liquid.CommitmentChangeResponse{
-				RejectionReason: "not enough capacity!",
-				RetryAt:         None[time.Time](),
-			}, nil
-		}
-	}
-
-	return result, nil
-}
-
-func liquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, serviceInfo liquid.ServiceInfo) Option[liquid.ProjectMetadata] {
-	if !serviceInfo.CommitmentHandlingNeedsProjectMetadata {
-		return None[liquid.ProjectMetadata]()
-	}
-	return Some(core.KeystoneProjectFromDB(dbProject, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid())
 }
 
 func evaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.ResponseWriter) {
