@@ -1940,7 +1940,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side\n"})
+	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -2141,14 +2141,14 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "exact error message does not matter"})
+	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "liquid says: not enough capacity!"})
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("fourth", "capacity_a", 21, 14),
-		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
-		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("liquid says: not enough capacity!\n"),
+		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 	*s.CurrentProjectCommitmentID-- // request was unsuccessful
