@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -449,17 +450,21 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	WITH project_commitment_sums_by_status AS (
-	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
+	WITH project_commitment_sums_by_status_by_transfer_status AS (
+	  SELECT az_resource_id, project_id, status, transfer_status, SUM(amount) AS amount
 	    FROM project_commitments
 	   WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	   GROUP BY az_resource_id, project_id, status, transfer_status
+	), project_commitment_sums_by_transfer_status AS (
+	  SELECT az_resource_id, project_id, status, JSON_OBJECT_AGG(transfer_status, amount) AS amount
+	    FROM project_commitment_sums_by_status_by_transfer_status
 	   GROUP BY az_resource_id, project_id, status
 	), project_commitment_sums AS (
-	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status
-	    FROM project_commitment_sums_by_status
+	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status_by_transfer_status
+	    FROM project_commitment_sums_by_transfer_status
 	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status
+	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status_by_transfer_status
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -680,18 +685,18 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch values for project AZ level (usage/commitments)
 	err = sqlext.ForeachRow(d.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName         string
-			domainUUID         string
-			projectName        string
-			projectUUID        string
-			dbServiceType      db.ServiceType
-			dbResourceName     liquid.ResourceName
-			az                 liquid.AvailabilityZone
-			usage              uint64
-			amountByStatusJSON *string
+			domainName                         string
+			domainUUID                         string
+			projectName                        string
+			projectUUID                        string
+			dbServiceType                      db.ServiceType
+			dbResourceName                     liquid.ResourceName
+			az                                 liquid.AvailabilityZone
+			usage                              uint64
+			amountByStatusByTransferStatusJSON *string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&az, &usage, &amountByStatusJSON)
+			&az, &usage, &amountByStatusByTransferStatusJSON)
 		if err != nil {
 			return err
 		}
@@ -708,21 +713,30 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			result["limes_project_usage_per_az"] = append(result["limes_project_usage_per_az"], metric)
 		}
 		committed := uint64(0)
-		if amountByStatusJSON != nil {
-			var amountByStatus map[liquid.CommitmentStatus]uint64
-			err = json.Unmarshal([]byte(*amountByStatusJSON), &amountByStatus)
+		if amountByStatusByTransferStatusJSON != nil {
+			var amountByStatusByTransferStatus map[liquid.CommitmentStatus]map[limesresources.CommitmentTransferStatus]uint64
+			err = json.Unmarshal([]byte(*amountByStatusByTransferStatusJSON), &amountByStatusByTransferStatus)
 			if err != nil {
-				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *amountByStatusJSON)
+				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *amountByStatusByTransferStatusJSON)
 			}
-			committed = amountByStatus[liquid.CommitmentStatusConfirmed]
-			for status, amount := range amountByStatus {
+			for status, amountByTransferStatus := range amountByStatusByTransferStatus {
 				state := string(status)
 				if status == liquid.CommitmentStatusConfirmed {
 					state = "active" // backwards compatibility with old db.ProjectCommitmentState enum (TODO: use liquid.CommitmentStatus values in v2 metrics)
 				}
 				labelsWithState := fmt.Sprintf(`%s,state=%q`, labels, state)
-				metric := dataMetric{Labels: labelsWithState, Value: float64(amount)}
-				result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)
+				for transferStatus, amount := range amountByTransferStatus {
+					if status == liquid.CommitmentStatusConfirmed {
+						committed += amount
+					}
+
+					labelsWithTransferStatus := labelsWithState
+					if transferStatus != limesresources.CommitmentTransferStatusNone {
+						labelsWithTransferStatus = fmt.Sprintf(`%s,transfer_status=%q`, labelsWithState, transferStatus)
+					}
+					metric := dataMetric{Labels: labelsWithTransferStatus, Value: float64(amount)}
+					result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)
+				}
 			}
 		}
 		if d.ReportZeroes || max(usage, committed) != 0 {

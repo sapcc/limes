@@ -1,0 +1,162 @@
+# HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
+# TYPE limes_autogrow_growth_multiplier gauge
+limes_autogrow_growth_multiplier{resource="capacity",service="first",service_name="first"} 1
+limes_autogrow_growth_multiplier{resource="resource",service="service",service_name="second"} 1
+limes_autogrow_growth_multiplier{resource="things",service="first",service_name="first"} 1
+limes_autogrow_growth_multiplier{resource="things",service="second",service_name="second"} 1
+# HELP limes_autogrow_quota_overcommit_threshold_percent For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.
+# TYPE limes_autogrow_quota_overcommit_threshold_percent gauge
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="first",service_name="first"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="resource",service="service",service_name="second"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="first",service_name="first"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="second",service_name="second"} 0
+# HELP limes_available_commitment_duration Reports which commitment durations are available for new commitments on a Limes resource.
+# TYPE limes_available_commitment_duration gauge
+limes_available_commitment_duration{duration="1 hour",resource="capacity",service="first",service_name="first"} 1
+limes_available_commitment_duration{duration="1 hour",resource="resource",service="service",service_name="second"} 1
+limes_available_commitment_duration{duration="10 days",resource="capacity",service="first",service_name="first"} 1
+limes_available_commitment_duration{duration="10 days",resource="resource",service="service",service_name="second"} 1
+# HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
+# TYPE limes_cluster_capacity gauge
+limes_cluster_capacity{resource="capacity",service="first",service_name="first"} 84
+limes_cluster_capacity{resource="resource",service="service",service_name="second"} 46
+limes_cluster_capacity{resource="things",service="first",service_name="first"} 42
+limes_cluster_capacity{resource="things",service="second",service_name="second"} 23
+# HELP limes_cluster_capacity_per_az Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.
+# TYPE limes_cluster_capacity_per_az gauge
+limes_cluster_capacity_per_az{availability_zone="az-one",resource="capacity",service="first",service_name="first"} 42
+limes_cluster_capacity_per_az{availability_zone="az-one",resource="resource",service="service",service_name="second"} 23
+limes_cluster_capacity_per_az{availability_zone="az-two",resource="capacity",service="first",service_name="first"} 42
+limes_cluster_capacity_per_az{availability_zone="az-two",resource="resource",service="service",service_name="second"} 23
+# HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
+# TYPE limes_cluster_usage_per_az gauge
+limes_cluster_usage_per_az{availability_zone="az-one",resource="capacity",service="first",service_name="first"} 8
+limes_cluster_usage_per_az{availability_zone="az-one",resource="resource",service="service",service_name="second"} 4
+limes_cluster_usage_per_az{availability_zone="az-two",resource="capacity",service="first",service_name="first"} 8
+limes_cluster_usage_per_az{availability_zone="az-two",resource="resource",service="service",service_name="second"} 4
+# HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
+# TYPE limes_domain_quota gauge
+limes_domain_quota{domain="france",domain_id="uuid-for-france",resource="capacity",service="first",service_name="first"} 0
+limes_domain_quota{domain="france",domain_id="uuid-for-france",resource="resource",service="service",service_name="second"} 0
+limes_domain_quota{domain="france",domain_id="uuid-for-france",resource="things",service="first",service_name="first"} 0
+limes_domain_quota{domain="france",domain_id="uuid-for-france",resource="things",service="second",service_name="second"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="first",service_name="first"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="resource",service="service",service_name="second"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="first",service_name="first"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="second",service_name="second"} 0
+# HELP limes_project_commitment_min_expires_at Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.
+# TYPE limes_project_commitment_min_expires_at gauge
+limes_project_commitment_min_expires_at{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_commitment_min_expires_at{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="second",service_name="second"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="second",service_name="second"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="first",service_name="first"} 0
+limes_project_commitment_min_expires_at{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="second",service_name="second"} 0
+# HELP limes_project_committed_per_az Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.
+# TYPE limes_project_committed_per_az gauge
+limes_project_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first",state="planned",transfer_status="public"} 1
+limes_project_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first",state="planned"} 1
+# HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
+# TYPE limes_project_quota gauge
+limes_project_quota{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_quota{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_quota{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="first",service_name="first"} 0
+limes_project_quota{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="second",service_name="second"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="first",service_name="first"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="second",service_name="second"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="first",service_name="first"} 0
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="second",service_name="second"} 0
+# HELP limes_project_usage Actual (logical) usage of a Limes resource for an OpenStack project.
+# TYPE limes_project_usage gauge
+limes_project_usage{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_usage{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="first",service_name="first"} 0
+limes_project_usage{domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="second",service_name="second"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="first",service_name="first"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="second",service_name="second"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="first",service_name="first"} 0
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="second",service_name="second"} 0
+# HELP limes_project_usage_per_az Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.
+# TYPE limes_project_usage_per_az gauge
+limes_project_usage_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="second",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="second",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="second",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_usage_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+# HELP limes_project_used_and_or_committed_per_az The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.
+# TYPE limes_project_used_and_or_committed_per_az gauge
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="things",service="second",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="second",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="second",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="france",domain_id="uuid-for-france",project="paris",project_id="uuid-for-paris",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="resource",service="service",service_name="second"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="first",service_name="first"} 0
+limes_project_used_and_or_committed_per_az{availability_zone="unknown",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="resource",service="service",service_name="second"} 0
+# HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
+# TYPE limes_unit_multiplier gauge
+limes_unit_multiplier{resource="capacity",service="first",service_name="first"} 1
+limes_unit_multiplier{resource="resource",service="service",service_name="second"} 1
+limes_unit_multiplier{resource="things",service="first",service_name="first"} 1
+limes_unit_multiplier{resource="things",service="second",service_name="second"} 1
