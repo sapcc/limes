@@ -1370,6 +1370,15 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	})
 	tr.DBChanges().Ignore()
 
+	dmr := &collector.DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_commitment_transfer.prom"),
+	}.Check(t, dmr)
+
 	s.Clock.StepBy(1 * time.Hour)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
