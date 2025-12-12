@@ -457,11 +457,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	result := true
-	if commitmentChangeResponse.RejectionReason != "" {
-		evaluateRetryHeader(commitmentChangeResponse, w)
-		result = false
-	}
+	result := !commitmentChangeRequestWasRejected(commitmentChangeResponse, w, false)
 	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
 }
 
@@ -591,9 +587,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	if commitmentChangeRequest.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
-		if commitmentChangeResponse.RejectionReason != "" {
-			evaluateRetryHeader(commitmentChangeResponse, w)
-			http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
+		if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 			return
 		}
 		dbCommitment.ConfirmedAt = Some(now)
@@ -1672,9 +1666,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	if commitmentChangeResponse.RejectionReason != "" {
-		evaluateRetryHeader(commitmentChangeResponse, w)
-		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
+	if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 		return
 	}
 
@@ -2017,9 +2009,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
-	if commitmentChangeRequest.RequiresConfirmation() && commitmentChangeResponse.RejectionReason != "" {
-		evaluateRetryHeader(commitmentChangeResponse, w)
-		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
+	if commitmentChangeRequest.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 		return
 	}
 
@@ -2219,9 +2209,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	dbCommitment.Duration = req.Duration
 	dbCommitment.ExpiresAt = newExpiresAt
-	if commitmentChangeResponse.RejectionReason != "" {
-		evaluateRetryHeader(commitmentChangeResponse, w)
-		http.Error(w, commitmentChangeResponse.RejectionReason, http.StatusConflict)
+	if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 		return
 	}
 
@@ -2357,10 +2345,18 @@ func liquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, 
 	return Some(core.KeystoneProjectFromDB(dbProject, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid())
 }
 
-func evaluateRetryHeader(response liquid.CommitmentChangeResponse, w http.ResponseWriter) {
-	if retryAt, exists := response.RetryAt.Unpack(); exists && response.RejectionReason != "" {
+func commitmentChangeRequestWasRejected(response liquid.CommitmentChangeResponse, w http.ResponseWriter, withHTTPResponse bool) bool {
+	if response.RejectionReason == "" {
+		return false
+	}
+	if retryAt, exists := response.RetryAt.Unpack(); exists {
 		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
 	}
+	if withHTTPResponse {
+		http.Error(w, response.RejectionReason, http.StatusConflict)
+		return true // gocritic fears missing return otherwise
+	}
+	return true
 }
 
 // DeleteProjectCommitmentAsCloudAdmin handles DELETE /v1/commitments/:id.
