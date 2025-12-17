@@ -747,7 +747,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	)
 }
 
-func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string) (s test.Setup, add func(db.ProjectCommitment) liquid.CommitmentUUID) {
+func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liquidHandlesCommitments bool) (s test.Setup, add func(db.ProjectCommitment) liquid.CommitmentUUID) {
 	add = func(c db.ProjectCommitment) liquid.CommitmentUUID {
 		t.Helper()
 		c.CreatorUUID = "dummy"
@@ -766,14 +766,19 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string) (s 
 				Topology:    liquid.AZAwareTopology,
 				HasCapacity: true,
 				HasQuota:    true,
+				// important: in most cases, we use the local way to determine whether commitments fit the capacity
+				HandlesCommitments: liquidHandlesCommitments,
 			},
 			"things": {
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
 				HasQuota:    true,
+				// important: in most cases, we use the local way to determine whether commitments fit the capacity
+				HandlesCommitments: liquidHandlesCommitments,
 			},
 		},
+		CommitmentHandlingNeedsProjectMetadata: true,
 	}
 
 	azReportForFirst := liquid.AZResourceCapacityReport{Capacity: 42, Usage: Some[uint64](8)}
@@ -847,7 +852,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			// test automatic project quota calculation with non-default settings on */capacity resources
 			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
 		]
-	}`)
+	}`, false)
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// fill `services` and `az_resources` as though a previous capacity scrape has already taken place,
@@ -1315,7 +1320,7 @@ const commitmentConfigWithoutOvercommitJSON = `{
 }`
 
 func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
-	s, add := commonScanCapacityWithCommitmentsSetup(t, commitmentConfigWithoutOvercommitJSON)
+	s, add := commonScanCapacityWithCommitmentsSetup(t, commitmentConfigWithoutOvercommitJSON, false)
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
@@ -1792,6 +1797,146 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid19, uuid22, timestampUpdates())
 }
 
+func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
+	// set liquidHandlesCommitments to true to test the takeover with capacity delegation enabled
+	s, add := commonScanCapacityWithCommitmentsSetup(t, commitmentConfigWithoutOvercommitJSON, true)
+	job := s.Collector.CapacityScrapeJob(s.Registry)
+
+	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	// in each of the test steps below, the timestamp updates on services will always be the same
+	timestampUpdates := func() string {
+		scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt2 := s.Clock.Now()
+		return strings.TrimSpace(fmt.Sprintf(`
+					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
+				`,
+			scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
+			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
+		))
+	}
+
+	s.Clock.StepBy(1 * time.Hour)
+	now := s.Clock.Now()
+
+	// start simple, add 1 commitment
+	berlin := s.GetProjectID("berlin")
+	berlinUUID := s.GetProjectUUID("berlin")
+	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
+	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
+	committedForTenDays := must.Return(limesresources.ParseCommitmentDuration("10 days"))
+	add(db.ProjectCommitment{
+		UUID:         "00000000-0000-0000-0000-000000000001",
+		ProjectID:    berlin,
+		AZResourceID: secondCapacityAZOne,
+		Amount:       10,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+	// first has no commitment, no request should be sent
+	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
+		t.Fatal("expected no commitment change request to be sent to Liquid")
+	}
+	// second was not handled yet
+	if s.LiquidClients["second"].LastCommitmentChangeRequest.InfoVersion != 0 {
+		t.Fatal("expected no commitment change request to be sent to Liquid")
+	}
+
+	mustT(t, job.ProcessOne(s.Ctx))
+	// first has no commitment, no request should be sent
+	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
+		t.Fatal("expected no commitment change request to be sent to Liquid")
+	}
+	// now second was handled
+	ccr := s.LiquidClients["second"].LastCommitmentChangeRequest
+	if ccr.InfoVersion == 0 {
+		t.Fatal("expected commitment change request to be sent to Liquid")
+	}
+	assert.Equal(t, len(ccr.ByProject), 1)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ProjectMetadata.IsSome(), true)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ProjectMetadata.UnwrapOr(liquid.ProjectMetadata{}).Name, "berlin")
+	assert.Equal(t, ccr.ByProject[berlinUUID].ProjectMetadata.UnwrapOr(liquid.ProjectMetadata{}).Domain.Name, "germany")
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource), 1)
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments), 1)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments[0].UUID, "00000000-0000-0000-0000-000000000001")
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedBefore, 0)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedAfter, 10)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET quota = 10 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 1, 9, 'confirmed', 10, '10 days', %[1]d, 'dummy', 'dummy', %[2]d, %[3]d, '{}');
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
+		%[4]s
+	`, now.Unix(), now.Add(10*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
+
+	s.Clock.StepBy(1 * time.Hour)
+	now = s.Clock.Now()
+
+	// add another 2 commitments in service second and 1 in service first for confirmation
+	add(db.ProjectCommitment{
+		UUID:         "00000000-0000-0000-0000-000000000002",
+		ProjectID:    berlin,
+		AZResourceID: firstCapacityAZOne,
+		Amount:       3,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+	add(db.ProjectCommitment{
+		UUID:         "00000000-0000-0000-0000-000000000003",
+		ProjectID:    berlin,
+		AZResourceID: secondCapacityAZOne,
+		Amount:       1,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+	add(db.ProjectCommitment{
+		UUID:         "00000000-0000-0000-0000-000000000004",
+		ProjectID:    berlin,
+		AZResourceID: secondCapacityAZOne,
+		Amount:       2,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+
+	setClusterCapacitorsStale(t, s)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	ccr = s.LiquidClients["first"].LastCommitmentChangeRequest
+	assert.Equal(t, len(ccr.ByProject), 1)
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource), 1)
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments), 1)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments[0].UUID, "00000000-0000-0000-0000-000000000002")
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedBefore, 0)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedAfter, 3)
+
+	// this goes one by one, so we only see the last one - but the TotalConfirmedBefore recognizes the previous ones
+	ccr = s.LiquidClients["second"].LastCommitmentChangeRequest
+	assert.Equal(t, len(ccr.ByProject), 1)
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource), 1)
+	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments), 1)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].Commitments[0].UUID, "00000000-0000-0000-0000-000000000004")
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedBefore, 11)
+	assert.Equal(t, ccr.ByProject[berlinUUID].ByResource["capacity"].TotalConfirmedAfter, 13)
+
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET quota = 13 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
+		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 3 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
+		UPDATE project_az_resources SET quota = 13 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 1, 2, 'confirmed', 3, '10 days', %[1]d, 'dummy', 'dummy', %[2]d, %[4]d, '{}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 9, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[3]d, %[4]d, '{}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (4, '00000000-0000-0000-0000-000000000004', 1, 9, 'confirmed', 2, '10 days', %[1]d, 'dummy', 'dummy', %[3]d, %[4]d, '{}');
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		%[5]s
+	`, now.Unix(), now.Add(5*time.Second).Unix(), now.Add(10*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
+}
+
 func TestScanCapacityWithMailNotification(t *testing.T) {
 	var parsedConfig, mailConfig map[string]any
 	must.Succeed(json.Unmarshal([]byte(commitmentConfigWithoutOvercommitJSON), &parsedConfig))
@@ -1809,7 +1954,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	}`), &mailConfig))
 	parsedConfig["mail_notifications"] = mailConfig
 	config := must.Return(json.Marshal(parsedConfig))
-	s, add := commonScanCapacityWithCommitmentsSetup(t, string(config))
+	s, add := commonScanCapacityWithCommitmentsSetup(t, string(config), false)
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)

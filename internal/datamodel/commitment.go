@@ -4,9 +4,11 @@
 package datamodel
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -20,6 +22,8 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
+
+	. "github.com/majewsky/gg/option"
 )
 
 // GenerateTransferToken generates a token that is used to transfer a commitment from a source to a target project.
@@ -117,4 +121,112 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceL
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
+}
+
+// DelegateChangeCommitments decides whether LiquidClient.ChangeCommitments() should be called,
+// depending on the setting of liquid.ResourceInfo.HandlesCommitments. If not, it routes the
+// operation to be performed locally on the database. In case the LiquidConnection is not filled,
+// a LiquidClient is instantiated on the fly to perform the operation. It utilizes a given ServiceInfo so that no
+// double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
+func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
+	localCommitmentChanges := liquid.CommitmentChangeRequest{
+		DryRun:      req.DryRun,
+		AZ:          req.AZ,
+		InfoVersion: req.InfoVersion,
+		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
+	}
+	remoteCommitmentChanges := liquid.CommitmentChangeRequest{
+		DryRun:      req.DryRun,
+		AZ:          req.AZ,
+		InfoVersion: req.InfoVersion,
+		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
+	}
+	for projectUUID, projectCommitmentChangeset := range req.ByProject {
+		for resourceName, resourceCommitmentChangeset := range projectCommitmentChangeset.ByResource {
+			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
+			for i, commitment := range resourceCommitmentChangeset.Commitments {
+				commitment.ExpiresAt = commitment.ExpiresAt.Local()
+				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.Local)
+				resourceCommitmentChangeset.Commitments[i] = commitment
+			}
+
+			if serviceInfo.Resources[resourceName].HandlesCommitments {
+				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
+				if !exists {
+					remoteCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
+						ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
+					}
+				}
+				remoteCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
+				continue
+			}
+			_, exists := localCommitmentChanges.ByProject[projectUUID]
+			if !exists {
+				localCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
+					ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
+				}
+			}
+			localCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
+		}
+	}
+	for projectUUID, projectCommitmentChangeset := range localCommitmentChanges.ByProject {
+		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
+			pcs := projectCommitmentChangeset
+			pcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
+			localCommitmentChanges.ByProject[projectUUID] = pcs
+		}
+	}
+	for projectUUID, remoteCommitmentChangeset := range remoteCommitmentChanges.ByProject {
+		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
+			rcs := remoteCommitmentChangeset
+			rcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
+			remoteCommitmentChanges.ByProject[projectUUID] = rcs
+		}
+	}
+
+	// check remote
+	if len(remoteCommitmentChanges.ByProject) != 0 {
+		var liquidClient core.LiquidClient
+		if len(cluster.LiquidConnections) == 0 {
+			// find the right ServiceType
+			liquidClient, err = cluster.LiquidClientFactory(serviceType)
+			if err != nil {
+				return result, err
+			}
+		} else {
+			liquidClient = cluster.LiquidConnections[serviceType].LiquidClient
+		}
+		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
+		if err != nil {
+			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
+		}
+		if commitmentChangeResponse.RejectionReason != "" {
+			return commitmentChangeResponse, nil
+		}
+	}
+
+	// check local
+	if len(localCommitmentChanges.ByProject) != 0 {
+		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, cluster, dbi)
+		if err != nil {
+			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
+		}
+		if !canAcceptLocally {
+			return liquid.CommitmentChangeResponse{
+				RejectionReason: "not enough capacity!",
+				RetryAt:         None[time.Time](),
+			}, nil
+		}
+	}
+
+	return result, nil
+}
+
+// LiquidProjectMetadataFromDBProject converts a db.Project into liquid.ProjectMetadata
+// only if the given serviceInfo requires it for commitment handling.
+func LiquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain, serviceInfo liquid.ServiceInfo) Option[liquid.ProjectMetadata] {
+	if !serviceInfo.CommitmentHandlingNeedsProjectMetadata {
+		return None[liquid.ProjectMetadata]()
+	}
+	return Some(core.KeystoneProjectFromDB(dbProject, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid())
 }
