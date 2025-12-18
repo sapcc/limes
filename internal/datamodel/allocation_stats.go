@@ -15,6 +15,8 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
+
+	. "github.com/majewsky/gg/option"
 )
 
 // clusterAZAllocationStats bundles all data pertaining to a specific AZ
@@ -134,10 +136,10 @@ var (
 
 // Shared data collection phase for ApplyComputedProjectQuota,
 // CanConfirmNewCommitment and ConfirmPendingCommitments.
-func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.ResourceName, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
+func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.ResourceName, azFilter Option[limes.AvailabilityZone], cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
 	scopeDesc := fmt.Sprintf("%s/%s", serviceType, resourceName)
-	if azFilter != nil {
-		scopeDesc += fmt.Sprintf(" in %s", *azFilter)
+	if azFilter.IsSome() {
+		scopeDesc += fmt.Sprintf(" in %s", azFilter)
 	}
 	result := make(map[limes.AvailabilityZone]clusterAZAllocationStats)
 

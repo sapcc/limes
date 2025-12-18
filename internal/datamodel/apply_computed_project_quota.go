@@ -135,7 +135,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	// collect required data (TODO: pass `resourceID` into here to simplify queries over there too?)
-	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx)
+	stats, err := collectAZAllocationStats(serviceType, resourceName, None[liquid.AvailabilityZone](), cluster, tx)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	// AZ separated basequota will be assigned to all available AZs
 	if logg.ShowDebug {
 		// NOTE: The structs that contain pointers must be printed as JSON to actually show all values.
-		logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
+		logg.Debug("ACPQ for %s/%s: statsByAZ = %#v", serviceType, resourceName, stats)
 		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
 		buf, _ := json.Marshal(constraints) //nolint:errcheck
 		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resourceName, string(buf))
@@ -289,7 +289,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	}
 
 	// enumerate which project IDs and AZs are relevant
-	// ("Relevant" AZs are all that have allocation stats available.)
+	// ("Relevant" AZs are all that have allocation statsByAZ available.)
 	// additionally, we prepare the special handling for projects which have usage in az=unknown
 	isProjectID := make(map[db.ProjectID]struct{})
 	isRelevantAZ := make(map[limes.AvailabilityZone]struct{}, len(stats))
