@@ -5,7 +5,6 @@ package api
 
 import (
 	"cmp"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -175,7 +174,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		}
 		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
 		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resInfo.Unit))
+		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resInfo.Unit))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -297,7 +296,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		if !exists {
 			continue // like above, this is just defense in depth (the DB should be consistent with itself)
 		}
-		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resInfo.Unit)
+		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resInfo.Unit)
 		// hide some fields that we should not be showing in this very public list
 		c.CreatorUUID = ""
 		c.CreatorName = ""
@@ -426,7 +425,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	newStatus := liquid.CommitmentStatusConfirmed
 	totalConfirmedAfter := totalConfirmed + req.Amount
 
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	ccr, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
 		DryRun:      true,
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
@@ -453,11 +452,11 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 				},
 			},
 		},
-	}, loc.ServiceType, *serviceInfo, p.DB)
+	}, *loc, *serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	result := !commitmentChangeRequestWasRejected(commitmentChangeResponse, w, false)
+	result := !commitmentChangeRequestWasRejected(ccr, w, false)
 	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
 }
 
@@ -550,7 +549,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		newStatus = liquid.CommitmentStatusConfirmed
 		totalConfirmedAfter += req.Amount
 	}
-	commitmentChangeRequest := liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -578,14 +577,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, commitmentChangeRequest, loc.ServiceType, *serviceInfo, p.DB)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
 
-	if commitmentChangeRequest.RequiresConfirmation() {
+	if ccr.RequiresConfirmation() {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
 		if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 			return
@@ -594,22 +593,22 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		dbCommitment.Status = liquid.CommitmentStatusConfirmed
 
 		// handle public transfer commitments (does not alter the confirmed commitment)
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		err = transferableCommitmentCache.CheckAndConsume(dbCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
 		mailTemplate := None[core.MailTemplate]()
 		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
 			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
 		}
-		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, resourceInfo.Unit, audit.Context{
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		err = transferableCommitmentCache.CheckAndConsume(dbCommitment, totalConfirmed)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, audit.Context{
 			UserIdentity: token,
 			Request:      r,
-		}, mailTemplate)
+		})
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -634,7 +633,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, *loc, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       now,
 		Request:    r,
@@ -642,12 +641,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		ReasonCode: http.StatusCreated,
 		Action:     cadf.CreateAction,
 		Target: audit.CommitmentEventTarget{
-			DomainID:        dbDomain.UUID,
-			DomainName:      dbDomain.Name,
-			ProjectID:       dbProject.UUID,
-			ProjectName:     dbProject.Name,
-			Commitments:     []limesresources.Commitment{commitment},
-			WorkflowContext: Some(creationContext),
+			DomainID:                dbDomain.UUID,
+			DomainName:              dbDomain.Name,
+			ProjectID:               dbProject.UUID,
+			ProjectName:             dbProject.Name,
+			CommitmentChangeRequest: ccr,
 		},
 	})
 
@@ -839,7 +837,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 			ExpiresAt: dbCommitment.ExpiresAt,
 		})
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -857,7 +855,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		},
-	}, loc.ServiceType, serviceInfo, tx)
+	}
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -868,14 +867,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
 	auditEvent := audit.CommitmentEventTarget{
-		DomainID:        dbDomain.UUID,
-		DomainName:      dbDomain.Name,
-		ProjectID:       dbProject.UUID,
-		ProjectName:     dbProject.Name,
-		Commitments:     []limesresources.Commitment{c},
-		WorkflowContext: Some(creationContext),
+		DomainID:                dbDomain.UUID,
+		DomainName:              dbDomain.Name,
+		ProjectID:               dbProject.UUID,
+		ProjectName:             dbProject.Name,
+		CommitmentChangeRequest: ccr,
 	}
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
@@ -1015,7 +1013,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// TODO: for now, this is CommitmentChangeRequest.RequiresConfirmation() = false, because totalConfirmed stays and guaranteed is not used yet.
 	// when we change this, we need to evaluate the response of the liquid
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1042,7 +1040,8 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		},
-	}, loc.ServiceType, serviceInfo, tx)
+	}
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1054,14 +1053,13 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	// Create resultset and auditlogs
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
 	auditEvent := audit.CommitmentEventTarget{
-		DomainID:        dbDomain.UUID,
-		DomainName:      dbDomain.Name,
-		ProjectID:       dbProject.UUID,
-		ProjectName:     dbProject.Name,
-		Commitments:     []limesresources.Commitment{c},
-		WorkflowContext: Some(creationContext),
+		DomainID:                dbDomain.UUID,
+		DomainName:              dbDomain.Name,
+		ProjectID:               dbProject.UUID,
+		ProjectName:             dbProject.Name,
+		CommitmentChangeRequest: ccr,
 	}
 
 	p.auditor.Record(audittools.Event{
@@ -1136,7 +1134,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		totalConfirmedAfter -= dbCommitment.Amount
 	}
 
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1163,7 +1161,8 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		},
-	}, loc.ServiceType, serviceInfo, p.DB)
+	}
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1174,8 +1173,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1183,11 +1180,11 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
 		Target: audit.CommitmentEventTarget{
-			DomainID:    dbDomain.UUID,
-			DomainName:  dbDomain.Name,
-			ProjectID:   dbProject.UUID,
-			ProjectName: dbProject.Name,
-			Commitments: []limesresources.Commitment{c},
+			DomainID:                dbDomain.UUID,
+			DomainName:              dbDomain.Name,
+			ProjectID:               dbProject.UUID,
+			ProjectName:             dbProject.Name,
+			CommitmentChangeRequest: ccr,
 		},
 	})
 
@@ -1307,7 +1304,46 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
+	// if not split, the ccr is just used for audit logging
+	ccr := liquid.CommitmentChangeRequest{
+		AZ:          loc.AvailabilityZone,
+		InfoVersion: serviceInfo.Version,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			dbProject.UUID: {
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					loc.ResourceName: {
+						TotalConfirmedBefore: totalConfirmed,
+						TotalConfirmedAfter:  totalConfirmed,
+						// TODO: change when introducing "guaranteed" commitments
+						TotalGuaranteedBefore: 0,
+						TotalGuaranteedAfter:  0,
+					},
+				},
+			},
+		},
+	}
+	cac := map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{}
+
 	if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
+		rcr := ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName]
+		rcr.Commitments = []liquid.Commitment{
+			// unchanged
+			{
+				UUID:      dbCommitment.UUID,
+				OldStatus: Some(dbCommitment.Status),
+				NewStatus: Some(dbCommitment.Status),
+				Amount:    dbCommitment.Amount,
+				ConfirmBy: dbCommitment.ConfirmBy,
+				ExpiresAt: dbCommitment.ExpiresAt,
+			},
+		}
+		ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName] = rcr
+		cac[dbCommitment.UUID] = audit.CommitmentAttributeChangeset{
+			OldTransferStatus: Some(dbCommitment.TransferStatus),
+			NewTransferStatus: Some(req.TransferStatus),
+		}
+
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = transferToken
 		dbCommitment.TransferStartedAt = transferStartedAt
@@ -1339,52 +1375,42 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
-			AZ:          loc.AvailabilityZone,
-			InfoVersion: serviceInfo.Version,
-			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-				dbProject.UUID: {
-					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
-					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-						loc.ResourceName: {
-							TotalConfirmedBefore: totalConfirmed,
-							TotalConfirmedAfter:  totalConfirmed,
-							// TODO: change when introducing "guaranteed" commitments
-							TotalGuaranteedBefore: 0,
-							TotalGuaranteedAfter:  0,
-							Commitments: []liquid.Commitment{
-								// old
-								{
-									UUID:      dbCommitment.UUID,
-									OldStatus: Some(dbCommitment.Status),
-									NewStatus: Some(liquid.CommitmentStatusSuperseded),
-									Amount:    dbCommitment.Amount,
-									ConfirmBy: dbCommitment.ConfirmBy,
-									ExpiresAt: dbCommitment.ExpiresAt,
-								},
-								// new
-								{
-									UUID:      transferCommitment.UUID,
-									OldStatus: None[liquid.CommitmentStatus](),
-									NewStatus: Some(transferCommitment.Status),
-									Amount:    transferCommitment.Amount,
-									ConfirmBy: transferCommitment.ConfirmBy,
-									ExpiresAt: transferCommitment.ExpiresAt,
-								},
-								{
-									UUID:      remainingCommitment.UUID,
-									OldStatus: None[liquid.CommitmentStatus](),
-									NewStatus: Some(remainingCommitment.Status),
-									Amount:    remainingCommitment.Amount,
-									ConfirmBy: remainingCommitment.ConfirmBy,
-									ExpiresAt: remainingCommitment.ExpiresAt,
-								},
-							},
-						},
-					},
-				},
+		rcr := ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName]
+		rcr.Commitments = []liquid.Commitment{
+			// old
+			{
+				UUID:      dbCommitment.UUID,
+				OldStatus: Some(dbCommitment.Status),
+				NewStatus: Some(liquid.CommitmentStatusSuperseded),
+				Amount:    dbCommitment.Amount,
+				ConfirmBy: dbCommitment.ConfirmBy,
+				ExpiresAt: dbCommitment.ExpiresAt,
 			},
-		}, loc.ServiceType, serviceInfo, tx)
+			// new
+			{
+				UUID:      transferCommitment.UUID,
+				OldStatus: None[liquid.CommitmentStatus](),
+				NewStatus: Some(transferCommitment.Status),
+				Amount:    transferCommitment.Amount,
+				ConfirmBy: transferCommitment.ConfirmBy,
+				ExpiresAt: transferCommitment.ExpiresAt,
+			},
+			{
+				UUID:      remainingCommitment.UUID,
+				OldStatus: None[liquid.CommitmentStatus](),
+				NewStatus: Some(remainingCommitment.Status),
+				Amount:    remainingCommitment.Amount,
+				ConfirmBy: remainingCommitment.ConfirmBy,
+				ExpiresAt: remainingCommitment.ExpiresAt,
+			},
+		}
+		ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName] = rcr
+		cac[transferCommitment.UUID] = audit.CommitmentAttributeChangeset{
+			OldTransferStatus: Some(limesresources.CommitmentTransferStatusNone),
+			NewTransferStatus: Some(req.TransferStatus),
+		}
+
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1414,7 +1440,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1422,11 +1448,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
 		Target: audit.CommitmentEventTarget{
-			DomainID:    dbDomain.UUID,
-			DomainName:  dbDomain.Name,
-			ProjectID:   dbProject.UUID,
-			ProjectName: dbProject.Name,
-			Commitments: []limesresources.Commitment{c},
+			DomainID:                     dbDomain.UUID,
+			DomainName:                   dbDomain.Name,
+			ProjectID:                    dbProject.UUID,
+			ProjectName:                  dbProject.Name,
+			CommitmentChangeRequest:      ccr,
+			CommitmentAttributeChangeset: cac,
 		},
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
@@ -1503,7 +1530,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1613,7 +1640,13 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// check move is allowed
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	cac := map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{
+		dbCommitment.UUID: {
+			OldTransferStatus: Some(dbCommitment.TransferStatus),
+			NewTransferStatus: Some(limesresources.CommitmentTransferStatusNone),
+		},
+	}
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -1662,7 +1695,8 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				},
 			},
 		},
-	}, loc.ServiceType, serviceInfo, tx)
+	}
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1685,7 +1719,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -1693,11 +1727,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
 		Target: audit.CommitmentEventTarget{
-			DomainID:    targetDomain.UUID,
-			DomainName:  targetDomain.Name,
-			ProjectID:   targetProject.UUID,
-			ProjectName: targetProject.Name,
-			Commitments: []limesresources.Commitment{c},
+			DomainID:                     targetDomain.UUID,
+			DomainName:                   targetDomain.Name,
+			ProjectID:                    targetProject.UUID,
+			ProjectName:                  targetProject.Name,
+			CommitmentChangeRequest:      ccr,
+			CommitmentAttributeChangeset: cac,
 		},
 	})
 
@@ -1967,7 +2002,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		targetTotalConfirmedAfter += req.TargetAmount
 	}
 
-	commitmentChangeRequest := liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          sourceLoc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2003,21 +2038,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, commitmentChangeRequest, sourceLoc.ServiceType, serviceInfo, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sourceLoc, serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
-	if commitmentChangeRequest.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
+	if ccr.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 		return
-	}
-
-	auditEvent := audit.CommitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
 	}
 
 	var (
@@ -2032,9 +2060,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
-		auditEvent.Commitments = append(auditEvent.Commitments,
-			datamodel.ConvertCommitmentToDisplayForm(remainingCommitment, sourceLoc, p.Cluster.BehaviorForResourceLocation(sourceLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, remainingCommitment, p.timeNow), resourceInfo.Unit),
-		)
 	}
 
 	relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
@@ -2068,20 +2093,20 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
-	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
-	auditEvent.WorkflowContext = Some(db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonSplit,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
-	})
+	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target:     auditEvent,
+		Target: audit.CommitmentEventTarget{
+			DomainID:                dbDomain.UUID,
+			DomainName:              dbDomain.Name,
+			ProjectID:               dbProject.UUID,
+			ProjectName:             dbProject.Name,
+			CommitmentChangeRequest: ccr,
+		},
 	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
@@ -2174,7 +2199,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	// might only reject in the remote-case, locally we accept extensions as limes does not know future capacity
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
+	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
@@ -2202,7 +2227,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 				},
 			},
 		},
-	}, loc.ServiceType, serviceInfo, p.DB)
+	}
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2219,7 +2245,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
@@ -2227,115 +2253,15 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
 		Target: audit.CommitmentEventTarget{
-			DomainID:    dbDomain.UUID,
-			DomainName:  dbDomain.Name,
-			ProjectID:   dbProject.UUID,
-			ProjectName: dbProject.Name,
-			Commitments: []limesresources.Commitment{c},
+			DomainID:                dbDomain.UUID,
+			DomainName:              dbDomain.Name,
+			ProjectID:               dbProject.UUID,
+			ProjectName:             dbProject.Name,
+			CommitmentChangeRequest: ccr,
 		},
 	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
-}
-
-// DelegateChangeCommitments decides whether LiquidClient.ChangeCommitments() should be called,
-// depending on the setting of liquid.ResourceInfo.HandlesCommitments. If not, it routes the
-// operation to be performed locally on the database. In case the LiquidConnection is not filled,
-// a LiquidClient is instantiated on the fly to perform the operation. It utilizes a given ServiceInfo so that no
-// double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func (p *v1Provider) DelegateChangeCommitments(ctx context.Context, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
-	localCommitmentChanges := liquid.CommitmentChangeRequest{
-		DryRun:      req.DryRun,
-		AZ:          req.AZ,
-		InfoVersion: req.InfoVersion,
-		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
-	}
-	remoteCommitmentChanges := liquid.CommitmentChangeRequest{
-		DryRun:      req.DryRun,
-		AZ:          req.AZ,
-		InfoVersion: req.InfoVersion,
-		ByProject:   make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset),
-	}
-	for projectUUID, projectCommitmentChangeset := range req.ByProject {
-		for resourceName, resourceCommitmentChangeset := range projectCommitmentChangeset.ByResource {
-			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
-			for i, commitment := range resourceCommitmentChangeset.Commitments {
-				commitment.ExpiresAt = commitment.ExpiresAt.Local()
-				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.Local)
-				resourceCommitmentChangeset.Commitments[i] = commitment
-			}
-
-			if serviceInfo.Resources[resourceName].HandlesCommitments {
-				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
-				if !exists {
-					remoteCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
-						ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
-					}
-				}
-				remoteCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
-				continue
-			}
-			_, exists := localCommitmentChanges.ByProject[projectUUID]
-			if !exists {
-				localCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
-					ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
-				}
-			}
-			localCommitmentChanges.ByProject[projectUUID].ByResource[resourceName] = resourceCommitmentChangeset
-		}
-	}
-	for projectUUID, projectCommitmentChangeset := range localCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
-			pcs := projectCommitmentChangeset
-			pcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
-			localCommitmentChanges.ByProject[projectUUID] = pcs
-		}
-	}
-	for projectUUID, remoteCommitmentChangeset := range remoteCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
-			rcs := remoteCommitmentChangeset
-			rcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
-			remoteCommitmentChanges.ByProject[projectUUID] = rcs
-		}
-	}
-
-	// check remote
-	if len(remoteCommitmentChanges.ByProject) != 0 {
-		var liquidClient core.LiquidClient
-		c := p.Cluster
-		if len(c.LiquidConnections) == 0 {
-			// find the right ServiceType
-			liquidClient, err = c.LiquidClientFactory(serviceType)
-			if err != nil {
-				return result, err
-			}
-		} else {
-			liquidClient = c.LiquidConnections[serviceType].LiquidClient
-		}
-		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
-		if err != nil {
-			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
-		}
-		if commitmentChangeResponse.RejectionReason != "" {
-			return commitmentChangeResponse, nil
-		}
-	}
-
-	// check local
-	if len(localCommitmentChanges.ByProject) != 0 {
-		canAcceptLocally, err := datamodel.CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, p.Cluster, dbi)
-		if err != nil {
-			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
-		}
-		if !canAcceptLocally {
-			return liquid.CommitmentChangeResponse{
-				RejectionReason: "not enough capacity!",
-				RetryAt:         None[time.Time](),
-			}, nil
-		}
-	}
-
-	return result, nil
 }
 
 func commitmentChangeRequestWasRejected(response liquid.CommitmentChangeResponse, w http.ResponseWriter, withHTTPResponse bool) bool {

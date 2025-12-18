@@ -13,7 +13,6 @@ import (
 
 	"github.com/lib/pq"
 	. "github.com/majewsky/gg/option"
-	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
@@ -55,35 +54,62 @@ type TransferableCommitmentCache struct {
 	transferableCommitmentsByID map[db.ProjectCommitmentID]*db.ProjectCommitment
 	// transferredCommitmentIDs holds the IDs of commitments that have already been transferred.
 	transferredCommitmentIDs map[db.ProjectID]map[db.ProjectCommitmentID]commitmentTransferLeftover
+	// affectedProjectsByID hold all projects that have transferable commitments
+	affectedProjectsByID map[db.ProjectID]db.Project
+	// affectedDomainsByID hold all domains that have projects with transferable commitments
+	affectedDomainsByID map[db.DomainID]db.Domain
 
 	// utilities
 	dbi                           db.Interface
+	serviceInfo                   liquid.ServiceInfo
 	loc                           core.AZResourceLocation
 	now                           time.Time
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
 	generateTransferToken         func() string
+	mailTemplate                  Option[core.MailTemplate]
+
+	// the following fields are used for caching between CheckAndConsume() and GenerateAuditEventsAndMails()
+	ccrs map[liquid.CommitmentUUID]liquid.CommitmentChangeRequest
+	cacs map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string) (t TransferableCommitmentCache, err error) {
+func NewTransferableCommitmentCache(dbi db.Interface, serviceInfo liquid.ServiceInfo, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, queryArgs...)
 	if err != nil {
-		return t, fmt.Errorf("while enumerating transferable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
+		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", loc.ScopeString(), err)
 	}
 	t.transferableCommitmentsByID = make(map[db.ProjectCommitmentID]*db.ProjectCommitment, len(t.transferableCommitments))
+	affectedProjectIDs := make(map[db.ProjectID]struct{})
 	for i := range t.transferableCommitments {
 		t.transferableCommitmentsByID[t.transferableCommitments[i].ID] = &t.transferableCommitments[i]
+		affectedProjectIDs[t.transferableCommitments[i].ProjectID] = struct{}{}
 	}
 
 	t.transferredCommitmentIDs = make(map[db.ProjectID]map[db.ProjectCommitmentID]commitmentTransferLeftover)
 
+	t.affectedProjectsByID, err = db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * from projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	if err != nil {
+		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", loc.ScopeString(), err)
+	}
+	t.affectedDomainsByID, err = db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * from domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	if err != nil {
+		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", loc.ScopeString(), err)
+	}
+
 	// fill utilities
 	t.dbi = dbi
+	t.serviceInfo = serviceInfo
 	t.loc = loc
 	t.now = now
 	t.generateProjectCommitmentUUID = generateProjectCommitmentUUID
 	t.generateTransferToken = generateTransferToken
+	t.mailTemplate = mailTemplate
+
+	// initialize caching fields
+	t.ccrs = make(map[liquid.CommitmentUUID]liquid.CommitmentChangeRequest)
+	t.cacs = make(map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset)
 
 	return t, nil
 }
@@ -105,7 +131,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, loc core.AZResourceLocatio
 // CommitmentWasTransferred should be used to check before confirming a commitment.
 // All transfers will lead to a mail which contains the leftover amount, so that the customer
 // can track the whole processing of the transferred commitment over time.
-func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment) (err error) {
+func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, currentTotalConfirmed uint64) (err error) {
 	overallTransferredAmount := uint64(0)
 	for idx, tc := range t.transferableCommitments {
 		if overallTransferredAmount == c.Amount {
@@ -129,6 +155,42 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment) (e
 		// all checks passed, so this project gets at least one transfer
 		if _, exists := t.transferredCommitmentIDs[tc.ProjectID]; !exists {
 			t.transferredCommitmentIDs[tc.ProjectID] = make(map[db.ProjectCommitmentID]commitmentTransferLeftover)
+		}
+
+		// push to the audit events
+		project := t.affectedProjectsByID[tc.ProjectID]
+		domain := t.affectedDomainsByID[project.DomainID]
+		t.ccrs[tc.UUID] = liquid.CommitmentChangeRequest{
+			AZ:          t.loc.AvailabilityZone,
+			InfoVersion: t.serviceInfo.Version,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				project.UUID: {
+					ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain, t.serviceInfo),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						t.loc.ResourceName: {
+							TotalConfirmedBefore: currentTotalConfirmed,
+							TotalConfirmedAfter:  currentTotalConfirmed,
+							// TODO: change when introducing "guaranteed" commitments
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0,
+							Commitments: []liquid.Commitment{
+								{
+									UUID:      tc.UUID,
+									OldStatus: Some(tc.Status),
+									NewStatus: Some(tc.Status),
+									Amount:    tc.Amount,
+									ConfirmBy: tc.ConfirmBy,
+									ExpiresAt: tc.ExpiresAt,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		t.cacs[tc.UUID] = audit.CommitmentAttributeChangeset{
+			OldTransferStatus: Some(tc.TransferStatus),
+			NewTransferStatus: Some(limesresources.CommitmentTransferStatusNone),
 		}
 
 		// at least a part of this commitment will be consumed, so we will supersede it in any case
@@ -209,7 +271,7 @@ func (t *TransferableCommitmentCache) getTransferredCommitmentsForProject(projec
 
 // GenerateAuditEventsAndMails generates the audit events and mail notifications
 // for all transferred commitments that were processed via CheckAndConsume.
-func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity core.ResourceRef, unit limes.Unit, auditContext audit.Context, mailTemplate Option[core.MailTemplate]) (auditEvents []audittools.Event, err error) {
+func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity core.ResourceRef, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	// first, we deduplicate the transfers per project by linking the last leftover to the first transfer commitment
 	for _, projectID := range slices.Sorted(maps.Keys(t.transferredCommitmentIDs)) {
 		transfers := t.transferredCommitmentIDs[projectID]
@@ -246,11 +308,6 @@ func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity co
 			return auditEvents, err
 		}
 
-		var (
-			auditEventCommitments     []limesresources.Commitment
-			auditEventCommitmentIDs   []db.ProjectCommitmentID
-			auditEventCommitmentUUIDs []liquid.CommitmentUUID
-		)
 		n.Commitments = make([]core.CommitmentNotification, 0, len(notifiableTransfers))
 		for _, cID := range slices.Sorted(maps.Keys(notifiableTransfers)) {
 			leftover := notifiableTransfers[cID]
@@ -269,11 +326,25 @@ func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity co
 				},
 				LeftoverAmount: leftover.Amount,
 			})
-			auditEventCommitments = append(auditEventCommitments, ConvertCommitmentToDisplayForm(c, t.loc, apiIdentity, false, unit))
-			auditEventCommitmentIDs = append(auditEventCommitmentIDs, c.ID)
-			auditEventCommitmentUUIDs = append(auditEventCommitmentUUIDs, c.UUID)
+
+			// push one transfer audit event per commitment, because they belong to separate CCRs
+			auditEvents = append(auditEvents, audittools.Event{
+				Time:       t.now,
+				Request:    auditContext.Request,
+				User:       auditContext.UserIdentity,
+				ReasonCode: http.StatusOK,
+				Action:     ConsumeAction,
+				Target: audit.CommitmentEventTarget{
+					DomainID:                     domainUUID,
+					DomainName:                   n.DomainName,
+					ProjectID:                    projectUUID,
+					ProjectName:                  n.ProjectName,
+					CommitmentChangeRequest:      t.ccrs[c.UUID],
+					CommitmentAttributeChangeset: map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{c.UUID: t.cacs[c.UUID]},
+				},
+			})
 		}
-		if tpl, exists := mailTemplate.Unpack(); len(n.Commitments) != 0 && exists {
+		if tpl, exists := t.mailTemplate.Unpack(); len(n.Commitments) != 0 && exists {
 			// push mail notifications
 			mail, err := tpl.Render(n, projectID, t.now)
 			if err != nil {
@@ -283,28 +354,6 @@ func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity co
 			if err != nil {
 				return auditEvents, err
 			}
-		}
-		if len(auditEventCommitments) != 0 {
-			// push transfer event
-			auditEvents = append(auditEvents, audittools.Event{
-				Time:       t.now,
-				Request:    auditContext.Request,
-				User:       auditContext.UserIdentity,
-				ReasonCode: http.StatusOK,
-				Action:     ConsumeAction,
-				Target: audit.CommitmentEventTarget{
-					DomainID:    domainUUID,
-					DomainName:  n.DomainName,
-					ProjectID:   projectUUID,
-					ProjectName: n.ProjectName,
-					WorkflowContext: Some(db.CommitmentWorkflowContext{
-						Reason:                 db.CommitmentReasonConsume,
-						RelatedCommitmentIDs:   auditEventCommitmentIDs,
-						RelatedCommitmentUUIDs: auditEventCommitmentUUIDs,
-					}),
-					Commitments: auditEventCommitments,
-				},
-			})
 		}
 	}
 	return auditEvents, nil

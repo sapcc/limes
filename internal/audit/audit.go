@@ -16,8 +16,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
-
-	"github.com/sapcc/limes/internal/db"
 )
 
 // MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -121,44 +119,58 @@ func (t RateLimitEventTarget) Render() cadf.Resource {
 	}
 }
 
+// CommitmentAttributeChangeset contains changes, which are not included in
+// liquid.CommitmentChangeRequest, but are relevant for auditing.
+type CommitmentAttributeChangeset struct {
+	OldTransferStatus Option[limesresources.CommitmentTransferStatus] // can be None, when the TransferStatus is stable
+	NewTransferStatus Option[limesresources.CommitmentTransferStatus] // can be None, when the TransferStatus is stable
+}
+
 // CommitmentEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding commitments.
 type CommitmentEventTarget struct {
-	DomainID        string
-	DomainName      string
-	ProjectID       liquid.ProjectUUID
-	ProjectName     string
-	Commitments     []limesresources.Commitment // must have at least one entry
-	WorkflowContext Option[db.CommitmentWorkflowContext]
+	DomainID    string
+	DomainName  string
+	ProjectID   liquid.ProjectUUID
+	ProjectName string
+	// must have at least one project, with one resource, with one commitment
+	CommitmentChangeRequest liquid.CommitmentChangeRequest
+	// can have one entry per commitment UUID
+	CommitmentAttributeChangeset map[liquid.CommitmentUUID]CommitmentAttributeChangeset
 }
 
 // Render implements the audittools.Target interface.
 func (t CommitmentEventTarget) Render() cadf.Resource {
-	if len(t.Commitments) == 0 {
+	var firstCommitment liquid.Commitment
+outer:
+	for _, pcc := range t.CommitmentChangeRequest.ByProject {
+		for _, rcc := range pcc.ByResource {
+			for _, commitment := range rcc.Commitments {
+				firstCommitment = commitment
+				break outer
+			}
+		}
+	}
+	if firstCommitment.UUID == "" {
 		panic("commitmentEventTarget must contain at least one commitment")
 	}
+
 	res := cadf.Resource{
 		TypeURI:     "service/resources/commitment",
-		ID:          t.Commitments[0].UUID,
+		ID:          string(firstCommitment.UUID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   string(t.ProjectID),
 		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{},
 	}
-	for idx, commitment := range t.Commitments {
-		name := "payload"
-		if idx > 0 {
-			name = "additional-payload"
-		}
-		attachment := must.Return(cadf.NewJSONAttachment(name, commitment))
+
+	attachment := must.Return(cadf.NewJSONAttachment("payload", t.CommitmentChangeRequest))
+	res.Attachments = append(res.Attachments, attachment)
+	if len(t.CommitmentAttributeChangeset) > 0 {
+		attachment = must.Return(cadf.NewJSONAttachment("context-payload", t.CommitmentAttributeChangeset))
 		res.Attachments = append(res.Attachments, attachment)
 	}
-	workflowContext, ok := t.WorkflowContext.Unpack()
-	if ok {
-		attachment := must.Return(cadf.NewJSONAttachment("context-payload", workflowContext))
-		res.Attachments = append(res.Attachments, attachment)
-	}
+
 	return res
 }
 
