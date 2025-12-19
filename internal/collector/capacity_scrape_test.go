@@ -2024,9 +2024,9 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		%[5]s
 	`, scrapedAt1.Unix(), scrapedAt2.Unix(), uuid1, uuid2, timestampUpdates())
 	events := s.Auditor.RecordedEvents()
-	assert.Equal(t, len(events), 2)
-	assert.Equal(t, len(events[0].Target.Attachments), 2) // last one is the summary
-	assert.Equal(t, len(events[1].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(events), 2)                       // 2 confirmations
+	assert.Equal(t, len(events[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
+	assert.Equal(t, len(events[1].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 
 	// day 2: confirm two commitments in the same project -> only one mail will be scheduled regarding both confirmations
 	uuid3 := add(db.ProjectCommitment{
@@ -2064,8 +2064,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		%[5]s
 	`, scrapedAt2.Unix(), uuid2, uuid3, uuid4, timestampUpdates())
 	events = s.Auditor.RecordedEvents()
-	assert.Equal(t, len(events), 1)
-	assert.Equal(t, len(events[0].Target.Attachments), 3) // last one is the summary
+	assert.Equal(t, len(events), 2)                       // another 2 confirmations
+	assert.Equal(t, len(events[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 
 	// now, we put a commitment which gets confirmed but transferred --> only one mail for the transfer and one for the confirmation
 	uuid5 := add(db.ProjectCommitment{
@@ -2107,10 +2107,11 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		%[4]s
 	`, scrapedAt2.Unix(), uuid5, uuid6, timestampUpdates())
 	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
 	// check partial takeover
 	uuid7 := add(db.ProjectCommitment{
@@ -2154,10 +2155,11 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		%[5]s
 	`, scrapedAt2.Unix(), uuid7, uuid8, uuid9, timestampUpdates())
 	events = s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
 	// check that 3 more takeovers are summed into 1 takeover mail
 	resultUUIDs := make([]liquid.CommitmentUUID, 3)
@@ -2195,10 +2197,10 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		%[10]s
 	`, scrapedAt2.Unix(), uuid7, uuid9, resultUUIDs[0], resultUUIDs[1], resultUUIDs[2], test.GenerateDummyCommitmentUUID(13), test.GenerateDummyCommitmentUUID(14), test.GenerateDummyCommitmentUUID(15), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 4) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 3)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 }
 
 func filterSlice[T any](input []T, predicate func(T) bool) []T {

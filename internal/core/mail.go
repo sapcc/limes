@@ -30,6 +30,18 @@ type AZResourceLocation struct {
 	AvailabilityZone limes.AvailabilityZone
 }
 
+// ScopeString returns a human-readable string representation of this AZ resource location.
+// Format: "<service_type>/<resource_name> in <availability_zone>"
+func (a AZResourceLocation) ScopeString() string {
+	return fmt.Sprintf("%s/%s in %s", a.ServiceType, a.ResourceName, a.AvailabilityZone)
+}
+
+// ShortScopeString returns a compact string representation of this AZ resource location.
+// Format: "<service_type>/<resource_name>/<availability_zone>"
+func (a AZResourceLocation) ShortScopeString() string {
+	return fmt.Sprintf("%s/%s/%s", a.ServiceType, a.ResourceName, a.AvailabilityZone)
+}
+
 // CommitmentNotification appears in type CommitmentGroupNotification.
 type CommitmentNotification struct {
 	Commitment     db.ProjectCommitment
