@@ -276,7 +276,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID),
+		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),

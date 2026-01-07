@@ -1,0 +1,20 @@
+# HELP limes_report_specificity Number of API requests by endpoint type and number of services and resources that appear in the requested report.
+# TYPE limes_report_specificity counter
+limes_report_specificity{resources="1",services="1",type="cluster_show"} 3
+limes_report_specificity{resources="1",services="1",type="domain_show"} 3
+limes_report_specificity{resources="1",services="1",type="project_show"} 3
+limes_report_specificity{resources="1",services="2",type="cluster_show"} 6
+limes_report_specificity{resources="1",services="2",type="domain_show"} 6
+limes_report_specificity{resources="1",services="2",type="project_show"} 6
+limes_report_specificity{resources="2",services="1",type="cluster_show"} 2
+limes_report_specificity{resources="2",services="1",type="domain_show"} 2
+limes_report_specificity{resources="2",services="1",type="project_show"} 2
+limes_report_specificity{resources="2",services="2",type="cluster_show"} 1
+limes_report_specificity{resources="2",services="2",type="domain_show"} 1
+limes_report_specificity{resources="2",services="2",type="project_show"} 1
+limes_report_specificity{resources="3",services="2",type="cluster_show"} 1
+limes_report_specificity{resources="3",services="2",type="domain_show"} 1
+limes_report_specificity{resources="3",services="2",type="project_show"} 1
+limes_report_specificity{resources="4",services="2",type="cluster_show"} 4
+limes_report_specificity{resources="4",services="2",type="domain_show"} 4
+limes_report_specificity{resources="4",services="2",type="project_show"} 4

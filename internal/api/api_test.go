@@ -18,6 +18,7 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
 	. "github.com/majewsky/gg/option"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -27,6 +28,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -444,6 +446,14 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit-and-v2-api.json"),
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/cluster_operations_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func Test_DomainOperations(t *testing.T) {
@@ -522,6 +532,14 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 204, // no content because no new domains discovered
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/domain_operations_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func Test_ProjectOperations(t *testing.T) {
@@ -854,6 +872,14 @@ func Test_ProjectOperations(t *testing.T) {
 			rateName, expectedLimit, actualLimit,
 		)
 	}
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/project_operations_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) {
@@ -917,6 +943,14 @@ func Test_EmptyProjectList(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/empty_project_list_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func Test_LargeProjectList(t *testing.T) {
@@ -1053,6 +1087,14 @@ func Test_LargeProjectList(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": expectedProjectsJSON},
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/large_project_list_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func Test_PutMaxQuotaOnProject(t *testing.T) {
@@ -1335,6 +1377,14 @@ func Test_Historical_Usage(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-v2-api.json"),
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/historical_usage_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 func TestResourceRenaming(t *testing.T) {
@@ -1557,6 +1607,14 @@ func TestResourceRenaming(t *testing.T) {
 	expect("?resource=capacity",
 		"4 seconds: unshared/capacity",
 	)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/resource_renaming_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
 // JSONThatUnmarshalsInto is an implementor of the assert.HTTPResponseBody interface that
@@ -1666,4 +1724,12 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-az-separated.json"),
 	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/separated_topology_operations_metrics.prom"),
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }

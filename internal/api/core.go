@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -59,12 +61,18 @@ type v1Provider struct {
 	timeNow                       func() time.Time
 	generateTransferToken         func() string
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
+
+	reportSpecificityCounter *prometheus.CounterVec
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID) httpapi.API {
+func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID, registerer prometheus.Registerer) httpapi.API {
+	if registerer == nil {
+		registerer = prometheus.DefaultRegisterer
+	}
+
 	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
@@ -83,6 +91,15 @@ func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 	}
 	p.generateTransferToken = generateTransferToken
 	p.generateProjectCommitmentUUID = generateProjectCommitmentUUID
+
+	p.reportSpecificityCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "limes_report_specificity",
+			Help: "Number of API requests by endpoint type and number of services and resources that appear in the requested report.",
+		},
+		[]string{"type", "services", "resources"},
+	)
+	registerer.MustRegister(p.reportSpecificityCounter)
 
 	return p
 }
@@ -297,4 +314,24 @@ func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject d
 		return nil, errors.New("no resource data found for project")
 	}
 	return result, nil
+}
+
+// RecordReportSpecificity records a report request with the number of included services and resources.
+func (p *v1Provider) recordReportSpecificity(reportType string, filter reports.Filter) {
+	serviceCount := len(filter.Includes)
+
+	resourceCount := 0
+	for _, resourcesInService := range filter.Includes {
+		for _, included := range resourcesInService {
+			if included {
+				resourceCount++
+			}
+		}
+	}
+
+	p.reportSpecificityCounter.WithLabelValues(
+		reportType,
+		strconv.Itoa(serviceCount),
+		strconv.Itoa(resourceCount),
+	).Inc()
 }

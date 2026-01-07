@@ -27,7 +27,9 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	p.recordReportSpecificity("domain_list", filter)
+	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, serviceInfos)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -52,7 +54,9 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	p.recordReportSpecificity("domain_show", filter)
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, serviceInfos)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

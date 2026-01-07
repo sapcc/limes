@@ -31,6 +31,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	p.recordReportSpecificity("cluster_show", filter)
 	if showBasic {
 		filter.IsSubcapacityAllowed = func(serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
 			token.Context.Request["service"] = string(serviceType)

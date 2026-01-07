@@ -272,7 +272,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.CurrentTransferTokenNumber = currentTransferTokenNumber
 	s.Handler = httpapi.Compose(
 		append(params.APIMiddlewares,
-			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator),
+			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator, s.Registry),
 			httpapi.WithoutLogging(),
 		)...,
 	)

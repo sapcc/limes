@@ -53,6 +53,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	p.recordReportSpecificity("project_list", filter)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, serviceInfos, stream.WriteItem))
 }
@@ -78,7 +79,9 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	p.recordReportSpecificity("project_show", filter)
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, serviceInfos)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
