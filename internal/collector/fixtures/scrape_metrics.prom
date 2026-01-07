@@ -4,6 +4,17 @@ limes_newest_scraped_at{service="unittest"} 12690
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
 limes_oldest_scraped_at{service="unittest"} 12685
+# HELP limes_resource_quota_syncs Counter for syncs of quota to backend per project service.
+# TYPE limes_resource_quota_syncs counter
+limes_resource_quota_syncs{service_name="unittest",service_type="unittest",task_outcome="failure"} 2
+limes_resource_quota_syncs{service_name="unittest",service_type="unittest",task_outcome="success"} 2
+limes_resource_quota_syncs{service_name="unknown",service_type="unknown",task_outcome="failure"} 0
+limes_resource_quota_syncs{service_name="unknown",service_type="unknown",task_outcome="success"} 0
+# HELP limes_scrapes Counter for scrape operations per Keystone project.
+# TYPE limes_scrapes counter
+limes_scrapes{service_type="unittest",task_outcome="success"} 14
+limes_scrapes{service_type="unknown",task_outcome="failure"} 0
+limes_scrapes{service_type="unknown",task_outcome="success"} 0
 # HELP limes_unittest_capacity_usage 
 # TYPE limes_unittest_capacity_usage gauge
 limes_unittest_capacity_usage{domain_id="uuid-for-germany",project_id="uuid-for-berlin"} 20
