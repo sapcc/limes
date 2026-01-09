@@ -34,7 +34,7 @@ type Logic struct {
 	// connections
 	NovaV2            *gophercloud.ServiceClient `json:"-"`
 	PlacementV1       *gophercloud.ServiceClient `json:"-"`
-	OSTypeProber      *OSTypeProber              `json:"-"`
+	OSTypeProber      *liquidapi.OSTypeProber    `json:"-"`
 	ServerGroupProber *ServerGroupProber         `json:"-"`
 	// computed state
 	ignoredFlavorNames liquidapi.State[[]string]                                `json:"-"`
@@ -56,16 +56,11 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	}
 	l.PlacementV1.Microversion = "1.6" // for traits endpoint
 
-	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
+	l.OSTypeProber, err = liquidapi.NewOSTypeProber(provider, eo)
 	if err != nil {
 		return err
 	}
 
-	glanceV2, err := openstack.NewImageV2(provider, eo)
-	if err != nil {
-		return err
-	}
-	l.OSTypeProber = NewOSTypeProber(l.NovaV2, cinderV3, glanceV2)
 	l.ServerGroupProber = NewServerGroupProber(l.NovaV2)
 
 	return nil

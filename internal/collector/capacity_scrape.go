@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -146,7 +147,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		// NOTE: in this case, we continue below, with the resources update
 		// the services row will be updated at the end of the tx
 	} else {
-		err = util.UnpackError(err)
+		err = gophercloudext.UnpackError(err)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
 		service.ScrapeErrorMessage = err.Error()
 

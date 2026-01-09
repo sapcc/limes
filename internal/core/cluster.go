@@ -19,6 +19,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -100,7 +101,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	// initialize discovery plugin
 	err := c.DiscoveryPlugin.Init(ctx, provider, eo)
 	if err != nil {
-		errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
+		errs.Addf("failed to initialize discovery method: %w", gophercloudext.UnpackError(err))
 	}
 
 	if len(c.LiquidConnections) == 0 {
@@ -113,12 +114,12 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 		conn := c.LiquidConnections[serviceType]
 		client, err := liquidClientFactory(serviceType)
 		if err != nil {
-			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
+			errs.Addf("failed to initialize service %s: %w", serviceType, gophercloudext.UnpackError(err))
 			continue
 		}
 		err = conn.Init(ctx, client)
 		if err != nil {
-			errs.Addf("failed to initialize service %s: %w", serviceType, util.UnpackError(err))
+			errs.Addf("failed to initialize service %s: %w", serviceType, gophercloudext.UnpackError(err))
 		}
 	}
 

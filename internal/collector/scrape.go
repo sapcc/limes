@@ -14,6 +14,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -159,7 +160,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project)
 	if err != nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
-		task.Err = util.UnpackError(err)
+		task.Err = gophercloudext.UnpackError(err)
 		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
 
@@ -167,7 +168,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	rateData, serializedScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
-		task.Err = util.UnpackError(err)
+		task.Err = gophercloudext.UnpackError(err)
 		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
 
