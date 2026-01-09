@@ -14,13 +14,13 @@ import (
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // ScanDomainsAndProjectsJob is a jobloop.CronJob.
@@ -55,7 +55,7 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 	// list domains in Keystone
 	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("while listing domains: %w", util.UnpackError(err))
+		return nil, fmt.Errorf("while listing domains: %w", gophercloudext.UnpackError(err))
 	}
 	domains := c.Cluster.Config.Discovery.FilterDomains(allDomains)
 	isDomainUUID := make(map[string]bool)
@@ -141,7 +141,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	// list projects in Keystone
 	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(ctx, core.KeystoneDomainFromDB(*domain))
 	if err != nil {
-		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, util.UnpackError(err))
+		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, gophercloudext.UnpackError(err))
 	}
 	isProjectUUID := make(map[liquid.ProjectUUID]bool)
 	for _, project := range projects {

@@ -20,8 +20,6 @@ import (
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
-
-	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
 // Logic implements the liquidapi.Logic interface for Ironic.
@@ -37,7 +35,7 @@ type Logic struct {
 	NovaV2       *gophercloud.ServiceClient `json:"-"`
 	IronicV1     *gophercloud.ServiceClient `json:"-"`
 	PlacementV1  *gophercloud.ServiceClient `json:"-"`
-	OSTypeProber *nova.OSTypeProber         `json:"-"`
+	OSTypeProber *liquidapi.OSTypeProber    `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -60,20 +58,8 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	}
 	l.PlacementV1.Microversion = "1.3" // for query parameter "member_of" in resource provider listing
 
-	// NOTE: Cinder API access is probably not required if, as I'm expecting,
-	// Ironic nodes cannot be booted with a network-attached root disk.
-	// But because of how the code is structured, the OSTypeProber needs this client anyway.
-	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
-	if err != nil {
-		return err
-	}
-	glanceV2, err := openstack.NewImageV2(provider, eo)
-	if err != nil {
-		return err
-	}
-	l.OSTypeProber = nova.NewOSTypeProber(l.NovaV2, cinderV3, glanceV2)
-
-	return nil
+	l.OSTypeProber, err = liquidapi.NewOSTypeProber(provider, eo)
+	return err
 }
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
