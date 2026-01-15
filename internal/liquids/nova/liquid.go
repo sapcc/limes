@@ -184,6 +184,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		resources[resourceName] = liquid.ResourceInfo{
 			Unit:     unit,
 			HasQuota: true,
+			Topology: liquid.AZAwareTopology,
 		}
 	}
 
