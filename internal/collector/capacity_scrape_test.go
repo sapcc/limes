@@ -13,7 +13,6 @@ import (
 	"time"
 
 	. "github.com/majewsky/gg/option"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/cadf"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -334,16 +333,15 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	)
 
 	// check data metrics generated for these capacity data
-	registry := prometheus.NewPedanticRegistry()
 	pmc := &collector.CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(pmc)
+	s.Registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
-	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 
 	dmr := &collector.DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	assert.HTTPRequest{

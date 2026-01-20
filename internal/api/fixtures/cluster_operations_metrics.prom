@@ -1,0 +1,6 @@
+# HELP limes_report_specificity Number of API requests by endpoint type and number of services and resources that appear in the requested report.
+# TYPE limes_report_specificity counter
+limes_report_specificity{resources="0",services="0",type="cluster_show"} 1
+limes_report_specificity{resources="0",services="1",type="cluster_show"} 1
+limes_report_specificity{resources="1",services="1",type="cluster_show"} 1
+limes_report_specificity{resources="4",services="2",type="cluster_show"} 4
