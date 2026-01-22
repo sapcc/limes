@@ -157,34 +157,23 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 			t.transferredCommitmentIDs[tc.ProjectID] = make(map[db.ProjectCommitmentID]commitmentTransferLeftover)
 		}
 
-		// push to the audit events
+		// prepare audit event data
 		project := t.affectedProjectsByID[tc.ProjectID]
 		domain := t.affectedDomainsByID[project.DomainID]
-		t.ccrs[tc.UUID] = liquid.CommitmentChangeRequest{
-			AZ:          t.loc.AvailabilityZone,
-			InfoVersion: t.serviceInfo.Version,
-			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-				project.UUID: {
-					ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain, t.serviceInfo),
-					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-						t.loc.ResourceName: {
-							TotalConfirmedBefore: currentTotalConfirmed,
-							TotalConfirmedAfter:  currentTotalConfirmed,
-							// TODO: change when introducing "guaranteed" commitments
-							TotalGuaranteedBefore: 0,
-							TotalGuaranteedAfter:  0,
-							Commitments: []liquid.Commitment{
-								{
-									UUID:      tc.UUID,
-									OldStatus: Some(tc.Status),
-									NewStatus: Some(tc.Status),
-									Amount:    tc.Amount,
-									ConfirmBy: tc.ConfirmBy,
-									ExpiresAt: tc.ExpiresAt,
-								},
-							},
-						},
-					},
+		auditResource := liquid.ResourceCommitmentChangeset{
+			TotalConfirmedBefore: currentTotalConfirmed,
+			TotalConfirmedAfter:  currentTotalConfirmed, // will be adjusted below based on how much is consumed
+			// TODO: change when introducing "guaranteed" commitments
+			TotalGuaranteedBefore: 0,
+			TotalGuaranteedAfter:  0,
+			Commitments: []liquid.Commitment{
+				{
+					UUID:      tc.UUID,
+					OldStatus: Some(tc.Status),
+					NewStatus: Some(liquid.CommitmentStatusSuperseded),
+					Amount:    tc.Amount,
+					ConfirmBy: tc.ConfirmBy,
+					ExpiresAt: tc.ExpiresAt,
 				},
 			},
 		}
@@ -217,10 +206,40 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 				Amount: tc.Amount - amountToConsume,
 				ID:     leftoverCommitment.ID,
 			}
+
+			auditResource.Commitments = append(auditResource.Commitments, liquid.Commitment{
+				UUID:      leftoverCommitment.UUID,
+				OldStatus: None[liquid.CommitmentStatus](),
+				NewStatus: Some(leftoverCommitment.Status),
+				Amount:    leftoverCommitment.Amount,
+				ConfirmBy: leftoverCommitment.ConfirmBy,
+				ExpiresAt: leftoverCommitment.ExpiresAt,
+			})
+			if tc.Status == liquid.CommitmentStatusConfirmed {
+				auditResource.TotalConfirmedAfter -= amountToConsume
+			}
 		} else {
 			// the transferable commitment is fully consumed
 			overallTransferredAmount += tc.Amount
 			t.transferredCommitmentIDs[tc.ProjectID][tc.ID] = commitmentTransferLeftover{}
+
+			if tc.Status == liquid.CommitmentStatusConfirmed {
+				auditResource.TotalConfirmedAfter -= tc.Amount
+			}
+		}
+
+		// retain ccr for audit event
+		t.ccrs[tc.UUID] = liquid.CommitmentChangeRequest{
+			AZ:          t.loc.AvailabilityZone,
+			InfoVersion: t.serviceInfo.Version,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				project.UUID: {
+					ProjectMetadata: Some(core.KeystoneProjectFromDB(project, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid()),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						t.loc.ResourceName: auditResource,
+					},
+				},
+			},
 		}
 
 		// supersede consumed commitment
@@ -328,21 +347,16 @@ func (t *TransferableCommitmentCache) GenerateAuditEventsAndMails(apiIdentity co
 			})
 
 			// push one transfer audit event per commitment, because they belong to separate CCRs
-			auditEvents = append(auditEvents, audittools.Event{
+			auditEvents = append(auditEvents, audit.CommitmentEventTarget{
+				CommitmentChangeRequest:      t.ccrs[c.UUID],
+				CommitmentAttributeChangeset: map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{c.UUID: t.cacs[c.UUID]},
+			}.ReplicateForAllProjects(audittools.Event{
 				Time:       t.now,
 				Request:    auditContext.Request,
 				User:       auditContext.UserIdentity,
 				ReasonCode: http.StatusOK,
 				Action:     ConsumeAction,
-				Target: audit.CommitmentEventTarget{
-					DomainID:                     domainUUID,
-					DomainName:                   n.DomainName,
-					ProjectID:                    projectUUID,
-					ProjectName:                  n.ProjectName,
-					CommitmentChangeRequest:      t.ccrs[c.UUID],
-					CommitmentAttributeChangeset: map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{c.UUID: t.cacs[c.UUID]},
-				},
-			})
+			})...)
 		}
 		if tpl, exists := t.mailTemplate.Unpack(); len(n.Commitments) != 0 && exists {
 			// push mail notifications

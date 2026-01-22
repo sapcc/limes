@@ -634,20 +634,18 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	p.auditor.Record(audittools.Event{
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, *serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       now,
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusCreated,
 		Action:     cadf.CreateAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                dbDomain.UUID,
-			DomainName:              dbDomain.Name,
-			ProjectID:               dbProject.UUID,
-			ProjectName:             dbProject.Name,
-			CommitmentChangeRequest: ccr,
-		},
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
@@ -868,21 +866,19 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
-	auditEvent := audit.CommitmentEventTarget{
-		DomainID:                dbDomain.UUID,
-		DomainName:              dbDomain.Name,
-		ProjectID:               dbProject.UUID,
-		ProjectName:             dbProject.Name,
-		CommitmentChangeRequest: ccr,
-	}
-	p.auditor.Record(audittools.Event{
+
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target:     auditEvent,
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -1054,22 +1050,19 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	// Create resultset and auditlogs
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
-	auditEvent := audit.CommitmentEventTarget{
-		DomainID:                dbDomain.UUID,
-		DomainName:              dbDomain.Name,
-		ProjectID:               dbProject.UUID,
-		ProjectName:             dbProject.Name,
-		CommitmentChangeRequest: ccr,
-	}
 
-	p.auditor.Record(audittools.Event{
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target:     auditEvent,
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -1173,21 +1166,18 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	p.auditor.Record(audittools.Event{
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                dbDomain.UUID,
-			DomainName:              dbDomain.Name,
-			ProjectID:               dbProject.UUID,
-			ProjectName:             dbProject.Name,
-			CommitmentChangeRequest: ccr,
-		},
 	})
-
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1441,21 +1431,20 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	p.auditor.Record(audittools.Event{
+
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest:      audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentAttributeChangeset: cac,
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                     dbDomain.UUID,
-			DomainName:                   dbDomain.Name,
-			ProjectID:                    dbProject.UUID,
-			ProjectName:                  dbProject.Name,
-			CommitmentChangeRequest:      ccr,
-			CommitmentAttributeChangeset: cac,
-		},
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1720,21 +1709,22 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	p.auditor.Record(audittools.Event{
+
+	ccr = audit.EnsureLiquidProjectMetadata(ccr, sourceProject, sourceDomain, serviceInfo)
+	ccr = audit.EnsureLiquidProjectMetadata(ccr, *targetProject, *targetDomain, serviceInfo)
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest:      ccr,
+		CommitmentAttributeChangeset: cac,
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                     targetDomain.UUID,
-			DomainName:                   targetDomain.Name,
-			ProjectID:                    targetProject.UUID,
-			ProjectName:                  targetProject.Name,
-			CommitmentChangeRequest:      ccr,
-			CommitmentAttributeChangeset: cac,
-		},
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -2094,21 +2084,19 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
-	p.auditor.Record(audittools.Event{
+
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                dbDomain.UUID,
-			DomainName:              dbDomain.Name,
-			ProjectID:               dbProject.UUID,
-			ProjectName:             dbProject.Name,
-			CommitmentChangeRequest: ccr,
-		},
 	})
-
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -2246,20 +2234,19 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	p.auditor.Record(audittools.Event{
+
+	auditEvents := audit.CommitmentEventTarget{
+		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
-		Target: audit.CommitmentEventTarget{
-			DomainID:                dbDomain.UUID,
-			DomainName:              dbDomain.Name,
-			ProjectID:               dbProject.UUID,
-			ProjectName:             dbProject.Name,
-			CommitmentChangeRequest: ccr,
-		},
 	})
+	for _, event := range auditEvents {
+		p.auditor.Record(event)
+	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
 }

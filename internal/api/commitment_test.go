@@ -899,8 +899,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 // here, we only test a very basic case. The same code of the TransferableCommitmentCache
 // is used by ScrapeCapacity, so the extensive testing of all the different edge cases
 // happens there. This is only to prevent that we unintentionally break the integration with
-// the API
-func TestTransferCommitmentConsumption(t *testing.T) {
+// the API.
+func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
@@ -1707,6 +1707,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
+	s.Auditor.IgnoreEventsUntilNow()
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
@@ -1753,6 +1754,26 @@ func Test_TransferCommitment(t *testing.T) {
 			},
 		},
 	})
+	events := s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2)
+	assert.Equal(t, events[0].Action, cadf.UpdateAction)
+	assert.Equal(t, events[1].Action, cadf.UpdateAction)
+	assert.Equal(t, events[0].Target.ProjectID, "uuid-for-berlin")  // from-project
+	assert.Equal(t, events[1].Target.ProjectID, "uuid-for-dresden") // to-project
+	assert.Equal(t, len(events[0].Target.Attachments), 2)           // changeRequest + transfer_status change
+	assert.Equal(t, len(events[1].Target.Attachments), 2)           // changeRequest + transfer_status change
+	// because this is a transfer between two projects, we exemplary check that the project names are redacted, because its important here
+	var payload liquid.CommitmentChangeRequest
+	switch v := events[0].Target.Attachments[0].Content.(type) {
+	case string:
+		err := json.Unmarshal([]byte(v), &payload)
+		if err != nil {
+			t.Fatal("audit event attachment should be valid json")
+		}
+	default:
+		t.Fatal("audit event attachment should be string")
+	}
+	assert.Equal(t, payload.ByProject["uuid-for-berlin"].ProjectMetadata.IsNone(), true)
 
 	// Split and transfer commitment.
 	assert.HTTPRequest{

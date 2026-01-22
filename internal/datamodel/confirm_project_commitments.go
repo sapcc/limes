@@ -284,20 +284,15 @@ func generateAuditEventsAndMails(mailTemplate Option[core.MailTemplate], dbi db.
 		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
 
 		// push one confirmation audit event per commitment, because they belong to separate CCRs
-		auditEvents = append(auditEvents, audittools.Event{
+		auditEvents = append(auditEvents, audit.CommitmentEventTarget{
+			CommitmentChangeRequest: ccrs[c.UUID],
+		}.ReplicateForAllProjects(audittools.Event{
 			Time:       now,
 			Request:    auditContext.Request,
 			User:       auditContext.UserIdentity,
 			ReasonCode: http.StatusOK,
 			Action:     ConfirmAction,
-			Target: audit.CommitmentEventTarget{
-				DomainID:                domainUUID,
-				DomainName:              n.DomainName,
-				ProjectID:               projectUUID,
-				ProjectName:             n.ProjectName,
-				CommitmentChangeRequest: ccrs[c.UUID],
-			},
-		})
+		})...)
 
 		if !c.NotifyOnConfirm {
 			continue
@@ -376,5 +371,5 @@ func delegateChangeCommitmentsWithShortcut(ctx context.Context, cluster *core.Cl
 	}
 
 	// as the totalConfirmed will increase, we don't need to check for RequiresConfirmation() here
-	return accepted, ccr, nil
+	return accepted, audit.EnsureLiquidProjectMetadata(ccr, project, domain, serviceInfo), nil
 }
