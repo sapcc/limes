@@ -379,6 +379,109 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
 }
 
+func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
+	// first, we assemble a flat case where the capacity is lower than the base quota
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		liquid.AvailabilityZoneAny: {
+			Capacity: 4,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(2),
+				402: constantUsage(0),
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.5,
+		ProjectBaseQuota: 6,
+		AllowQuotaOvercommitUntilAllocatedPercent: 90,
+	}
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		liquid.AvailabilityZoneAny: {
+			401: {Allocated: 4},
+			402: {Allocated: 4},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 4},
+			402: {Allocated: 4},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.FlatTopology})
+
+	// az-aware
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 4,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(2),
+				402: constantUsage(0),
+			},
+		},
+		"az-two": {
+			Capacity: 5,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+			},
+		},
+		liquid.AvailabilityZoneAny: {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 3},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneAny: {
+			401: {Allocated: 3},
+			402: {Allocated: 6},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 6},
+			402: {Allocated: 6},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareTopology})
+
+	// az-separated
+	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 4,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(2),
+				402: constantUsage(0),
+			},
+		},
+		"az-two": {
+			Capacity: 5,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+			},
+		},
+	}
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 4},
+			402: {Allocated: 4},
+		},
+		"az-two": {
+			401: {Allocated: 5},
+			402: {Allocated: 5},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 9},
+			402: {Allocated: 9},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZSeparatedTopology})
+}
+
 func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 	// This scenario has a resource that has its capacity 85% allocated to usage and commitments.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{

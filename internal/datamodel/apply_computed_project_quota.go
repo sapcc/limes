@@ -391,19 +391,23 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	if cfg.ProjectBaseQuota > 0 {
 		for projectID := range isProjectID {
 			sumOfLocalizedQuotas := uint64(0)
+			sumOfCapacities := uint64(0)
 			for az := range isRelevantAZ {
 				if az != limes.AvailabilityZoneAny {
 					sumOfLocalizedQuotas += target[az][projectID].Allocated
 				}
+				sumOfCapacities += stats[az].Capacity
 			}
-			if sumOfLocalizedQuotas < cfg.ProjectBaseQuota {
+			// we don't want to hand out the base quota in full, if the total capacity is lower than it
+			realisticBaseQuota := min(cfg.ProjectBaseQuota, sumOfCapacities)
+			if sumOfLocalizedQuotas < realisticBaseQuota {
 				// AZ separated topology receives the basequota to all available AZs
 				if resInfo.Topology == liquid.AZSeparatedTopology {
 					for az := range isRelevantAZ {
-						target[az][projectID].Desired = cfg.ProjectBaseQuota
+						target[az][projectID].Desired = min(cfg.ProjectBaseQuota, stats[az].Capacity)
 					}
 				} else {
-					target[limes.AvailabilityZoneAny][projectID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
+					target[limes.AvailabilityZoneAny][projectID].Desired = realisticBaseQuota - sumOfLocalizedQuotas
 				}
 			}
 		}
