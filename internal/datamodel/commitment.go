@@ -98,13 +98,13 @@ func CanDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitm
 
 // ConvertCommitmentToDisplayForm transforms a db.ProjectCommitment into a limesresources.Commitment for displaying
 // to the user on the API or usage within the audit log.
-func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceLocation, apiIdentity core.ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
+func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, az limes.AvailabilityZone, apiIdentity core.ResourceRef, canBeDeleted bool, unit limes.Unit) limesresources.Commitment {
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
 		UUID:             string(c.UUID),
 		ServiceType:      apiIdentity.ServiceType,
 		ResourceName:     apiIdentity.Name,
-		AvailabilityZone: loc.AvailabilityZone,
+		AvailabilityZone: az,
 		Amount:           c.Amount,
 		Unit:             unit,
 		Duration:         c.Duration,
@@ -125,10 +125,11 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, loc core.AZResourceL
 
 // DelegateChangeCommitments decides whether LiquidClient.ChangeCommitments() should be called,
 // depending on the setting of liquid.ResourceInfo.HandlesCommitments. If not, it routes the
-// operation to be performed locally on the database. In case the LiquidConnection is not filled,
-// a LiquidClient is instantiated on the fly to perform the operation. It utilizes a given ServiceInfo so that no
-// double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
+// operation to be performed locally on LazyStatsCache. The LazyStatsCache can have the stats
+// preloaded - but does not have to. In case the LiquidConnection is not filled,
+// a LiquidClient is instantiated on the fly to perform the operation remotely. It utilizes a given
+// ServiceInfo so that no double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
+func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, loc core.AZResourceLocation, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
 	localCommitmentChanges := liquid.CommitmentChangeRequest{
 		DryRun:      req.DryRun,
 		AZ:          req.AZ,
@@ -189,16 +190,16 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 		var liquidClient core.LiquidClient
 		if len(cluster.LiquidConnections) == 0 {
 			// find the right ServiceType
-			liquidClient, err = cluster.LiquidClientFactory(serviceType)
+			liquidClient, err = cluster.LiquidClientFactory(loc.ServiceType)
 			if err != nil {
 				return result, err
 			}
 		} else {
-			liquidClient = cluster.LiquidConnections[serviceType].LiquidClient
+			liquidClient = cluster.LiquidConnections[loc.ServiceType].LiquidClient
 		}
 		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
 		if err != nil {
-			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", serviceType, err)
+			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", loc.ServiceType, err)
 		}
 		if commitmentChangeResponse.RejectionReason != "" {
 			return commitmentChangeResponse, nil
@@ -207,7 +208,7 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 
 	// check local
 	if len(localCommitmentChanges.ByProject) != 0 {
-		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, serviceType, cluster, dbi)
+		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, loc, cluster, dbi)
 		if err != nil {
 			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
 		}

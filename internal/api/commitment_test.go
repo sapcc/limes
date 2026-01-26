@@ -5,6 +5,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -746,7 +748,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	loc := core.AZResourceLocation{
+		ServiceType:      "first",
+		ResourceName:     "capacity",
+		AvailabilityZone: "az-one",
+	}
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
@@ -766,7 +773,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
@@ -788,7 +795,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
@@ -811,7 +818,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = true
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
@@ -830,7 +837,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(6)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
@@ -855,7 +862,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
@@ -892,8 +899,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 // here, we only test a very basic case. The same code of the TransferableCommitmentCache
 // is used by ScrapeCapacity, so the extensive testing of all the different edge cases
 // happens there. This is only to prevent that we unintentionally break the integration with
-// the API
-func TestTransferCommitmentConsumption(t *testing.T) {
+// the API.
+func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
@@ -942,9 +949,10 @@ func TestTransferCommitmentConsumption(t *testing.T) {
 	events := s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2)
 	assert.Equal(t, events[0].Action, datamodel.ConsumeAction)
-	assert.Equal(t, len(events[0].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(events[0].Target.Attachments), 2) // changeRequest + transfer_status change
+	assert.Equal(t, events[0].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, test.GenerateDummyCommitmentUUID(1))))
 	assert.Equal(t, events[1].Action, cadf.CreateAction)
-	assert.Equal(t, len(events[1].Target.Attachments), 2) // last one is the summary
+	assert.Equal(t, len(events[1].Target.Attachments), 1) // changeRequest
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_commitments WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = 'dummyToken-1';
@@ -1699,6 +1707,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
+	s.Auditor.IgnoreEventsUntilNow()
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
@@ -1745,6 +1754,26 @@ func Test_TransferCommitment(t *testing.T) {
 			},
 		},
 	})
+	events := s.Auditor.RecordedEvents()
+	assert.Equal(t, len(events), 2)
+	assert.Equal(t, events[0].Action, cadf.UpdateAction)
+	assert.Equal(t, events[1].Action, cadf.UpdateAction)
+	assert.Equal(t, events[0].Target.ProjectID, "uuid-for-berlin")  // from-project
+	assert.Equal(t, events[1].Target.ProjectID, "uuid-for-dresden") // to-project
+	assert.Equal(t, len(events[0].Target.Attachments), 2)           // changeRequest + transfer_status change
+	assert.Equal(t, len(events[1].Target.Attachments), 2)           // changeRequest + transfer_status change
+	// because this is a transfer between two projects, we exemplary check that the project names are redacted, because its important here
+	var payload liquid.CommitmentChangeRequest
+	switch v := events[0].Target.Attachments[0].Content.(type) {
+	case string:
+		err := json.Unmarshal([]byte(v), &payload)
+		if err != nil {
+			t.Fatal("audit event attachment should be valid json")
+		}
+	default:
+		t.Fatal("audit event attachment should be string")
+	}
+	assert.Equal(t, payload.ByProject["uuid-for-berlin"].ProjectMetadata.IsNone(), true)
 
 	// Split and transfer commitment.
 	assert.HTTPRequest{
@@ -1935,7 +1964,12 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "second", s.Cluster, s.DB)
+	loc := core.AZResourceLocation{
+		ServiceType:      "second",
+		ResourceName:     "capacity",
+		AvailabilityZone: "az-one",
+	}
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
@@ -2136,7 +2170,12 @@ func Test_ConvertCommitments(t *testing.T) {
 			},
 		},
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	loc := core.AZResourceLocation{
+		ServiceType:      "fourth",
+		ResourceName:     "capacity_a",
+		AvailabilityZone: "az-one",
+	}
+	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
 	if err != nil {
 		t.Fatal(err)
@@ -2176,7 +2215,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)
@@ -2274,7 +2313,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB)
+	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
 	if err != nil {
 		t.Fatal(err)

@@ -328,7 +328,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, se
 			},
 			Request: audit.CollectorDummyRequest,
 		}
-		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, loc, resInfo.Unit, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
+		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, loc, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
 		if err != nil {
 			return err
 		}
