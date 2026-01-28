@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -900,10 +899,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, string(serviceType)))
 		return nil
 	}))
-
-	if !reflect.DeepEqual(pairs, actualPairs) {
-		t.Errorf("expected stale project services %v, but got %v", pairs, actualPairs)
-	}
+	assert.DeepEqual(t, "stale project services", actualPairs, pairs)
 }
 
 func Test_EmptyProjectList(t *testing.T) {

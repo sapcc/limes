@@ -162,7 +162,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err == nil {
 		t.Errorf("ScanDomains #6 did not fail when it should have")
 	}
-	assert.DeepEqual(t, "error string after ScanDomains #6", err.Error(), "while removing deleted Keystone project france/bordeaux from our database: project has commitments which are not superseded or expired")
+	assert.ErrEqual(t, err, "while removing deleted Keystone project france/bordeaux from our database: project has commitments which are not superseded or expired")
 	tr.DBChanges().AssertEmpty()
 
 	// now we set the commitment to expired, the deletion succeeds
@@ -189,7 +189,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
-	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
 		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND service_id = 1;
@@ -207,7 +207,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #9 failed: %v", err)
 	}
-	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #9", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND uuid = 'uuid-for-germany';
 		UPDATE projects SET name = 'berlin-changed' WHERE id = 1 AND uuid = 'uuid-for-berlin';

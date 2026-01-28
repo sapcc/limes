@@ -754,7 +754,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		AvailabilityZone: "az-one",
 	}
 	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -771,7 +771,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
+	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
@@ -790,7 +790,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -810,7 +810,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = true
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -826,7 +826,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
+	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
@@ -848,7 +848,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -1813,11 +1813,11 @@ func Test_TransferCommitment(t *testing.T) {
 
 	var supersededCommitment db.ProjectCommitment
 	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
-	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
+	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 
 	var splitCommitment db.ProjectCommitment
 	must.SucceedT(t, s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`))
-	assert.DeepEqual(t, "commitment state", splitCommitment.Status, liquid.CommitmentStatusConfirmed)
+	assert.Equal(t, splitCommitment.Status, liquid.CommitmentStatusConfirmed)
 
 	// wrong token
 	assert.HTTPRequest{
@@ -1940,7 +1940,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		AvailabilityZone: "az-one",
 	}
 	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
+	assert.Equal(t, dbResult, false)
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 
 	assert.HTTPRequest{
@@ -2143,7 +2143,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		AvailabilityZone: "az-one",
 	}
 	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
+	assert.Equal(t, dbResult, false)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "liquid says: not enough capacity!"})
 
 	assert.HTTPRequest{
@@ -2180,7 +2180,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -2195,10 +2195,10 @@ func Test_ConvertCommitments(t *testing.T) {
 	var commitmentToCheck db.ProjectCommitment
 	// original
 	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 1`))
-	assert.DeepEqual(t, "commitment state", commitmentToCheck.Status, liquid.CommitmentStatusSuperseded)
+	assert.Equal(t, commitmentToCheck.Status, liquid.CommitmentStatusSuperseded)
 	// remainder
 	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 2`))
-	assert.DeepEqual(t, "commitment amount", commitmentToCheck.Amount, 18)
+	assert.Equal(t, commitmentToCheck.Amount, 18)
 
 	// Reject conversion attempt to a different project.
 	assert.HTTPRequest{
@@ -2269,7 +2269,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
-	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
+	assert.Equal(t, dbResult, true)
 
 	assert.HTTPRequest{
 		Method: http.MethodPost,
@@ -2748,7 +2748,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Validate that commitments that were merged are now superseded and have the correct context
 	var supersededCommitment db.ProjectCommitment
 	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
-	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
+	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	expectedContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5},
@@ -2758,7 +2758,7 @@ func Test_MergeCommitments(t *testing.T) {
 	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
 	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`))
-	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
+	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
 }

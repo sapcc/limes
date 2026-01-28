@@ -116,10 +116,10 @@ func Test_MailDelivery(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 3;`)
 
-	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
+	// day 4: unmanaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
 	s.Clock.StepBy(24 * time.Hour)
-	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 0)
+	assert.Equal(t, mailer.UndeliverableMails, 0)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
-	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 1)
+	assert.Equal(t, mailer.UndeliverableMails, 1)
 }

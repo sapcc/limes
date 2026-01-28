@@ -113,7 +113,7 @@ func expectJSON[T cmp.Ordered](t *testing.T, value util.TimeSeries[T], repr stri
 	if err != nil {
 		t.Error("while marshaling: " + err.Error())
 	} else {
-		assert.DeepEqual(t, "JSON representation", buf, repr)
+		assert.Equal(t, buf, repr)
 	}
 
 	// test that the JSON representation unmarshals into an identical value
