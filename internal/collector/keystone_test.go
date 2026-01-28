@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
@@ -137,10 +138,10 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains with ScanAllProjects should notice the deleted project and don't cleanup because of active commitments
 	commitmentForOneDay, err := limesresources.ParseCommitmentDuration("1 day")
-	mustT(t, err)
+	must.SucceedT(t, err)
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
-	mustT(t, err)
+	must.SucceedT(t, err)
 	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000001",
 		ProjectID:           4,

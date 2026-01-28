@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/internal/api"
@@ -408,10 +409,7 @@ func (s Setup) MustDBExec(query string, args ...any) {
 // MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.
 func (s Setup) MustDBInsert(pointerToRecord any) {
 	s.t.Helper()
-	err := s.DB.Insert(pointerToRecord)
-	if err != nil {
-		s.t.Fatal(err.Error())
-	}
+	must.SucceedT(s.t, s.DB.Insert(pointerToRecord))
 }
 
 func failIfErrs(t *testing.T, errs errext.ErrorSet) {

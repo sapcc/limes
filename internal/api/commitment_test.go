@@ -1766,10 +1766,7 @@ func Test_TransferCommitment(t *testing.T) {
 	var payload liquid.CommitmentChangeRequest
 	switch v := events[0].Target.Attachments[0].Content.(type) {
 	case string:
-		err := json.Unmarshal([]byte(v), &payload)
-		if err != nil {
-			t.Fatal("audit event attachment should be valid json")
-		}
+		must.SucceedT(t, json.Unmarshal([]byte(v), &payload))
 	default:
 		t.Fatal("audit event attachment should be string")
 	}
@@ -1833,17 +1830,11 @@ func Test_TransferCommitment(t *testing.T) {
 	})
 
 	var supersededCommitment db.ProjectCommitment
-	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
 	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 
 	var splitCommitment db.ProjectCommitment
-	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`))
 	assert.DeepEqual(t, "commitment state", splitCommitment.Status, liquid.CommitmentStatusConfirmed)
 
 	// wrong token
@@ -1921,10 +1912,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 			TransferToken string `json:"transfer_token"`
 		} `json:"commitment"`
 	}
-	err := json.Unmarshal(respBodyBytes, &resp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, json.Unmarshal(respBodyBytes, &resp))
 
 	// check that the datamodel logic is correct
 	commitmentChangeRequest := liquid.CommitmentChangeRequest{
@@ -2233,16 +2221,10 @@ func Test_ConvertCommitments(t *testing.T) {
 
 	var commitmentToCheck db.ProjectCommitment
 	// original
-	err = s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 1`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 1`))
 	assert.DeepEqual(t, "commitment state", commitmentToCheck.Status, liquid.CommitmentStatusSuperseded)
 	// remainder
-	err = s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 2`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 2`))
 	assert.DeepEqual(t, "commitment amount", commitmentToCheck.Amount, 18)
 
 	// Reject conversion attempt to a different project.
@@ -2795,10 +2777,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
 	var supersededCommitment db.ProjectCommitment
-	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
 	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	expectedContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
@@ -2806,20 +2785,11 @@ func Test_MergeCommitments(t *testing.T) {
 		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{test.GenerateDummyCommitmentUUID(5)},
 	}
 	var supersedeContext db.CommitmentWorkflowContext
-	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
-	err = s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`))
 	assert.DeepEqual(t, "commitment state", supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
-	err = json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.DeepEqual(t, "commitment supersede context", supersedeContext, expectedContext)
 }
 

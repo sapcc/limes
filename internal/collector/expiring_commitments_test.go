@@ -175,7 +175,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	tr0.Ignore()
 
 	// successfully queue two projects with 2 commitments each. Ignore short-term commitments and mark them as notified.
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
@@ -215,7 +215,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 
 	// once the configuration error is fixed, the missing notification will be enqueued on the next run
 	mailConfig.Templates = originalMailTemplates
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_commitments SET notified_for_expiration = TRUE WHERE id = 10 AND uuid = '00000000-0000-0000-0000-000000000010' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 1, 'Information about expiring commitments', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:1 year Date:1970-01-02 Service:service Resource:resource AZ:az-one', %d);

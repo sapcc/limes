@@ -830,10 +830,7 @@ func Test_ProjectOperations(t *testing.T) {
 		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`
-	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow))
 	if actualLimit != expectedLimit {
 		t.Errorf(
 			"rate limit %s was not updated in database: expected limit %d, but got %d",
@@ -856,10 +853,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
 	}.Check(t, s.Handler)
-	err = s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must.SucceedT(t, s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow))
 	if oldProjectRateId != projectRateId {
 		t.Errorf(
 			"for rate %s, a new ID was created instead of updating the existing one",
@@ -894,7 +888,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 	`)
 	var actualPairs []string
 
-	err := sqlext.ForeachRow(dbm, queryStr, nil, func(rows *sql.Rows) error {
+	must.SucceedT(t, sqlext.ForeachRow(dbm, queryStr, nil, func(rows *sql.Rows) error {
 		var (
 			projectName string
 			serviceType limes.ServiceType
@@ -905,10 +899,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 		}
 		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, string(serviceType)))
 		return nil
-	})
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	}))
 
 	if !reflect.DeepEqual(pairs, actualPairs) {
 		t.Errorf("expected stale project services %v, but got %v", pairs, actualPairs)
@@ -1006,7 +997,7 @@ func Test_LargeProjectList(t *testing.T) {
 		),
 	}
 	for _, query := range queries {
-		err := sqlext.WithPreparedStatement(s.DB, query, func(stmt *sql.Stmt) error {
+		must.SucceedT(t, sqlext.WithPreparedStatement(s.DB, query, func(stmt *sql.Stmt) error {
 			for idx, uuid := range projectUUIDs {
 				_, err := stmt.Exec(idx, uuid)
 				if err != nil {
@@ -1014,10 +1005,7 @@ func Test_LargeProjectList(t *testing.T) {
 				}
 			}
 			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		}))
 	}
 
 	// build expectation for what the project list will look like
