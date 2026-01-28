@@ -753,11 +753,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ResourceName:     "capacity",
 		AvailabilityZone: "az-one",
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -773,11 +770,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
@@ -795,11 +789,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -818,11 +809,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = true
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -837,11 +825,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(6)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
 	assert.HTTPRequest{
@@ -862,11 +847,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -1957,11 +1939,8 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		ResourceName:     "capacity",
 		AvailabilityZone: "az-one",
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 
 	assert.HTTPRequest{
@@ -2163,11 +2142,8 @@ func Test_ConvertCommitments(t *testing.T) {
 		ResourceName:     "capacity_a",
 		AvailabilityZone: "az-one",
 	}
-	dbResult, err := datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, false)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "liquid says: not enough capacity!"})
 
 	assert.HTTPRequest{
@@ -2203,11 +2179,8 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	assert.HTTPRequest{
@@ -2295,11 +2268,8 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
-	dbResult, err = datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.DeepEqual(t, "CanAcceptCommitmentChangeRequest", dbResult, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	assert.HTTPRequest{
 		Method: http.MethodPost,

@@ -24,6 +24,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
@@ -50,10 +51,7 @@ func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
-	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 }
 
 const (

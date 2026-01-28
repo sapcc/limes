@@ -14,6 +14,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -1255,21 +1256,9 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 		return
 	}
 
-	inputJSON, err := json.Marshal(input)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	expectedJSON, err := json.Marshal(expected)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	actualJSON, err := json.Marshal(actual)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 	t.Error("ExpectACPQResult failed")
 	t.Logf("    config = %#v", cfg)
-	t.Logf("     input = %s", inputJSON)
-	t.Logf("  expected = %s", expectedJSON)
-	t.Logf("    actual = %s", actualJSON)
+	t.Logf("     input = %s", must.ReturnT(json.Marshal(input))(t))
+	t.Logf("  expected = %s", must.ReturnT(json.Marshal(expected))(t))
+	t.Logf("    actual = %s", must.ReturnT(json.Marshal(actual))(t))
 }
