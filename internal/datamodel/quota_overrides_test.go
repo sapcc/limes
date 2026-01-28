@@ -121,9 +121,7 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
-	for _, err := range errs {
-		t.Error(err.Error())
-	}
+	assert.Equal(t, errs.Join(", "), "")
 	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
 }
 
@@ -138,8 +136,6 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
-	for _, err := range errs {
-		t.Error(err.Error())
-	}
+	assert.Equal(t, errs.Join(", "), "")
 	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
 }

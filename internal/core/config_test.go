@@ -237,7 +237,5 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	if !errs.IsEmpty() {
-		t.Errorf("expected no errors for a valid configuration but got: %s", errs.Join(","))
-	}
+	assert.Equal(t, errs.Join(","), "")
 }

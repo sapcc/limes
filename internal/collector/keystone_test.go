@@ -75,10 +75,7 @@ func Test_ScanDomains(t *testing.T) {
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
 	// are then constructed by the scraper)
-	actualNewDomains, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains #1 failed: %v", err)
-	}
+	actualNewDomains := must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	sort.Strings(expectedNewDomains) // order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
@@ -87,10 +84,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// second ScanDomains should not discover anything new
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains #2 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
@@ -102,19 +96,13 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not see this new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains #3 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
 	// ScanDomains with ScanAllProjects should discover the new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
-	if err != nil {
-		t.Errorf("ScanDomains #4 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (7, 4, 1, TRUE, %[1]d);
@@ -129,10 +117,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not notice anything
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains #5 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
@@ -168,10 +153,7 @@ func Test_ScanDomains(t *testing.T) {
 	// now we set the commitment to expired, the deletion succeeds
 	s.MustDBExec(`UPDATE project_commitments SET status = $1`, liquid.CommitmentStatusExpired)
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
-	if err != nil {
-		t.Errorf("ScanDomains #7 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_commitments WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
@@ -185,10 +167,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains #8 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
@@ -203,10 +182,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the changed names and update the domain/project records accordingly
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
-	if err != nil {
-		t.Errorf("ScanDomains #9 failed: %v", err)
-	}
+	actualNewDomains = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true}))(t)
 	assert.DeepEqual(t, "new domains after ScanDomains #9", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND uuid = 'uuid-for-germany';
