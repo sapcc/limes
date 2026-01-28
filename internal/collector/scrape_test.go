@@ -31,24 +31,6 @@ import (
 	"github.com/sapcc/limes/internal/test"
 )
 
-func mustFailT(t *testing.T, err, expected error) {
-	t.Helper()
-	if err == nil {
-		t.Errorf("expected to fail with %q, but got no error", expected.Error())
-	} else if err.Error() != expected.Error() {
-		t.Errorf("expected to fail with %q, but failed with %q", expected.Error(), err.Error())
-	}
-}
-
-func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
-	t.Helper()
-	if err == nil {
-		t.Errorf("expected to fail with %q, but got no error", rx.String())
-	} else if !rx.MatchString(err.Error()) {
-		t.Errorf("expected to fail with %q, but failed with %q", rx.String(), err.Error())
-	}
-}
-
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
 	_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
@@ -254,7 +236,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// second Scrape should not change anything (not even the timestamps) since
 	// less than 30 minutes have passed since the last Scrape("unittest")
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
 	// change the data that is reported by the liquid
@@ -341,8 +323,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	// in the second attempt)
 	s.LiquidClients["unittest"].SetQuotaError(errors.New("SetQuota failed as requested"))
 	expectedErrorRx := regexp.MustCompile(`SetQuota failed as requested$`)
-	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
+	assert.ErrEqual(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	assert.ErrEqual(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 	failedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	failedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -367,7 +349,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	`)
 
 	// test SyncQuotaToBackendJob not having anything to do
-	mustFailT(t, syncJob.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
+	assert.ErrEqual(t, syncJob.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
 	// Scrape should show that the quota update was durable
@@ -554,8 +536,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(collector.ScrapeInterval)
 	s.LiquidClients["unittest"].UsageReport.SetError(errors.New("GetUsageReport failed as requested"))
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
@@ -590,8 +572,8 @@ func Test_ScrapeFailure(t *testing.T) {
 
 	// next Scrape should yield the same result
 	s.Clock.StepBy(collector.ScrapeInterval)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 
 	checkedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 = s.Clock.Now()
@@ -650,8 +632,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	s.Clock.StepBy(collector.ScrapeInterval)
 	s.LiquidClients["unittest"].UsageReport.SetError(errors.New("GetUsageReport failed as requested"))
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
 	checkedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 = s.Clock.Now()
@@ -751,7 +733,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	// check that Scrape() behaves properly when encountering a liquid with
 	// no Resources() (in the wild, this can happen because some liquids
 	// only have Rates())
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New(`during scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`))
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), `during scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`)
 
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -949,7 +931,7 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.LiquidClients["unittest"].IncrementServiceInfoVersion()
 	s.LiquidClients["unittest"].IncrementUsageReportInfoVersion()
 
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources[\"capacity\"] has invalid topology \"invalidAZ1\""))
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), `during scrape of project germany/berlin: received ServiceInfo is invalid: .Resources["capacity"] has invalid topology "invalidAZ1"`)
 
 	s.Clock.StepBy(collector.ScrapeInterval)
 	// negative: service usage report validation should fail for mismatched topology and AZ reports
@@ -958,5 +940,5 @@ func Test_TopologyScrapes(t *testing.T) {
 		resInfo.Topology = liquid.FlatTopology
 		srvInfo.Resources["capacity"] = resInfo
 	})
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during scrape of project germany/dresden: received ServiceUsageReport is invalid: .Resources[\"capacity\"].PerAZ has entries for []liquid.AvailabilityZone{\"az-one\", \"az-two\"}, which is invalid for topology \"flat\" (expected entries for []liquid.AvailabilityZone{\"any\"}); .Resources[\"capacity\"] has no quota reported on resource level, which is invalid for HasQuota = true and topology \"flat\""))
+	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), `during scrape of project germany/dresden: received ServiceUsageReport is invalid: .Resources["capacity"].PerAZ has entries for []liquid.AvailabilityZone{"az-one", "az-two"}, which is invalid for topology "flat" (expected entries for []liquid.AvailabilityZone{"any"}); .Resources["capacity"] has no quota reported on resource level, which is invalid for HasQuota = true and topology "flat"`)
 }

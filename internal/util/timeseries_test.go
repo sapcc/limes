@@ -36,11 +36,11 @@ func TestTimeSeries(t *testing.T) {
 
 	// trying to add an earlier measurement is an error
 	err := s.AddMeasurement(time.Unix(13, 0), 41.0)
-	mustFailT(t, err, "cannot add value for timestamp 13: already recorded later timestamp 15")
+	assert.ErrEqual(t, err, "cannot add value for timestamp 13: already recorded later timestamp 15")
 
 	// trying to add contradictory measurements is an error
 	err = s.AddMeasurement(time.Unix(15, 0), 42.0)
-	mustFailT(t, err, "ambiguous value for timestamp 15: tried to record 42 now, but already recorded 41")
+	assert.ErrEqual(t, err, "ambiguous value for timestamp 15: tried to record 42 now, but already recorded 41")
 
 	// add some more measurements to prepare for the pruning test
 	must.SucceedT(t, s.AddMeasurement(time.Unix(20, 0), 40.0))
@@ -86,7 +86,7 @@ func TestTimeSeriesUnmarshalErrors(t *testing.T) {
 	for _, tc := range testcases {
 		t.Logf("testing unmarshal of `%s`", tc.Representation)
 		_, err := util.ParseTimeSeries[float64](tc.Representation)
-		mustFailT(t, err, tc.ExpectedError)
+		assert.ErrEqual(t, err, tc.ExpectedError)
 	}
 }
 
@@ -103,15 +103,6 @@ func TestTimeSeriesPruningWithOnlyAncientValues(t *testing.T) {
 
 	// The bug was that the value 5 was not pruned from the time series as expected.
 	expectJSON(t, s, `{"t":[1715247668],"v":[6]}`)
-}
-
-func mustFailT(t *testing.T, err error, expected string) {
-	t.Helper()
-	if err == nil {
-		t.Errorf("expected to fail with %q, but got no error", expected)
-	} else if err.Error() != expected {
-		t.Errorf("expected to fail with %q, but failed with %q", expected, err.Error())
-	}
 }
 
 func expectJSON[T cmp.Ordered](t *testing.T, value util.TimeSeries[T], repr string) {
