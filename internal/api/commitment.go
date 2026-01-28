@@ -542,10 +542,37 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
 
-	// we do an information to liquid in any case, right now we only check the result when confirming immediately
+	// might get modified below
 	newStatus := liquid.CommitmentStatusPlanned
 	totalConfirmedAfter := totalConfirmed
+	var auditEvents []audittools.Event
+
 	if confirmBy.IsNone() {
+		// When the commitment is to be confirmed immediately, we check for the transferable commitments first.
+		// The freedCapacity of transferableCommitmentCache.CheckAndConsume is considered automatically later,
+		// as the stats are loaded within datamodel.DelegateChangeCommitments when commitment transfers were
+		// already done in the transaction.
+		mailTemplate := None[core.MailTemplate]()
+		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
+			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
+		}
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		_, err = transferableCommitmentCache.CheckAndConsume(dbCommitment, totalConfirmed, r.Context())
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, audit.Context{
+			UserIdentity: token,
+			Request:      r,
+		})
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		auditEvents = append(auditEvents, ae...)
+
 		newStatus = liquid.CommitmentStatusConfirmed
 		totalConfirmedAfter += req.Amount
 	}
@@ -577,7 +604,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, p.DB)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -591,30 +618,6 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.Status = liquid.CommitmentStatusConfirmed
-
-		// handle public transfer commitments (does not alter the confirmed commitment)
-		mailTemplate := None[core.MailTemplate]()
-		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
-			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
-		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		err = transferableCommitmentCache.CheckAndConsume(dbCommitment, totalConfirmed)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, audit.Context{
-			UserIdentity: token,
-			Request:      r,
-		})
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		for _, event := range ae {
-			p.auditor.Record(event)
-		}
 	} else {
 		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
 		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
@@ -634,7 +637,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	auditEvents := audit.CommitmentEventTarget{
+	auditEvents = append(auditEvents, audit.CommitmentEventTarget{
 		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, *serviceInfo),
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       now,
@@ -642,7 +645,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		User:       token,
 		ReasonCode: http.StatusCreated,
 		Action:     cadf.CreateAction,
-	})
+	})...)
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
