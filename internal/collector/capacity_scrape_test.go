@@ -154,7 +154,7 @@ func Test_ScanCapacity(t *testing.T) {
 	// check that capacity records are created correctly (and that nonexistent
 	// resources are ignored by the scraper)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
@@ -192,7 +192,7 @@ func Test_ScanCapacity(t *testing.T) {
 	// if we don't bump the version, we will observe that for "things" nothing happens (as it is unknown
 	// to the database) and for "unknown" there is no value
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -210,7 +210,7 @@ func Test_ScanCapacity(t *testing.T) {
 	s.LiquidClients["unshared"].IncrementServiceInfoVersion()
 	s.LiquidClients["unshared"].IncrementCapacityReportInfoVersion()
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
@@ -299,7 +299,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	})
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -321,7 +321,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 		}
 	})
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -399,7 +399,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	})
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -419,7 +419,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		report.Resources["things"].PerAZ["az-two"].Usage = Some[uint64](3)
 	})
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -443,7 +443,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	// check that removing a LiquidConnection does nothing special (will be auto-removed later)
 	delete(s.Cluster.LiquidConnections, "unittest")
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -487,7 +487,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 	// ...scrape will record those values faithfully and not set "last_nonzero_raw_capacity"
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
@@ -508,7 +508,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 	// ...scrape will record those values and set "last_nonzero_raw_capacity" because a non-zero value was observed
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
@@ -529,7 +529,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 	// ...scrape will record those values and, once again, leave "last_nonzero_raw_capacity" untouched
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
@@ -574,7 +574,7 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 	})
 
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 4, usage = 0, last_nonzero_raw_capacity = 4 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
@@ -601,7 +601,7 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 
 	// we expect capacity=0 and usage=NULL
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
@@ -646,7 +646,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	// since it does not report for anything (this used to fail because we generated a syntactically
 	// invalid WHERE clause when matching zero resources)
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -656,7 +656,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	// rerun also works
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
 		UPDATE services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -668,7 +668,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	s.LiquidClients["shared"].IncrementServiceInfoVersion()
 	s.LiquidClients["shared"].IncrementCapacityReportInfoVersion()
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -731,7 +731,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 
 	// capacity scrape writes both the LIQUID-based and the manual capacity value
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
@@ -1033,7 +1033,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// Note that the "things" resources are not explicitly set up in the
 	// quota_distribution_configs test section. The automatic behavior amounts to
 	// pretty much just setting `quota = usage`, i.e. `quota = 0` in this case.
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	desyncedAt2 := s.Clock.Now()
@@ -1071,7 +1071,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	//
 	// The confirmed commitment is for first/capacity in berlin az-one (amount = 10).
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1086,7 +1086,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The confirmed commitment (ID=2) is for first/capacity in berlin az-one (amount = 100).
 	// A similar commitment (ID=3) for second/capacity is not confirmed because of missing capacity.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1104,7 +1104,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The two commitments that are confirmed (ID=4 and ID=5) have a lower created_at than the unconfirmed one (ID=6).
 	// This is because we want to ensure the "first come, first serve" rule.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -1122,7 +1122,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// Both dresden (ID=7) and berlin (ID=8) are asking for an amount of 300 to be committed, on a total capacity of 420.
 	// But because berlin has an existing usage of 250, dresden is denied (even though it asked first) and berlin is confirmed.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1139,7 +1139,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// The second commitment (ID=10 in dresden) is much smaller (only 1 larger than project usage),
 	// but cannot be confirmed because ID=9 grabbed any and all unused capacity.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -1153,7 +1153,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	// ...Once ID=9 expires an hour later, ID=10 can be confirmed.
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -1193,7 +1193,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	for serviceType, expectedDemandsByResource := range expectedDemandsByService {
 		for resourceName, expectedDemands := range expectedDemandsByResource {
 			actualDemands, err := bc.GetResourceDemand(serviceType, resourceName)
-			mustT(t, err)
+			must.SucceedT(t, err)
 			desc := fmt.Sprintf("GetGlobalResourceDemand for %s/%s", serviceType, resourceName)
 			assert.DeepEqual(t, desc, actualDemands.PerAZ, expectedDemands)
 		}
@@ -1202,7 +1202,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// now we let almost all commitments expire, so that we can test the az_resources_project_commitments_trigger
 	// all are expired, 10 remains active
 	s.Clock.StepBy(9 * 24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 7 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
@@ -1232,7 +1232,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	})
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqual(`
 		DELETE FROM az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'first/capacity/any';
 		DELETE FROM az_resources WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'first/capacity/az-one';
@@ -1322,7 +1322,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
@@ -1374,7 +1374,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// both commitments get confirmed
 	now := s.Clock.Now().Add(-5 * time.Second)
@@ -1407,7 +1407,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// no change to transfer commitment, other one confirmed
 	now = s.Clock.Now().Add(-5 * time.Second)
@@ -1430,7 +1430,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// no change to transfer commitment, other one confirmed
 	now = s.Clock.Now().Add(-5 * time.Second)
@@ -1453,7 +1453,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// complete takeover, so transfer commitment is marked as superseded - the quota for the taken over commitment is reduced
 	now = s.Clock.Now().Add(-5 * time.Second)
@@ -1501,7 +1501,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// transfer commitment superseded and split in the process - unconsumed amount=1 remains
 	// 2 consuming commitments are confirmed
@@ -1534,7 +1534,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// the takeover to the new commitment shifts the quota's by 1
 	now = s.Clock.Now().Add(-5 * time.Second)
@@ -1574,7 +1574,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	now = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1611,7 +1611,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	now = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1670,7 +1670,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(1 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// at first, nothing happens, because all dates are in the future
 	tr.DBChanges().AssertEqualf(`
@@ -1678,7 +1678,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// now uuid16 is confirmed - as the confirmation of uuid18 is later, nothing else happens
 	now = s.Clock.Now().Add(-5 * time.Second)
@@ -1691,7 +1691,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, now.Unix(), uuid16, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// now the time progresses, uuid17 becomes pending and takes over amount=2 from uuid16 --> quota in berlin reduces by 2
 	// a leftover for amount=1 is created for the not-taken-over part of uuid16
@@ -1713,7 +1713,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, now.Unix(), creation.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid17, uuid19, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// now the time progresses again, uuid18 becomes pending, but takes over an amount=1 from uuid17 because it was posted earlier
 	// this leads to quota on project=paris
@@ -1735,7 +1735,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, now.Unix(), creation.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid18, uuid20, timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// further time progression leads to no changes
 	tr.DBChanges().AssertEqualf(`
@@ -1754,7 +1754,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	now = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1780,7 +1780,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	now = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
@@ -1801,7 +1801,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
@@ -1837,7 +1837,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 	})
 
 	setClusterCapacitorsStale(t, s)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	// first has no commitment, no request should be sent
 	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
 		t.Fatal("expected no commitment change request to be sent to Liquid")
@@ -1847,7 +1847,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 		t.Fatal("expected no commitment change request to be sent to Liquid")
 	}
 
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	// first has no commitment, no request should be sent
 	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
 		t.Fatal("expected no commitment change request to be sent to Liquid")
@@ -1904,7 +1904,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 	})
 
 	setClusterCapacitorsStale(t, s)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	ccr = s.LiquidClients["first"].LastCommitmentChangeRequest
 	assert.Equal(t, len(ccr.ByProject), 1)
 	assert.Equal(t, len(ccr.ByProject[berlinUUID].ByResource), 1)
@@ -1958,7 +1958,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func() string {
@@ -2004,7 +2004,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -2049,7 +2049,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 
 	// we go to 12:00 here, so that id=2 gets expired
 	s.Clock.StepBy(36 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -2090,7 +2090,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
@@ -2135,7 +2135,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	uuid9 := test.GenerateDummyCommitmentUUID(9)
@@ -2175,7 +2175,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`

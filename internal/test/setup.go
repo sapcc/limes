@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/internal/api"
@@ -233,10 +234,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		if exists {
 			rateLimits = liquidConfig.RateLimits
 		}
-		_, err := core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB)
-		if err != nil {
-			t.Fatal(err)
-		}
+		_ = must.ReturnT(core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))(t)
 	}
 	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
 	failIfErrs(t, errs)
@@ -293,10 +291,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 
 	if params.WithInitialDiscovery {
-		_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true})
-		if err != nil {
-			t.Fatal(err.Error())
-		}
+		_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true}))(t)
 	}
 
 	if params.WithEmptyRecordsAsNeeded {
@@ -399,19 +394,13 @@ func (s Setup) GetProjectUUID(name string) (result liquid.ProjectUUID) {
 // MustDBExec is a shorthand for s.DB.Exec() + t.Fatal() on error.
 func (s Setup) MustDBExec(query string, args ...any) {
 	s.t.Helper()
-	_, err := s.DB.Exec(query, args...)
-	if err != nil {
-		s.t.Fatal(err.Error())
-	}
+	_ = must.ReturnT(s.DB.Exec(query, args...))(s.t)
 }
 
 // MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.
 func (s Setup) MustDBInsert(pointerToRecord any) {
 	s.t.Helper()
-	err := s.DB.Insert(pointerToRecord)
-	if err != nil {
-		s.t.Fatal(err.Error())
-	}
+	must.SucceedT(s.t, s.DB.Insert(pointerToRecord))
 }
 
 func failIfErrs(t *testing.T, errs errext.ErrorSet) {

@@ -36,11 +36,11 @@ func TestConfigValidation(t *testing.T) {
 
 	// invalid JSON
 	_, errs = core.NewClusterFromJSON([]byte("{invalid}"), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "parse configuration: invalid character 'i' looking for beginning of object key string")
+	assert.Equal(t, errs.Join(","), "parse configuration: invalid character 'i' looking for beginning of object key string")
 
 	// empty config
 	_, errs = core.NewClusterFromJSON([]byte("{}"), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: availability_zones[],missing configuration value: liquids[]")
+	assert.Equal(t, errs.Join(","), "missing configuration value: availability_zones[],missing configuration value: liquids[]")
 
 	// invalid AZs
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -51,7 +51,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "invalid value for availability_zones[0]: \"\" is not an acceptable name for a real AZ,invalid value for availability_zones[1]: \"any\" is not an acceptable name for a real AZ")
+	assert.Equal(t, errs.Join(","), "invalid value for availability_zones[0]: \"\" is not an acceptable name for a real AZ,invalid value for availability_zones[1]: \"any\" is not an acceptable name for a real AZ")
 
 	// missing area attribute in liquid config
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -60,7 +60,7 @@ func TestConfigValidation(t *testing.T) {
 			"shared": {}
 		}
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: liquids.shared.area")
+	assert.Equal(t, errs.Join(","), "missing configuration value: liquids.shared.area")
 
 	// empty resource/rate behaviors
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -77,7 +77,7 @@ func TestConfigValidation(t *testing.T) {
 			{ "rate": "" }
 		]
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: resource_behavior[0].resource,missing configuration value: rate_behavior[0].rate")
+	assert.Equal(t, errs.Join(","), "missing configuration value: resource_behavior[0].resource,missing configuration value: rate_behavior[0].rate")
 
 	// quota distribution config: empty resource name and invalid model
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -98,7 +98,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: distribution_model_configs[0].resource,invalid value for distribution_model_configs[0].model: \"invalid\",invalid value for distribution_model_configs[0].autogrow: cannot be set for model \"invalid\"")
+	assert.Equal(t, errs.Join(","), "missing configuration value: distribution_model_configs[0].resource,invalid value for distribution_model_configs[0].model: \"invalid\",invalid value for distribution_model_configs[0].autogrow: cannot be set for model \"invalid\"")
 
 	// quota distribution config: missing autogrow configuration
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -115,7 +115,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "missing configuration value: distribution_model_configs[0].autogrow")
+	assert.Equal(t, errs.Join(","), "missing configuration value: distribution_model_configs[0].autogrow")
 
 	// quota distribution config: invalid growth multiplier and invalid retention period
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -136,7 +136,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), "invalid value for distribution_model_configs[0].growth_multiplier: -5 (must be >= 0),invalid value for distribution_model_configs[0].usage_data_retention_period: must not be 0")
+	assert.Equal(t, errs.Join(","), "invalid value for distribution_model_configs[0].growth_multiplier: -5 (must be >= 0),invalid value for distribution_model_configs[0].usage_data_retention_period: must not be 0")
 
 	// commitment conversion: overlapping flavors
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -199,7 +199,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.DeepEqual(t, "errs", errs.Join(","), `invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`)
+	assert.Equal(t, errs.Join(","), `invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`)
 
 	// Valid config. Empty discovery method should be allowed
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -237,7 +237,5 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	if !errs.IsEmpty() {
-		t.Errorf("expected no errors for a valid configuration but got: %s", errs.Join(","))
-	}
+	assert.Equal(t, errs.Join(","), "")
 }

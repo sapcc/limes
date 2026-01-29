@@ -11,6 +11,7 @@ import (
 
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
@@ -98,7 +99,7 @@ func Test_MailDelivery(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 	// day 1: successfully send a mail
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 1;`)
 
 	// day 2: fail a mail delivery and increase the fail counter
@@ -112,13 +113,13 @@ func Test_MailDelivery(t *testing.T) {
 
 	// day 3: send another mail successfully. Now notification with ID 2 and 3 overlap.
 	s.Clock.StepBy(24 * time.Hour)
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 3;`)
 
-	// day 4: unmaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
+	// day 4: unmanaged project metadata will result in a queue deletion. No recipient could be resolved from the project.
 	s.Clock.StepBy(24 * time.Hour)
-	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 0)
-	mustT(t, job.ProcessOne(s.Ctx))
+	assert.Equal(t, mailer.UndeliverableMails, 0)
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_mail_notifications WHERE id = 4;`)
-	assert.DeepEqual(t, "undeliverable mail count", mailer.UndeliverableMails, 1)
+	assert.Equal(t, mailer.UndeliverableMails, 1)
 }

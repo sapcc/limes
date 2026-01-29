@@ -12,6 +12,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/test"
 )
@@ -49,8 +50,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 
 	scrapeJob := s.Collector.ScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
-	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
-	mustT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
+	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
+	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -65,8 +66,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 			"berlin": { "unittest": { "capacity": "10 B", "things": 1000 } }
 		}
 	}`
-	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, os.WriteFile(configPath, []byte(buf), 0666))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 10 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET override_quota_from_config = 1000 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
@@ -79,8 +80,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 			"dresden": { "unittest": { "capacity": "20 B" } }
 		}
 	}`
-	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, os.WriteFile(configPath, []byte(buf), 0666))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 15 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET override_quota_from_config = NULL WHERE id = 2 AND project_id = 1 AND resource_id = 2;
@@ -98,7 +99,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 			"dresden": { "unittest": { "capacity": "20 B" } }
 		}
 	}`
-	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
-	mustT(t, job.ProcessOne(s.Ctx))
+	must.SucceedT(t, os.WriteFile(configPath, []byte(buf), 0666))
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEmpty()
 }

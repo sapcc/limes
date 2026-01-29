@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
@@ -19,10 +20,7 @@ func Test_Consistency(t *testing.T) {
 	consistencyJob := s.Collector.CheckConsistencyJob(s.Registry)
 
 	// run ScanDomains once to establish a baseline
-	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
-	if err != nil {
-		t.Errorf("ScanDomains failed: %v", err)
-	}
+	_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/checkconsistency0.sql")
 
@@ -30,10 +28,7 @@ func Test_Consistency(t *testing.T) {
 	// {domain,project}_services created by ScanDomains(), but adds
 	// services entries
 	s.Clock.StepBy(time.Hour)
-	err = consistencyJob.ProcessOne(s.Ctx)
-	if err != nil {
-		t.Error(err)
-	}
+	must.SucceedT(t, consistencyJob.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEmpty()
 
 	// remove some project_services entries
@@ -56,10 +51,7 @@ func Test_Consistency(t *testing.T) {
 
 	// check that CheckConsistency() brings everything back into a nice state
 	s.Clock.StepBy(time.Hour)
-	err = consistencyJob.ProcessOne(s.Ctx)
-	if err != nil {
-		t.Error(err)
-	}
+	must.SucceedT(t, consistencyJob.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_services WHERE id = 7 AND project_id = 1 AND service_id = 3;
 		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (8, 1, 2, TRUE, %d);
