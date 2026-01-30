@@ -9,14 +9,14 @@ require (
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/gophercloud/gophercloud/v2 v2.10.0
 	github.com/gorilla/mux v1.8.1
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/majewsky/gg v1.5.0
 	github.com/majewsky/schwift/v2 v2.0.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.5
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.18.0
-	github.com/sapcc/go-bits v0.0.0-20260116110244-dee8151c1378
+	github.com/sapcc/go-bits v0.0.0-20260130093945-5dd497f4cf92
 )
 
 require (
