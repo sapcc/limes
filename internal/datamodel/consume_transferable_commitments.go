@@ -4,6 +4,7 @@
 package datamodel
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -61,6 +62,7 @@ type TransferableCommitmentCache struct {
 
 	// utilities
 	dbi                           db.Interface
+	cluster                       *core.Cluster
 	serviceInfo                   liquid.ServiceInfo
 	loc                           core.AZResourceLocation
 	now                           time.Time
@@ -74,7 +76,7 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, serviceInfo liquid.ServiceInfo, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, serviceInfo liquid.ServiceInfo, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, queryArgs...)
 	if err != nil {
@@ -100,6 +102,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, serviceInfo liquid.Service
 
 	// fill utilities
 	t.dbi = dbi
+	t.cluster = cluster
 	t.serviceInfo = serviceInfo
 	t.loc = loc
 	t.now = now
@@ -131,8 +134,9 @@ func NewTransferableCommitmentCache(dbi db.Interface, serviceInfo liquid.Service
 // CommitmentWasTransferred should be used to check before confirming a commitment.
 // All transfers will lead to a mail which contains the leftover amount, so that the customer
 // can track the whole processing of the transferred commitment over time.
-func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, currentTotalConfirmed uint64) (err error) {
+func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, currentTotalConfirmed uint64, ctx context.Context) (freedAmounts map[db.ProjectID]uint64, err error) {
 	overallTransferredAmount := uint64(0)
+	freedAmounts = make(map[db.ProjectID]uint64)
 	for idx, tc := range t.transferableCommitments {
 		if overallTransferredAmount == c.Amount {
 			break
@@ -160,7 +164,7 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 		// prepare audit event data
 		project := t.affectedProjectsByID[tc.ProjectID]
 		domain := t.affectedDomainsByID[project.DomainID]
-		auditResource := liquid.ResourceCommitmentChangeset{
+		rcc := liquid.ResourceCommitmentChangeset{
 			TotalConfirmedBefore: currentTotalConfirmed,
 			TotalConfirmedAfter:  currentTotalConfirmed, // will be adjusted below based on how much is consumed
 			// TODO: change when introducing "guaranteed" commitments
@@ -184,20 +188,23 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 
 		// at least a part of this commitment will be consumed, so we will supersede it in any case
 		amountToConsume := c.Amount - overallTransferredAmount
+		if _, ok := freedAmounts[tc.ProjectID]; !ok {
+			freedAmounts[tc.ProjectID] = 0
+		}
 		if tc.Amount > amountToConsume {
 			// the leftover amount to be transferred is not enough to consume the whole commitment
 			// we will place a new commitment for the leftover amount
 			overallTransferredAmount += amountToConsume
 			leftoverCommitment, err := BuildSplitCommitment(tc, tc.Amount-amountToConsume, t.now, t.generateProjectCommitmentUUID)
 			if err != nil {
-				return err
+				return freedAmounts, err
 			}
 			leftoverCommitment.TransferStatus = limesresources.CommitmentTransferStatusPublic
 			leftoverCommitment.TransferToken = Some(t.generateTransferToken())
 			leftoverCommitment.TransferStartedAt = tc.TransferStartedAt
 			err = t.dbi.Insert(&leftoverCommitment)
 			if err != nil {
-				return err
+				return freedAmounts, err
 			}
 
 			t.transferableCommitments[idx] = leftoverCommitment
@@ -207,7 +214,7 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 				ID:     leftoverCommitment.ID,
 			}
 
-			auditResource.Commitments = append(auditResource.Commitments, liquid.Commitment{
+			rcc.Commitments = append(rcc.Commitments, liquid.Commitment{
 				UUID:      leftoverCommitment.UUID,
 				OldStatus: None[liquid.CommitmentStatus](),
 				NewStatus: Some(leftoverCommitment.Status),
@@ -216,7 +223,8 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 				ExpiresAt: leftoverCommitment.ExpiresAt,
 			})
 			if tc.Status == liquid.CommitmentStatusConfirmed {
-				auditResource.TotalConfirmedAfter -= amountToConsume
+				rcc.TotalConfirmedAfter -= amountToConsume
+				freedAmounts[tc.ProjectID] += amountToConsume
 			}
 		} else {
 			// the transferable commitment is fully consumed
@@ -224,23 +232,43 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 			t.transferredCommitmentIDs[tc.ProjectID][tc.ID] = commitmentTransferLeftover{}
 
 			if tc.Status == liquid.CommitmentStatusConfirmed {
-				auditResource.TotalConfirmedAfter -= tc.Amount
+				rcc.TotalConfirmedAfter -= tc.Amount
+				freedAmounts[tc.ProjectID] += tc.Amount
 			}
 		}
 
-		// retain ccr for audit event
-		t.ccrs[tc.UUID] = liquid.CommitmentChangeRequest{
+		// inform liquid about the commitment change, if applicable (we don't use datamodel.DelegateChangeCommitments
+		// here, as we know locally, that this operation works from capacity side).
+		ccr := liquid.CommitmentChangeRequest{
 			AZ:          t.loc.AvailabilityZone,
 			InfoVersion: t.serviceInfo.Version,
 			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 				project.UUID: {
 					ProjectMetadata: Some(core.KeystoneProjectFromDB(project, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid()),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-						t.loc.ResourceName: auditResource,
+						t.loc.ResourceName: rcc,
 					},
 				},
 			},
 		}
+		if t.serviceInfo.Resources[t.loc.ResourceName].HandlesCommitments {
+			var liquidClient core.LiquidClient
+			if len(t.cluster.LiquidConnections) == 0 {
+				// find the right ServiceType
+				liquidClient, err = t.cluster.LiquidClientFactory(t.loc.ServiceType)
+				if err != nil {
+					return freedAmounts, fmt.Errorf("while obtaining liquid client for notifying liquid about transfer of commitment %s: %w", tc.UUID, err)
+				}
+			} else {
+				liquidClient = t.cluster.LiquidConnections[t.loc.ServiceType].LiquidClient
+			}
+			_, err := liquidClient.ChangeCommitments(ctx, ccr)
+			if err != nil {
+				return freedAmounts, fmt.Errorf("while notifying liquid about transfer of commitment %s: %w", tc.UUID, err)
+			}
+		}
+		// retain ccr for audit event
+		t.ccrs[tc.UUID] = ccr
 
 		// supersede consumed commitment
 		tc.TransferStartedAt = None[time.Time]()
@@ -255,15 +283,15 @@ func (t *TransferableCommitmentCache) CheckAndConsume(c db.ProjectCommitment, cu
 		}
 		buf, err := json.Marshal(supersedeContext)
 		if err != nil {
-			return err
+			return freedAmounts, err
 		}
 		tc.SupersedeContextJSON = Some(json.RawMessage(buf))
 		_, err = t.dbi.Update(&tc)
 		if err != nil {
-			return err
+			return freedAmounts, err
 		}
 	}
-	return nil
+	return freedAmounts, nil
 }
 
 // ConfirmTransferableCommitmentIfExists should be used between calls to CheckAndConsume

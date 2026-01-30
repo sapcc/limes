@@ -168,7 +168,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// initiate cache of transferable commitments
-	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, serviceInfo, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
+	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, serviceInfo, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -185,9 +185,32 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 
 	// foreach confirmable commitment in the order to be confirmed
 	for _, cc := range confirmableCommitments {
+		// if a commitment was transferred in this iteration already, we do not need to confirm it
+		// if partially transferred, the leftover commitment is added to the transferable commitments and considered separately
+		if transferableCommitmentCache.CommitmentWasTransferred(cc.ID, cc.ProjectID) {
+			continue
+		}
+
+		// First, we check whether we can consume transferable commitments to satisfy this commitment.
+		// The freedAmounts are considered for the stats given to the delegateChangeCommitmentsWithShortcut() call below.
+		freedAmounts, err := transferableCommitmentCache.CheckAndConsume(cc, stats.ProjectStats[cc.ProjectID].Committed, ctx)
+		if err != nil {
+			return nil, err
+		}
+		overallFreedAmount := uint64(0)
+		for projectID, freedAmount := range freedAmounts {
+			oldStats := stats.ProjectStats[projectID]
+			stats.ProjectStats[projectID] = projectAZAllocationStats{
+				Committed: oldStats.Committed - freedAmount,
+				Usage:     oldStats.Usage,
+			}
+			overallFreedAmount += freedAmount
+		}
+		missingAmount := cc.Amount - overallFreedAmount
+
 		// ignore commitments that do not fit
-		logg.Debug("checking ConfirmPendingCommitments in %s: commitmentID = %d, projectID = %d, amount = %d",
-			loc.ShortScopeString(), cc.ID, cc.ProjectID, cc.Amount)
+		logg.Debug("checking ConfirmPendingCommitments in %s: commitmentID = %d, projectID = %d, overall amount = %d, missing amount = %d",
+			loc.ShortScopeString(), cc.ID, cc.ProjectID, cc.Amount, missingAmount)
 		project := affectedProjectsByID[cc.ProjectID]
 		domain := affectedDomainsByID[project.DomainID]
 
@@ -200,16 +223,6 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 			continue
 		}
 		ccrs[cc.UUID] = ccr
-		// if a commitment was transferred in this iteration already, we do not need to confirm it
-		// if partially transferred, the leftover commitment is added to the transferable commitments and considered separately
-		if transferableCommitmentCache.CommitmentWasTransferred(cc.ID, cc.ProjectID) {
-			continue
-		}
-
-		err = transferableCommitmentCache.CheckAndConsume(cc, stats.ProjectStats[cc.ProjectID].Committed)
-		if err != nil {
-			return nil, err
-		}
 
 		// confirm the commitment
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, status = $2 WHERE id = $3`,
@@ -223,7 +236,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 		// block its allocation from being committed again in this loop
 		oldStats := stats.ProjectStats[cc.ProjectID]
 		stats.ProjectStats[cc.ProjectID] = projectAZAllocationStats{
-			Committed: oldStats.Committed + cc.Amount,
+			Committed: oldStats.Committed + missingAmount,
 			Usage:     oldStats.Usage,
 		}
 	}
