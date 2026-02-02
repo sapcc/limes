@@ -38,7 +38,7 @@ var getTransferableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPla
 		JOIN project_commitments pc ON pc.az_resource_id = azr.id
 		WHERE s.type = $1 AND r.name = $2 AND azr.az = $3
 			AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
-			AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+			AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 		ORDER BY pc.transfer_started_at ASC, pc.created_at ASC, pc.id ASC
 	`))
 

@@ -270,4 +270,10 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN quota,
 			DROP COLUMN backend_quota;
 	`),
+	"071_add_commitment_deleted_at.down.sql": `
+		ALTER TABLE project_commitments DROP COLUMN deleted_at;
+	`,
+	"071_add_commitment_deleted_at.up.sql": `
+		ALTER TABLE project_commitments ADD COLUMN deleted_at TIMESTAMPTZ DEFAULT NULL;
+	`,
 }

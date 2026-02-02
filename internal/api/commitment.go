@@ -45,7 +45,7 @@ var (
 		  JOIN az_resources azr ON pc.az_resource_id = azr.id
 		  JOIN resources r ON azr.resource_id = r.id {{AND r.name = $resource_name}}
 		  JOIN services s ON r.service_id = s.id {{AND s.type = $service_type}}
-		 WHERE %s AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+		 WHERE %s AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 		 ORDER BY pc.id
 	`))
 
@@ -64,7 +64,7 @@ var (
 		  JOIN az_resources azr ON pc.az_resource_id = azr.id
 		  JOIN resources r ON azr.resource_id = r.id
 		 WHERE r.path = $1
-		   AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+		   AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 		   AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
 	`))
 
@@ -1161,7 +1161,9 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// perform deletion
-	_, err = p.DB.Delete(&dbCommitment)
+	dbCommitment.Status = util.CommitmentStatusDeleted
+	dbCommitment.DeletedAt = Some(p.timeNow())
+	_, err = p.DB.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1242,8 +1244,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	if req.TransferStatus != limesresources.CommitmentTransferStatusNone {
 		// In order to prevent confusion, only commitments in a certain status can be marked as transferable.
-		if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, dbCommitment.Status) {
-			http.Error(w, "expired or superseded commitments cannot be transferred", http.StatusBadRequest)
+		if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired, util.CommitmentStatusDeleted}, dbCommitment.Status) {
+			http.Error(w, "expired, superseded or deleted commitments cannot be transferred", http.StatusBadRequest)
 			return
 		}
 
@@ -2143,7 +2145,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if dbCommitment.Status == liquid.CommitmentStatusSuperseded {
+	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusSuperseded, util.CommitmentStatusDeleted}, dbCommitment.Status) {
 		msg := fmt.Sprintf("unable to operate on commitment with a status of %s", dbCommitment.Status)
 		http.Error(w, msg, http.StatusForbidden)
 		return
