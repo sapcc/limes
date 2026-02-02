@@ -41,12 +41,16 @@ var (
 		       transfer_status = {{limesresources.CommitmentTransferStatusNone}},
 		       transfer_token = NULL,
 		       transfer_started_at = NULL
-		 WHERE status != {{liquid.CommitmentStatusSuperseded}} AND expires_at <= $1
+		 WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{util.CommitmentStatusDeleted}}) AND expires_at <= $1
 	`))
-	expiredCommitmentsCleanupQuery = sqlext.SimplifyWhitespace(`
+	hardDeleteCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		DELETE FROM project_commitments
+		 WHERE status = {{util.CommitmentStatusDeleted}} AND deleted_at + interval '6 months' <= $1
+	`))
+	expiredCommitmentsCleanupQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		DELETE FROM project_commitments pc
-		 WHERE expires_at + interval '1 month' <= $1
-	`)
+		 WHERE status != {{util.CommitmentStatusDeleted}} AND expires_at + interval '1 month' <= $1
+	`))
 )
 
 func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels) error {
@@ -69,6 +73,12 @@ func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels
 	_, err = c.DB.Exec(expiredCommitmentsCleanupQuery, now)
 	if err != nil {
 		return fmt.Errorf("while deleting expired commitments without undeleted successors: %w", err)
+	}
+
+	// step 3: hard-delete soft-deleted commitments after a grace period
+	_, err = c.DB.Exec(hardDeleteCommitmentsQuery, now)
+	if err != nil {
+		return fmt.Errorf("while deleting soft-deleted commitments: %w", err)
 	}
 
 	return nil

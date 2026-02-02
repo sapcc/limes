@@ -22,6 +22,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/util"
 
 	. "github.com/majewsky/gg/option"
 )
@@ -487,7 +488,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	// commitments can be deleted with sufficient privilege
+	// commitments can be soft-deleted with sufficient privilege
 	s.TokenValidator.Enforcer.AllowUncommit = true
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
@@ -516,6 +517,11 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 			},
 		},
 	})
+	var deletedCommitment db.ProjectCommitment
+	must.SucceedT(t, s.DB.SelectOne(&deletedCommitment, `SELECT * FROM project_commitments where ID = 2`))
+	assert.Equal(t, deletedCommitment.Status, util.CommitmentStatusDeleted)
+	assert.Equal(t, deletedCommitment.DeletedAt.IsSome(), true)
+	must.ReturnT(s.DB.Delete(&deletedCommitment))
 
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	assert.HTTPRequest{
@@ -606,6 +612,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 			},
 		},
 	})
+	s.MustDBExec(`DELETE FROM project_commitments WHERE ID = $1`, 3)
 
 	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
@@ -2679,7 +2686,7 @@ func Test_MergeCommitments(t *testing.T) {
 	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusNone)
 
 	// Do not merge commitments with statuses other than "active"
-	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}
+	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired, util.CommitmentStatusDeleted}
 	for _, status := range unmergeableStatuses {
 		s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
 		assert.HTTPRequest{
