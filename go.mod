@@ -17,6 +17,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.18.0
 	github.com/sapcc/go-bits v0.0.0-20260205162534-c193fd73ad83
+	golang.org/x/net v0.49.0
 )
 
 require (
@@ -35,6 +36,6 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

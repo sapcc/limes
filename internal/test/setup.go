@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -42,6 +43,7 @@ type setupParams struct {
 	WithInitialDiscovery     bool
 	WithEmptyRecordsAsNeeded bool
 	WithLiquidConnections    bool
+	WithMailTemplates        bool
 	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
 	LiquidClients            map[db.ServiceType]*MockLiquidClient
 }
@@ -126,6 +128,12 @@ func WithEmptyRecordsAsNeeded(params *setupParams) {
 // "discovery.static_config", by running the ScanDomainsAndProjectsJob.
 func WithInitialDiscovery(params *setupParams) {
 	params.WithInitialDiscovery = true
+}
+
+// WithMailTemplates is a SetupOption that populates the
+// mail notification config with dummy mail templates.
+func WithMailTemplates(params *setupParams) {
+	params.WithMailTemplates = true
 }
 
 // Setup contains all the pieces that are needed for most tests.
@@ -322,6 +330,21 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 				''                AS subresources
 			FROM tmp CROSS JOIN projects p ORDER BY p.id, tmp.id
 		`))
+	}
+
+	if params.WithMailTemplates {
+		testTemplate := core.MailTemplate{
+			Subject: "subject",
+			Body:    "<html>body</html>",
+		}
+		must.Succeed(testTemplate.Compile())
+		s.Cluster.Config.MailNotifications = Some(&core.MailConfiguration{
+			Templates: core.MailTemplateConfiguration{
+				ConfirmedCommitments:   testTemplate,
+				ExpiringCommitments:    testTemplate,
+				TransferredCommitments: testTemplate,
+			},
+		})
 	}
 
 	return s
