@@ -1391,7 +1391,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		%[4]s
 	`, now.Unix(), uuid1, uuid2, timestampUpdates())
 
-	// now we place a commitment that is in the same project, so it cannot be consume the transferable one;
+	// now we place a commitment that is in the same project, so it cannot consume the transferable one;
 	// this checks that we avoid the loophole where the customer wants to get rid of an
 	// old undeletable commitment by having it be consumed by a newer deletable one;
 	// via API, this situation can only be achieved by first creating the planned commitment
@@ -1793,6 +1793,82 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 22 AND uuid = '%[9]s' AND transfer_token = NULL;
 		%[10]s
 	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid19, uuid22, timestampUpdates())
+
+	// Now, we want to check that transfers of confirmed commitments free capacity up.
+	// Additionally, this should enable multiple confirmations in a row, which would otherwise not have enough capacity.
+	// The capacity of firstCapacityAZOne is 42, committed are currently 22.
+	// The first transferable commitment gets confirmed immediately, making committed 41.
+	// The second transferable commitment gets consumed while still in planned state.
+	creation = s.Clock.Now()
+	expiry = s.Clock.Now().Add(10 * oneDay)
+
+	uuid23 := add(db.ProjectCommitment{
+		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+		ProjectID:         berlin,
+		AZResourceID:      firstCapacityAZOne,
+		Amount:            19,
+		CreatedAt:         creation,
+		Duration:          committedForTenDays,
+		TransferToken:     Some(s.Collector.GenerateTransferToken()),
+		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
+		TransferStartedAt: Some(creation),
+	})
+	s.Clock.StepBy(1 * time.Hour)
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+
+	confirmation = s.Clock.Now().Add(-5 * time.Second)
+	creation2 = s.Clock.Now()
+	expiry2 = s.Clock.Now().Add(10 * oneDay)
+	uuid24 := add(db.ProjectCommitment{
+		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+		ProjectID:    paris,
+		AZResourceID: firstCapacityAZOne,
+		Amount:       4,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+	uuid25 := add(db.ProjectCommitment{
+		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+		ProjectID:    paris,
+		AZResourceID: firstCapacityAZOne,
+		Amount:       16,
+		CreatedAt:    s.Clock.Now(),
+		Duration:     committedForTenDays,
+	})
+	uuid26 := add(db.ProjectCommitment{
+		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+		ProjectID:         berlin,
+		AZResourceID:      firstCapacityAZOne,
+		Amount:            10,
+		CreatedAt:         creation2,
+		Duration:          committedForTenDays,
+		TransferToken:     Some(s.Collector.GenerateTransferToken()),
+		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
+		TransferStartedAt: Some(creation2),
+	})
+	tr.DBChanges().Ignore()
+
+	// We expect that the first commitment gets transferred completely in 2 steps, freeing 19 capacity.
+	// The second transferable commitment is still planned and 1 capacity is transferred, the rest is a leftover.
+	s.Clock.StepBy(1 * time.Hour)
+	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+
+	now = s.Clock.Now().Add(-5 * time.Second)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET quota = 2 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 24 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 24 WHERE id = 32 AND project_id = 3 AND az_resource_id = 4;
+		UPDATE project_az_resources SET quota = 2 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
+		DELETE FROM project_commitments WHERE id = 23 AND uuid = '%[7]s' AND transfer_token = 'dummyToken-11';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (23, '%[7]s', 1, 2, 'superseded', 19, '10 days', %[2]d, 'dummy', 'dummy', %[6]d, %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [24], "related_uuids": ["%[8]s"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 24 AND uuid = '%[8]s' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 25 AND uuid = '%[9]s' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 26 AND uuid = '%[10]s' AND transfer_token = 'dummyToken-12';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (26, '%[10]s', 1, 2, 'superseded', 10, '10 days', %[3]d, 'dummy', 'dummy', %[5]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [25], "related_uuids": ["%[9]s"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (27, '%[11]s', 1, 2, 'superseded', 15, '10 days', %[1]d, 'dummy', 'dummy', %[6]d, %[4]d, %[1]d, '{"reason": "split", "related_ids": [23], "related_uuids": ["%[7]s"]}', '{"reason": "consume", "related_ids": [25], "related_uuids": ["b7a56873-cd77-4f2c-446d-369b649430b6"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (28, '%[12]s', 1, 2, 'pending', 9, '10 days', %[1]d, 'dummy', 'dummy', %[5]d, 'public', 'dummyToken-14', '{"reason": "split", "related_ids": [26], "related_uuids": ["%[10]s"]}', %[3]d);
+		%[13]s
+	`, now.Unix(), creation.Unix(), creation2.Unix(), expiry.Unix(), expiry2.Unix(), confirmation.Unix(), uuid23, uuid24, uuid25, uuid26, test.GenerateDummyCommitmentUUID(27), test.GenerateDummyCommitmentUUID(28), timestampUpdates())
 }
 
 func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
@@ -2107,7 +2183,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // transfer_status changes
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
@@ -2155,7 +2231,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // / transfer_status changes
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
@@ -2191,13 +2267,13 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (15, '%[9]s', 2, 9, 'confirmed', 6, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 'public', 'dummyToken-6', '{"reason": "split", "related_ids": [14], "related_uuids": ["%[8]s"]}', 302440);
 		DELETE FROM project_commitments WHERE id = 9 AND uuid = '%[3]s' AND transfer_token = 'dummyToken-3';
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (9, '%[3]s', 2, 9, 'superseded', 9, '10 days', 388850, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [7], "related_uuids": ["7902699b-e42c-4a8e-46fb-bb4501726517"]}', '{"reason": "consume", "related_ids": [10], "related_uuids": ["%[4]s"]}');
-		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (8, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:9 Duration:10 days Date:1970-01-05 Service:service Resource:resource AZ:az-one Leftover:6', %[1]d);
+		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (8, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:9 Duration:10 days Date:1970-01-06 Service:service Resource:resource AZ:az-one Leftover:6', %[1]d);
 		%[10]s
 	`, scrapedAt2.Unix(), uuid7, uuid9, resultUUIDs[0], resultUUIDs[1], resultUUIDs[2], test.GenerateDummyCommitmentUUID(13), test.GenerateDummyCommitmentUUID(14), test.GenerateDummyCommitmentUUID(15), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 3)
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
-	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 1)
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // transfer_status changes
+	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 3)
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 }
 

@@ -431,7 +431,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -541,85 +541,90 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
+	var auditEvents []audittools.Event
 
-	// we do an information to liquid in any case, right now we only check the result when confirming immediately
-	newStatus := liquid.CommitmentStatusPlanned
-	totalConfirmedAfter := totalConfirmed
 	if confirmBy.IsNone() {
-		newStatus = liquid.CommitmentStatusConfirmed
-		totalConfirmedAfter += req.Amount
-	}
-	ccr := liquid.CommitmentChangeRequest{
-		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, *serviceInfo),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					loc.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmedAfter,
-						// TODO: change when introducing "guaranteed" commitments
-						TotalGuaranteedBefore: 0,
-						TotalGuaranteedAfter:  0,
-						Commitments: []liquid.Commitment{
-							{
-								UUID:      dbCommitment.UUID,
-								OldStatus: None[liquid.CommitmentStatus](),
-								NewStatus: Some(newStatus),
-								Amount:    req.Amount,
-								ConfirmBy: confirmBy,
-								ExpiresAt: req.Duration.AddTo(confirmBy.UnwrapOr(now)),
+		// When the commitment is to be confirmed immediately, the capacity check
+		// is carried out together with the transferability check in the cache.
+		mailTemplate := None[core.MailTemplate]()
+		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
+			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
+		}
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		auditContext := audit.Context{
+			UserIdentity: token,
+			Request:      r,
+		}
+		result, err := transferableCommitmentCache.CanConfirmWithTransfers(r.Context(), dbCommitment, *dbProject, *dbDomain, true, false, auditContext, cadf.CreateAction)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		if commitmentChangeRequestWasRejected(result, w, true) {
+			return
+		}
+
+		// retrieve mails and audit event
+		auditEvents = append(auditEvents, transferableCommitmentCache.RetrieveAuditEvents()...)
+		err = transferableCommitmentCache.GenerateTransferMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+
+		dbCommitment.ConfirmedAt = Some(now)
+		dbCommitment.Status = liquid.CommitmentStatusConfirmed
+	} else {
+		// when the commitment is not to be confirmed immediately, we check
+		// (or inform the liquid) about the capacity independently.
+		ccr := liquid.CommitmentChangeRequest{
+			AZ:          loc.AvailabilityZone,
+			InfoVersion: serviceInfo.Version,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				dbProject.UUID: {
+					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						loc.ResourceName: {
+							TotalConfirmedBefore: totalConfirmed,
+							TotalConfirmedAfter:  totalConfirmed,
+							// TODO: change when introducing "guaranteed" commitments
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0,
+							Commitments: []liquid.Commitment{
+								{
+									UUID:      dbCommitment.UUID,
+									OldStatus: None[liquid.CommitmentStatus](),
+									NewStatus: Some(liquid.CommitmentStatusPlanned),
+									Amount:    req.Amount,
+									ConfirmBy: confirmBy,
+									ExpiresAt: req.Duration.AddTo(confirmBy.UnwrapOr(now)),
+								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, p.DB)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
-
-	if ccr.RequiresConfirmation() {
-		// if not planned for confirmation in the future, confirm immediately (or fail)
-		if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
-			return
 		}
-		dbCommitment.ConfirmedAt = Some(now)
-		dbCommitment.Status = liquid.CommitmentStatusConfirmed
-
-		// handle public transfer commitments (does not alter the confirmed commitment)
-		mailTemplate := None[core.MailTemplate]()
-		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
-			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
-		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
-		err = transferableCommitmentCache.CheckAndConsume(dbCommitment, totalConfirmed)
-		if respondwith.ObfuscatedErrorText(w, err) {
+		if ccr.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 			return
 		}
-		ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, audit.Context{
-			UserIdentity: token,
-			Request:      r,
-		})
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		for _, event := range ae {
-			p.auditor.Record(event)
-		}
-	} else {
-		// TODO: when introducing guaranteed, the customer can choose via the API signature whether he wants to create
-		// the commitment only as guaranteed (RequestAsGuaranteed). If this request then fails, the customer could
-		// resubmit it and get a planned commitment, which might never get confirmed.
+		// TODO: change when introducing "guaranteed" commitments
 		dbCommitment.Status = liquid.CommitmentStatusPlanned
+
+		auditEvents = append(auditEvents, audit.CommitmentEventTarget{
+			CommitmentChangeRequest: ccr,
+		}.ReplicateForAllProjects(audittools.Event{
+			Time:       now,
+			Request:    r,
+			User:       token,
+			ReasonCode: http.StatusCreated,
+			Action:     cadf.CreateAction,
+		}, None[cadf.Action](), None[liquid.ProjectUUID]())...)
 	}
 
 	// create commitment
@@ -627,22 +632,10 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-
 	err = tx.Commit()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-
-	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
-	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, *serviceInfo),
-	}.ReplicateForAllProjects(audittools.Event{
-		Time:       now,
-		Request:    r,
-		User:       token,
-		ReasonCode: http.StatusCreated,
-		Action:     cadf.CreateAction,
-	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -656,6 +649,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	// render response
+	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": commitment})
 }
 
@@ -840,7 +836,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -868,14 +864,14 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1014,7 +1010,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1052,14 +1048,14 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1132,7 +1128,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1167,14 +1163,14 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1300,7 +1296,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -1330,8 +1326,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 		ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName] = rcr
 		cac[dbCommitment.UUID] = audit.CommitmentAttributeChangeset{
-			OldTransferStatus: Some(dbCommitment.TransferStatus),
-			NewTransferStatus: Some(req.TransferStatus),
+			OldTransferStatus: dbCommitment.TransferStatus,
+			NewTransferStatus: req.TransferStatus,
 		}
 
 		dbCommitment.TransferStatus = req.TransferStatus
@@ -1396,8 +1392,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 		ccr.ByProject[dbProject.UUID].ByResource[loc.ResourceName] = rcr
 		cac[transferCommitment.UUID] = audit.CommitmentAttributeChangeset{
-			OldTransferStatus: Some(limesresources.CommitmentTransferStatusNone),
-			NewTransferStatus: Some(req.TransferStatus),
+			OldTransferStatus: limesresources.CommitmentTransferStatusNone,
+			NewTransferStatus: req.TransferStatus,
 		}
 
 		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
@@ -1433,15 +1429,15 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest:      audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
-		CommitmentAttributeChangeset: cac,
+		CommitmentChangeRequest:       ccr,
+		CommitmentAttributeChangesets: cac,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1631,8 +1627,8 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	// check move is allowed
 	cac := map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{
 		dbCommitment.UUID: {
-			OldTransferStatus: Some(dbCommitment.TransferStatus),
-			NewTransferStatus: Some(limesresources.CommitmentTransferStatusNone),
+			OldTransferStatus: dbCommitment.TransferStatus,
+			NewTransferStatus: limesresources.CommitmentTransferStatusNone,
 		},
 	}
 	ccr := liquid.CommitmentChangeRequest{
@@ -1640,7 +1636,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			sourceProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
@@ -1662,7 +1658,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				},
 			},
 			targetProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: targetTotalConfirmed,
@@ -1710,18 +1706,16 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 
-	ccr = audit.EnsureLiquidProjectMetadata(ccr, sourceProject, sourceDomain, serviceInfo)
-	ccr = audit.EnsureLiquidProjectMetadata(ccr, *targetProject, *targetDomain, serviceInfo)
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest:      ccr,
-		CommitmentAttributeChangeset: cac,
+		CommitmentChangeRequest:       ccr,
+		CommitmentAttributeChangesets: cac,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1997,7 +1991,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					sourceLoc.ResourceName: {
 						TotalConfirmedBefore: sourceTotalConfirmed,
@@ -2086,14 +2080,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -2192,7 +2186,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		InfoVersion: serviceInfo.Version,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain, serviceInfo),
+				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					loc.ResourceName: {
 						TotalConfirmedBefore: totalConfirmed,
@@ -2236,14 +2230,14 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
-		CommitmentChangeRequest: audit.EnsureLiquidProjectMetadata(ccr, *dbProject, *dbDomain, serviceInfo),
+		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjects(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
-	})
+	}, None[cadf.Action](), None[liquid.ProjectUUID]())
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
