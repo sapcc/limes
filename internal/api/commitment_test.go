@@ -878,13 +878,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-// here, we only test a very basic case. The same code of the TransferableCommitmentCache
+// We only test a very basic case. The same code of the TransferableCommitmentCache
 // is used by ScrapeCapacity, so the extensive testing of all the different edge cases
-// happens there. This is only to prevent that we unintentionally break the integration with
-// the API.
+// happens there. This is only to prevent that we unintentionally break the API integration.
 func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
-	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
+	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
@@ -944,18 +943,15 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 	events := s.Auditor.RecordedEvents()
-	assert.Equal(t, len(events), 3)
-	// consumption of first commitment
-	assert.Equal(t, events[0].Action, datamodel.ConsumeAction)
+	assert.Equal(t, len(events), 2)
+	// first project: commitment creation POV
+	assert.Equal(t, events[0].Action, cadf.CreateAction)
 	assert.Equal(t, len(events[0].Target.Attachments), 2) // changeRequest + transfer_status change
-	assert.Equal(t, events[0].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, test.GenerateDummyCommitmentUUID(1))))
-	// consumption of second commitment
+	assert.Equal(t, events[0].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""},"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, uuid1, uuid2)))
+	// second project: commitment consumption POV
 	assert.Equal(t, events[1].Action, datamodel.ConsumeAction)
 	assert.Equal(t, len(events[1].Target.Attachments), 2) // changeRequest + transfer_status change
-	assert.Equal(t, events[1].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, test.GenerateDummyCommitmentUUID(2))))
-	// creation of new commitment
-	assert.Equal(t, events[2].Action, cadf.CreateAction)
-	assert.Equal(t, len(events[2].Target.Attachments), 1) // changeRequest
+	assert.Equal(t, events[1].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""},"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, uuid1, uuid2)))
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_commitments WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = 'dummyToken-1';
@@ -970,7 +966,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 func TestCommitmentDelegationToDB(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
-	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
+	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := assert.JSONObject{
