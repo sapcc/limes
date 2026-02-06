@@ -930,3 +930,9 @@ Requires the `?service_type` query parameter.
 
 Generates the request body payload for querying the LIQUID API endpoint /v1/projects/:uuid/report-usage of a specific service and project.
 Requires the `?service_type` and `?project_id` query parameters.
+
+### GET /admin/mail/render
+
+Renders the mail template of the respective type using dummy values and
+verifies that the generated content is valid HTML.
+Requires the `?template_type` query parameter.
