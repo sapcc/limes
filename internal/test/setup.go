@@ -5,8 +5,6 @@ package test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"net/http"
@@ -163,12 +161,8 @@ func transferTokenGenerator() (generator func() string, currentTransferTokenNumb
 
 // GenerateDummyCommitmentUUID generates a deterministic UUID from the given ID.
 func GenerateDummyCommitmentUUID(idx uint64) liquid.CommitmentUUID {
-	// e.g. idx = 5
-	//   -> str = hex(sha256("5")) = "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
-	//   -> uuid = "ef2d127d-e37b-4942-baad-06145e54b0c6"
-	buf := sha256.Sum256([]byte(strconv.FormatUint(idx, 10)))
-	str := hex.EncodeToString(buf[:])
-	uuid := fmt.Sprintf("%s-%s-4%s-%s-%s", str[0:8], str[8:12], str[13:16], str[16:20], str[20:32])
+	str := fmt.Sprintf("%032d", idx) // pad idx to 32 digits with leading zeros
+	uuid := fmt.Sprintf("%s-%s-%s-%s-%s", str[0:8], str[8:12], str[12:16], str[16:20], str[20:32])
 	return liquid.CommitmentUUID(uuid)
 }
 

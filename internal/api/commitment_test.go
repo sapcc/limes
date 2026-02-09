@@ -5,7 +5,6 @@ package api_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"net/http"
 	"testing"
@@ -333,7 +332,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -365,7 +364,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"capacity": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    10,
 								ConfirmBy: Some(s.Clock.Now().Add(14 * day).Local()),
@@ -390,7 +389,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}
 	resp2 := assert.JSONObject{
 		"id":                2,
-		"uuid":              test.GenerateDummyCommitmentUUID(2),
+		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "first",
 		"resource_name":     "things",
 		"availability_zone": "any",
@@ -420,7 +419,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    20,
 								ConfirmBy: Some(s.Clock.Now().Add(14 * day).Local()),
@@ -503,7 +502,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 					"things": {
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								OldStatus: Some(liquid.CommitmentStatusPlanned),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    20,
@@ -641,7 +640,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 						TotalConfirmedBefore: 10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    10,
@@ -729,7 +728,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		TotalConfirmedAfter: maxCommittableCapacity,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      test.GenerateDummyCommitmentUUID(2),
+				UUID:      "00000000-0000-0000-0000-000000000002",
 				NewStatus: Some(liquid.CommitmentStatusConfirmed),
 				Amount:    maxCommittableCapacity,
 				ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -785,7 +784,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 
 	// create a commitment for some of that capacity
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = committedCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(4)
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = "00000000-0000-0000-0000-000000000004"
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
@@ -804,7 +803,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	// check that can-confirm can only confirm the remainder of the available capacity, not more
 	remainingCommittableCapacity := maxCommittableCapacity - committedCapacity
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(5)
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = "00000000-0000-0000-0000-000000000005"
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = committedCapacity
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
@@ -822,7 +821,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = remainingCommittableCapacity + 1
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(6)
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = "00000000-0000-0000-0000-000000000006"
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
@@ -843,7 +842,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		s.Clock.Now(), liquid.CommitmentStatusExpired)
 
 	capacityResourceCommitmentChangeset.Commitments[0].Amount = maxCommittableCapacity
-	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(7)
+	capacityResourceCommitmentChangeset.Commitments[0].UUID = "00000000-0000-0000-0000-000000000007"
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
@@ -889,14 +888,13 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 
 	dresden := s.GetProjectID("dresden")
 	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
-	uuid := s.Collector.GenerateProjectCommitmentUUID()
 	s.MustDBInsert(&db.ProjectCommitment{
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
 		CreationContextJSON: json.RawMessage(`{}`),
 		ExpiresAt:           s.Clock.Now().Add(time.Hour),
 		Status:              liquid.CommitmentStatusPlanned,
-		UUID:                uuid,
+		UUID:                s.Collector.GenerateProjectCommitmentUUID(),
 		ProjectID:           dresden,
 		AZResourceID:        firstCapacityAZOne,
 		Amount:              1,
@@ -932,16 +930,16 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	assert.Equal(t, len(events), 2)
 	assert.Equal(t, events[0].Action, datamodel.ConsumeAction)
 	assert.Equal(t, len(events[0].Target.Attachments), 2) // changeRequest + transfer_status change
-	assert.Equal(t, events[0].Target.Attachments[1].Content, any(fmt.Sprintf(`{"%s":{"OldTransferStatus":"public","NewTransferStatus":""}}`, test.GenerateDummyCommitmentUUID(1))))
+	assert.Equal(t, events[0].Target.Attachments[1].Content, `{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""}}`)
 	assert.Equal(t, events[1].Action, cadf.CreateAction)
 	assert.Equal(t, len(events[1].Target.Attachments), 1) // changeRequest
 
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_commitments WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '%[1]s', 2, 2, 'superseded', 1, '1 hour', %[3]d, 'dummy', 'dummy', %[4]d, %[3]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["%[2]s"]}');
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (2, '%[2]s', 1, 2, 'confirmed', 2, '2 hours', %[3]d, 'uuid-for-alice', 'alice@Default', %[3]d, %[5]d, '{"reason": "create"}');
-		UPDATE services SET next_scrape_at = %[3]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-    `, uuid, test.GenerateDummyCommitmentUUID(2), s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
+		DELETE FROM project_commitments WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = 'dummyToken-1';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 2, 'superseded', 1, '1 hour', %[1]d, 'dummy', 'dummy', %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["00000000-0000-0000-0000-000000000002"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 1, 2, 'confirmed', 2, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}');
+		UPDATE services SET next_scrape_at = %[1]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+    `, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
@@ -1018,7 +1016,7 @@ func TestGetPublicCommitments(t *testing.T) {
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -1330,7 +1328,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1458,7 +1456,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    10,
@@ -1471,7 +1469,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 							},
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(4),
+								UUID:      "00000000-0000-0000-0000-000000000004",
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    1,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1531,7 +1529,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1596,7 +1594,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1616,7 +1614,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp2 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1636,7 +1634,7 @@ func Test_TransferCommitment(t *testing.T) {
 	transferToken2 := test.GenerateDummyTransferToken(2)
 	resp3 := assert.JSONObject{
 		"id":                2,
-		"uuid":              test.GenerateDummyCommitmentUUID(2),
+		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1655,7 +1653,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 	resp4 := assert.JSONObject{
 		"id":                2,
-		"uuid":              test.GenerateDummyCommitmentUUID(2),
+		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -1708,7 +1706,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  0,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    10,
@@ -1725,7 +1723,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1782,7 +1780,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  1,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: None[liquid.CommitmentStatus](),
 								Amount:    9,
@@ -1799,7 +1797,7 @@ func Test_TransferCommitment(t *testing.T) {
 						TotalConfirmedAfter:  9,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    9,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1907,7 +1905,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 						TotalConfirmedBefore: 10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -1923,7 +1921,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 						TotalConfirmedAfter:  20,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -2106,7 +2104,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		TotalConfirmedBefore: 21,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      test.GenerateDummyCommitmentUUID(1),
+				UUID:      "00000000-0000-0000-0000-000000000001",
 				OldStatus: Some(liquid.CommitmentStatusConfirmed),
 				NewStatus: Some(liquid.CommitmentStatusSuperseded),
 				Amount:    21,
@@ -2118,7 +2116,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		TotalConfirmedAfter: 14,
 		Commitments: []liquid.Commitment{
 			{
-				UUID:      test.GenerateDummyCommitmentUUID(2),
+				UUID:      "00000000-0000-0000-0000-000000000002",
 				NewStatus: Some(liquid.CommitmentStatusConfirmed),
 				Amount:    14,
 				ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -2169,7 +2167,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityBCommitmentChangeset.TotalConfirmedBefore = 21
 	capacityBCommitmentChangeset.TotalConfirmedAfter = 18
 	capacityBCommitmentChangeset.Commitments = append(capacityBCommitmentChangeset.Commitments, liquid.Commitment{
-		UUID:      test.GenerateDummyCommitmentUUID(2),
+		UUID:      "00000000-0000-0000-0000-000000000002",
 		NewStatus: Some(liquid.CommitmentStatusConfirmed),
 		Amount:    18,
 		ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
@@ -2249,7 +2247,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.TotalConfirmedBefore = 2
 	capacityACommitmentChangeset.TotalConfirmedAfter = 2
 	capacityACommitmentChangeset.Commitments[0] = liquid.Commitment{
-		UUID:      test.GenerateDummyCommitmentUUID(5),
+		UUID:      "00000000-0000-0000-0000-000000000005",
 		NewStatus: Some(liquid.CommitmentStatusPlanned),
 		Amount:    2,
 		ExpiresAt: s.Clock.Now().Add(14 * day).Add(1 * time.Hour).Local(),
@@ -2258,7 +2256,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityBCommitmentChangeset.TotalConfirmedBefore = 18
 	capacityBCommitmentChangeset.Commitments = []liquid.Commitment{
 		{
-			UUID:      test.GenerateDummyCommitmentUUID(4),
+			UUID:      "00000000-0000-0000-0000-000000000004",
 			OldStatus: Some(liquid.CommitmentStatusPlanned),
 			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    3,
@@ -2325,7 +2323,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                1,
-			"uuid":              test.GenerateDummyCommitmentUUID(1),
+			"uuid":              "00000000-0000-0000-0000-000000000001",
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -2353,7 +2351,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:         test.GenerateDummyCommitmentUUID(1),
+								UUID:         "00000000-0000-0000-0000-000000000001",
 								OldStatus:    Some(liquid.CommitmentStatusConfirmed),
 								NewStatus:    Some(liquid.CommitmentStatusConfirmed),
 								Amount:       10,
@@ -2390,7 +2388,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                2,
-			"uuid":              test.GenerateDummyCommitmentUUID(2),
+			"uuid":              "00000000-0000-0000-0000-000000000002",
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -2418,7 +2416,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 						TotalConfirmedAfter:  10,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:         test.GenerateDummyCommitmentUUID(2),
+								UUID:         "00000000-0000-0000-0000-000000000002",
 								OldStatus:    Some(liquid.CommitmentStatusPlanned),
 								NewStatus:    Some(liquid.CommitmentStatusPlanned),
 								Amount:       10,
@@ -2556,7 +2554,7 @@ func Test_MergeCommitments(t *testing.T) {
 	}
 	resp4 := assert.JSONObject{
 		"id":                4,
-		"uuid":              test.GenerateDummyCommitmentUUID(4),
+		"uuid":              "00000000-0000-0000-0000-000000000004",
 		"service_type":      "second",
 		"resource_name":     "other",
 		"availability_zone": "az-one",
@@ -2574,7 +2572,7 @@ func Test_MergeCommitments(t *testing.T) {
 	// Merged commitment
 	resp5 := assert.JSONObject{
 		"id":                5,
-		"uuid":              test.GenerateDummyCommitmentUUID(5),
+		"uuid":              "00000000-0000-0000-0000-000000000005",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -2711,20 +2709,20 @@ func Test_MergeCommitments(t *testing.T) {
 						TotalConfirmedAfter:  15,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(5),
+								UUID:      "00000000-0000-0000-0000-000000000005",
 								NewStatus: Some(liquid.CommitmentStatusConfirmed),
 								Amount:    15,
 								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).Local(),
 							},
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(1),
+								UUID:      "00000000-0000-0000-0000-000000000001",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    10,
 								ExpiresAt: s.Clock.Now().Add(1 * time.Hour).Local(),
 							},
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(2),
+								UUID:      "00000000-0000-0000-0000-000000000002",
 								OldStatus: Some(liquid.CommitmentStatusConfirmed),
 								NewStatus: Some(liquid.CommitmentStatusSuperseded),
 								Amount:    5,
@@ -2752,7 +2750,7 @@ func Test_MergeCommitments(t *testing.T) {
 	expectedContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{5},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{test.GenerateDummyCommitmentUUID(5)},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{"00000000-0000-0000-0000-000000000005"},
 	}
 	var supersedeContext db.CommitmentWorkflowContext
 	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
@@ -2798,7 +2796,7 @@ func Test_RenewCommitments(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                3,
-		"uuid":              test.GenerateDummyCommitmentUUID(3),
+		"uuid":              "00000000-0000-0000-0000-000000000003",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -2815,7 +2813,7 @@ func Test_RenewCommitments(t *testing.T) {
 	}
 	resp2 := assert.JSONObject{
 		"id":                4,
-		"uuid":              test.GenerateDummyCommitmentUUID(4),
+		"uuid":              "00000000-0000-0000-0000-000000000004",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -2849,7 +2847,7 @@ func Test_RenewCommitments(t *testing.T) {
 						TotalConfirmedAfter:  2,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(3),
+								UUID:      "00000000-0000-0000-0000-000000000003",
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    2,
 								ExpiresAt: s.Clock.Now().Add(2 * time.Hour).Local(),
@@ -2878,7 +2876,7 @@ func Test_RenewCommitments(t *testing.T) {
 						TotalConfirmedAfter:  1,
 						Commitments: []liquid.Commitment{
 							{
-								UUID:      test.GenerateDummyCommitmentUUID(4),
+								UUID:      "00000000-0000-0000-0000-000000000004",
 								NewStatus: Some(liquid.CommitmentStatusPlanned),
 								Amount:    1,
 								ExpiresAt: s.Clock.Now().Add(4 * time.Hour).Local(),
@@ -2959,7 +2957,7 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"uuid":              test.GenerateDummyCommitmentUUID(1),
+		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",

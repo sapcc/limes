@@ -745,17 +745,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	)
 }
 
-func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liquidHandlesCommitments bool) (s test.Setup, add func(db.ProjectCommitment) liquid.CommitmentUUID) {
-	add = func(c db.ProjectCommitment) liquid.CommitmentUUID {
-		t.Helper()
-		c.CreatorUUID = "dummy"
-		c.CreatorName = "dummy"
-		c.CreationContextJSON = json.RawMessage(`{}`)
-		c.ExpiresAt = c.Duration.AddTo(c.ConfirmBy.UnwrapOr(c.CreatedAt))
-		c.Status = liquid.CommitmentStatusPlanned
-		s.MustDBInsert(&c)
-		return c.UUID
-	}
+func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liquidHandlesCommitments bool) (s test.Setup, add func(db.ProjectCommitment)) {
 	srvInfo := liquid.ServiceInfo{
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
@@ -810,6 +800,17 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 
 	s.LiquidClients["first"].CapacityReport.Set(firstCapacityReport)
 	s.LiquidClients["second"].CapacityReport.Set(secondCapacityReport)
+
+	add = func(c db.ProjectCommitment) {
+		t.Helper()
+		c.UUID = s.Collector.GenerateProjectCommitmentUUID()
+		c.CreatorUUID = "dummy"
+		c.CreatorName = "dummy"
+		c.CreationContextJSON = json.RawMessage(`{}`)
+		c.ExpiresAt = c.Duration.AddTo(c.ConfirmBy.UnwrapOr(c.CreatedAt))
+		c.Status = liquid.CommitmentStatusPlanned
+		s.MustDBInsert(&c)
+	}
 	return
 }
 
@@ -898,7 +899,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	// day 1: just a boring commitment that easily fits in the available capacity
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000001",
 		ProjectID:    berlin,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       10,
@@ -909,7 +909,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	// day 2: very large commitments that exceed the raw capacity; only the one on "first" works because that service has a large overcommit factor
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000002",
 		ProjectID:    berlin,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       100,
@@ -918,7 +917,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000003",
 		ProjectID:    berlin,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       100,
@@ -931,7 +929,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	//        1. ID=3 does not block these commitments even though it is on the same resource and AZ
 	//        2. we cannot confirm all of these; which ones are confirmed demonstrates the order of consideration
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000004",
 		ProjectID:    dresden,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       10,
@@ -940,7 +937,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000005",
 		ProjectID:    dresden,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       10,
@@ -949,7 +945,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000006",
 		ProjectID:    dresden,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       10,
@@ -961,7 +956,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// day 4: test confirmation that is (or is not) blocked by existing usage in other projects
 	// (on a capacity of 420, there is already 250 usage in berlin, so only berlin can confirm a commitment for amount = 300, even though dresden asked first)
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000007",
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZTwo,
 		Amount:       300,
@@ -970,7 +964,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000008",
 		ProjectID:    berlin,
 		AZResourceID: firstCapacityAZTwo,
 		Amount:       300,
@@ -982,7 +975,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// day 5: test commitments that cannot be confirmed until the previous commitment expires
 	// (ID=9 is confirmed, and then ID=10 cannot be confirmed until ID=9 expires because ID=9 blocks absolutely all available capacity in that resource and AZ)
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000009",
 		ProjectID:    berlin,
 		AZResourceID: secondCapacityAZTwo,
 		Amount:       22,
@@ -991,7 +983,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForOneHour,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000010",
 		ProjectID:    dresden,
 		AZResourceID: secondCapacityAZTwo,
 		Amount:       2,
@@ -1352,8 +1343,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	// now we place a commitment in one project to be transferred and another one, but in different AZs
 	expiry := s.Clock.Now().Add(10 * oneDay)
 	creation := s.Clock.Now()
-	uuid1 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         berlin,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            1,
@@ -1363,8 +1353,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
 	})
-	uuid2 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZTwo,
 		Amount:       1,
@@ -1384,20 +1373,19 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '%[2]s' AND transfer_token = 'dummyToken-1';
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 2 AND uuid = '%[3]s' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = 'dummyToken-1';
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 3 AND project_id = 2 AND service_id = 1;
-		%[4]s
-	`, now.Unix(), uuid1, uuid2, timestampUpdates())
+		%[2]s
+	`, now.Unix(), timestampUpdates())
 
 	// now we place a commitment that is in the same project, so it cannot be consume the transferable one;
 	// this checks that we avoid the loophole where the customer wants to get rid of an
 	// old undeletable commitment by having it be consumed by a newer deletable one;
 	// via API, this situation can only be achieved by first creating the planned commitment
 	// and then setting another one to be transferred
-	uuid3 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    berlin,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       2,
@@ -1414,13 +1402,12 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '%[2]s' AND transfer_token = NULL;
-		%[3]s
-	`, now.Unix(), uuid3, timestampUpdates())
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
+		%[2]s
+	`, now.Unix(), timestampUpdates())
 
 	// now we place a commitment that is in a different project, but it was placed before the transfer one
-	uuid4 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       4,
@@ -1437,13 +1424,12 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 4 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 5 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '%[2]s' AND transfer_token = NULL;
-		%[3]s
-	`, now.Unix(), uuid4, timestampUpdates())
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+		%[2]s
+	`, now.Unix(), timestampUpdates())
 
 	// now we simulate that the transfer commitment is taken over fully by a commitment in the other project
-	uuid5 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       1,
@@ -1462,17 +1448,16 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 6 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 1 AND uuid = '%[5]s' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '%[5]s', 1, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[3]d, %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [5], "related_uuids": ["%[6]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 5 AND uuid = '%[6]s' AND transfer_token = NULL;
-		%[7]s
-	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), uuid1, uuid5, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = 'dummyToken-1';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 1, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[3]d, %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [5], "related_uuids": ["00000000-0000-0000-0000-000000000005"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
+		%[5]s
+	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 
 	// now, we simulate a partial takeover by 2 new commitments, so that a split happens
 	expiry = s.Clock.Now().Add(10 * oneDay)
 	creation = s.Clock.Now()
-	uuid6 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         berlin,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            7,
@@ -1482,16 +1467,14 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
 	})
-	uuid7 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       2,
 		CreatedAt:    s.Clock.Now(),
 		Duration:     committedForTenDays,
 	})
-	uuid8 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       4,
@@ -1513,18 +1496,17 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 12 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (10, '%[8]s', 1, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[1]d, %[3]d, 'public', 'dummyToken-4', '{"reason": "split", "related_ids": [9], "related_uuids": ["19581e27-de7c-4d00-ff1c-e50b2047e7a5"]}', %[2]d);
-		DELETE FROM project_commitments WHERE id = 6 AND uuid = '%[4]s' AND transfer_token = 'dummyToken-2';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (6, '%[4]s', 1, 2, 'superseded', 7, '10 days', %[2]d, 'dummy', 'dummy', %[1]d, %[3]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [7], "related_uuids": ["%[5]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 7 AND uuid = '%[5]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 8 AND uuid = '%[6]s' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (9, '%[7]s', 1, 2, 'superseded', 5, '10 days', %[1]d, 'dummy', 'dummy', %[1]d, %[3]d, %[1]d, '{"reason": "split", "related_ids": [6], "related_uuids": ["e7f6c011-776e-4db7-cd33-0b54174fd76f"]}', '{"reason": "consume", "related_ids": [8], "related_uuids": ["2c624232-cdd2-4177-1294-dfbb310aca00"]}');
-		%[9]s
-	`, now.Unix(), creation.Unix(), expiry.Unix(), uuid6, uuid7, uuid8, test.GenerateDummyCommitmentUUID(9), test.GenerateDummyCommitmentUUID(10), timestampUpdates())
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (10, '00000000-0000-0000-0000-000000000010', 1, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[1]d, %[3]d, 'public', 'dummyToken-4', '{"reason": "split", "related_ids": [9], "related_uuids": ["00000000-0000-0000-0000-000000000009"]}', %[2]d);
+		DELETE FROM project_commitments WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = 'dummyToken-2';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (6, '00000000-0000-0000-0000-000000000006', 1, 2, 'superseded', 7, '10 days', %[2]d, 'dummy', 'dummy', %[1]d, %[3]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [7], "related_uuids": ["00000000-0000-0000-0000-000000000007"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (9, '00000000-0000-0000-0000-000000000009', 1, 2, 'superseded', 5, '10 days', %[1]d, 'dummy', 'dummy', %[1]d, %[3]d, %[1]d, '{"reason": "split", "related_ids": [6], "related_uuids": ["00000000-0000-0000-0000-000000000006"]}', '{"reason": "consume", "related_ids": [8], "related_uuids": ["00000000-0000-0000-0000-000000000008"]}');
+		%[4]s
+	`, now.Unix(), creation.Unix(), expiry.Unix(), timestampUpdates())
 
 	// takeover the rest now when more consumers are available
-	uuid11 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       1,
@@ -1543,17 +1525,16 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 13 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 10 AND uuid = '%[5]s' AND transfer_token = 'dummyToken-4';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (10, '%[5]s', 1, 2, 'superseded', 1, '10 days', %[3]d, 'dummy', 'dummy', %[3]d, %[4]d, %[1]d, '{"reason": "split", "related_ids": [9], "related_uuids": ["19581e27-de7c-4d00-ff1c-e50b2047e7a5"]}', '{"reason": "consume", "related_ids": [11], "related_uuids": ["4fc82b26-aecb-47d2-868c-4efbe3581732"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 11 AND uuid = '%[6]s' AND transfer_token = NULL;
-		%[7]s
-	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), test.GenerateDummyCommitmentUUID(10), uuid11, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 10 AND uuid = '00000000-0000-0000-0000-000000000010' AND transfer_token = 'dummyToken-4';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (10, '00000000-0000-0000-0000-000000000010', 1, 2, 'superseded', 1, '10 days', %[3]d, 'dummy', 'dummy', %[3]d, %[4]d, %[1]d, '{"reason": "split", "related_ids": [9], "related_uuids": ["00000000-0000-0000-0000-000000000009"]}', '{"reason": "consume", "related_ids": [11], "related_uuids": ["00000000-0000-0000-0000-000000000011"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 11 AND uuid = '00000000-0000-0000-0000-000000000011' AND transfer_token = NULL;
+		%[5]s
+	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 
 	// now, we do a takeover of a commitment that is valid shorter than the consuming commitment (but confirm_by earlier)
 	expiry = s.Clock.Now().Add(10 * oneDay)
 	creation = s.Clock.Now()
-	uuid12 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         berlin,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            3,
@@ -1563,8 +1544,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
 	})
-	uuid13 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       3,
@@ -1580,17 +1560,16 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 15 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 16 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 12 AND uuid = '%[5]s' AND transfer_token = 'dummyToken-5';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (12, '%[5]s', 1, 2, 'superseded', 3, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [13], "related_uuids": ["%[6]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 13 AND uuid = '%[6]s' AND transfer_token = NULL;
-		%[7]s
-	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), uuid12, uuid13, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 12 AND uuid = '00000000-0000-0000-0000-000000000012' AND transfer_token = 'dummyToken-5';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (12, '00000000-0000-0000-0000-000000000012', 1, 2, 'superseded', 3, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [13], "related_uuids": ["00000000-0000-0000-0000-000000000013"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 13 AND uuid = '00000000-0000-0000-0000-000000000013' AND transfer_token = NULL;
+		%[5]s
+	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 
 	// now, we do a takeover of an older posted commitment that is valid longer, but the shorter commitment consumes the leftover time
 	expiry = s.Clock.Now().Add(9 * oneDay)
 	creation = s.Clock.Now().Add(-11 * oneDay) // before the transfer commitment
-	uuid14 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         berlin,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            1,
@@ -1600,8 +1579,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
 	})
-	uuid15 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    dresden,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       1,
@@ -1617,11 +1595,11 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 16 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 17 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 14 AND uuid = '%[5]s' AND transfer_token = 'dummyToken-6';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (14, '%[5]s', 1, 2, 'superseded', 1, '20 days', %[2]d, 'dummy', 'dummy', %[1]d, %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [15], "related_uuids": ["%[6]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 15 AND uuid = '%[6]s' AND transfer_token = NULL;
-		%[7]s
-	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), uuid14, uuid15, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 14 AND uuid = '00000000-0000-0000-0000-000000000014' AND transfer_token = 'dummyToken-6';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (14, '00000000-0000-0000-0000-000000000014', 1, 2, 'superseded', 1, '20 days', %[2]d, 'dummy', 'dummy', %[1]d, %[4]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [15], "related_uuids": ["00000000-0000-0000-0000-000000000015"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 15 AND uuid = '00000000-0000-0000-0000-000000000015' AND transfer_token = NULL;
+		%[5]s
+	`, now.Unix(), creation.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 
 	// now we stagger the confirm_by dates and set the commitments to be transferred in a different order
 	// uuid16 is due to confirm earlier, but set to be transferred later
@@ -1631,8 +1609,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	expiry = s.Clock.Now().Add(11 * oneDay)
 	confirmBy := s.Clock.Now().Add(24 * time.Hour)
 	transferStartedAt := s.Clock.Now().Add(1 * time.Hour)
-	uuid16 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         berlin,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            3,
@@ -1646,8 +1623,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	expiry2 := s.Clock.Now().Add(12 * oneDay)
 	confirmBy2 := s.Clock.Now().Add(48 * time.Hour)
 	transferStartedAt2 := s.Clock.Now().Add(-1 * time.Hour)
-	uuid17 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         dresden,
 		AZResourceID:      firstCapacityAZOne,
 		Amount:            2,
@@ -1658,8 +1634,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		TransferStartedAt: Some(transferStartedAt2),
 		ConfirmBy:         Some(confirmBy2),
 	})
-	uuid18 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    paris,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       1,
@@ -1686,9 +1661,9 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 5 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 5 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 16 AND uuid = '%[2]s' AND transfer_token = 'dummyToken-7';
-		%[3]s
-	`, now.Unix(), uuid16, timestampUpdates())
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 16 AND uuid = '00000000-0000-0000-0000-000000000016' AND transfer_token = 'dummyToken-7';
+		%[2]s
+	`, now.Unix(), timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1699,18 +1674,17 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	confirmation2 := now
 	creation3 := now
 
-	uuid19 := test.GenerateDummyCommitmentUUID(19)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 18 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 19 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 16 AND uuid = '%[7]s' AND transfer_token = 'dummyToken-7';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (16, '%[7]s', 1, 2, 'superseded', 3, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [17], "related_uuids": ["%[8]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 17 AND uuid = '%[8]s' AND transfer_token = 'dummyToken-8';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (19, '%[9]s', 1, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, 'public', 'dummyToken-9', '{"reason": "split", "related_ids": [16], "related_uuids": ["%[7]s"]}', %[3]d);
-		%[10]s
-	`, now.Unix(), creation.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid17, uuid19, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 16 AND uuid = '00000000-0000-0000-0000-000000000016' AND transfer_token = 'dummyToken-7';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (16, '00000000-0000-0000-0000-000000000016', 1, 2, 'superseded', 3, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [17], "related_uuids": ["00000000-0000-0000-0000-000000000017"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 17 AND uuid = '00000000-0000-0000-0000-000000000017' AND transfer_token = 'dummyToken-8';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (19, '00000000-0000-0000-0000-000000000019', 1, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, 'public', 'dummyToken-9', '{"reason": "split", "related_ids": [16], "related_uuids": ["00000000-0000-0000-0000-000000000016"]}', %[3]d);
+		%[7]s
+	`, now.Unix(), creation.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1720,19 +1694,18 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	now = s.Clock.Now().Add(-5 * time.Second)
 	creation2 := now
 
-	uuid20 := test.GenerateDummyCommitmentUUID(20)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 17 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 18 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 32 AND project_id = 3 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 17 AND uuid = '%[7]s' AND transfer_token = 'dummyToken-8';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (17, '%[7]s', 2, 2, 'superseded', 2, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [18], "related_uuids": ["%[8]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 18 AND uuid = '%[8]s' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (20, '%[9]s', 2, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, 'public', 'dummyToken-10', '{"reason": "split", "related_ids": [17], "related_uuids": ["%[7]s"]}', %[3]d);
+		DELETE FROM project_commitments WHERE id = 17 AND uuid = '00000000-0000-0000-0000-000000000017' AND transfer_token = 'dummyToken-8';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (17, '00000000-0000-0000-0000-000000000017', 2, 2, 'superseded', 2, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [18], "related_uuids": ["00000000-0000-0000-0000-000000000018"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 18 AND uuid = '00000000-0000-0000-0000-000000000018' AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (20, '00000000-0000-0000-0000-000000000020', 2, 2, 'confirmed', 1, '10 days', %[1]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, 'public', 'dummyToken-10', '{"reason": "split", "related_ids": [17], "related_uuids": ["00000000-0000-0000-0000-000000000017"]}', %[3]d);
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 5 AND project_id = 3 AND service_id = 1;
-		%[10]s
-	`, now.Unix(), creation.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid18, uuid20, timestampUpdates())
+		%[7]s
+	`, now.Unix(), creation.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), timestampUpdates())
 
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -1743,8 +1716,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	`, timestampUpdates())
 
 	// we add one more immediately confirmed commitment over 1 now to paris, which will lead to the uuid17 being fully consumed
-	uuid21 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    paris,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       1,
@@ -1762,15 +1734,14 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 17 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 32 AND project_id = 3 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 20 AND uuid = '%[8]s' AND transfer_token = 'dummyToken-10';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (20, '%[8]s', 2, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{"reason": "split", "related_ids": [17], "related_uuids": ["%[7]s"]}', '{"reason": "consume", "related_ids": [21], "related_uuids": ["%[9]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 21 AND uuid = '%[9]s' AND transfer_token = NULL;
-		%[10]s
-	`, now.Unix(), creation2.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), uuid17, uuid20, uuid21, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 20 AND uuid = '00000000-0000-0000-0000-000000000020' AND transfer_token = 'dummyToken-10';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (20, '00000000-0000-0000-0000-000000000020', 2, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{"reason": "split", "related_ids": [17], "related_uuids": ["00000000-0000-0000-0000-000000000017"]}', '{"reason": "consume", "related_ids": [21], "related_uuids": ["00000000-0000-0000-0000-000000000021"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 21 AND uuid = '00000000-0000-0000-0000-000000000021' AND transfer_token = NULL;
+		%[7]s
+	`, now.Unix(), creation2.Unix(), transferStartedAt2.Unix(), confirmBy2.Unix(), confirmation2.Unix(), expiry2.Unix(), timestampUpdates())
 
 	// now we add one commitment larger than the rest of uuid16 (which is uuid19), consuming it fully
-	uuid22 := add(db.ProjectCommitment{
-		UUID:         s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:    paris,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       2,
@@ -1788,11 +1759,11 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 		UPDATE project_az_resources SET quota = 4 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 4 WHERE id = 32 AND project_id = 3 AND az_resource_id = 4;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		DELETE FROM project_commitments WHERE id = 19 AND uuid = '%[8]s' AND transfer_token = 'dummyToken-9';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (19, '%[8]s', 1, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{"reason": "split", "related_ids": [16], "related_uuids": ["%[7]s"]}', '{"reason": "consume", "related_ids": [22], "related_uuids": ["%[9]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 22 AND uuid = '%[9]s' AND transfer_token = NULL;
-		%[10]s
-	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), uuid16, uuid19, uuid22, timestampUpdates())
+		DELETE FROM project_commitments WHERE id = 19 AND uuid = '00000000-0000-0000-0000-000000000019' AND transfer_token = 'dummyToken-9';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (19, '00000000-0000-0000-0000-000000000019', 1, 2, 'superseded', 1, '10 days', %[2]d, 'dummy', 'dummy', %[4]d, %[5]d, %[6]d, %[1]d, '{"reason": "split", "related_ids": [16], "related_uuids": ["00000000-0000-0000-0000-000000000016"]}', '{"reason": "consume", "related_ids": [22], "related_uuids": ["00000000-0000-0000-0000-000000000022"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 22 AND uuid = '00000000-0000-0000-0000-000000000022' AND transfer_token = NULL;
+		%[7]s
+	`, now.Unix(), creation3.Unix(), transferStartedAt.Unix(), confirmBy.Unix(), confirmation.Unix(), expiry.Unix(), timestampUpdates())
 }
 
 func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
@@ -1828,7 +1799,6 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
 	committedForTenDays := must.Return(limesresources.ParseCommitmentDuration("10 days"))
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000001",
 		ProjectID:    berlin,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       10,
@@ -1879,7 +1849,6 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 
 	// add another 2 commitments in service second and 1 in service first for confirmation
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000002",
 		ProjectID:    berlin,
 		AZResourceID: firstCapacityAZOne,
 		Amount:       3,
@@ -1887,7 +1856,6 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000003",
 		ProjectID:    berlin,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       1,
@@ -1895,7 +1863,6 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 	add(db.ProjectCommitment{
-		UUID:         "00000000-0000-0000-0000-000000000004",
 		ProjectID:    berlin,
 		AZResourceID: secondCapacityAZOne,
 		Amount:       2,
@@ -1980,8 +1947,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	dresden := s.GetProjectID("dresden")
 	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
 	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
-	uuid1 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       berlin,
 		AZResourceID:    firstCapacityAZOne,
 		Amount:          10,
@@ -1989,8 +1955,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		Duration:        committedForTenDays,
 		NotifyOnConfirm: true,
 	})
-	uuid2 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       dresden,
 		AZResourceID:    secondCapacityAZOne,
 		Amount:          1,
@@ -2013,22 +1978,21 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_az_resources SET quota = 1 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 10 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '%[3]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[2]d WHERE id = 2 AND uuid = '%[4]s' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[2]d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (1, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:10 Duration:10 days Date:1970-01-02 Service:first Resource:capacity AZ:az-one', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (2, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:2 days Date:1970-01-02 Service:service Resource:resource AZ:az-one', %[2]d);
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
-		%[5]s
-	`, scrapedAt1.Unix(), scrapedAt2.Unix(), uuid1, uuid2, timestampUpdates())
+		%[3]s
+	`, scrapedAt1.Unix(), scrapedAt2.Unix(), timestampUpdates())
 	events := s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2)                       // 2 confirmations
 	assert.Equal(t, len(events[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 	assert.Equal(t, len(events[1].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 
 	// day 2: confirm two commitments in the same project -> only one mail will be scheduled regarding both confirmations
-	uuid3 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       dresden,
 		AZResourceID:    secondCapacityAZOne,
 		Amount:          1,
@@ -2036,8 +2000,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		Duration:        committedForTenDays,
 		NotifyOnConfirm: true,
 	})
-	uuid4 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       dresden,
 		AZResourceID:    secondCapacityAZOne,
 		Amount:          1,
@@ -2055,19 +2018,18 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
-		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '%[2]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '%[3]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '%[4]s' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 3 AND uuid = '00000000-0000-0000-0000-000000000003' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (3, 2, 'Your recent commitment confirmations', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:10 days Date:1970-01-03 Service:service Resource:resource AZ:az-one Creator:dummy Amount:1 Duration:10 days Date:1970-01-03 Service:service Resource:resource AZ:az-one', %[1]d);
-		%[5]s
-	`, scrapedAt2.Unix(), uuid2, uuid3, uuid4, timestampUpdates())
+		%[2]s
+	`, scrapedAt2.Unix(), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2)                       // another 2 confirmations
 	assert.Equal(t, len(events[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
 
 	// now, we put a commitment which gets confirmed but transferred --> only one mail for the transfer and one for the confirmation
-	uuid5 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         dresden,
 		AZResourceID:      secondCapacityAZOne,
 		Amount:            1,
@@ -2078,8 +2040,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		TransferStartedAt: Some(s.Clock.Now()),
 		NotifyOnConfirm:   true,
 	})
-	uuid6 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       berlin,
 		AZResourceID:    secondCapacityAZOne,
 		Amount:          1,
@@ -2096,14 +2057,14 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
-		DELETE FROM project_commitments WHERE id = 5 AND uuid = '%[2]s' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, notify_on_confirm, creation_context_json, supersede_context_json) VALUES (5, '%[2]s', 2, 9, 'superseded', 1, '10 days', 216030, 'dummy', 'dummy', 302440, 1080030, 302440, TRUE, '{}', '{"reason": "consume", "related_ids": [6], "related_uuids": ["%[3]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 6 AND uuid = '%[3]s' AND transfer_token = NULL;
+		DELETE FROM project_commitments WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = 'dummyToken-1';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, notify_on_confirm, creation_context_json, supersede_context_json) VALUES (5, '00000000-0000-0000-0000-000000000005', 2, 9, 'superseded', 1, '10 days', 216030, 'dummy', 'dummy', 302440, 1080030, 302440, TRUE, '{}', '{"reason": "consume", "related_ids": [6], "related_uuids": ["00000000-0000-0000-0000-000000000006"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (4, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:1 Duration:10 days Date:1970-01-04 Service:service Resource:resource AZ:az-one Leftover:0', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (5, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:1 Duration:10 days Date:1970-01-04 Service:service Resource:resource AZ:az-one', %[1]d);
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
-		%[4]s
-	`, scrapedAt2.Unix(), uuid5, uuid6, timestampUpdates())
+		%[2]s
+	`, scrapedAt2.Unix(), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
@@ -2112,8 +2073,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
 	// check partial takeover
-	uuid7 := add(db.ProjectCommitment{
-		UUID:              s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:         dresden,
 		AZResourceID:      secondCapacityAZOne,
 		Amount:            10,
@@ -2123,8 +2083,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		TransferStatus:    limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt: Some(s.Clock.Now()),
 	})
-	uuid8 := add(db.ProjectCommitment{
-		UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	add(db.ProjectCommitment{
 		ProjectID:       berlin,
 		AZResourceID:    secondCapacityAZOne,
 		Amount:          1,
@@ -2138,20 +2097,19 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	scrapedAt2 = s.Clock.Now()
-	uuid9 := test.GenerateDummyCommitmentUUID(9)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 11 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 11 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
-		DELETE FROM project_commitments WHERE id = 7 AND uuid = '%[2]s' AND transfer_token = 'dummyToken-2';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (7, '%[2]s', 2, 9, 'superseded', 10, '10 days', 302440, 'dummy', 'dummy', 388850, 1166440, 388850, '{}', '{"reason": "consume", "related_ids": [8], "related_uuids": ["%[3]s"]}');
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 8 AND uuid = '%[3]s' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (9, '%[4]s', 2, 9, 'confirmed', 9, '10 days', 388850, 'dummy', 'dummy', 388850, 1166440, 'public', 'dummyToken-3', '{"reason": "split", "related_ids": [7], "related_uuids": ["%[2]s"]}', 302440);
+		DELETE FROM project_commitments WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = 'dummyToken-2';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (7, '00000000-0000-0000-0000-000000000007', 2, 9, 'superseded', 10, '10 days', 302440, 'dummy', 'dummy', 388850, 1166440, 388850, '{}', '{"reason": "consume", "related_ids": [8], "related_uuids": ["00000000-0000-0000-0000-000000000008"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (9, '00000000-0000-0000-0000-000000000009', 2, 9, 'confirmed', 9, '10 days', 388850, 'dummy', 'dummy', 388850, 1166440, 'public', 'dummyToken-3', '{"reason": "split", "related_ids": [7], "related_uuids": ["00000000-0000-0000-0000-000000000007"]}', 302440);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (6, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:10 Duration:10 days Date:1970-01-05 Service:service Resource:resource AZ:az-one Leftover:9', %[1]d);
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (7, 1, 'Your recent commitment confirmations', 'Domain:germany Project:berlin Creator:dummy Amount:1 Duration:10 days Date:1970-01-05 Service:service Resource:resource AZ:az-one', %[1]d);
-		%[5]s
-	`, scrapedAt2.Unix(), uuid7, uuid8, uuid9, timestampUpdates())
+		%[2]s
+	`, scrapedAt2.Unix(), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2) // one confirmation, one transfer
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 1)
@@ -2160,10 +2118,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
 
 	// check that 3 more takeovers are summed into 1 takeover mail
-	resultUUIDs := make([]liquid.CommitmentUUID, 3)
-	for i := range resultUUIDs {
-		resultUUIDs[i] = add(db.ProjectCommitment{
-			UUID:            s.Collector.GenerateProjectCommitmentUUID(),
+	for range 3 {
+		add(db.ProjectCommitment{
 			ProjectID:       berlin,
 			AZResourceID:    secondCapacityAZOne,
 			Amount:          1,
@@ -2183,17 +2139,17 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 		UPDATE project_az_resources SET quota = 8 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 5 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 10 AND uuid = '%[4]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 11 AND uuid = '%[5]s' AND transfer_token = NULL;
-		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 12 AND uuid = '%[6]s' AND transfer_token = NULL;
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (13, '%[7]s', 2, 9, 'superseded', 8, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [9], "related_uuids": ["%[3]s"]}', '{"reason": "consume", "related_ids": [11], "related_uuids": ["%[5]s"]}');
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (14, '%[8]s', 2, 9, 'superseded', 7, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [13], "related_uuids": ["%[7]s"]}', '{"reason": "consume", "related_ids": [12], "related_uuids": ["%[6]s"]}');
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (15, '%[9]s', 2, 9, 'confirmed', 6, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 'public', 'dummyToken-6', '{"reason": "split", "related_ids": [14], "related_uuids": ["%[8]s"]}', 302440);
-		DELETE FROM project_commitments WHERE id = 9 AND uuid = '%[3]s' AND transfer_token = 'dummyToken-3';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (9, '%[3]s', 2, 9, 'superseded', 9, '10 days', 388850, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [7], "related_uuids": ["7902699b-e42c-4a8e-46fb-bb4501726517"]}', '{"reason": "consume", "related_ids": [10], "related_uuids": ["%[4]s"]}');
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 10 AND uuid = '00000000-0000-0000-0000-000000000010' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 11 AND uuid = '00000000-0000-0000-0000-000000000011' AND transfer_token = NULL;
+		UPDATE project_commitments SET status = 'confirmed', confirmed_at = %[1]d WHERE id = 12 AND uuid = '00000000-0000-0000-0000-000000000012' AND transfer_token = NULL;
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (13, '00000000-0000-0000-0000-000000000013', 2, 9, 'superseded', 8, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [9], "related_uuids": ["00000000-0000-0000-0000-000000000009"]}', '{"reason": "consume", "related_ids": [11], "related_uuids": ["00000000-0000-0000-0000-000000000011"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (14, '00000000-0000-0000-0000-000000000014', 2, 9, 'superseded', 7, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [13], "related_uuids": ["00000000-0000-0000-0000-000000000013"]}', '{"reason": "consume", "related_ids": [12], "related_uuids": ["00000000-0000-0000-0000-000000000012"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, transfer_status, transfer_token, creation_context_json, transfer_started_at) VALUES (15, '00000000-0000-0000-0000-000000000015', 2, 9, 'confirmed', 6, '10 days', 475260, 'dummy', 'dummy', 388850, 1166440, 'public', 'dummyToken-6', '{"reason": "split", "related_ids": [14], "related_uuids": ["00000000-0000-0000-0000-000000000014"]}', 302440);
+		DELETE FROM project_commitments WHERE id = 9 AND uuid = '00000000-0000-0000-0000-000000000009' AND transfer_token = 'dummyToken-3';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (9, '00000000-0000-0000-0000-000000000009', 2, 9, 'superseded', 9, '10 days', 388850, 'dummy', 'dummy', 388850, 1166440, 475260, '{"reason": "split", "related_ids": [7], "related_uuids": ["00000000-0000-0000-0000-000000000007"]}', '{"reason": "consume", "related_ids": [10], "related_uuids": ["00000000-0000-0000-0000-000000000010"]}');
 		INSERT INTO project_mail_notifications (id, project_id, subject, body, next_submission_at) VALUES (8, 2, 'Your recent commitment transfers', 'Domain:germany Project:dresden Creator:dummy Amount:9 Duration:10 days Date:1970-01-05 Service:service Resource:resource AZ:az-one Leftover:6', %[1]d);
-		%[10]s
-	`, scrapedAt2.Unix(), uuid7, uuid9, resultUUIDs[0], resultUUIDs[1], resultUUIDs[2], test.GenerateDummyCommitmentUUID(13), test.GenerateDummyCommitmentUUID(14), test.GenerateDummyCommitmentUUID(15), timestampUpdates())
+		%[2]s
+	`, scrapedAt2.Unix(), timestampUpdates())
 	events = s.Auditor.RecordedEvents()
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })), 3)
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 1) // no changes to the transfer status, just 1 entry
