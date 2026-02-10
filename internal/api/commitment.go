@@ -543,6 +543,13 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
 	var auditEvents []audittools.Event
 
+	// we will pre-insert the commitment, because we need the db.ProjectCommitmentID to
+	// be referenced in the supersede context of the transferable commitments
+	err = tx.Insert(&dbCommitment)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
 	if confirmBy.IsNone() {
 		// When the commitment is to be confirmed immediately, the capacity check
 		// is carried out together with the transferability check in the cache.
@@ -618,17 +625,17 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 		auditEvents = append(auditEvents, audit.CommitmentEventTarget{
 			CommitmentChangeRequest: ccr,
-		}.ReplicateForAllProjects(audittools.Event{
+		}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 			Time:       now,
 			Request:    r,
 			User:       token,
 			ReasonCode: http.StatusCreated,
 			Action:     cadf.CreateAction,
-		}, None[cadf.Action](), None[liquid.ProjectUUID]())...)
+		})...)
 	}
 
 	// create commitment
-	err = tx.Insert(&dbCommitment)
+	_, err = tx.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -865,13 +872,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1049,13 +1056,13 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1164,13 +1171,13 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
 		Action:     cadf.DeleteAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1431,13 +1438,13 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest:       ccr,
 		CommitmentAttributeChangesets: cac,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -1709,13 +1716,13 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest:       ccr,
 		CommitmentAttributeChangesets: cac,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -2081,13 +2088,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusAccepted,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}
@@ -2231,13 +2238,13 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
-	}.ReplicateForAllProjects(audittools.Event{
+	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusOK,
 		Action:     cadf.UpdateAction,
-	}, None[cadf.Action](), None[liquid.ProjectUUID]())
+	})
 	for _, event := range auditEvents {
 		p.auditor.Record(event)
 	}

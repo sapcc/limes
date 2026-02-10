@@ -150,6 +150,12 @@ type CommitmentEventTarget struct {
 	CommitmentAttributeChangesets map[liquid.CommitmentUUID]CommitmentAttributeChangeset
 }
 
+// ReplicateForAllProjectsWithDefaults calls ReplicateForAllProjects but sets the
+// overrideAction and overrideProjectUUID to None().
+func (t CommitmentEventTarget) ReplicateForAllProjectsWithDefaults(event audittools.Event) []audittools.Event {
+	return t.ReplicateForAllProjects(event, None[cadf.Action](), None[liquid.ProjectUUID]())
+}
+
 // ReplicateForAllProjects takes an audittools.Event and generates
 // one audittools.Event per project affected in the CommitmentEventTarget, placing
 // the richCommitmentEventTarget for that project into the Target field.
@@ -167,22 +173,32 @@ func (t CommitmentEventTarget) ReplicateForAllProjects(event audittools.Event, o
 
 	for _, projectUUID := range projects {
 		projectMetadata := projectMetadataByProjectUUID[projectUUID]
-		if pm, exists := projectMetadata.Unpack(); !exists {
+		if pm, pmExists := projectMetadata.Unpack(); !pmExists {
 			panic("attempted to create audit event target from CommitmentChangeRequest without ProjectMetadata")
 		} else {
 			// With this logic we can achieve that multiple projects with transferred commitment(s) can keep
 			// the datamodel.ConsumeAction while the receiving project(s) can get cadf.CreateAction or datamodel.ConfirmAction.
+			newReasonCode := event.ReasonCode
 			newAction := event.Action
-			oAction, exists2 := overrideAction.Unpack()
-			oProjectUUID, exists3 := overrideProjectUUID.Unpack()
-			if exists2 && exists3 && oProjectUUID == projectUUID {
+			oAction, actionExists := overrideAction.Unpack()
+			oProjectUUID, projectUUIDexists := overrideProjectUUID.Unpack()
+			if actionExists && projectUUIDexists && oProjectUUID == projectUUID {
 				newAction = oAction
+
+				// To keep the call signature small, we derive the ReasonCode from the overrideAction. The overrideAction
+				// is used on the consumer project: If the commitment is newly created, the reasonCode should be 201.
+				// If the consumer commitment is updated, the reasonCode should be 200 - which should be the default
+				// event.ReasonCode for commitment events anyways.
+
+				if oAction == cadf.CreateAction {
+					newReasonCode = http.StatusCreated
+				}
 			}
 			result = append(result, audittools.Event{
 				Time:       event.Time,
 				Request:    event.Request,
 				User:       event.User,
-				ReasonCode: event.ReasonCode,
+				ReasonCode: newReasonCode,
 				Action:     newAction,
 				Target: richCommitmentEventTarget{
 					DomainID:                     pm.Domain.UUID,

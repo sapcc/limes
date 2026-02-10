@@ -225,8 +225,8 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 
 // LiquidProjectMetadataFromDBProject converts a db.Project into liquid.ProjectMetadata.
 // We use this function regardless of `liquid.ServiceInfo.CommitmentHandlingNeedsProjectMetadata`, so that
-// ProjectMetadata is always filled for Limes-internal use. Before delegating to the liquid, we might remove
-// it again if not needed.
+// ProjectMetadata is always filled for Limes-internal use. Before delegating it to the liquid,
+// it will be omitted if not requested.
 func LiquidProjectMetadataFromDBProject(dbProject db.Project, domain db.Domain) Option[liquid.ProjectMetadata] {
 	return Some(core.KeystoneProjectFromDB(dbProject, core.KeystoneDomain{UUID: domain.UUID, Name: domain.Name}).ForLiquid())
 }

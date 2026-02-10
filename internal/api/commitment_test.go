@@ -945,16 +945,20 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	assert.Equal(t, events[0].Action, cadf.CreateAction)
 	assert.Equal(t, len(events[0].Target.Attachments), 2) // changeRequest + transfer_status change
 	assert.Equal(t, events[0].Target.Attachments[1].Content, any(`{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""},"00000000-0000-0000-0000-000000000002":{"OldTransferStatus":"public","NewTransferStatus":""}}`))
+	// important: the ReasonCode of the creation event should be 201
+	assert.Equal(t, events[0].Reason.ReasonCode, "201")
 	// second project: commitment consumption POV
 	assert.Equal(t, events[1].Action, datamodel.ConsumeAction)
 	assert.Equal(t, len(events[1].Target.Attachments), 2) // changeRequest + transfer_status change
 	assert.Equal(t, events[1].Target.Attachments[1].Content, any(`{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""},"00000000-0000-0000-0000-000000000002":{"OldTransferStatus":"public","NewTransferStatus":""}}`))
+	// important: the ReasonCode of the consume event should be 200
+	assert.Equal(t, events[1].Reason.ReasonCode, "200")
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_commitments WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [3], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
 		DELETE FROM project_commitments WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = 'dummyToken-2';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[1]d, %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[1]d, %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [3], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 2, 'confirmed', 6, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}');
 		UPDATE services SET next_scrape_at = %[1]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
     `, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
