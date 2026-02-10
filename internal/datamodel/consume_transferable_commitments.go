@@ -275,7 +275,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		rcc.Commitments = append(rcc.Commitments, liquid.Commitment{
 			UUID:      tc.UUID,
 			OldStatus: Some(tc.Status),
-			NewStatus: None[liquid.CommitmentStatus](),
+			NewStatus: Some(liquid.CommitmentStatusSuperseded),
 			Amount:    tc.Amount,
 			ConfirmBy: tc.ConfirmBy,
 			ExpiresAt: tc.ExpiresAt,
@@ -305,7 +305,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	t.updateStats(ccr)
 
 	// add audit events
-	t.auditEventsByConfirmedCommitmentUUID[c.UUID] = t.assembleAuditEvents(ccr, cacs, project.UUID, auditContext, auditAction)
+	t.auditEventsByConfirmedCommitmentUUID[c.UUID] = t.assembleAuditEvents(ccr, cacs, project.UUID, auditAction, auditContext)
 
 	// add commitment changes to database
 	for i, idx := range slices.Backward(potentiallyTransferredCommitmentIdxs) {
@@ -315,9 +315,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		}
 
 		// delete the audit event, if the commitment was confirmed previously
-		if _, exists := t.auditEventsByConfirmedCommitmentUUID[c.UUID]; exists {
-			delete(t.auditEventsByConfirmedCommitmentUUID, tc.UUID)
-		}
+		delete(t.auditEventsByConfirmedCommitmentUUID, tc.UUID)
 
 		// Insert the leftover commitment, if exists.
 		if i == 0 && tc.Amount > lastConsumedAmount {
@@ -475,7 +473,7 @@ func (t *TransferableCommitmentCache) RetrieveAuditEvents() []audittools.Event {
 
 // assembleAuditEvents constructs the audit events for all affected projects
 // with the commitments that were processed via CanConfirmWithTransfers.
-func (t *TransferableCommitmentCache) assembleAuditEvents(ccr liquid.CommitmentChangeRequest, cacs map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset, consumingProjectUUID liquid.ProjectUUID, auditContext audit.Context, auditAction cadf.Action) []audittools.Event {
+func (t *TransferableCommitmentCache) assembleAuditEvents(ccr liquid.CommitmentChangeRequest, cacs map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset, consumingProjectUUID liquid.ProjectUUID, consumeAction cadf.Action, auditContext audit.Context) []audittools.Event {
 	return audit.CommitmentEventTarget{
 		CommitmentChangeRequest:       ccr,
 		CommitmentAttributeChangesets: cacs,
@@ -483,9 +481,9 @@ func (t *TransferableCommitmentCache) assembleAuditEvents(ccr liquid.CommitmentC
 		Time:       t.now,
 		Request:    auditContext.Request,
 		User:       auditContext.UserIdentity,
-		ReasonCode: http.StatusOK,
-		Action:     ConsumeAction,
-	}, Some(auditAction), Some(consumingProjectUUID))
+		ReasonCode: http.StatusOK, // value for the transfer commitments
+		Action:     ConsumeAction, // value for the transfer commitments
+	}, Some(consumeAction), Some(consumingProjectUUID))
 }
 
 // delegateChangeCommitmentsWithShortcut calls DelegateChangeCommitments unless we know
@@ -541,8 +539,8 @@ func (t *TransferableCommitmentCache) updateStats(ccr liquid.CommitmentChangeReq
 			newProjectStats := projectAZAllocationStats{
 				Committed:          rcc.TotalConfirmedAfter,
 				Usage:              projectStats.Usage,
-				MinHistoricalUsage: 0,
-				MaxHistoricalUsage: 0,
+				MinHistoricalUsage: projectStats.MinHistoricalUsage,
+				MaxHistoricalUsage: projectStats.MaxHistoricalUsage,
 			}
 			t.stats.ProjectStats[affectedProject.ID] = newProjectStats
 		}

@@ -122,7 +122,6 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc co
 func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	// load confirmable commitments
 	var confirmableCommitments []db.ProjectCommitment
-	confirmedCommitmentsByProjectID := make(map[db.ProjectID][]*db.ProjectCommitment)
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
 	if err != nil {
@@ -172,8 +171,10 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 		return nil, err
 	}
 
+	confirmedCommitmentsByProjectID := make(map[db.ProjectID][]*db.ProjectCommitment)
 	// foreach confirmable commitment in the order to be confirmed
-	for _, cc := range confirmableCommitments {
+	for i := range confirmableCommitments {
+		cc := confirmableCommitments[i] // avoid pointer issues in loop
 		// If a commitment was transferred in this iteration already, we do not need to confirm it.
 		// If partially transferred, the leftover is added to the transferable commitments instead of the superseded one.
 		if transferableCommitmentCache.CommitmentWasTransferred(cc.ID, cc.ProjectID) {

@@ -1769,7 +1769,8 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	// Additionally, this should enable multiple confirmations in a row, which would otherwise not have enough capacity.
 	// The capacity of firstCapacityAZOne is 42, committed are currently 22.
 	// The first transferable commitment gets confirmed immediately, making committed 41.
-	// The second transferable commitment gets consumed while still in planned state.
+	// The second transferable commitment with the amount of 10 gets consumed while still in planned state.
+	// The remaining commitment with the amount if 9 cannot be confirmed and will remain in pending state.
 	creation = s.Clock.Now()
 	expiry = s.Clock.Now().Add(10 * oneDay)
 
@@ -2227,6 +2228,28 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "confirm" })[0].Target.Attachments), 2) // transfer_status changes
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })), 3)
 	assert.Equal(t, len(filterSlice(events, func(e cadf.Event) bool { return e.Action == "consume" })[0].Target.Attachments), 2) // transfer_status changes
+
+	// make sure that the right commitments are referenced in each audit event
+	// confirmation + consumption 1
+	for i := range 2 {
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000010","oldStatus":"pending","newStatus":"confirmed","amount":1`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000009","oldStatus":"confirmed","newStatus":"superseded","amount":9`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000013","oldStatus":null,"newStatus":"confirmed","amount":8`), true)
+	}
+	// confirmation + consumption 2
+	for i := range 2 {
+		i += 2
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000011","oldStatus":"pending","newStatus":"confirmed","amount":1`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000013","oldStatus":"confirmed","newStatus":"superseded","amount":8`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000014","oldStatus":null,"newStatus":"confirmed","amount":7`), true)
+	}
+	// confirmation + consumption 2
+	for i := range 2 {
+		i += 4
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000012","oldStatus":"pending","newStatus":"confirmed","amount":1`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000014","oldStatus":"confirmed","newStatus":"superseded","amount":7`), true)
+		assert.Equal(t, strings.Contains((events[i].Target.Attachments[0].Content).(string), `"uuid":"00000000-0000-0000-0000-000000000015","oldStatus":null,"newStatus":"confirmed","amount":6`), true)
+	}
 }
 
 func filterSlice[T any](input []T, predicate func(T) bool) []T {
