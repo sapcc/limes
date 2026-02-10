@@ -104,7 +104,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	oneDay := 24 * time.Hour
 	commitmentForOneDay, err := limesresources.ParseCommitmentDuration("1 day")
 	must.SucceedT(t, err)
-	commitmentForTenDays, err := limesresources.ParseCommitmentDuration("10 day")
+	commitmentForTenDays, err := limesresources.ParseCommitmentDuration("10 days")
 	must.SucceedT(t, err)
 	commitmentForThreeYears, err := limesresources.ParseCommitmentDuration("3 years")
 	must.SucceedT(t, err)

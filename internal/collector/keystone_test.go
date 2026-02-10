@@ -147,7 +147,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err == nil {
 		t.Errorf("ScanDomains #6 did not fail when it should have")
 	}
-	assert.ErrEqual(t, err, "while removing deleted Keystone project france/bordeaux from our database: project has commitments which are not superseded or expired")
+	assert.ErrEqual(t, err, "while removing deleted Keystone project france/bordeaux from our database: project has commitments which are not superseded, expired or deleted")
 	tr.DBChanges().AssertEmpty()
 
 	// now we set the commitment to expired, the deletion succeeds

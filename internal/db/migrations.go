@@ -270,10 +270,36 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN quota,
 			DROP COLUMN backend_quota;
 	`),
-	"071_add_commitment_deleted_at.down.sql": `
+	"071_add_commitment_deleted_at.down.sql": ExpandEnumPlaceholders(`
 		ALTER TABLE project_commitments DROP COLUMN deleted_at;
-	`,
-	"071_add_commitment_deleted_at.up.sql": `
+		ALTER TABLE project_commitments
+			DROP CONSTRAINT transfer_status_check;
+		ALTER TABLE project_commitments
+			ADD CONSTRAINT transfer_status_check CHECK (status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) OR transfer_status = {{limesresources.CommitmentTransferStatusNone}});
+		CREATE OR REPLACE FUNCTION az_resources_project_commitments_trigger_function()
+			RETURNS trigger AS $$
+			BEGIN
+				DELETE FROM project_commitments
+					WHERE az_resource_id = OLD.id
+					AND status IN ('expired', 'superseded');
+				RETURN OLD;
+			END;
+			$$ LANGUAGE plpgsql;
+	`),
+	"071_add_commitment_deleted_at.up.sql": ExpandEnumPlaceholders(`
 		ALTER TABLE project_commitments ADD COLUMN deleted_at TIMESTAMPTZ DEFAULT NULL;
-	`,
+		ALTER TABLE project_commitments
+			DROP CONSTRAINT transfer_status_check;
+		ALTER TABLE project_commitments
+			ADD CONSTRAINT transfer_status_check CHECK (status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}}) OR transfer_status = {{limesresources.CommitmentTransferStatusNone}});
+		CREATE OR REPLACE FUNCTION az_resources_project_commitments_trigger_function()
+			RETURNS trigger AS $$
+			BEGIN
+				DELETE FROM project_commitments
+					WHERE az_resource_id = OLD.id
+					AND status IN ('expired', 'superseded', 'deleted');
+				RETURN OLD;
+			END;
+			$$ LANGUAGE plpgsql;
+	`),
 }

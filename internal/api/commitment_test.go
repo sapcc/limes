@@ -521,6 +521,12 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	must.SucceedT(t, s.DB.SelectOne(&deletedCommitment, `SELECT * FROM project_commitments where ID = 2`))
 	assert.Equal(t, deletedCommitment.Status, util.CommitmentStatusDeleted)
 	assert.Equal(t, deletedCommitment.DeletedAt.IsSome(), true)
+	// a delete on the soft-deleted commitment returns 404
+	assert.HTTPRequest{
+		Method:       http.MethodDelete,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
+		ExpectStatus: http.StatusNotFound,
+	}.Check(t, s.Handler)
 	must.ReturnT(s.DB.Delete(&deletedCommitment))
 
 	s.TokenValidator.Enforcer.AllowUncommit = false
@@ -1411,12 +1417,14 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
 	}.Check(t, s.Handler)
 
-	// cleanup
+	// an expired commitment cannot be deleted
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
-		ExpectStatus: http.StatusNoContent,
+		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
+	// cleanup
+	s.MustDBExec(`DELETE FROM project_commitments WHERE id = 1`)
 
 	// TransferAmount < CommitmentAmount
 	resp2 := assert.JSONObject{

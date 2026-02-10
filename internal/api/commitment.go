@@ -1106,6 +1106,12 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// ignore expired, superseded or soft-deleted commitments
+	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusExpired, liquid.CommitmentStatusSuperseded, util.CommitmentStatusDeleted}, dbCommitment.Status) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	}
+
 	// check authorization for this specific commitment
 	if !datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
@@ -1163,6 +1169,9 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// perform deletion
 	dbCommitment.Status = util.CommitmentStatusDeleted
 	dbCommitment.DeletedAt = Some(p.timeNow())
+	dbCommitment.TransferStatus = limesresources.CommitmentTransferStatusNone
+	dbCommitment.TransferToken = None[string]()
+	dbCommitment.TransferStartedAt = None[time.Time]()
 	_, err = p.DB.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
