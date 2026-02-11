@@ -267,7 +267,7 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		test.WithMockLiquidClient("fourth", srvInfoFourth),
 		test.WithPersistedServiceInfo("fourth", srvInfoFourth),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// fill `az_resources`

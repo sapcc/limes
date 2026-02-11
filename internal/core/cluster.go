@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"time"
 
@@ -35,9 +36,12 @@ import (
 // read-only mode, which will cause all operations involving LiquidConnections
 // to fallback to database operations.
 type Cluster struct {
-	Config            ClusterConfiguration
-	DiscoveryPlugin   DiscoveryPlugin
+	Config          ClusterConfiguration
+	DiscoveryPlugin DiscoveryPlugin
+	// LiquidConnections are only filled for the collector-task.
 	LiquidConnections map[db.ServiceType]*LiquidConnection
+	// When LiquidConnections are not filled, the ServiceInfoCache is populated and used to retrieve ServiceInfo
+	ServiceInfoCache *ServiceInfoCache
 	// reference of the DB is necessary to delete leftover LiquidConnections
 	DB *gorp.DbMap
 	// used to generate LiquidClients without LiquidConnections
@@ -92,10 +96,12 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 //
 // It also loads the QuotaOverrides for this cluster, if configured.
 // We also validate if Config.ResourceBehavior[].ScalesWith refers to existing resources.
-//
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all LiquidConnections.
-func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error)) (errs errext.ErrorSet) {
+//
+// The ServiceInfoCache is assembled here, because we need to use the Config in the test
+// setup before Connect.
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error), dbURL Option[url.URL]) (errs errext.ErrorSet) {
 	// save factory for possible later use
 	c.LiquidClientFactory = liquidClientFactory
 
@@ -106,6 +112,14 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	if len(c.LiquidConnections) == 0 {
+		// load service info, if there are no liquid connections
+		sic, err := NewServiceInfoCache(c.DB, dbURL)
+		if err != nil {
+			errs.Addf("could not create service info cache: %w", err)
+			return errs
+		}
+		c.ServiceInfoCache = sic
+
 		return errs
 	}
 
@@ -169,8 +183,8 @@ func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.Serv
 	return Some(connection.ServiceInfo()), nil
 }
 
-// This is used to reach ConfigSets stored inside type ServiceConfiguration.
-func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfiguration {
+// ConfigForService is used to reach ConfigSets stored inside type ServiceConfiguration.
+func (c *Cluster) ConfigForService(serviceType db.ServiceType) LiquidConfiguration {
 	for st, l := range c.Config.Liquids {
 		if st == serviceType {
 			return l
@@ -181,7 +195,7 @@ func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfigurati
 
 // CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
 func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentBehavior {
-	return c.configForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
+	return c.ConfigForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in the given service.

@@ -6,6 +6,7 @@ package core_test
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"testing"
@@ -73,7 +74,7 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 	for _, err := range errs {
 		t.Fatal(err)
 	}
-	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
+	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, option.None[url.URL]())
 	if failOnConnectError {
 		for _, err := range errs {
 			t.Fatal(err)

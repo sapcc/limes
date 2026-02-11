@@ -36,7 +36,7 @@ func TestInconsistencyReport(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// initially, we will put in some numbers that do not have any inconsistencies

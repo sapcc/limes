@@ -54,7 +54,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// shorthands for the DB setup below

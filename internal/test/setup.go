@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -30,19 +32,21 @@ import (
 	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/internal/api"
+	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
 type setupParams struct {
-	ConfigJSON               string
-	APIMiddlewares           []httpapi.API
-	WithInitialDiscovery     bool
-	WithEmptyRecordsAsNeeded bool
-	WithLiquidConnections    bool
-	PersistedServiceInfo     map[db.ServiceType]liquid.ServiceInfo
-	LiquidClients            map[db.ServiceType]*MockLiquidClient
+	ConfigJSON                       string
+	APIMiddlewares                   []httpapi.API
+	WithInitialDiscovery             bool
+	WithEmptyResourceRecordsAsNeeded bool
+	WithEmptyRateRecordsAsNeeded     bool
+	WithLiquidConnections            bool
+	PersistedServiceInfo             map[db.ServiceType]liquid.ServiceInfo
+	LiquidClients                    map[db.ServiceType]*MockLiquidClient
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -108,7 +112,7 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 	}
 }
 
-// WithEmptyRecordsAsNeeded is a SetupOption that populates the DB with empty
+// WithEmptyResourceRecordsAsNeeded is a SetupOption that populates the DB with empty
 // records for project_resources and project_az_resources.
 //
 // It relies on the services, resources and az_resources to exist!
@@ -116,8 +120,20 @@ func WithPersistedServiceInfo(st db.ServiceType, si liquid.ServiceInfo) SetupOpt
 //
 // It also relies on domains and projects to exist!
 // (e.g. use WithInitialDiscovery)
-func WithEmptyRecordsAsNeeded(params *setupParams) {
-	params.WithEmptyRecordsAsNeeded = true
+func WithEmptyResourceRecordsAsNeeded(params *setupParams) {
+	params.WithEmptyResourceRecordsAsNeeded = true
+}
+
+// WithEmptyRateRecordsAsNeeded is a SetupOption that populates the DB with empty
+// records for project_rates.
+//
+// It relies on the services and rates to exist!
+// (e.g. use WithPersistedServiceInfo)
+//
+// It also relies on domains and projects to exist!
+// (e.g. use WithInitialDiscovery)
+func WithEmptyRateRecordsAsNeeded(params *setupParams) {
+	params.WithEmptyRateRecordsAsNeeded = true
 }
 
 // WithInitialDiscovery is a SetupOption that populates the DB with records for
@@ -135,6 +151,7 @@ type Setup struct {
 	Cluster                    *core.Cluster
 	Clock                      *mock.Clock
 	Registry                   *prometheus.Registry
+	mockUserIdentity           map[string]string // can be used to alter the scope of the simulated token in tests
 	TokenValidator             *mock.Validator[*PolicyEnforcer]
 	Auditor                    *audittools.MockAuditor
 	LiquidClients              map[db.ServiceType]*MockLiquidClient
@@ -187,7 +204,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 
 	// validate selected options
-	if params.WithEmptyRecordsAsNeeded && !params.WithInitialDiscovery {
+	if params.WithEmptyResourceRecordsAsNeeded && !params.WithInitialDiscovery {
 		t.Fatal("can not create empty DB records since no projects are being discovered during setup")
 	}
 
@@ -232,7 +249,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 		_ = must.ReturnT(core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))(t)
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory)
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, option.None[url.URL]())
 	failIfErrs(t, errs)
 
 	s.Registry = prometheus.NewPedanticRegistry()
@@ -247,7 +264,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowEditMaxQuota: true,
 		AllowUncommit:     true,
 	}
-	mockUserIdentity := map[string]string{
+	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",
 		"user_name":           "alice",
 		"user_domain_name":    "Default",
@@ -257,7 +274,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		"project_domain_name": "Default",
 		"project_domain_id":   "uuid-for-default",
 	}
-	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
+	s.TokenValidator = mock.NewValidator(enforcer, s.mockUserIdentity)
 	s.Auditor = audittools.NewMockAuditor()
 
 	projectCommitmentUUIDGenerator, currentProjectCommitmentID := projectCommitmentUUIDGenerator()
@@ -267,6 +284,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Handler = httptest.NewHandler(httpapi.Compose(
 		append(params.APIMiddlewares,
 			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator, s.Registry),
+			api_v2.NewV2API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now),
 			httpapi.WithoutLogging(),
 		)...,
 	))
@@ -290,7 +308,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{ScanAllProjects: true}))(t)
 	}
 
-	if params.WithEmptyRecordsAsNeeded {
+	if params.WithEmptyResourceRecordsAsNeeded {
 		// fills all ProjectResource entries (for each pair of service and resource name)
 		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
@@ -320,7 +338,28 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		`))
 	}
 
+	if params.WithEmptyRateRecordsAsNeeded {
+		// fills all ProjectRate entries (for each pair of service and rate name)
+		// TODO: Why do we have liquid.RateInfo.HasUsage but usage_as_bigint must not be null?
+		s.MustDBExec(db.ExpandEnumPlaceholders(`
+			INSERT INTO project_rates (project_id, rate_id, usage_as_bigint) 
+			SELECT
+				p.id              AS project_id,
+				r.id              AS rate_id,
+				0 as usage_as_bigint
+			FROM rates r CROSS JOIN projects p ORDER BY p.id, r.id
+		`))
+	}
+
 	return s
+}
+
+// UpdateMockUserIdentity updates the given key-value pairs in the mock user identity,
+// which are then handed to the TokenValidator.
+func (s Setup) UpdateMockUserIdentity(updates map[string]string) {
+	s.t.Helper()
+	maps.Copy(s.mockUserIdentity, updates)
+	s.TokenValidator.Auth = s.mockUserIdentity
 }
 
 // GetServiceID is a helper function for finding the ID of a db.Service record.

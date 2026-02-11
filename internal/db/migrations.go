@@ -35,4 +35,63 @@ var sqlMigrations = map[string]string{
 		DROP TABLE categories;
 		DROP TABLE services;
 	`,
+	`076_notify_service_update.up.sql`: `
+		CREATE OR REPLACE FUNCTION notify_service_update()
+			RETURNS trigger AS $$
+			DECLARE
+				service_type TEXT;
+			BEGIN
+				IF TG_TABLE_NAME = 'services' THEN
+					FOR service_type IN
+						SELECT s.type FROM services s
+							WHERE s.type = ANY(ARRAY[NEW.type, OLD.type])
+					LOOP
+						PERFORM pg_notify('limes_service_update', service_type);
+					END LOOP;
+
+				ELSIF TG_TABLE_NAME = 'resources' OR TG_TABLE_NAME = 'rates' THEN
+					FOR service_type IN
+						SELECT s.type FROM services s
+							WHERE s.id = ANY(ARRAY[NEW.service_id, OLD.service_id])
+					LOOP
+						PERFORM pg_notify('limes_service_update', service_type);
+					END LOOP;
+
+				ELSIF TG_TABLE_NAME = 'az_resources' THEN
+					FOR service_type IN
+						SELECT DISTINCT s.type FROM services s
+							JOIN resources r ON r.service_id = s.id
+							WHERE r.id = ANY(ARRAY[NEW.resource_id, OLD.resource_id])
+					LOOP
+						PERFORM pg_notify('limes_service_update', service_type);
+					END LOOP;
+				END IF;
+
+				RETURN COALESCE(NEW, OLD);
+			END;
+			$$ LANGUAGE plpgsql;
+
+		CREATE TRIGGER services_notify_update
+			AFTER INSERT OR UPDATE OR DELETE ON services
+			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
+
+		CREATE TRIGGER resources_notify_update
+			AFTER INSERT OR UPDATE OR DELETE ON resources
+			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
+
+		CREATE TRIGGER az_resources_notify_update
+			AFTER INSERT OR UPDATE OR DELETE ON az_resources
+			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
+
+		CREATE TRIGGER rates_notify_update
+			AFTER INSERT OR UPDATE OR DELETE ON rates
+			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
+	`,
+	`076_notify_service_update.down.sql`: `
+		DROP TRIGGER IF EXISTS rates_notify_update ON rates;
+		DROP TRIGGER IF EXISTS az_resources_notify_update ON az_resources;
+		DROP TRIGGER IF EXISTS resources_notify_update ON resources;
+		DROP TRIGGER IF EXISTS services_notify_update ON services;
+		DROP FUNCTION IF EXISTS notify_service_update;
+	`,
 }

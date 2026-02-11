@@ -129,7 +129,7 @@ func setupTest(t *testing.T) test.Setup {
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
 		test.WithPersistedServiceInfo("unshared", srvInfoUnshared),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// shorthands
@@ -334,7 +334,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.MustDBExec(`UPDATE project_services SET scraped_at = $1, checked_at = $1`, time.Unix(11, 0))
@@ -922,7 +922,7 @@ func Test_EmptyProjectList(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// This warrants its own unit test since the rendering of empty project lists
@@ -946,7 +946,7 @@ func Test_EmptyProjectList(t *testing.T) {
 func Test_LargeProjectList(t *testing.T) {
 	// to test the behavior of the project list endpoint for large lists,
 	// set up a config with a large number of projects (we do it via the discovery config
-	// in order to leverage test.WithInitialDiscover and test.WithEmptyRecordsAsNeeded)
+	// in order to leverage test.WithInitialDiscover and test.WithEmptyResourceRecordsAsNeeded)
 	projectUUIDs := make([]liquid.ProjectUUID, 100)
 	projectsAsConfigured := make([]core.KeystoneProject, len(projectUUIDs))
 	for idx := range projectUUIDs {
@@ -983,10 +983,10 @@ func Test_LargeProjectList(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	// fill various fields that `test.WithEmptyRecordsAsNeeded` initializes empty with reasonably plausible dummy values
+	// fill various fields that `test.WithEmptyResourceRecordsAsNeeded` initializes empty with reasonably plausible dummy values
 	// (all those queries take an index into the project list as $1 and the project UUID as $2)
 	queries := []string{
 		`UPDATE project_services SET scraped_at = TO_TIMESTAMP($1) AT LOCAL WHERE project_id = (SELECT id FROM projects WHERE uuid = $2)`,
@@ -1108,7 +1108,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -1242,7 +1242,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -1419,7 +1419,7 @@ func TestResourceRenaming(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// helper function that makes one GET query per structural level and checks
@@ -1686,7 +1686,7 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		test.WithConfig(testAZSeparatedConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfo),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.MustDBExec(`

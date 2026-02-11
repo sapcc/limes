@@ -122,6 +122,16 @@ type ServiceRateLimitConfiguration struct {
 	ProjectDefault []RateLimitConfiguration `json:"project_default"`
 }
 
+// GetGlobalDefaultRateLimit returns the default global-level rate limit for a given target type URI and action or an error if not found.
+func (svcRlConfig ServiceRateLimitConfiguration) GetGlobalDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
+	for _, rateCfg := range svcRlConfig.Global {
+		if rateCfg.Name == name {
+			return rateCfg, true
+		}
+	}
+	return RateLimitConfiguration{}, false
+}
+
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
 func (svcRlConfig ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
@@ -175,6 +185,7 @@ type MailTemplateConfiguration struct {
 
 // NewClusterFromJSON reads and validates the configuration in the given JSON document.
 // Errors are logged and will result in program termination, causing the function to not return.
+// dbURL must be filled when fillLiquidConnections is false, to ensure ServiceInfo stays up to date.
 func NewClusterFromJSON(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := json.Unmarshal(configBytes, &config)

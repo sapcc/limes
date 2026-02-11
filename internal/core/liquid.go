@@ -104,7 +104,7 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
 	newVersion := serviceInfo.Version
 	if infoVersion != newVersion {
-		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
+		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
 	}
 	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {

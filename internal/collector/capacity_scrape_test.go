@@ -827,7 +827,7 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 		test.WithMockLiquidClient("second", srvInfoSecond),
 		test.WithLiquidConnections,
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.LiquidClients["first"].CapacityReport.Set(firstCapacityReport)

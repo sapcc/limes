@@ -11,7 +11,6 @@ import (
 	"html"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -29,30 +28,16 @@ import (
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
 
+	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
 )
 
-// VersionData is used by version advertisement handlers.
-type VersionData struct {
-	Status string            `json:"status"`
-	ID     string            `json:"id"`
-	Links  []VersionLinkData `json:"links"`
-}
-
-// VersionLinkData is used by version advertisement handlers, as part of the
-// VersionData struct.
-type VersionLinkData struct {
-	URL      string `json:"href"`
-	Relation string `json:"rel"`
-	Type     string `json:"type,omitempty"`
-}
-
 type v1Provider struct {
 	Cluster        *core.Cluster
 	DB             *gorp.DbMap
-	VersionData    VersionData
+	VersionData    api_v2.VersionData
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
 	// see comment in ListProjects() for details
@@ -74,10 +59,10 @@ func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 	}
 
 	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
-	p.VersionData = VersionData{
+	p.VersionData = api_v2.VersionData{
 		Status: "CURRENT",
 		ID:     "v1",
-		Links: []VersionLinkData{
+		Links: []api_v2.VersionLinkData{
 			{
 				Relation: "self",
 				URL:      p.Path(),
@@ -123,7 +108,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpapi.IdentifyEndpoint(r, "/")
 		httpapi.SkipRequestLog(r)
-		respondwith.JSON(w, 300, map[string]any{"versions": []VersionData{p.VersionData}})
+		respondwith.JSON(w, 300, map[string]any{"versions": []api_v2.VersionData{p.VersionData}})
 	})
 
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -193,21 +178,14 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
 
 // Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
-	parts := []string{
-		strings.TrimSuffix(p.Cluster.Config.CatalogURL, "/"),
-		"v1",
-	}
-	parts = append(parts, elements...)
-	return strings.Join(parts, "/")
+	return api_v2.Path(p.Cluster.Config.CatalogURL, "v1", elements...)
 }
 
 // CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
 // returns a Token instance for checking authorization. Any errors that occur
 // during this function are deferred until Require() is called.
 func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
-	t := p.tokenValidator.CheckToken(r)
-	t.Context.Request = mux.Vars(r)
-	return t
+	return api_v2.CheckToken(r, p.tokenValidator)
 }
 
 // FindDomainFromRequest loads the db.Domain referenced by the :domain_id path

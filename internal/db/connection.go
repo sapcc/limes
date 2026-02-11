@@ -6,6 +6,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -28,7 +29,7 @@ func Configuration() easypg.Configuration {
 }
 
 // Init initializes the connection to the database.
-func Init() (*sql.DB, error) {
+func Init() (dbConn *sql.DB, dbURL url.URL, err error) {
 	extraConnectionOptions := make(map[string]string)
 	if bininfo.Component() == "limes-serve" {
 		// the API seems to have issues with connections getting stuck in "idle in transaction" during high load, not sure yet why
@@ -36,7 +37,7 @@ func Init() (*sql.DB, error) {
 	}
 
 	dbName := osext.GetenvOrDefault("LIMES_DB_NAME", "limes")
-	dbURL, err := easypg.URLFrom(easypg.URLParts{
+	dbURL, err = easypg.URLFrom(easypg.URLParts{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
 		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
 		UserName:          osext.GetenvOrDefault("LIMES_DB_USERNAME", "postgres"),
@@ -45,14 +46,14 @@ func Init() (*sql.DB, error) {
 		DatabaseName:      dbName,
 	})
 	if err != nil {
-		return nil, err
+		return nil, dbURL, err
 	}
-	dbConn, err := easypg.Connect(dbURL, Configuration())
+	dbConn, err = easypg.Connect(dbURL, Configuration())
 	if err != nil {
-		return nil, err
+		return nil, dbURL, err
 	}
 	prometheus.MustRegister(sqlstats.NewStatsCollector(dbName, dbConn))
-	return dbConn, nil
+	return dbConn, dbURL, nil
 }
 
 // InitORM wraps a database connection into a gorp.DbMap instance.
