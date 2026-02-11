@@ -177,6 +177,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 
 	r.Methods("GET").Path("/admin/liquid/service-capacity-request").HandlerFunc(p.GetServiceCapacityRequest)
 	r.Methods("GET").Path("/admin/liquid/service-usage-request").HandlerFunc(p.GetServiceUsageRequest)
+	r.Methods("GET").Path("/admin/mail/render").HandlerFunc(p.RenderMailTemplate)
 }
 
 // RequireJSON will parse the request body into the given data structure, or
