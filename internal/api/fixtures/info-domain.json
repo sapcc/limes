@@ -1,0 +1,98 @@
+{
+  "service_areas": {
+    "first": {
+      "services": {
+        "first": {
+          "version": 1,
+          "display_name": "",
+          "resources": {
+            "capacity": {
+              "resources": {
+                "capacity": {
+                  "display_name": "",
+                  "unit": "B",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true
+                }
+              }
+            },
+            "things": {
+              "resources": {
+                "things": {
+                  "display_name": "",
+                  "topology": "flat",
+                  "has_capacity": false,
+                  "has_quota": true
+                }
+              }
+            }
+          },
+          "rates": {
+            "objects:create": {
+              "display_name": "",
+              "topology": "flat",
+              "has_usage": true
+            },
+            "objects:delete": {
+              "display_name": "",
+              "unit": "MiB",
+              "topology": "flat",
+              "has_usage": true
+            },
+            "objects:unlimited": {
+              "display_name": "",
+              "unit": "KiB",
+              "topology": "flat",
+              "has_usage": true
+            },
+            "objects:update": {
+              "display_name": "",
+              "topology": "flat",
+              "has_usage": true
+            }
+          }
+        }
+      }
+    },
+    "second": {
+      "services": {
+        "second": {
+          "version": 1,
+          "display_name": "",
+          "resources": {
+            "capacity": {
+              "resources": {
+                "capacity": {
+                  "display_name": "",
+                  "unit": "B",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true,
+                  "commitment_config": {
+                    "durations": [
+                      "1 hour",
+                      "2 hours"
+                    ],
+                    "min_confirm_by": 604800
+                  }
+                }
+              }
+            },
+            "things": {
+              "resources": {
+                "things": {
+                  "display_name": "",
+                  "topology": "flat",
+                  "has_capacity": false,
+                  "has_quota": true
+                }
+              }
+            }
+          },
+          "rates": {}
+        }
+      }
+    }
+  }
+}
