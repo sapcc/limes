@@ -18,9 +18,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
-
-	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/db"
 )
 
 // MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -124,18 +121,6 @@ func (t RateLimitEventTarget) Render() cadf.Resource {
 	}
 }
 
-// EnsureLiquidProjectMetadata guarantees that the given liquid.CommitmentChangeRequest
-// contains project metadata for the given db.Project and db.Domain.
-// The functions should be used before passing a liquid.CommitmentChangeRequest into an
-// audit.CommitmentAttributeChangeset to be logged for auditing. For auditing purposes,
-// the project metadata must be filled. It is important to call it for all involved projects.
-func EnsureLiquidProjectMetadata(ccr liquid.CommitmentChangeRequest, project db.Project, domain db.Domain, serviceInfo liquid.ServiceInfo) liquid.CommitmentChangeRequest {
-	pcc := ccr.ByProject[project.UUID]
-	pcc.ProjectMetadata = Some(core.KeystoneProjectFromDB(project, core.KeystoneDomainFromDB(domain)).ForLiquid())
-	ccr.ByProject[project.UUID] = pcc
-	return ccr
-}
-
 // redactLiquidProjectMetadataNames removes ProjectMedata of a
 // liquid.CommitmentChangeRequest. It is used to enable information-leak-free logging
 // of commitment changes where multiple projects are involved.
@@ -150,8 +135,8 @@ func redactLiquidProjectMetadataNames(ccr liquid.CommitmentChangeRequest) liquid
 // CommitmentAttributeChangeset contains changes, which are not included in
 // liquid.CommitmentChangeRequest, but are relevant for auditing.
 type CommitmentAttributeChangeset struct {
-	OldTransferStatus Option[limesresources.CommitmentTransferStatus] // can be None, when the TransferStatus is stable
-	NewTransferStatus Option[limesresources.CommitmentTransferStatus] // can be None, when the TransferStatus is stable
+	OldTransferStatus limesresources.CommitmentTransferStatus
+	NewTransferStatus limesresources.CommitmentTransferStatus
 }
 
 // CommitmentEventTarget contains the structure for rendering a cadf.Event.Target for
@@ -162,7 +147,13 @@ type CommitmentEventTarget struct {
 	// must have at least one project, with one resource, with one commitment
 	CommitmentChangeRequest liquid.CommitmentChangeRequest
 	// can have one entry per commitment UUID
-	CommitmentAttributeChangeset map[liquid.CommitmentUUID]CommitmentAttributeChangeset
+	CommitmentAttributeChangesets map[liquid.CommitmentUUID]CommitmentAttributeChangeset
+}
+
+// ReplicateForAllProjectsWithDefaults calls ReplicateForAllProjects but sets the
+// overrideAction and overrideProjectUUID to None().
+func (t CommitmentEventTarget) ReplicateForAllProjectsWithDefaults(event audittools.Event) []audittools.Event {
+	return t.ReplicateForAllProjects(event, None[cadf.Action](), None[liquid.ProjectUUID]())
 }
 
 // ReplicateForAllProjects takes an audittools.Event and generates
@@ -170,7 +161,7 @@ type CommitmentEventTarget struct {
 // the richCommitmentEventTarget for that project into the Target field.
 // It also redacts project and domain names from the CommitmentChangeRequest
 // to avoid information leaks in audit logs.
-func (t CommitmentEventTarget) ReplicateForAllProjects(event audittools.Event) []audittools.Event {
+func (t CommitmentEventTarget) ReplicateForAllProjects(event audittools.Event, overrideAction Option[cadf.Action], overrideProjectUUID Option[liquid.ProjectUUID]) []audittools.Event {
 	// sort, to make audit event order deterministic
 	projects := slices.Sorted(maps.Keys(t.CommitmentChangeRequest.ByProject))
 	var result []audittools.Event
@@ -180,24 +171,42 @@ func (t CommitmentEventTarget) ReplicateForAllProjects(event audittools.Event) [
 		projectMetadataByProjectUUID[projectUUID] = pcc.ProjectMetadata
 	}
 
-	for _, projectID := range projects {
-		projectMetadata := projectMetadataByProjectUUID[projectID]
-		if pm, exists := projectMetadata.Unpack(); !exists {
+	for _, projectUUID := range projects {
+		projectMetadata := projectMetadataByProjectUUID[projectUUID]
+		if pm, pmExists := projectMetadata.Unpack(); !pmExists {
 			panic("attempted to create audit event target from CommitmentChangeRequest without ProjectMetadata")
 		} else {
+			// With this logic we can achieve that multiple projects with transferred commitment(s) can keep
+			// the datamodel.ConsumeAction while the receiving project(s) can get cadf.CreateAction or datamodel.ConfirmAction.
+			newReasonCode := event.ReasonCode
+			newAction := event.Action
+			oAction, actionExists := overrideAction.Unpack()
+			oProjectUUID, projectUUIDexists := overrideProjectUUID.Unpack()
+			if actionExists && projectUUIDexists && oProjectUUID == projectUUID {
+				newAction = oAction
+
+				// To keep the call signature small, we derive the ReasonCode from the overrideAction. The overrideAction
+				// is used on the consumer project: If the commitment is newly created, the reasonCode should be 201.
+				// If the consumer commitment is updated, the reasonCode should be 200 - which should be the default
+				// event.ReasonCode for commitment events anyways.
+
+				if oAction == cadf.CreateAction {
+					newReasonCode = http.StatusCreated
+				}
+			}
 			result = append(result, audittools.Event{
 				Time:       event.Time,
 				Request:    event.Request,
 				User:       event.User,
-				ReasonCode: event.ReasonCode,
-				Action:     event.Action,
+				ReasonCode: newReasonCode,
+				Action:     newAction,
 				Target: richCommitmentEventTarget{
 					DomainID:                     pm.Domain.UUID,
 					DomainName:                   pm.Domain.Name,
 					ProjectID:                    liquid.ProjectUUID(pm.UUID),
 					ProjectName:                  pm.Name,
 					CommitmentChangeRequest:      redactLiquidProjectMetadataNames(t.CommitmentChangeRequest),
-					CommitmentAttributeChangeset: t.CommitmentAttributeChangeset,
+					CommitmentAttributeChangeset: t.CommitmentAttributeChangesets,
 				},
 			})
 		}

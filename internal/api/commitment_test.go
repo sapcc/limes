@@ -877,18 +877,23 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-// here, we only test a very basic case. The same code of the TransferableCommitmentCache
+// We only test a very basic case. The same code of the TransferableCommitmentCache
 // is used by ScrapeCapacity, so the extensive testing of all the different edge cases
-// happens there. This is only to prevent that we unintentionally break the integration with
-// the API.
+// happens there. This is only to prevent that we unintentionally break the API integration.
 func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
+	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
+	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
 
+	// We create 2 commitments, one confirmed and one planned, to check that we calculate the missing amount correctly.
+	// The capacity is 10, overall confirmed is 3, other projects have a use of 4 and the commitment project has usage 2.
+	// If the commitment was not transferred, we would allocate 3 + 4 + 6 = 13 > 10.
+	// With the transfer, it works out as 4 + 6 = 10.
 	dresden := s.GetProjectID("dresden")
 	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
-	s.MustDBInsert(&db.ProjectCommitment{
+	c := &db.ProjectCommitment{
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
 		CreationContextJSON: json.RawMessage(`{}`),
@@ -897,13 +902,21 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 		UUID:                s.Collector.GenerateProjectCommitmentUUID(),
 		ProjectID:           dresden,
 		AZResourceID:        firstCapacityAZOne,
-		Amount:              1,
+		Amount:              3,
 		CreatedAt:           s.Clock.Now(),
 		Duration:            must.Return(limesresources.ParseCommitmentDuration("1 hour")),
 		TransferToken:       Some(s.Collector.GenerateTransferToken()),
 		TransferStatus:      limesresources.CommitmentTransferStatusPublic,
 		TransferStartedAt:   Some(s.Clock.Now()),
-	})
+	}
+	s.MustDBInsert(c)
+
+	c.UUID = s.Collector.GenerateProjectCommitmentUUID()
+	c.Status = liquid.CommitmentStatusConfirmed
+	c.ConfirmedAt = Some(s.Clock.Now())
+	c.TransferToken = Some(s.Collector.GenerateTransferToken())
+	s.MustDBInsert(c)
+
 	tr, _ := easypg.NewTracker(t, s.DB.Db)
 	tr.DBChanges().Ignore()
 
@@ -923,21 +936,30 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         request(2),
+		Body:         request(6),
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 	events := s.Auditor.RecordedEvents()
 	assert.Equal(t, len(events), 2)
-	assert.Equal(t, events[0].Action, datamodel.ConsumeAction)
+	// first project: commitment creation POV
+	assert.Equal(t, events[0].Action, cadf.CreateAction)
 	assert.Equal(t, len(events[0].Target.Attachments), 2) // changeRequest + transfer_status change
-	assert.Equal(t, events[0].Target.Attachments[1].Content, `{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""}}`)
-	assert.Equal(t, events[1].Action, cadf.CreateAction)
-	assert.Equal(t, len(events[1].Target.Attachments), 1) // changeRequest
+	assert.Equal(t, events[0].Target.Attachments[1].Content, any(`{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""},"00000000-0000-0000-0000-000000000002":{"OldTransferStatus":"public","NewTransferStatus":""}}`))
+	// important: the ReasonCode of the creation event should be 201
+	assert.Equal(t, events[0].Reason.ReasonCode, "201")
+	// second project: commitment consumption POV
+	assert.Equal(t, events[1].Action, datamodel.ConsumeAction)
+	assert.Equal(t, len(events[1].Target.Attachments), 2) // changeRequest + transfer_status change
+	assert.Equal(t, events[1].Target.Attachments[1].Content, any(`{"00000000-0000-0000-0000-000000000001":{"OldTransferStatus":"public","NewTransferStatus":""},"00000000-0000-0000-0000-000000000002":{"OldTransferStatus":"public","NewTransferStatus":""}}`))
+	// important: the ReasonCode of the consume event should be 200
+	assert.Equal(t, events[1].Reason.ReasonCode, "200")
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM project_commitments WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = 'dummyToken-1';
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 2, 'superseded', 1, '1 hour', %[1]d, 'dummy', 'dummy', %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [0], "related_uuids": ["00000000-0000-0000-0000-000000000002"]}');
-		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 1, 2, 'confirmed', 2, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (1, '00000000-0000-0000-0000-000000000001', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [3], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
+		DELETE FROM project_commitments WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = 'dummyToken-2';
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[1]d, %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [3], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}');
+		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 2, 'confirmed', 6, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}');
 		UPDATE services SET next_scrape_at = %[1]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
     `, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
 }
@@ -945,7 +967,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 func TestCommitmentDelegationToDB(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
-	// here, we modify the database so that the commitments for "first/capacity" go to the database for approval
+	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := assert.JSONObject{
