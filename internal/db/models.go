@@ -172,6 +172,7 @@ type ProjectCommitment struct {
 	ConfirmBy    Option[time.Time]                 `db:"confirm_by"`
 	ConfirmedAt  Option[time.Time]                 `db:"confirmed_at"`
 	ExpiresAt    time.Time                         `db:"expires_at"`
+	DeletedAt    Option[time.Time]                 `db:"deleted_at"`
 
 	// Commitments can be superseded due to splits, conversions or merges.
 	// The context columns contain information about the reason and related commitments

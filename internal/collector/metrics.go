@@ -452,7 +452,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 	WITH project_commitment_sums_by_status AS (
 	  SELECT az_resource_id, project_id, status, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+	   WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 	   GROUP BY az_resource_id, project_id, status
 	), project_commitment_sums AS (
 	  SELECT az_resource_id, project_id, JSON_OBJECT_AGG(status, amount) AS amount_by_status

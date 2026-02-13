@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/util"
 )
 
 const (
@@ -102,6 +103,8 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	job := s.Collector.CleanupOldCommitmentsJob(s.Registry)
 	oneDay := 24 * time.Hour
 	commitmentForOneDay, err := limesresources.ParseCommitmentDuration("1 day")
+	must.SucceedT(t, err)
+	commitmentForTenDays, err := limesresources.ParseCommitmentDuration("10 days")
 	must.SucceedT(t, err)
 	commitmentForThreeYears, err := limesresources.ParseCommitmentDuration("3 years")
 	must.SucceedT(t, err)
@@ -295,5 +298,34 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		DELETE FROM project_commitments WHERE id = 5 AND uuid = '00000000-0000-0000-0000-000000000005' AND transfer_token = NULL;
 		DELETE FROM project_commitments WHERE id = 6 AND uuid = '00000000-0000-0000-0000-000000000006' AND transfer_token = NULL;
 		DELETE FROM project_commitments WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+	`)
+
+	// lastly, we test the hard-delete of soft deleted commitments after 6 months
+	s.MustDBInsert(&db.ProjectCommitment{
+		ID:                  8,
+		UUID:                "00000000-0000-0000-0000-000000000008",
+		ProjectID:           1,
+		AZResourceID:        1,
+		Amount:              15,
+		Duration:            commitmentForTenDays,
+		CreatedAt:           s.Clock.Now().Add(-2 * oneDay),
+		ConfirmedAt:         Some(s.Clock.Now().Add(-2 * oneDay)),
+		ExpiresAt:           commitmentForTenDays.AddTo(s.Clock.Now().Add(-2 * oneDay)),
+		Status:              util.CommitmentStatusDeleted,
+		CreationContextJSON: json.RawMessage(buf),
+		DeletedAt:           Some(s.Clock.Now().Add(-oneDay)),
+	})
+	tr.DBChanges().Ignore()
+
+	// some time passes, nothing happens - also this is not picked up by expiration sql statements!
+	s.Clock.StepBy(150 * oneDay)
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEmpty()
+
+	// now we pass the 6 months mark, hard-delete happens
+	s.Clock.StepBy(33 * oneDay)
+	must.SucceedT(t, job.ProcessOne(s.Ctx))
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_commitments WHERE id = 8 AND uuid = '00000000-0000-0000-0000-000000000008' AND transfer_token = NULL;
 	`)
 }

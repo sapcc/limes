@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,3 +45,9 @@ func IntoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
 func FromUnixEncodedTime(t limes.UnixEncodedTime) time.Time {
 	return t.Time
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+// CommitmentStatusDeleted is used for soft-deleting commitments before they get hard-deleted after a grace period.
+// It is defined here instead of in the liquid package, because in liquid we model deletions as status=None.
+const CommitmentStatusDeleted liquid.CommitmentStatus = "deleted"

@@ -10,6 +10,8 @@ import (
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 // BuildSimpleWhereClause constructs a WHERE clause of the form "field1 = val1 AND
@@ -75,6 +77,7 @@ var (
 		"{{liquid.CommitmentStatusConfirmed}}":  enumValueToSQLLiteral(liquid.CommitmentStatusConfirmed),
 		"{{liquid.CommitmentStatusSuperseded}}": enumValueToSQLLiteral(liquid.CommitmentStatusSuperseded),
 		"{{liquid.CommitmentStatusExpired}}":    enumValueToSQLLiteral(liquid.CommitmentStatusExpired),
+		"{{util.CommitmentStatusDeleted}}":      enumValueToSQLLiteral(util.CommitmentStatusDeleted),
 		// liquid.Topology
 		"{{liquid.FlatTopology}}":        enumValueToSQLLiteral(liquid.FlatTopology),
 		"{{liquid.AZAwareTopology}}":     enumValueToSQLLiteral(liquid.AZAwareTopology),

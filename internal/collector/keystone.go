@@ -257,11 +257,11 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 var (
 	deleteProjectCheckBlockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT COUNT(*) FROM project_commitments
-		 WHERE project_id = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+		 WHERE project_id = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 	`))
 	deleteProjectRemoveNonblockingCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		DELETE FROM project_commitments
-		 WHERE project_id = $1 AND status IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}})
+		 WHERE project_id = $1 AND status IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 	`))
 )
 
@@ -280,7 +280,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 		return err
 	}
 	if result > 0 {
-		return errors.New("project has commitments which are not superseded or expired")
+		return errors.New("project has commitments which are not superseded, expired or deleted")
 	}
 
 	// it is fine to delete a project that only has superseded and expired commitments on it
