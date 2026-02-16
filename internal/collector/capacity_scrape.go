@@ -70,7 +70,7 @@ var (
 	`)
 
 	// This query updates `project_commitments.status` on all rows that have not
-	// reached one of the final statuses ("superseded" and "expired").
+	// reached one of the final statuses ("superseded", "expired" or "deleted").
 	//
 	// The result of this computation is used in all bulk queries on
 	// project_commitments to replace lengthy and time-dependent conditions with
@@ -90,7 +90,7 @@ var (
 		                             ELSE transfer_token END,
 		       transfer_started_at = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN NULL
 		                                  ELSE transfer_started_at END
-		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}) AND az_resource_id IN (
+		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}}) AND az_resource_id IN (
 			SELECT azr.id
 			  FROM services s
 			  JOIN resources r ON r.service_id = s.id
