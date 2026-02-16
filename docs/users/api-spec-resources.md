@@ -42,7 +42,7 @@ measured on different levels of this hierarchy:
   Limes itself, but by the respective backing service managing the resource in question, Limes continually ensures that
   the **backend quota** (the project's quota for that resource in the backing service) stays in sync with the quota
   managed in Limes. Limes also scrapes **usage** data from the backing service for each project. The backing service is
-  responsible for ensure that the usage for each project resource does not exceed the respective quota.
+  responsible for ensuring that the usage for each project resource does not exceed the respective quota.
 - For historical reasons, the domain level has two attributes called **domain quota** and **projects quota**. Those are
   currently both equal to the sum of quotas over all projects within the domain.
 - The cluster level is where **capacity** is reported. The cluster level also reports the **domains quota**, the sum of
@@ -87,7 +87,7 @@ Commitments follow a simple state machine:
   Creating an unconfirmed commitment is only possible if the commitment is created with a `confirm_by` timestamp.
   Such commitments are intended for demand management and forecasting.
 * `unconfirmed -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
-* `-> confirmed`: Commiments can also be created by a project administrator in an immediately-confirmed state,
+* `-> confirmed`: Commitments can also be created by a project administrator in an immediately-confirmed state,
   if the respective capacity can be reserved for the project immediately.
 * `confirmed -> expired`: Once the commitment's duration elapses, the price discount and capacity guarantee elapse.
   The duration until expiry counts starting from the state transition into `confirmed`.
@@ -105,14 +105,16 @@ projects in two ways:
 * `public`: Commitments in this transfer status are discoverable by the [`GET /v1/public-commitments`](#get-v1public-commitments)
   endpoint. Any project owner can then complete the transfer to their own project as if it was an `unlisted` commitment.
   This functionality is commonly referred to as "commitment marketplace" by cloud providers. When a commitment is
-  transferred in this way.
+  transferred in this way it is discoverable by any project via a dedicated API.
   
   **Important**: Limes will consider commitments posted as `public` for _automatic consumption_ by new commitments
   which are being created independently of the marketplace. This means that on confirmation of a new commitment,
   the operation automatically releases `public` commitments. This follows the business rules that the new commitment
   must expire later than the posted commitment and it will only be released up to the amount of the new commitment.
   This works also step by step: The not-consumed part will be considered for consumption again and again, until it is
-  fully consumed. The background for this behavior is that commitments are built mainly for managing private cloud, where there is no 
+  fully consumed. This behavior exists because, in Limes’s private‑cloud model, commitments primarily support capacity
+  management. There is typically no incentive to assume existing commitments except when their remaining term differs
+  from that of a new commitment.
 
 Other than the automatic consumption of public commitments, a billing system connected to Limes should handle a
 commitment in transfer (not consumed yet) as if it was not in transfer. This means that it will not cause cost
@@ -235,8 +237,9 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
+| `commitment_config.min_confirm_by` | integer | UNIX timestamp before which no commitments for the resource are accepted. Not shown if not set. | 
+| `commitment_config.durations` | []string | List of accepted commitment durations for this resource, e.g. `["1 year", "3 years"]`. |
 | `capacity` | unsigned integer | The available capacity for this resource. |
 | `raw_capacity` | unsigned integer | The available raw capacity for this resource (only shown for [overcommitted resources](#overcommit)). |
 | `per_availability_zone` | list of objects | A breakdown of this resource's capacity by availability zone (only shown for resources supporting a breakdown by AZ). |
@@ -245,7 +248,7 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `physical_usage` | unsigned integer | The sum of all physical usage values for this resource across all projects in all domains (only shown for [resources that report physical usage](#physical-usage)). |
 | `subcapacities` | list of objects | The subcapacities for this resource (only shown if `?detail` is given in the query and the resource supports [subcapacity reporting](#subcapacities)). |
 
-The objects at `cluster.services[].resources[].per_availability_zones[]` may contain the following fields:
+The objects at `cluster.services[].resources[].per_availability_zone[]` may contain the following fields:
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
@@ -324,8 +327,9 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
+| `commitment_config.min_confirm_by` | integer | UNIX timestamp before which no commitments for the resource are accepted. Not shown if not set. | 
+| `commitment_config.durations` | []string | List of accepted commitment durations for this resource, e.g. `["1 year", "3 years"]`. |
 | `quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
 | `projects_quota` | unsigned integer | **Deprecated.** Equal to `quota`. |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in this domain. |
@@ -444,8 +448,9 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
+| `commitment_config.min_confirm_by` | integer | UNIX timestamp before which no commitments for the resource are accepted. Not shown if not set. | 
+| `commitment_config.durations` | []string | List of accepted commitment durations for this resource, e.g. `["1 year", "3 years"]`. |
 | `quota` | unsigned integer | The granted quota for this resource in this project. |
 | `usable_quota` | unsigned integer | **Deprecated.** Always equal to `quota`. |
 | `usage` | unsigned integer | The usage of this resource in this project. |
@@ -552,15 +557,24 @@ Returns 200 (OK) on success. Result is a JSON document like:
   "commitments": [
     {
       "id": 42023,
+      "uuid": "ce3ac9b3-752b-4d03-81e4-c5ea104ca9a1",
       "service_type": "compute",
       "resource_name": "cores",
       "availability_zone": "west-1",
       "amount": 100,
       "duration": "2 years",
-      "requested_at": 1696604400,
+      "created_at": 1696604400,
+      "creator_uuid": "954a6bd24c29d6e7e573d1c70c8c0556bcc0a851da02602f310314c98ed70cdf",
+      "creator_name": "bob",
+      "can_be_deleted": false,
+      "confirm_by": 1696636800,
       "confirmed_at": 1696636800,
       "expires_at": 1759795200,
-      "status": "confirmed"
+      "transfer_status": "unlisted",
+      "transfer_token": "b53c66b96d37e3d2fc4e0fde6168e91fd628f858d9c4ebc0",
+      "status": "confirmed",
+      "notify_on_confirm": true,
+      "was_renewed": false
     }
   ]
 }
@@ -572,19 +586,24 @@ The following fields can appear in the response body:
 | ----- | ---- | ----------- |
 | `commitments` | list of objects | List of commitments in the given project. |
 | `commitments[].id` | integer | A unique numerical identifier for this commitment. This API uses this numerical ID to refer to the commitment in other API calls. |
-| `commitments[].uuid` | integer | A unique string identifier for this commitment. The next major version of this API will use this UUID instead of the numerical ID to refer to commitments in API calls. |
+| `commitments[].uuid` | string | A unique string identifier for this commitment. The next major version of this API will use this UUID instead of the numerical ID to refer to commitments in API calls. |
 | `commitments[].service_type`<br>`commitments[].resource_name` | string | The resource for which usage is committed. |
 | `commitments[].availability_zone` | string | The availability zone in which usage is committed. |
 | `commitments[].amount` | integer | The amount of usage that was committed to. |
 | `commitments[].unit` | string | For measured resources, the unit for this resource. The value from the `amount` field is measured in this unit. |
 | `commitments[].duration` | string | The requested duration of this commitment, expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
 | `commitments[].created_at` | integer | UNIX timestamp when this commitment was created. |
+| `commitments[].creator_uuid` | string | A unique string identifier of the user who created this commitment. |
+| `commitments[].creator_name` | string | The user name of the user who created this commitment. |
+| `commitments[].can_be_deleted` | boolean | Whether the user who called the API has permission to delete the commitment. For customers, this is usually possible for 24 hours after creation. |
 | `commitments[].confirm_by` | integer | UNIX timestamp when this commitment should be confirmed. Only shown if this was given when creating the commitment, to delay confirmation into the future. |
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
 | `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Note that the duration counts from `confirm_by` (or from `created_at` for immediately-confirmed commitments) and is calculated at creation time, so this is also shown on unconfirmed commitments. |
-| `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
+| `commitments[].transfer_status` | string | Whether the commitment is marked for transfer to a different project in `unlisted` (private) or `public` mode. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if not set. |
+| `commitments[].transfer_token` | string | A unique string identifier which has to be provided when transferring the commitment. Not shown if `transfer_status` not set. |
 | `commitments[].status` | string | The current status of this commitment. If provided, one of "planned", "pending", "guaranteed", "confirmed", "superseded", or "expired". |
 | `commitments[].notify_on_confirm` | boolean | Whether a mail notification should be sent if a created commitment is confirmed. Can only be set if the commitment contains a `confirm_by` value. |
+| `commitments[].was_renewed` | boolean | Indicates whether this commitment has been renewed. A commitment was created that will be confirmed when this commitment will expire. |
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
 
@@ -624,13 +643,13 @@ Returns 201 (Created) on success. Result is a JSON document like:
     "availability_zone": "west-1",
     "amount": 100,
     "duration": "2 years",
-    "requested_at": 1696604400
+    "created_at": 1696604400
   }
 }
 ```
 
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
-If `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
+If no `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/merge
 
@@ -645,7 +664,7 @@ Returns 202 (Accepted) on success, and returns the merged commitment as a JSON d
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/:id/renew
 
-Renews an active commitment within the given project. The newly created commitment will have its `confirm_by` date set to the `expires_by` time of the existing commitment. Commitments can only be renewed if they are not yet expired, but will expire in less than 90 days. Requires a project-admin token.
+Renews an active commitment within the given project. The newly created commitment will have its `confirm_by` date set to the `expires_at` time of the existing commitment. Commitments can only be renewed if they are not yet expired, but will expire in less than 90 days. Requires a project-admin token.
 
 Returns 202 (Accepted) on success, and returns the renewed commitment as a JSON document with the same form as on `POST .../commitments/new`.
 
@@ -670,7 +689,7 @@ Prepares a commitment to be transferred from a source project to a target projec
 }
 ```
 If the amount to transfer is equal to the commitment, the whole commitment will be marked as transferable. If the amount is less than the commitment, the commitment will be split in two and the requested amount will be marked as transferable.
-The transfer status indicates if the commitment stays `unlisted` (private) or `public`.
+The transfer status indicates if the commitment will be `unlisted` (private) or `public`.
 The response is a JSON of the commitment including the following fields that identify a commitment in its transferable state:
 ```json
 {
@@ -728,9 +747,11 @@ Returns 200 (OK) on success, and a JSON document like:
 }
 ```
 
+In this example, a commitment for 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
+
 ### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert"
 
-Convert a commitment from a given resource to one of a different type. The target project is defined with the provided `project_id`.
+Convert a commitment from a given resource to one of a different type.
 Requires a request body like:
 
 ```json
@@ -739,16 +760,14 @@ Requires a request body like:
 		"target_service":  "compute",
 		"target_resource": "flavor_c48",
 		"source_amount":   9,
-		"target_amount":   6,
-	},
+		"target_amount":   6
+	}
 }
 ```
 In the example above the commitment that should be converted to the `target_resource` could be from type `flavor_c32` resulting in a conversion of `3:2`.
 
 
-Returns 202 (Accepted) on success, and and returns the converted commitment as a JSON document.
-
-In this example, a commitment for 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
+Returns 202 (Accepted) on success, and returns the converted commitment as a JSON document.
 
 ### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration"
 
@@ -760,13 +779,14 @@ Requires a request body like:
 }
 ```
 
-Returns 200 (OK) on Success, and returns the updated commitment as a JSON document.
+Returns 200 (OK) on success, and returns the updated commitment as a JSON document.
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
-Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).
-
-Only unconfirmed commitments may be deleted. If the commitment has already been confirmed, returns 403 (Forbidden).
+Deletes a commitment within the given project.
+Either requires a project-admin token and the commitment to have been created within the last 24 hours _or_ a cloud-admin token.
+On success, returns 204 (No Content).
+Otherwise returns 403 (Forbidden).
 
 ### GET /v1/inconsistencies
 
