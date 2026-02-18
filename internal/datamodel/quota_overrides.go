@@ -22,7 +22,7 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 	if path == "" {
 		return nil, nil
 	}
-	buf, err := os.ReadFile(path)
+	buf, err := os.ReadFile(path) // #nosec G703 -- path is from LIMES_QUOTA_OVERRIDES_PATH environment variable, controlled by operator
 	if err != nil {
 		errs.Add(err)
 		return
