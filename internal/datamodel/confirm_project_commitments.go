@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"time"
 
@@ -121,6 +120,19 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc co
 // them as possible given the currently available capacity. Simultaneously, it
 // releases transferable commitments that can be used to satisfy the pending ones.
 func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
+	// load confirmable commitments
+	var confirmableCommitments []db.ProjectCommitment
+	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
+	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", loc.ScopeString(), err)
+	}
+
+	// optimization: do not do more loading, if we do not have anything to confirm
+	if len(confirmableCommitments) == 0 {
+		return nil, nil
+	}
+
 	// load service info (used to generate liquid.ProjectMetadata)
 	maybeServiceInfo, err := cluster.InfoForService(loc.ServiceType)
 	if err != nil {
@@ -129,20 +141,6 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	serviceInfo, ok := maybeServiceInfo.Unpack()
 	if !ok {
 		return nil, fmt.Errorf("serviceInfo not found when trying to confirm commitments for %s", loc.ServiceType)
-	}
-
-	// load confirmable commitments
-	var confirmableCommitments []db.ProjectCommitment
-	confirmedCommitmentIDs := make(map[db.ProjectID][]db.ProjectCommitmentID)
-	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", loc.ScopeString(), err)
-	}
-
-	// optimization: do not load allocation stats if we do not have anything to confirm
-	if len(confirmableCommitments) == 0 {
-		return nil, nil
 	}
 
 	// load affected projects and domains
@@ -168,137 +166,100 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// initiate cache of transferable commitments
-	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, serviceInfo, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
+	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, serviceInfo, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
 	if err != nil {
 		return nil, err
 	}
 
-	// load allocation stats
-	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, Some(loc.AvailabilityZone), cluster, dbi)
-	if err != nil {
-		return nil, err
-	}
-	stats := statsByAZ[loc.AvailabilityZone]
-
-	// initialize map to hold CCRs for audit events
-	ccrs := make(map[liquid.CommitmentUUID]liquid.CommitmentChangeRequest, 0)
-
+	confirmedCommitmentsByProjectID := make(map[db.ProjectID][]*db.ProjectCommitment)
 	// foreach confirmable commitment in the order to be confirmed
-	for _, cc := range confirmableCommitments {
-		// ignore commitments that do not fit
-		logg.Debug("checking ConfirmPendingCommitments in %s: commitmentID = %d, projectID = %d, amount = %d",
-			loc.ShortScopeString(), cc.ID, cc.ProjectID, cc.Amount)
-		project := affectedProjectsByID[cc.ProjectID]
-		domain := affectedDomainsByID[project.DomainID]
-
-		var capacityAccepted bool
-		capacityAccepted, ccr, err := delegateChangeCommitmentsWithShortcut(ctx, cluster, dbi, loc, serviceInfo, project, domain, cc, stats)
-		if err != nil {
-			return nil, fmt.Errorf("while checking acceptance of commitment ID=%d for %s: %w", cc.ID, loc.ScopeString(), err)
-		}
-		if !capacityAccepted {
-			continue
-		}
-		ccrs[cc.UUID] = ccr
-		// if a commitment was transferred in this iteration already, we do not need to confirm it
-		// if partially transferred, the leftover commitment is added to the transferable commitments and considered separately
+	for i := range confirmableCommitments {
+		cc := confirmableCommitments[i] // avoid pointer issues in loop
+		// If a commitment was transferred in this iteration already, we do not need to confirm it.
+		// If partially transferred, the leftover is added to the transferable commitments instead of the superseded one.
 		if transferableCommitmentCache.CommitmentWasTransferred(cc.ID, cc.ProjectID) {
 			continue
 		}
 
-		err = transferableCommitmentCache.CheckAndConsume(cc, stats.ProjectStats[cc.ProjectID].Committed)
+		// First, we check whether we can consume transferable commitments and have the necessary capacity.
+		project := affectedProjectsByID[cc.ProjectID]
+		domain := affectedDomainsByID[project.DomainID]
+		result, err := transferableCommitmentCache.CanConfirmWithTransfers(ctx, cc, project, domain, false, false, auditContext, ConfirmAction)
 		if err != nil {
 			return nil, err
 		}
 
-		// confirm the commitment
-		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, status = $2 WHERE id = $3`,
-			now, liquid.CommitmentStatusConfirmed, cc.ID)
+		// When we cannot confirm the commitment, we check with the next one. This can lead to
+		// smaller but later created commitments to be confirmed earlier, but that is acceptable.
+		if result.RejectionReason != "" {
+			continue
+		}
+
+		// capacity is sufficient --> confirm the commitment
+		cc.ConfirmedAt = Some(now)
+		cc.Status = liquid.CommitmentStatusConfirmed
+		_, err = dbi.Update(&cc)
 		if err != nil {
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, loc.ScopeString(), err)
 		}
 		transferableCommitmentCache.ConfirmTransferableCommitmentIfExists(cc.ID, now)
-		confirmedCommitmentIDs[cc.ProjectID] = append(confirmedCommitmentIDs[cc.ProjectID], cc.ID)
-
-		// block its allocation from being committed again in this loop
-		oldStats := stats.ProjectStats[cc.ProjectID]
-		stats.ProjectStats[cc.ProjectID] = projectAZAllocationStats{
-			Committed: oldStats.Committed + cc.Amount,
-			Usage:     oldStats.Usage,
-		}
+		confirmedCommitmentsByProjectID[cc.ProjectID] = append(confirmedCommitmentsByProjectID[cc.ProjectID], &cc)
 	}
 
-	// gather some prerequisites for the mail notifications
+	// generate mail notifications for commitment transfers
 	apiIdentity := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
-
-	// generate audit events and mail notifications for commitment transfers
-	ae, err := transferableCommitmentCache.GenerateAuditEventsAndMails(apiIdentity, auditContext)
+	err = transferableCommitmentCache.GenerateTransferMails(apiIdentity)
 	if err != nil {
 		return nil, err
 	}
-	auditEvents = append(auditEvents, ae...)
 
-	for _, projectID := range slices.Sorted(maps.Keys(confirmedCommitmentIDs)) {
-		confirmations := confirmedCommitmentIDs[projectID]
-		// for commitments which get confirmed first and then transferred, we remove the mail for confirmation
-		// to avoid duplicate notification mails
+	// retrieve audit events for commitment transfers
+	auditEvents = append(auditEvents, transferableCommitmentCache.RetrieveAuditEvents()...)
+
+	// generate mail notifications for commitment confirmations
+	for _, projectID := range slices.Sorted(maps.Keys(confirmedCommitmentsByProjectID)) {
+		confirmedCommitments := confirmedCommitmentsByProjectID[projectID]
+		// For commitments which get confirmed first and then transferred, we remove the mail for confirmation
+		// to avoid duplicate notification mails.
 		notificationsForProject := transferableCommitmentCache.getTransferredCommitmentsForProject(projectID)
 		for cID := range notificationsForProject {
-			confirmations = slices.DeleteFunc(confirmations, func(id db.ProjectCommitmentID) bool { return id == cID })
+			confirmedCommitments = slices.DeleteFunc(confirmedCommitments, func(c *db.ProjectCommitment) bool { return c.ID == cID })
 		}
 
-		// generate audit events and mail notifications for commitment confirmations
-		ae, err = generateAuditEventsAndMails(confirmationTemplate, dbi, loc, apiIdentity, projectID, auditContext, confirmations, ccrs, now)
+		affectedProject := affectedProjectsByID[projectID]
+		affectedDomain := affectedDomainsByID[affectedProject.DomainID]
+		err = generateConfirmationMails(confirmationTemplate, dbi, loc, apiIdentity, affectedProject, affectedDomain, confirmedCommitments, now)
 		if err != nil {
 			return nil, err
 		}
-		auditEvents = append(auditEvents, ae...)
 	}
 
 	return auditEvents, nil
 }
 
-func generateAuditEventsAndMails(mailTemplate Option[core.MailTemplate], dbi db.Interface, loc core.AZResourceLocation, apiIdentity core.ResourceRef, projectID db.ProjectID, auditContext audit.Context,
-	confirmedCommitmentIDs []db.ProjectCommitmentID, ccrs map[liquid.CommitmentUUID]liquid.CommitmentChangeRequest, now time.Time) (auditEvents []audittools.Event, err error) {
-
-	var (
-		n           core.CommitmentGroupNotification
-		domainUUID  string
-		projectUUID liquid.ProjectUUID
-	)
-	err = dbi.QueryRow("SELECT d.uuid, d.name, p.uuid, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&domainUUID, &n.DomainName, &projectUUID, &n.ProjectName)
-	if err != nil {
-		return auditEvents, err
+func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.Interface, loc core.AZResourceLocation, apiIdentity core.ResourceRef, project db.Project, domain db.Domain, confirmedCommitments []*db.ProjectCommitment, now time.Time) error {
+	// The system can be configured to not send mails (e.g. for test systems).
+	tpl, tplExists := mailTemplate.Unpack()
+	if !tplExists {
+		return nil
 	}
 
-	commitmentsByID, err := db.BuildIndexOfDBResult(dbi, func(c db.ProjectCommitment) db.ProjectCommitmentID { return c.ID }, `SELECT * FROM project_commitments WHERE id = ANY($1)`, pq.Array(confirmedCommitmentIDs))
-	if err != nil {
-		return auditEvents, err
+	n := core.CommitmentGroupNotification{
+		DomainName:  domain.Name,
+		ProjectName: project.Name,
+		Commitments: make([]core.CommitmentNotification, 0, len(confirmedCommitments)),
 	}
 
-	for _, cID := range confirmedCommitmentIDs {
-		c, exists := commitmentsByID[cID]
-		if !exists {
-			return auditEvents, fmt.Errorf("tried to generate mail notification for non-existent commitment ID %d", cID)
-		}
-		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
-
-		// push one confirmation audit event per commitment, because they belong to separate CCRs
-		auditEvents = append(auditEvents, audit.CommitmentEventTarget{
-			CommitmentChangeRequest: ccrs[c.UUID],
-		}.ReplicateForAllProjects(audittools.Event{
-			Time:       now,
-			Request:    auditContext.Request,
-			User:       auditContext.UserIdentity,
-			ReasonCode: http.StatusOK,
-			Action:     ConfirmAction,
-		})...)
-
+	for _, c := range confirmedCommitments {
+		// The user can choose to not be notified on confirmation.
 		if !c.NotifyOnConfirm {
 			continue
 		}
+
+		// also defense in depth: we only generate mails for confirmed commitments
+		confirmedAt := c.ConfirmedAt.UnwrapOr(time.Unix(0, 0)) // the UnwrapOr() is defense in depth, it should never be relevant because we only notify for confirmed commitments here
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
-			Commitment: c,
+			Commitment: *c,
 			DateString: confirmedAt.Format(time.DateOnly),
 			// TODO: we actually don't want to have api-named props in AZResourceLocation. Replace the template and the code simultaneously.
 			Resource: core.AZResourceLocation{
@@ -308,68 +269,16 @@ func generateAuditEventsAndMails(mailTemplate Option[core.MailTemplate], dbi db.
 			},
 		})
 	}
-	if tpl, exists := mailTemplate.Unpack(); len(n.Commitments) != 0 && exists {
+	if len(n.Commitments) != 0 {
 		// push mail notifications
-		mail, err := tpl.Render(n, projectID, now)
+		mail, err := tpl.Render(n, project.ID, now)
 		if err != nil {
-			return auditEvents, err
+			return err
 		}
 		err = dbi.Insert(&mail)
 		if err != nil {
-			return auditEvents, err
+			return err
 		}
 	}
-	return auditEvents, nil
-}
-
-func delegateChangeCommitmentsWithShortcut(ctx context.Context, cluster *core.Cluster, dbi db.Interface, loc core.AZResourceLocation, serviceInfo liquid.ServiceInfo, project db.Project, domain db.Domain, commitment db.ProjectCommitment, stats clusterAZAllocationStats) (accepted bool, ccr liquid.CommitmentChangeRequest, err error) {
-	ccr = liquid.CommitmentChangeRequest{
-		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			project.UUID: {
-				ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain, serviceInfo),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					loc.ResourceName: {
-						TotalConfirmedBefore: stats.ProjectStats[commitment.ProjectID].Committed,
-						TotalConfirmedAfter:  stats.ProjectStats[commitment.ProjectID].Committed + commitment.Amount,
-						// TODO: change when introducing "guaranteed" commitments
-						TotalGuaranteedBefore: 0,
-						TotalGuaranteedAfter:  0,
-						Commitments: []liquid.Commitment{
-							{
-								UUID:      commitment.UUID,
-								OldStatus: Some(commitment.Status),
-								NewStatus: Some(liquid.CommitmentStatusConfirmed),
-								Amount:    commitment.Amount,
-								ConfirmBy: commitment.ConfirmBy,
-								ExpiresAt: commitment.ExpiresAt,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// optimization: we check locally, when we know that the resource does not manage commitments
-	// this avoids having to re-load the stats later in the callchain.
-	if !serviceInfo.Resources[loc.ResourceName].HandlesCommitments {
-		additions := map[db.ProjectID]uint64{commitment.ProjectID: commitment.Amount}
-		behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, loc.ResourceName)
-		accepted = stats.CanAcceptCommitmentChanges(additions, nil, behavior)
-	} else {
-		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, cluster, ccr, loc, serviceInfo, dbi)
-		if err != nil {
-			return false, liquid.CommitmentChangeRequest{}, err
-		}
-
-		accepted = commitmentChangeResponse.RejectionReason == ""
-		if !accepted {
-			logg.Info("commitment not accepted for %s: %s", loc.ShortScopeString(), commitmentChangeResponse.RejectionReason)
-		}
-	}
-
-	// as the totalConfirmed will increase, we don't need to check for RequiresConfirmation() here
-	return accepted, audit.EnsureLiquidProjectMetadata(ccr, project, domain, serviceInfo), nil
+	return nil
 }
