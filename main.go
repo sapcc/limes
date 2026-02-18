@@ -142,7 +142,7 @@ func main() {
 
 	// load configuration and connect to cluster
 	dbm := db.InitORM(must.Return(db.Init()))
-	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect")
+	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect") // #nosec G703 -- configPath is from command-line argument, controlled by operator
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo))
 	errs.LogFatalIfError()
@@ -169,7 +169,7 @@ Usage:
 `), `\t`, "\t") + "\n"
 
 func printUsageAndExit(exitCode int) {
-	fmt.Fprintln(os.Stderr, strings.ReplaceAll(usageMessage, "%s", os.Args[0]))
+	fmt.Fprintln(os.Stderr, strings.ReplaceAll(usageMessage, "%s", os.Args[0])) // #nosec G705 -- program name is safe to use in error message
 	os.Exit(exitCode)
 }
 
