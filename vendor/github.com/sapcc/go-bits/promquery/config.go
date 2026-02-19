@@ -80,7 +80,7 @@ func (cfg Config) Connect() (Client, error) {
 		}).DialContext,
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
-	transport.TLSClientConfig = &tls.Config{} //nolint:gosec // used for a client which defaults to TLS version 1.2
+	transport.TLSClientConfig = &tls.Config{}
 
 	if cfg.ClientCertificatePath != "" {
 		clientCert, err := tls.LoadX509KeyPair(cfg.ClientCertificatePath, cfg.ClientCertificateKeyPath)
