@@ -211,6 +211,11 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		if tc.ProjectID == c.ProjectID {
 			continue
 		}
+		// Automatic transfers of commitments between different projects but created
+		// by same user are also forbidden for exploitation reasons.
+		if tc.CreatorUUID == c.CreatorUUID {
+			continue
+		}
 		// A commitment is only consumed if it's expires_at <= expires_at of the commitment we confirm.
 		if tc.ExpiresAt.After(c.ExpiresAt) {
 			continue
