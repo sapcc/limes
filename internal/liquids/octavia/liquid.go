@@ -28,18 +28,21 @@ type Logic struct {
 }
 
 // On reading quota, we will accept any of the given names.
-// On reading usage and writing quota, we will use the first name in the list.
+// On reading usage and writing quota, we will use the ResourceName.
 //
 // It appears that the names with underscore are deprecated since Rocky, but
 // their removal has been procrastinated since then. Worse yet, GET requests on
 // Yoga still return the supposedly deprecated fields only, not the intended names.
-var octaviaNamesForResource = map[liquid.ResourceName][]string{
-	"healthmonitors": {"healthmonitor", "health_monitor"},
-	"l7policies":     {"l7policy"},
-	"listeners":      {"listener"},
-	"loadbalancers":  {"loadbalancer", "load_balancer"},
-	"pool_members":   {"member"},
-	"pools":          {"pool"},
+var mappedNamesForResource = map[liquid.ResourceName]struct {
+	OctaviaNames []string
+	DisplayName  string
+}{
+	"healthmonitors": {[]string{"healthmonitor", "health_monitor"}, "Health Monitors"},
+	"l7policies":     {[]string{"l7policy"}, "L7 Policies"},
+	"listeners":      {[]string{"listener"}, "Listeners"},
+	"loadbalancers":  {[]string{"loadbalancer", "load_balancer"}, "Load Balancers"},
+	"pool_members":   {[]string{"member"}, "Pool Members"},
+	"pools":          {[]string{"pool"}, "Pools"},
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -64,12 +67,13 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	// we support all resources that Octavia supports and that we also know about
-	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(octaviaNamesForResource))
-	for resName, octaviaNames := range octaviaNamesForResource {
-		for _, octaviaName := range octaviaNames {
+	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(mappedNamesForResource))
+	for resName, mappedNames := range mappedNamesForResource {
+		for _, octaviaName := range mappedNames.OctaviaNames {
 			_, exists := defaultQuota[octaviaName]
 			if exists {
 				resources[resName] = liquid.ResourceInfo{
+					DisplayName: mappedNames.DisplayName,
 					Unit:        liquid.UnitNone,
 					Topology:    liquid.FlatTopology,
 					HasCapacity: false,
@@ -81,8 +85,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Loadbalancing",
+		Resources:   resources,
 	}, nil
 }
 
@@ -105,7 +110,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 	resourceReports := make(map[liquid.ResourceName]*liquid.ResourceUsageReport, len(serviceInfo.Resources))
 	for resName := range serviceInfo.Resources {
-		octaviaNames := octaviaNamesForResource[resName]
+		octaviaNames := mappedNamesForResource[resName].OctaviaNames
 		report := liquid.ResourceUsageReport{
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: octaviaUsage[octaviaNames[0]]}),
 		}
@@ -129,7 +134,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	octaviaQuotas := make(quotaSet, len(serviceInfo.Resources))
 	for resName := range serviceInfo.Resources {
-		octaviaQuotas[octaviaNamesForResource[resName][0]] = req.Resources[resName].Quota
+		octaviaQuotas[mappedNamesForResource[resName].OctaviaNames[0]] = req.Resources[resName].Quota
 	}
 	_, err := quotas.Update(ctx, l.OctaviaV2, projectUUID, octaviaQuotas).Extract()
 	return err

@@ -168,23 +168,39 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+1)
 	resources["share_networks"] = liquid.ResourceInfo{
+		DisplayName: "Share Networks",
 		Unit:        liquid.UnitNone,
 		Topology:    liquid.FlatTopology,
 		HasCapacity: true,
 		HasQuota:    true,
 	}
 	for _, vst := range l.VirtualShareTypes {
-		resources[vst.sharesResourceName()] = resInfoForObjects
-		resources[vst.snapshotsResourceName()] = resInfoForObjects
-		resources[vst.shareCapacityResourceName()] = resInfoForCapacity
-		resources[vst.snapshotCapacityResourceName()] = resInfoForCapacity
+		sharesInfo := resInfoForObjects
+		sharesInfo.DisplayName = "Shares"
+		resources[vst.sharesResourceName()] = sharesInfo
+
+		snapshotsInfo := resInfoForObjects
+		snapshotsInfo.DisplayName = "Share Snapshots"
+		resources[vst.snapshotsResourceName()] = snapshotsInfo
+
+		shareCapacityInfo := resInfoForCapacity
+		shareCapacityInfo.DisplayName = "Share Capacity"
+		resources[vst.shareCapacityResourceName()] = shareCapacityInfo
+
+		snapshotCapacityInfo := resInfoForCapacity
+		snapshotCapacityInfo.DisplayName = "Share Snapshot Capacity"
+		resources[vst.snapshotCapacityResourceName()] = snapshotCapacityInfo
+
 		if l.NetappMetrics != nil {
-			resources[vst.snapmirrorCapacityResourceName()] = resInfoForSnapmirrorCapacity
+			snapmirrorCapacityInfo := resInfoForSnapmirrorCapacity
+			snapmirrorCapacityInfo.DisplayName = "Snapmirror Capacity"
+			resources[vst.snapmirrorCapacityResourceName()] = snapmirrorCapacityInfo
 		}
 	}
 
 	return liquid.ServiceInfo{
 		Version:                         time.Now().Unix(),
+		DisplayName:                     "Shared Filesystem",
 		Resources:                       resources,
 		UsageReportNeedsProjectMetadata: true,
 		QuotaUpdateNeedsProjectMetadata: true,

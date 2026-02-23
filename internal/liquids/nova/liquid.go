@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -86,7 +87,7 @@ func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceCli
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	// SAPCC extension: Nova may report quotas with this name pattern in its quota sets and quota class sets.
-	// If it does, instances with flavors that have the extra spec `quota:hw_version` set to the first match
+	// If it does, instances with fl avors that have the extra spec `quota:hw_version` set to the first match
 	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
 	//
 	// This initialization enumerates which such pooled resources exist.
@@ -95,7 +96,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
 	}
 	hasPooledResource := make(map[string]map[liquid.ResourceName]bool)
-	var hwVersionResources []liquid.ResourceName
+	hwVersionByResourceName := make(map[liquid.ResourceName]string, 0)
 	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
 	for resourceName := range defaultQuotaClassSet {
 		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
@@ -104,7 +105,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
 
-		hwVersionResources = append(hwVersionResources, liquid.ResourceName(resourceName))
+		hwVersionByResourceName[liquid.ResourceName(resourceName)] = hwVersion
 
 		if hasPooledResource[hwVersion] == nil {
 			hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
@@ -125,6 +126,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
+			DisplayName:         "Cores",
 			Unit:                liquid.UnitNone,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -132,6 +134,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"instances": {
+			DisplayName:         "Instances",
 			Unit:                liquid.UnitNone,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -139,6 +142,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"ram": {
+			DisplayName:         "RAM",
 			Unit:                liquid.UnitMebibytes,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -146,14 +150,16 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"server_groups": {
-			Unit:     liquid.UnitNone,
-			Topology: liquid.FlatTopology,
-			HasQuota: true,
+			DisplayName: "Server Groups",
+			Unit:        liquid.UnitNone,
+			Topology:    liquid.FlatTopology,
+			HasQuota:    true,
 		},
 		"server_group_members": {
-			Unit:     liquid.UnitNone,
-			Topology: liquid.FlatTopology,
-			HasQuota: true,
+			DisplayName: "Server Group Members",
+			Unit:        liquid.UnitNone,
+			Topology:    liquid.FlatTopology,
+			HasQuota:    true,
 		},
 	}
 
@@ -163,6 +169,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 		if IsSplitFlavor(f) {
 			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
+				DisplayName:         "Instances " + f.Name,
 				Unit:                liquid.UnitNone,
 				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
@@ -176,25 +183,36 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, err
 	}
 
-	for _, resourceName := range hwVersionResources {
+	for resourceName, hwVersion := range hwVersionByResourceName {
 		unit := liquid.UnitNone
-		if strings.HasSuffix(string(resourceName), "ram") {
+		// Generate display name from resource name (e.g., "hw_version_xyz_cores" -> "Cores v1")
+		var displayName string
+		switch {
+		case strings.HasSuffix(string(resourceName), "cores"):
+			displayName = "Cores " + hwVersion
+		case strings.HasSuffix(string(resourceName), "instances"):
+			displayName = "Instances " + hwVersion
+		case strings.HasSuffix(string(resourceName), "ram"):
+			displayName = "RAM " + hwVersion
 			unit = liquid.UnitMebibytes
 		}
+
 		resources[resourceName] = liquid.ResourceInfo{
-			Unit:     unit,
-			HasQuota: true,
-			Topology: liquid.AZAwareTopology,
+			DisplayName: displayName,
+			Unit:        unit,
+			HasQuota:    true,
+			Topology:    liquid.AZAwareTopology,
 		}
 	}
 
 	l.hasPooledResource.Set(hasPooledResource)
-	l.hwVersionResources.Set(hwVersionResources)
+	l.hwVersionResources.Set(slices.Collect(maps.Keys(hwVersionByResourceName)))
 	l.ignoredFlavorNames.Set(ignoredFlavorNames)
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Compute",
+		Resources:   resources,
 	}, nil
 }
 

@@ -135,28 +135,34 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	// build ResourceInfo set
 	resInfoForCapacity := liquid.ResourceInfo{
+		DisplayName:         "Capacity",
 		Unit:                liquid.UnitGibibytes,
 		Topology:            liquid.AZAwareTopology,
 		HasCapacity:         true,
 		NeedsResourceDemand: true,
 		HasQuota:            true,
 	}
-	resInfoForObjects := liquid.ResourceInfo{
+	resInfoVolumes := liquid.ResourceInfo{
+		DisplayName: "Volumes",
 		Unit:        liquid.UnitNone,
 		Topology:    liquid.AZAwareTopology,
 		HasCapacity: false,
 		HasQuota:    true,
 	}
+	resInfoSnapshots := resInfoVolumes.Clone()
+	resInfoSnapshots.DisplayName = "Snapshots"
+
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 3*len(volumeTypes))
 	for vt := range volumeTypes {
 		resources[vt.capacityResourceName()] = resInfoForCapacity
-		resources[vt.snapshotsResourceName()] = resInfoForObjects
-		resources[vt.volumesResourceName()] = resInfoForObjects
+		resources[vt.snapshotsResourceName()] = resInfoSnapshots
+		resources[vt.volumesResourceName()] = resInfoVolumes
 	}
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Block Storage",
+		Resources:   resources,
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"liquid_cinder_snapshots_with_unknown_volume_type_size": {
 				Type: liquid.MetricTypeGauge,

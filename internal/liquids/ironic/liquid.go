@@ -90,6 +90,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 
 		resources[resourceNameForFlavorName(flavor.Name)] = liquid.ResourceInfo{
+			DisplayName: "Instances " + flavor.Name,
 			Unit:        liquid.UnitNone,
 			Topology:    liquid.AZAwareTopology,
 			HasCapacity: true,
@@ -99,8 +100,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Bare Metal",
+		Resources:   resources,
 		CapacityMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_retired_ironic_nodes": {
 				Type: liquid.MetricTypeGauge,
