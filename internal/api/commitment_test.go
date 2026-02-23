@@ -996,7 +996,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// now we set the only confirmed commitment of 6 to be transferable
-	s.MustDBExec(`UPDATE project_commitments SET transfer_token = $1, transfer_status = 'public', transfer_started_at = $2 WHERE id = 3`, s.Collector.GenerateTransferToken(), s.Clock.Now())
+	s.MustDBExec(`UPDATE project_commitments SET transfer_token = $1, transfer_status = 'public', transfer_started_at = $2, creator_uuid = 'someone-else' WHERE id = 3`, s.Collector.GenerateTransferToken(), s.Clock.Now())
 
 	// now, we can confirm up to 4 more than before, because a usage of 2 remains for berlin, but not 5 more
 	assert.HTTPRequest{
