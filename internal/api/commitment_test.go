@@ -975,6 +975,44 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 2, 'confirmed', 6, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}');
 		UPDATE services SET next_scrape_at = %[1]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
     `, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
+
+	// we are now at sum(max(committed, usage)) = 10 and capacity for this resource is 10
+	// all projects have a usage of 2
+	// if we check whether we can confirm 2 in dresden (which is the usage), this would work
+	// if we check whether we can confirm 1 more, we get rejected
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
+		Body:         request(2),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
+		Body:         request(3),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": false},
+	}.Check(t, s.Handler)
+
+	// now we set the only confirmed commitment of 6 to be transferable
+	s.MustDBExec(`UPDATE project_commitments SET transfer_token = $1, transfer_status = 'public', transfer_started_at = $2 WHERE id = 3`, s.Collector.GenerateTransferToken(), s.Clock.Now())
+
+	// now, we can confirm up to 4 more than before, because a usage of 2 remains for berlin, but not 5 more
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
+		Body:         request(6),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
+		Body:         request(7),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": false},
+	}.Check(t, s.Handler)
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {

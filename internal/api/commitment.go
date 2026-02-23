@@ -421,38 +421,31 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// check for committable capacity
-	newStatus := liquid.CommitmentStatusConfirmed
-	totalConfirmedAfter := totalConfirmed + req.Amount
+	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
+	buf, err := json.Marshal(creationContext)
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	potentialCommitment := db.ProjectCommitment{
+		UUID:                p.generateProjectCommitmentUUID(),
+		ProjectID:           dbProject.ID,
+		AZResourceID:        azResourceID,
+		Amount:              req.Amount,
+		Duration:            req.Duration,
+		CreatedAt:           now,
+		CreatorUUID:         token.UserUUID(),
+		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+		ExpiresAt:           req.Duration.AddTo(now),
+		CreationContextJSON: json.RawMessage(buf),
+	}
 
-	ccr, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, liquid.CommitmentChangeRequest{
-		DryRun:      true,
-		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					loc.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmedAfter,
-						// TODO: change when introducing "guaranteed" commitments
-						TotalGuaranteedBefore: 0,
-						TotalGuaranteedAfter:  0,
-						Commitments: []liquid.Commitment{
-							{
-								UUID:      p.generateProjectCommitmentUUID(),
-								OldStatus: None[liquid.CommitmentStatus](),
-								NewStatus: Some(newStatus),
-								Amount:    req.Amount,
-								ExpiresAt: req.Duration.AddTo(now),
-							},
-						},
-					},
-				},
-			},
-		},
-	}, *loc, *serviceInfo, p.DB)
+	// check for committable capacity via the transferableCommitmentCache
+	// it automatically does the delegation to liquid if required
+	transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(p.DB, p.Cluster, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, None[core.MailTemplate]())
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+	ccr, err := transferableCommitmentCache.CanConfirmWithTransfers(r.Context(), potentialCommitment, *dbProject, *dbDomain, true, true, audit.Context{}, cadf.CreateAction)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
