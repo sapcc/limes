@@ -84,7 +84,7 @@ func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) 
 	case "transferred_commitments":
 		template = mailConfig.Templates.TransferredCommitments
 	default:
-		http.Error(w, "invalid template type", http.StatusBadRequest)
+		http.Error(w, `invalid template type, must be one of: "confirmed_commitments", "expiring_commitments", "transferred_commitments"`, http.StatusBadRequest)
 		return
 	}
 
