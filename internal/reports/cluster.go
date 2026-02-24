@@ -193,9 +193,9 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		}
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
-			resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity))
+			resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity)) //nolint:modernize // pointerTo takes a value, new() creates a zero value
 			if *resource.Capacity != *rawCapacity {
-				resource.RawCapacity = pointerTo(*rawCapacity)
+				resource.RawCapacity = pointerTo(*rawCapacity) //nolint:modernize // pointerTo takes a value, new() creates a zero value
 			}
 		}
 

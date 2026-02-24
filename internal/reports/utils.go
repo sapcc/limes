@@ -12,6 +12,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
+//nolint:modernize // false positive: pointerTo takes a value, new() creates a zero value
 func pointerTo[T any](value T) *T {
 	return &value
 }
