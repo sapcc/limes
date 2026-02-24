@@ -63,7 +63,7 @@ func TestRenderMailTemplate(t *testing.T) {
 		Method:       "GET",
 		Path:         "/admin/mail/render?template_type=unknown",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("invalid template type\n"),
+		ExpectBody:   assert.StringData("invalid template type, must be one of: \"confirmed_commitments\", \"expiring_commitments\", \"transferred_commitments\"\n"),
 	}.Check(t, s.Handler)
 
 	// happy path
