@@ -728,7 +728,8 @@ To ensure that a commitment can be checked for its `resource` type or `availabil
 
 ### GET /v1/public-commitments
 
-Returns a list of commitments which are in `transfer_status=public`, ready to be consumed by the user with `/transfer-commitment`.
+Returns a list of commitments for a specific resource which are in `transfer_status=public`, ready to be consumed by the user with `/transfer-commitment`.
+The resource must be identified through the query parameters `service` and `resource`, e.g. `?service=compute&resource=cores`.
 
 ### GET /v1/commitment-conversion/:service\_type/:resource\_name
 

@@ -214,7 +214,15 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 
 	// parse and validate request
 	query := r.URL.Query()
+	if query.Get("service") == "" {
+		http.Error(w, "missing required query parameter: service", http.StatusBadRequest)
+		return
+	}
 	requestedServiceType := limes.ServiceType(query.Get("service"))
+	if query.Get("resource") == "" {
+		http.Error(w, "missing required query parameter: resource", http.StatusBadRequest)
+		return
+	}
 	requestedResourceName := limesresources.ResourceName(query.Get("resource"))
 
 	serviceInfos, err := p.Cluster.AllServiceInfos()
