@@ -1163,8 +1163,14 @@ func TestGetPublicCommitmentsErrorCases(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments",
-		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: \"/\"\n"),
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("missing required query parameter: service\n"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/public-commitments?service=first",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("missing required query parameter: resource\n"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
