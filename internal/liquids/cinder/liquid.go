@@ -17,16 +17,21 @@ import (
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
+
+	. "github.com/majewsky/gg/option"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 // Logic implements the liquidapi.Logic interface for Cinder.
 type Logic struct {
 	// configuration
-	WithSubcapacities        bool                    `json:"with_subcapacities"`
-	WithVolumeSubresources   bool                    `json:"with_volume_subresources"`
-	WithSnapshotSubresources bool                    `json:"with_snapshot_subresources"`
-	ManagePrivateVolumeTypes regexpext.BoundedRegexp `json:"manage_private_volume_types"`
-	IgnorePublicVolumeTypes  regexpext.BoundedRegexp `json:"ignore_public_volume_types"`
+	WithSubcapacities        bool                           `json:"with_subcapacities"`
+	WithVolumeSubresources   bool                           `json:"with_volume_subresources"`
+	WithSnapshotSubresources bool                           `json:"with_snapshot_subresources"`
+	ManagePrivateVolumeTypes regexpext.BoundedRegexp        `json:"manage_private_volume_types"`
+	IgnorePublicVolumeTypes  regexpext.BoundedRegexp        `json:"ignore_public_volume_types"`
+	CategoryDisplayNames     map[liquid.CategoryName]string `json:"category_display_names"`
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
@@ -153,7 +158,19 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	resInfoSnapshots.DisplayName = "Snapshots"
 
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 3*len(volumeTypes))
+	categories := make(map[liquid.CategoryName]liquid.CategoryInfo)
 	for vt := range volumeTypes {
+		category := liquid.CategoryName(vt)
+		if _, cExists := categories[category]; !cExists {
+			cName, cDisplayNameExists := l.CategoryDisplayNames[category]
+			if !cDisplayNameExists {
+				cName = util.TitleCase(string(vt))
+			}
+			categories[category] = liquid.CategoryInfo{DisplayName: cName}
+		}
+		resInfoVolumes.Category = Some(category)
+		resInfoForCapacity.Category = Some(category)
+		resInfoSnapshots.Category = Some(category)
 		resources[vt.capacityResourceName()] = resInfoForCapacity
 		resources[vt.snapshotsResourceName()] = resInfoSnapshots
 		resources[vt.volumesResourceName()] = resInfoVolumes
@@ -162,6 +179,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version:     time.Now().Unix(),
 		DisplayName: "Block Storage",
+		Categories:  categories,
 		Resources:   resources,
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"liquid_cinder_snapshots_with_unknown_volume_type_size": {

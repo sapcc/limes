@@ -43,8 +43,8 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version:     1,
-		DisplayName: "E-Mail",
+		Version:     2,
+		DisplayName: "Email",
 		Rates: map[liquid.RateName]liquid.RateInfo{
 			"attachment_size":           {DisplayName: "Attachment Size", HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},
 			"data_transfer_in":          {DisplayName: "Data Transfer In", HasUsage: true, Topology: liquid.FlatTopology, Unit: liquid.UnitBytes},

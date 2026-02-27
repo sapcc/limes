@@ -32,7 +32,8 @@ type Logic struct {
 //
 // It appears that the names with underscore are deprecated since Rocky, but
 // their removal has been procrastinated since then. Worse yet, GET requests on
-// Yoga still return the supposedly deprecated fields only, not the intended names.
+// Yoga (checked again with Epoxy) still return the supposedly deprecated fields
+// only, not the intended names.
 var mappedNamesForResource = map[liquid.ResourceName]struct {
 	OctaviaNames []string
 	DisplayName  string

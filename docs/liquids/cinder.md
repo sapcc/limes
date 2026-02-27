@@ -20,6 +20,7 @@ This liquid provides support for the block storage service Cinder.
 | `with_volume_subresources`                | boolean                 | If true, subresources are reported on volumes resources.                        |
 | `manage_private_volume_types`<sup>1</sup> | regexpext.BoundedRegexp | If set, matching private volume types will be considered for liquid reports.    |
 | `ignore_public_volume_types`<sup>1</sup>  | regexpext.BoundedRegexp | If set, matching public volume types will not be considered for liquid reports. |
+| `category_display_names` | map[liquid.CategoryName]string | Optional mapping of category names to display names. If not set, the category display name will be the title-cased version of the volume type used as category name. |
 
 <sup>1</sup> Values are regular expressions [in the Go syntax](https://pkg.go.dev/regexp/syntax). Leading `^` and trailing `$` anchors are implied automatically.
 

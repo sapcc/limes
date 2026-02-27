@@ -38,7 +38,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version:     1,
+		Version:     2,
 		DisplayName: "Object Storage",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {

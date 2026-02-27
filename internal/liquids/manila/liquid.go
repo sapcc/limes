@@ -22,6 +22,10 @@ import (
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/promquery"
 	"github.com/sapcc/go-bits/respondwith"
+
+	. "github.com/majewsky/gg/option"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 // Logic implements the liquidapi.Logic interface for Manila.
@@ -34,9 +38,10 @@ type Logic struct {
 		SnapshotsPerShare uint64  `json:"snapshots_per_share"`
 		WithSubcapacities bool    `json:"with_subcapacities"`
 	} `json:"capacity_calculation"`
-	VirtualShareTypes                   []virtualShareType `json:"share_types"`
-	PrometheusAPIConfigForAZAwareness   *promquery.Config  `json:"prometheus_api_for_az_awareness"`
-	PrometheusAPIConfigForNetappMetrics *promquery.Config  `json:"prometheus_api_for_netapp_metrics"`
+	VirtualShareTypes                   []virtualShareType             `json:"share_types"`
+	PrometheusAPIConfigForAZAwareness   *promquery.Config              `json:"prometheus_api_for_az_awareness"`
+	PrometheusAPIConfigForNetappMetrics *promquery.Config              `json:"prometheus_api_for_netapp_metrics"`
+	CategoryDisplayNames                map[liquid.CategoryName]string `json:"category_display_names"`
 	// connections
 	ManilaV2      *gophercloud.ServiceClient                                 `json:"-"`
 	AZMetrics     *promquery.BulkQueryCache[azMetricsKey, azMetrics]         `json:"-"`
@@ -174,26 +179,42 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		HasCapacity: true,
 		HasQuota:    true,
 	}
+
+	categories := make(map[liquid.CategoryName]liquid.CategoryInfo)
 	for _, vst := range l.VirtualShareTypes {
+		category := liquid.CategoryName(vst.Name)
+		if _, cExists := categories[category]; !cExists {
+			cName, cDisplayNameExists := l.CategoryDisplayNames[category]
+			if !cDisplayNameExists {
+				cName = util.TitleCase(string(vst.Name))
+			}
+			categories[category] = liquid.CategoryInfo{DisplayName: cName}
+		}
+
 		sharesInfo := resInfoForObjects
 		sharesInfo.DisplayName = "Shares"
+		sharesInfo.Category = Some(category)
 		resources[vst.sharesResourceName()] = sharesInfo
 
 		snapshotsInfo := resInfoForObjects
 		snapshotsInfo.DisplayName = "Share Snapshots"
+		snapshotsInfo.Category = Some(category)
 		resources[vst.snapshotsResourceName()] = snapshotsInfo
 
 		shareCapacityInfo := resInfoForCapacity
 		shareCapacityInfo.DisplayName = "Share Capacity"
+		shareCapacityInfo.Category = Some(category)
 		resources[vst.shareCapacityResourceName()] = shareCapacityInfo
 
 		snapshotCapacityInfo := resInfoForCapacity
 		snapshotCapacityInfo.DisplayName = "Share Snapshot Capacity"
+		snapshotCapacityInfo.Category = Some(category)
 		resources[vst.snapshotCapacityResourceName()] = snapshotCapacityInfo
 
 		if l.NetappMetrics != nil {
 			snapmirrorCapacityInfo := resInfoForSnapmirrorCapacity
 			snapmirrorCapacityInfo.DisplayName = "Snapmirror Capacity"
+			snapmirrorCapacityInfo.Category = Some(category)
 			resources[vst.snapmirrorCapacityResourceName()] = snapmirrorCapacityInfo
 		}
 	}
@@ -201,6 +222,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version:                         time.Now().Unix(),
 		DisplayName:                     "Shared Filesystem",
+		Categories:                      categories,
 		Resources:                       resources,
 		UsageReportNeedsProjectMetadata: true,
 		QuotaUpdateNeedsProjectMetadata: true,
