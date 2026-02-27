@@ -277,6 +277,7 @@ func ForeachOptionTypeInLIQUID[T any](action func(...any) T) []T {
 		action(Option[uint64]{}),
 		action(Option[int64]{}),
 		action(Option[liquid.CommitmentStatus]{}),
+		action(Option[liquid.CategoryName]{}),
 	}
 }
 
