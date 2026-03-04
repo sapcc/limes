@@ -29,17 +29,20 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	return liquid.ServiceInfo{
-		Version: 1,
+		Version:     2,
+		DisplayName: "DNS",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"zones": {
-				Unit:     liquid.UnitNone,
-				Topology: liquid.FlatTopology,
-				HasQuota: true,
+				DisplayName: "Zones",
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.FlatTopology,
+				HasQuota:    true,
 			},
 			"recordsets_per_zone": {
-				Unit:     liquid.UnitNone,
-				Topology: liquid.FlatTopology,
-				HasQuota: true,
+				DisplayName: "Recordsets per Zone",
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.FlatTopology,
+				HasQuota:    true,
 			},
 		},
 	}, nil

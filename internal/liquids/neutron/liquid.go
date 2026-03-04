@@ -28,43 +28,47 @@ type Logic struct {
 	OwnProjectID string `json:"-"`
 }
 
-var neutronNameForResource = map[liquid.ResourceName]string{
+var mappedNamesForResource = map[liquid.ResourceName]struct {
+	NeutronName  string
+	DisplayName  string
+	CategoryName Option[liquid.CategoryName]
+}{
 	// core feature set
-	"floating_ips":         "floatingip",
-	"networks":             "network",
-	"ports":                "port",
-	"rbac_policies":        "rbac_policy",
-	"routers":              "router",
-	"security_group_rules": "security_group_rule",
-	"security_groups":      "security_group",
-	"subnet_pools":         "subnetpool",
-	"subnets":              "subnet",
+	"floating_ips":         {NeutronName: "floatingip", DisplayName: "Floating IPs"},
+	"networks":             {NeutronName: "network", DisplayName: "Networks"},
+	"ports":                {NeutronName: "port", DisplayName: "Ports"},
+	"rbac_policies":        {NeutronName: "rbac_policy", DisplayName: "RBAC Policies"},
+	"routers":              {NeutronName: "router", DisplayName: "Routers"},
+	"security_group_rules": {NeutronName: "security_group_rule", DisplayName: "Security Group Rules"},
+	"security_groups":      {NeutronName: "security_group", DisplayName: "Security Groups"},
+	"subnet_pools":         {NeutronName: "subnetpool", DisplayName: "Subnet Pools"},
+	"subnets":              {NeutronName: "subnet", DisplayName: "Subnets"},
 	// extensions
-	"bgpvpns": "bgpvpn",
-	"trunks":  "trunk",
+	"bgpvpns": {NeutronName: "bgpvpn", DisplayName: "BGP VPNs"},
+	"trunks":  {NeutronName: "trunk", DisplayName: "Trunks"},
 	// VPNaaS
-	"endpoint_groups":        "endpoint_group",
-	"ikepolicies":            "ikepolicy",
-	"ipsec_site_connections": "ipsec_site_connection",
-	"ipsecpolicies":          "ipsecpolicy",
-	"vpnservices":            "vpnservice",
+	"endpoint_groups":        {NeutronName: "endpoint_group", DisplayName: "Endpoint Groups", CategoryName: Some(liquid.CategoryName("vpnaas"))},
+	"ikepolicies":            {NeutronName: "ikepolicy", DisplayName: "IKE Policies", CategoryName: Some(liquid.CategoryName("vpnaas"))},
+	"ipsec_site_connections": {NeutronName: "ipsec_site_connection", DisplayName: "IPsec Site Connections", CategoryName: Some(liquid.CategoryName("vpnaas"))},
+	"ipsecpolicies":          {NeutronName: "ipsecpolicy", DisplayName: "IPsec Policies", CategoryName: Some(liquid.CategoryName("vpnaas"))},
+	"vpnservices":            {NeutronName: "vpnservice", DisplayName: "VPN Services", CategoryName: Some(liquid.CategoryName("vpnaas"))},
 	// FWaaS
-	"firewall_groups":   "firewall_group",
-	"firewall_policies": "firewall_policy",
-	"firewall_rules":    "firewall_rule",
+	"firewall_groups":   {NeutronName: "firewall_group", DisplayName: "Firewall Groups", CategoryName: Some(liquid.CategoryName("fwaas"))},
+	"firewall_policies": {NeutronName: "firewall_policy", DisplayName: "Firewall Policies", CategoryName: Some(liquid.CategoryName("fwaas"))},
+	"firewall_rules":    {NeutronName: "firewall_rule", DisplayName: "Firewall Rules", CategoryName: Some(liquid.CategoryName("fwaas"))},
 }
 
 func getNeutronNameForResource(resourceName liquid.ResourceName) string {
-	val, exists := neutronNameForResource[resourceName]
+	val, exists := mappedNamesForResource[resourceName]
 	if exists {
-		return val
+		return val.NeutronName
 	} else {
 		return string(resourceName)
 	}
 }
 
-var dynamicQuotaPrefixes = []string{
-	"routers_flavor_",
+var resourceDisplayNamePrefixByResourcePrefix = map[string]string{
+	"routers_flavor_": "Routers of flavor:",
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -80,21 +84,45 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	return nil
 }
 
-func getResourceNameIfQuotaRelevant(neutronName string) Option[liquid.ResourceName] {
+func getMappedNamesIfQuotaRelevant(neutronName string) Option[struct {
+	resourceName liquid.ResourceName
+	displayName  string
+	categoryName Option[liquid.CategoryName]
+}] {
 	// check for static quota name
-	for resName, v := range neutronNameForResource {
-		if v == neutronName {
-			return Some(resName)
+	for resName, v := range mappedNamesForResource {
+		if v.NeutronName == neutronName {
+			return Some(struct {
+				resourceName liquid.ResourceName
+				displayName  string
+				categoryName Option[liquid.CategoryName]
+			}{
+				resName,
+				v.DisplayName,
+				v.CategoryName,
+			})
 		}
 	}
 
 	// check for dynamic quota names
-	for _, prefix := range dynamicQuotaPrefixes {
-		if strings.HasPrefix(neutronName, prefix) {
-			return Some(liquid.ResourceName(neutronName))
+	for prefix, resourceDisplayNamePrefix := range resourceDisplayNamePrefixByResourcePrefix {
+		if sanitizedName, ok := strings.CutPrefix(neutronName, prefix); ok {
+			return Some(struct {
+				resourceName liquid.ResourceName
+				displayName  string
+				categoryName Option[liquid.CategoryName]
+			}{
+				liquid.ResourceName(neutronName),
+				fmt.Sprintf("%s %s", resourceDisplayNamePrefix, sanitizedName),
+				None[liquid.CategoryName](),
+			})
 		}
 	}
-	return None[liquid.ResourceName]()
+	return None[struct {
+		resourceName liquid.ResourceName
+		displayName  string
+		categoryName Option[liquid.CategoryName]
+	}]()
 }
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
@@ -112,12 +140,21 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	// we support all resources that Neutron supports and that we also know about
-	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(neutronNameForResource))
+	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(mappedNamesForResource))
+	categories := map[liquid.CategoryName]liquid.CategoryInfo{
+		"fwaas": {
+			DisplayName: "Firewall as a Service",
+		},
+		"vpnaas": {
+			DisplayName: "VPN as a Service",
+		},
+	}
 	for neutronName := range data.Quota {
-		resName, isRelevantQuota := getResourceNameIfQuotaRelevant(neutronName).Unpack()
-
+		mappedNames, isRelevantQuota := getMappedNamesIfQuotaRelevant(neutronName).Unpack()
 		if isRelevantQuota {
-			resources[resName] = liquid.ResourceInfo{
+			resources[mappedNames.resourceName] = liquid.ResourceInfo{
+				DisplayName: mappedNames.displayName,
+				Category:    mappedNames.categoryName,
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: false,
@@ -127,8 +164,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Network",
+		Categories:  categories,
+		Resources:   resources,
 	}, nil
 }
 

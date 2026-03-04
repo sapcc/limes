@@ -27,6 +27,7 @@ This liquid provides support for the shared file system storage service Manila.
 | `share_types[].name` | string | Required. The name of the share type on the Manila API. |
 | `share_types[].replication_enabled` | boolean | Whether this share type supports share replicas. This affects usage measurements and quota application as described below. |
 | `share_types[].mapping_rules` | list of objects | If given, this share type is a virtual share type mapping to multiple actual share types. [See "Virtual Share Types" for details.](#virtual-share-types) |
+| `category_display_names` | map[liquid.CategoryName]string | Optional mapping of category names to display names. If not set, the category display name will be the title-cased version of the virtual share type used as category name. |
 
 The two `prometheus_api_...` objects may contain the following fields (if they are present at all):
 

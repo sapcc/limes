@@ -25,6 +25,14 @@ This liquid provides support for the compute service Nova.
 | `ignored_traits` | []string | Traits that should be ignored during confirmation that all pooled flavors agree on which trait-match extra specs they use.  |
 | `with_subcapacities` | boolean | If true, subcapacities are reported. |
 | `with_subresources` | boolean | If true, subresources are reported. |
+| `category_for_split_flavor` | [ConfigSet](../operators/config.md#configset) keyed on `liquid.ResourceName` with `CategoryDeclaration` as value | Describes which category to use for which resource. If not set for a resource that is automatically constructed from a flavor, the resource will not get a category. |
+
+A `CategoryDeclaration` has the following fields:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `name` | string | The name of the category to use for this resource. |
+| `display_name` | string | The display name of the category to use for this resource. |
 
 ## Resources
 

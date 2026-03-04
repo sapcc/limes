@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -19,18 +20,24 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
+
+	. "github.com/majewsky/gg/option"
+
+	"github.com/sapcc/limes/internal/util"
 )
 
 // Logic implements the liquidapi.Logic interface for Nova.
 type Logic struct {
 	// configuration
-	HypervisorSelection hypervisorSelection `json:"hypervisor_selection"`
-	FlavorSelection     FlavorSelection     `json:"flavor_selection"`
-	WithSubresources    bool                `json:"with_subresources"`
-	WithSubcapacities   bool                `json:"with_subcapacities"`
-	BinpackBehavior     binpackBehavior     `json:"binpack_behavior"`
-	IgnoredTraits       []string            `json:"ignored_traits"`
+	HypervisorSelection    hypervisorSelection                                           `json:"hypervisor_selection"`
+	FlavorSelection        FlavorSelection                                               `json:"flavor_selection"`
+	WithSubresources       bool                                                          `json:"with_subresources"`
+	WithSubcapacities      bool                                                          `json:"with_subcapacities"`
+	BinpackBehavior        binpackBehavior                                               `json:"binpack_behavior"`
+	IgnoredTraits          []string                                                      `json:"ignored_traits"`
+	CategoryForSplitFlavor regexpext.ConfigSet[liquid.ResourceName, categoryDeclaration] `json:"category_for_split_flavor"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `json:"-"`
 	PlacementV1       *gophercloud.ServiceClient `json:"-"`
@@ -40,6 +47,11 @@ type Logic struct {
 	ignoredFlavorNames liquidapi.State[[]string]                                `json:"-"`
 	hasPooledResource  liquidapi.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
 	hwVersionResources liquidapi.State[[]liquid.ResourceName]                   `json:"-"`
+}
+
+type categoryDeclaration struct {
+	Name        liquid.CategoryName `json:"name"`
+	DisplayName string              `json:"display_name"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -95,7 +107,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
 	}
 	hasPooledResource := make(map[string]map[liquid.ResourceName]bool)
-	var hwVersionResources []liquid.ResourceName
+	hwVersionByResourceName := make(map[liquid.ResourceName]string, 0)
 	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
 	for resourceName := range defaultQuotaClassSet {
 		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
@@ -104,7 +116,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
 
-		hwVersionResources = append(hwVersionResources, liquid.ResourceName(resourceName))
+		hwVersionByResourceName[liquid.ResourceName(resourceName)] = hwVersion
 
 		if hasPooledResource[hwVersion] == nil {
 			hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
@@ -125,6 +137,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
+			DisplayName:         "Cores",
 			Unit:                liquid.UnitNone,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -132,6 +145,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"instances": {
+			DisplayName:         "Instances",
 			Unit:                liquid.UnitNone,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -139,6 +153,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"ram": {
+			DisplayName:         "RAM",
 			Unit:                liquid.UnitMebibytes,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
@@ -146,23 +161,35 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			NeedsResourceDemand: true,
 		},
 		"server_groups": {
-			Unit:     liquid.UnitNone,
-			Topology: liquid.FlatTopology,
-			HasQuota: true,
+			DisplayName: "Server Groups",
+			Unit:        liquid.UnitNone,
+			Topology:    liquid.FlatTopology,
+			HasQuota:    true,
 		},
 		"server_group_members": {
-			Unit:     liquid.UnitNone,
-			Topology: liquid.FlatTopology,
-			HasQuota: true,
+			DisplayName: "Server Group Members",
+			Unit:        liquid.UnitNone,
+			Topology:    liquid.FlatTopology,
+			HasQuota:    true,
 		},
 	}
 
+	categories := make(map[liquid.CategoryName]liquid.CategoryInfo)
 	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
 		if IsIronicFlavor(f) {
 			return nil
 		}
 		if IsSplitFlavor(f) {
+			var category Option[liquid.CategoryName]
+			if cd, exists := l.CategoryForSplitFlavor.Pick(ResourceNameForFlavor(f.Name)).Unpack(); exists {
+				category = Some(cd.Name)
+				if _, cExists := categories[cd.Name]; !cExists {
+					categories[cd.Name] = liquid.CategoryInfo{DisplayName: cd.DisplayName}
+				}
+			}
 			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
+				Category:            category,
+				DisplayName:         f.Name + " Instances",
 				Unit:                liquid.UnitNone,
 				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
@@ -176,25 +203,43 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, err
 	}
 
-	for _, resourceName := range hwVersionResources {
+	for resourceName, hwVersion := range hwVersionByResourceName {
+		category := liquid.CategoryName("hw_version_" + hwVersion)
+		if _, exists := categories[category]; !exists {
+			categories[category] = liquid.CategoryInfo{
+				DisplayName: util.TitleCase(hwVersion),
+			}
+		}
 		unit := liquid.UnitNone
-		if strings.HasSuffix(string(resourceName), "ram") {
+		var displayName string
+		switch {
+		case strings.HasSuffix(string(resourceName), "cores"):
+			displayName = "Cores"
+		case strings.HasSuffix(string(resourceName), "instances"):
+			displayName = "Instances"
+		case strings.HasSuffix(string(resourceName), "ram"):
+			displayName = "RAM"
 			unit = liquid.UnitMebibytes
 		}
+
 		resources[resourceName] = liquid.ResourceInfo{
-			Unit:     unit,
-			HasQuota: true,
-			Topology: liquid.AZAwareTopology,
+			DisplayName: displayName,
+			Category:    Some(category),
+			Unit:        unit,
+			HasQuota:    true,
+			Topology:    liquid.AZAwareTopology,
 		}
 	}
 
 	l.hasPooledResource.Set(hasPooledResource)
-	l.hwVersionResources.Set(hwVersionResources)
+	l.hwVersionResources.Set(slices.Collect(maps.Keys(hwVersionByResourceName)))
 	l.ignoredFlavorNames.Set(ignoredFlavorNames)
 
 	return liquid.ServiceInfo{
-		Version:   time.Now().Unix(),
-		Resources: resources,
+		Version:     time.Now().Unix(),
+		DisplayName: "Compute",
+		Categories:  categories,
+		Resources:   resources,
 	}, nil
 }
 
