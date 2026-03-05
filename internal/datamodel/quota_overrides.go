@@ -46,14 +46,14 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 	getUnit := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (limes.Unit, error) {
 		dbServiceType, dbResourceName, exists := nameMapping.MapFromV1API(serviceType, resourceName)
 		if !exists {
-			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
+			return limes.UnitNone, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
 		resInfo, exists := allResInfos[dbServiceType][dbResourceName]
 		if !exists {
-			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
+			return limes.UnitNone, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
 		if !resInfo.HasQuota {
-			return limes.UnitUnspecified, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
+			return limes.UnitNone, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
 		}
 		return resInfo.Unit, nil
 	}
