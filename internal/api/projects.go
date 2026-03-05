@@ -200,7 +200,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				Resources []struct {
 					Name     limesresources.ResourceName `json:"name"`
 					MaxQuota *uint64                     `json:"max_quota"`
-					Unit     *limes.Unit                 `json:"unit"`
+					Unit     Option[limes.Unit]          `json:"unit"`
 				} `json:"resources"`
 			} `json:"services"`
 		} `json:"project"`
@@ -240,19 +240,21 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					return
 				}
 
-				// convert given value to correct unit
-				requestedMaxQuota := limes.ValueWithUnit{
-					Unit:  limes.UnitUnspecified,
-					Value: *resRequest.MaxQuota,
-				}
-				if resRequest.Unit != nil {
-					requestedMaxQuota.Unit = *resRequest.Unit
-				}
-				convertedMaxQuota, err := core.ConvertUnitFor(serviceInfo, dbResourceName, requestedMaxQuota)
-				if err != nil {
-					msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
-					http.Error(w, msg, http.StatusUnprocessableEntity)
-					return
+				// convert given value to correct unit if a conversion was requested
+				var convertedMaxQuota uint64
+				if unit, ok := resRequest.Unit.Unpack(); ok {
+					converted, err := limes.ValueWithUnit{
+						Unit:  unit,
+						Value: *resRequest.MaxQuota,
+					}.ConvertTo(core.InfoForResource(serviceInfo, dbResourceName).Unit)
+					if err != nil {
+						msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
+						http.Error(w, msg, http.StatusUnprocessableEntity)
+						return
+					}
+					convertedMaxQuota = converted.Value
+				} else {
+					convertedMaxQuota = *resRequest.MaxQuota
 				}
 				requested[dbServiceType][dbResourceName] = &audit.MaxQuotaChange{NewValue: Some(convertedMaxQuota)}
 			}
