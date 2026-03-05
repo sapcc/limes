@@ -54,3 +54,7 @@ type ProjectRateID int64
 // ProjectCommitmentID is an ID into the project_commitments table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ProjectCommitmentID int64
+
+// CategoryID is an ID into the categories table. This typedef is
+// used to distinguish these IDs from IDs of other tables or raw int64 values.
+type CategoryID int64

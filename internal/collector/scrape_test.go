@@ -74,9 +74,17 @@ const (
 
 func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Unit Test",
+		Categories: map[liquid.CategoryName]liquid.CategoryInfo{
+			"foo_category": {
+				DisplayName: "Foo Category",
+			},
+		},
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
+				DisplayName:         "Capacity",
+				Category:            Some(liquid.CategoryName("foo_category")),
 				Unit:                liquid.UnitBytes,
 				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
@@ -84,6 +92,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 				NeedsResourceDemand: true,
 			},
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.AZAwareTopology,
 				HasCapacity: false,
@@ -672,8 +681,9 @@ const (
 
 func Test_ScrapeButNoResources(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version:   1,
-		Resources: map[liquid.ResourceName]liquid.ResourceInfo{},
+		Version:     1,
+		DisplayName: "Noop",
+		Resources:   map[liquid.ResourceName]liquid.ResourceInfo{},
 	}
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigJSON),
@@ -700,7 +710,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, scrape_duration_secs, serialized_metrics, checked_at, next_scrape_at) VALUES (1, 1, 1, %[2]d, 5, '{}', %[2]d, %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'noop', %[1]d, 1, 'Noop');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.ScrapeInterval).Unix(),
 	)
@@ -711,9 +721,10 @@ func Test_ScrapeButNoResources(t *testing.T) {
 
 func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Noop",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"things": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
+			"things": {DisplayName: "Things", Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
 	s := test.NewSetup(t,
@@ -751,8 +762,8 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (1, 1, 1, TRUE);
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 1, 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'noop', %[1]d, 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things', 'Things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'noop', %[1]d, 1, 'Noop');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.RecheckInterval).Unix(),
 	)
@@ -826,7 +837,7 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
-		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json, display_name) VALUES (1, 'unittest', 0, 2, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}', 'Unit Test');
 		`,
 		scrapedAt1.Unix(), scrapedAt1.Add(collector.ScrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(collector.ScrapeInterval).Unix(),
@@ -914,7 +925,7 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 3, topology = 'az-aware' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 2;
-		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 3, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json, display_name) VALUES (1, 'unittest', 0, 3, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}', 'Unit Test');
 	`,
 		checkedAt1.Unix(), checkedAt1.Add(collector.ScrapeInterval).Unix(),
 		checkedAt2.Unix(), checkedAt2.Add(collector.ScrapeInterval).Unix(),
