@@ -141,14 +141,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	// we support all resources that Neutron supports and that we also know about
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, len(mappedNamesForResource))
-	categories := map[liquid.CategoryName]liquid.CategoryInfo{
-		"fwaas": {
-			DisplayName: "Firewall as a Service",
-		},
-		"vpnaas": {
-			DisplayName: "VPN as a Service",
-		},
-	}
+	usesCategory := make(map[liquid.CategoryName]bool)
 	for neutronName := range data.Quota {
 		mappedNames, isRelevantQuota := getMappedNamesIfQuotaRelevant(neutronName).Unpack()
 		if isRelevantQuota {
@@ -160,7 +153,19 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 				HasCapacity: false,
 				HasQuota:    true,
 			}
+			if categoryName, ok := mappedNames.categoryName.Unpack(); ok {
+				usesCategory[categoryName] = true
+			}
 		}
+	}
+
+	// declare exactly those categories that we need
+	categories := make(map[liquid.CategoryName]liquid.CategoryInfo, len(usesCategory))
+	if usesCategory["fwaas"] {
+		categories["fwaas"] = liquid.CategoryInfo{DisplayName: "Firewall as a Service"}
+	}
+	if usesCategory["vpnaas"] {
+		categories["vpnaas"] = liquid.CategoryInfo{DisplayName: "VPN as a Service"}
 	}
 
 	return liquid.ServiceInfo{
