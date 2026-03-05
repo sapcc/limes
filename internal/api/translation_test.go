@@ -73,7 +73,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo())
+	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo(""))
 }
 
 func TestTranslateIronicSubcapacities(t *testing.T) {
@@ -84,7 +84,7 @@ func TestTranslateIronicSubcapacities(t *testing.T) {
 		"disk_gib": 42,
 	}
 	buf := must.Return(json.Marshal(attrs))
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("")
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = json.RawMessage(buf)
 	srvInfo.Resources["capacity"] = resInfo
@@ -181,7 +181,7 @@ func TestTranslateNovaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo())
+	testSubcapacityTranslation(t, "nova-flavors", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat, test.DefaultLiquidServiceInfo(""))
 }
 
 func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {
@@ -277,7 +277,7 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
+	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo(""))
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
@@ -303,7 +303,7 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
+	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo(""))
 }
 
 func TestTranslateIronicSubresources(t *testing.T) {
@@ -314,7 +314,7 @@ func TestTranslateIronicSubresources(t *testing.T) {
 		"disk_gib": 42,
 	}
 	buf := must.Return(json.Marshal(attrs))
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("")
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.Attributes = buf
 	srvInfo.Resources["capacity"] = resInfo
@@ -471,7 +471,7 @@ func TestTranslateNovaSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo())
+	testSubresourceTranslation(t, "nova-flavors", subresourcesInLiquidFormat, subresourcesInLegacyFormat, test.DefaultLiquidServiceInfo(""))
 }
 
 func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject, srvInfo liquid.ServiceInfo) {

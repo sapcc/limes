@@ -47,7 +47,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 }
 
 func TestGetServiceCapacityRequest(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("")
 	resInfo := srvInfo.Resources["capacity"]
 	resInfo.NeedsResourceDemand = true // must be set to test rendering of ServiceCapacityRequest.DemandForResource
 	srvInfo.Resources["capacity"] = resInfo
@@ -114,7 +114,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 }
 
 func TestServiceUsageRequest(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("")
 	srvInfo.UsageReportNeedsProjectMetadata = true
 
 	s := commonLiquidTestSetup(t, srvInfo)

@@ -61,7 +61,7 @@ const (
 )
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Unit Test")
 	s := test.NewSetup(t,
 		test.WithConfig(testCleanupOldCommitmentsConfigJSON),
 		test.WithMockLiquidClient("unittest", srvInfo),

@@ -112,11 +112,10 @@ var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid
 
 func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-no-renaming.json")
-	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
 		test.WithConfig(testQuotaOverridesNoRenamingConfigJSON),
-		test.WithMockLiquidClient("first", srvInfo),
-		test.WithMockLiquidClient("second", srvInfo),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo("Second")),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)
@@ -127,11 +126,10 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 
 func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", "fixtures/quota-overrides-with-renaming.json")
-	srvInfo := test.DefaultLiquidServiceInfo()
 	s := test.NewSetup(t,
 		test.WithConfig(testQuotaOverridesWithRenamingConfigJSON),
-		test.WithMockLiquidClient("first", srvInfo),
-		test.WithMockLiquidClient("second", srvInfo),
+		test.WithMockLiquidClient("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithMockLiquidClient("second", test.DefaultLiquidServiceInfo("Second")),
 		// here, we use the LiquidConnections, as this runs within the collect task
 		test.WithLiquidConnections,
 	)

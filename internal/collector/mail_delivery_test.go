@@ -42,7 +42,7 @@ func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) erro
 }
 
 func Test_MailDelivery(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Shared")
 	s := test.NewSetup(t,
 		test.WithConfig(`{
 			"availability_zones": ["az-one", "az-two"],

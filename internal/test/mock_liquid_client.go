@@ -6,6 +6,7 @@ package test
 import (
 	"context"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -13,11 +14,19 @@ import (
 // It defines two resources:
 //   - "capacity" is measured in bytes, AZ-aware and reports capacity.
 //   - "things" is counted, not AZ-aware and does not report capacity.
-func DefaultLiquidServiceInfo() liquid.ServiceInfo {
+func DefaultLiquidServiceInfo(displayName string) liquid.ServiceInfo {
 	return liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: displayName,
+		Categories: map[liquid.CategoryName]liquid.CategoryInfo{
+			"foo_category": {
+				DisplayName: "Foo Category",
+			},
+		},
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
+				DisplayName:         "Capacity",
+				Category:            Some(liquid.CategoryName("foo_category")),
 				Unit:                liquid.UnitBytes,
 				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
@@ -25,6 +34,7 @@ func DefaultLiquidServiceInfo() liquid.ServiceInfo {
 				NeedsResourceDemand: true,
 			},
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: false,

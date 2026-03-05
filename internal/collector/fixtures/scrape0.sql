@@ -9,6 +9,8 @@ INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 2,
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 2, 'az-two', 0, 'unittest/things/az-two');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 2, 'total', 0, 'unittest/things/total');
 
+INSERT INTO categories (id, name, display_name) VALUES (1, 'foo_category', 'Foo Category');
+
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
 INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (1, 2, 3, 10, 1000000000, '');
@@ -25,7 +27,7 @@ INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usa
 INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (3, 1, 'xOtherRate', 1, 'flat');
 INSERT INTO rates (id, service_id, name, liquid_version) VALUES (4, 1, 'xAnotherRate', 1);
 
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity');
-INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (2, 1, 'things', 1, 'az-aware', TRUE, 'unittest/things');
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity', 'Capacity', 1);
+INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'az-aware', TRUE, 'unittest/things', 'Things');
 
-INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json) VALUES (1, 'unittest', 0, 1, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}');
+INSERT INTO services (id, type, next_scrape_at, liquid_version, usage_metric_families_json, display_name) VALUES (1, 'unittest', 0, 1, '{"limes_unittest_capacity_usage":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_things_usage":{"type":"gauge","help":"","labelKeys":null}}', 'Unit Test');

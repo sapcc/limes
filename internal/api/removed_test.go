@@ -15,7 +15,7 @@ import (
 )
 
 func TestForbidClusterIDHeader(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Foo")
 	s := test.NewSetup(t,
 		test.WithConfig(`{
 			"availability_zones": ["az-one", "az-two"],
