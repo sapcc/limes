@@ -10,6 +10,7 @@ import (
 	. "github.com/majewsky/gg/option"
 
 	"github.com/sapcc/go-api-declarations/internal/clone"
+	"github.com/sapcc/go-api-declarations/internal/units"
 )
 
 // ServiceInfo is the response payload format for GET /v1/info.
@@ -103,7 +104,7 @@ type ResourceInfo struct {
 	// If omitted or empty, the resource is "countable" and any quota or usage values describe a number of objects.
 	// If non-empty, the resource is "measured" and quota or usage values are in multiples of the given unit.
 	// For example, the compute resource "cores" is countable, but the compute resource "ram" is measured, usually in MiB.
-	Unit Unit `json:"unit,omitempty"`
+	Unit Unit `json:"unit,omitzero"`
 
 	// How the resource reports usage (and capacity, if any). This field is required, and must contain one of the valid enum variants defined in this package.
 	Topology Topology `json:"topology"`
@@ -168,6 +169,29 @@ const (
 	AZSeparatedTopology Topology = "az-separated"
 )
 
+// Unit represents the unit a resource or rate is measured in.
+type Unit = units.Unit
+
+var (
+	// UnitNone is used for countable (rather than measurable) resources or rates.
+	UnitNone = units.UnitNone
+
+	// UnitBytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitBytes = units.UnitBytes
+	// UnitKibibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitKibibytes = units.UnitKibibytes
+	// UnitMebibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitMebibytes = units.UnitMebibytes
+	// UnitGibibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitGibibytes = units.UnitGibibytes
+	// UnitTebibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitTebibytes = units.UnitTebibytes
+	// UnitPebibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitPebibytes = units.UnitPebibytes
+	// UnitExbibytes is exactly that. Its MultiplyBy() method can be used to instantiate non-standard units.
+	UnitExbibytes = units.UnitExbibytes
+)
+
 // ResourceTopology is a synonym for Topology.
 //
 // Deprecated: Use Topology instead.
@@ -207,7 +231,7 @@ type RateInfo struct {
 	// If omitted or empty, the rate is "countable" and usage values describe a number of events.
 	// If non-empty, the rate is "measured" and usage values are in multiples of the given unit.
 	// For example, the storage rate "volume_creations" is countable, but the network rate "outbound_transfer" is measured, e.g. in bytes.
-	Unit Unit `json:"unit,omitempty"`
+	Unit Unit `json:"unit,omitzero"`
 
 	// How the rate reports usage. This field is required, and must contain one of the valid enum variants defined in this package.
 	Topology Topology `json:"topology"`
