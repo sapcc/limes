@@ -88,6 +88,7 @@ func main() {
 			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &cronus.Logic{}, opts))
 		case "designate":
+			opts.TakesConfiguration = true
 			opts.ServiceInfoRefreshInterval = 0
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
 		case "ironic":
