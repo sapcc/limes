@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sapcc/go-bits/assert"
+	"github.com/majewsky/gg/jsonmatch"
 
 	"github.com/sapcc/limes/internal/test"
 )
@@ -33,45 +33,37 @@ func TestRenderMailTemplate(t *testing.T) {
 			"mail_notifications": {
 				"templates": {
 					"confirmed_commitments": {
-					"subject": "subject",
-					"body": "\u003chtml\u003ebody\u003c/html\u003e"
+						"subject": "Confirmed Commitments",
+						"body": "<!DOCTYPE html><html><body>Confirmed</body></html>"
+					},
+					"expiring_commitments": {
+						"subject": "Expiring Commitments",
+						"body": "<!DOCTYPE html><html><body>Expiring</body></html>"
+					},
+					"transferred_commitments": {
+						"subject": "Transferred Commitments",
+						"body": "<!DOCTYPE html><html><body>Transferred</body></html>"
 					}
 				}	
 			}
 		}`),
 	)
 
+	ctx := t.Context()
+
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render?template_type=confirmed_commitments",
-		ExpectStatus: http.StatusForbidden,
-	}.Check(t, s.Handler)
+	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp.ExpectStatus(t, http.StatusForbidden)
 	s.TokenValidator.Enforcer.AllowView = true
 
-	// expect error when template type is missing
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render",
-		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required parameter: template_type\n"),
-	}.Check(t, s.Handler)
-
-	// expect error for invalid template type
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render?template_type=unknown",
-		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("invalid template type, must be one of: \"confirmed_commitments\", \"expiring_commitments\", \"transferred_commitments\"\n"),
-	}.Check(t, s.Handler)
-
-	// happy path
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render?template_type=confirmed_commitments",
-		ExpectStatus: http.StatusOK,
-	}.Check(t, s.Handler)
+	// happy path - renders all templates as JSON
+	resp = s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp.ExpectJSON(t, http.StatusOK, jsonmatch.Object{
+		"confirmed_commitments":   "<!DOCTYPE html><html><body>Confirmed</body></html>",
+		"expiring_commitments":    "<!DOCTYPE html><html><body>Expiring</body></html>",
+		"transferred_commitments": "<!DOCTYPE html><html><body>Transferred</body></html>",
+	})
 }
 
 func TestRenderMailTemplateInvalidHTML(t *testing.T) {
@@ -95,20 +87,25 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 			"mail_notifications": {
 				"templates": {
 					"confirmed_commitments": {
-					"subject": "subject",
-					"body": "\u003chtml\u003e"
+						"subject": "subject",
+						"body": "<html>"
+					},
+					"expiring_commitments": {
+						"subject": "subject",
+						"body": "<!DOCTYPE html><html><body>Test</body></html>"
+					},
+					"transferred_commitments": {
+						"subject": "subject",
+						"body": "<!DOCTYPE html><html><body>Test</body></html>"
 					}
 				}	
 			}
 		}`),
 	)
 
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render?template_type=confirmed_commitments",
-		ExpectStatus: http.StatusInternalServerError,
-		ExpectBody:   assert.StringData("mail template rendering returned invalid HTML: XML syntax error on line 1: unexpected EOF\n"),
-	}.Check(t, s.Handler)
+	ctx := t.Context()
+	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp.ExpectText(t, http.StatusInternalServerError, "template \"confirmed_commitments\" returned invalid HTML: XML syntax error on line 1: unexpected EOF\n")
 }
 
 func TestRenderMailTemplateOverEscaped(t *testing.T) {
@@ -132,18 +129,23 @@ func TestRenderMailTemplateOverEscaped(t *testing.T) {
 			"mail_notifications": {
 				"templates": {
 					"confirmed_commitments": {
-					"subject": "subject",
-					"body": "\"\\u003chtml\\u003ebody\\u003c/html\\u003e\\n\""
+						"subject": "subject",
+						"body": "\"\\u003chtml\\u003ebody\\u003c/html\\u003e\\n\""
+					},
+					"expiring_commitments": {
+						"subject": "subject",
+						"body": "<!DOCTYPE html><html><body>Test</body></html>"
+					},
+					"transferred_commitments": {
+						"subject": "subject",
+						"body": "<!DOCTYPE html><html><body>Test</body></html>"
 					}
 				}	
 			}
 		}`),
 	)
 
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/admin/mail/render?template_type=confirmed_commitments",
-		ExpectStatus: http.StatusInternalServerError,
-		ExpectBody:   assert.StringData("mail template rendering was escaped multiple times\n"),
-	}.Check(t, s.Handler)
+	ctx := t.Context()
+	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp.ExpectText(t, http.StatusInternalServerError, "template \"confirmed_commitments\" was escaped multiple times\n")
 }

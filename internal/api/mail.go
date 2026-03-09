@@ -17,7 +17,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -55,17 +54,11 @@ var everythingCommitment db.ProjectCommitment = db.ProjectCommitment{
 	NotifiedForExpiration: true,
 }
 
-// RenderMailTemplate handles GET /admin/mail/render?template_type=:type
+// RenderMailTemplate handles GET /admin/mail/render
 func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/admin/mail/render")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show") {
-		return
-	}
-
-	templateType := r.URL.Query().Get("template_type")
-	if templateType == "" {
-		http.Error(w, "missing required parameter: template_type", http.StatusBadRequest)
 		return
 	}
 
@@ -75,17 +68,10 @@ func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var template core.MailTemplate
-	switch templateType {
-	case "confirmed_commitments":
-		template = mailConfig.Templates.ConfirmedCommitments
-	case "expiring_commitments":
-		template = mailConfig.Templates.ExpiringCommitments
-	case "transferred_commitments":
-		template = mailConfig.Templates.TransferredCommitments
-	default:
-		http.Error(w, `invalid template type, must be one of: "confirmed_commitments", "expiring_commitments", "transferred_commitments"`, http.StatusBadRequest)
-		return
+	templates := map[string]core.MailTemplate{
+		"confirmed_commitments":   mailConfig.Templates.ConfirmedCommitments,
+		"expiring_commitments":    mailConfig.Templates.ExpiringCommitments,
+		"transferred_commitments": mailConfig.Templates.TransferredCommitments,
 	}
 
 	dummyResource := core.AZResourceLocation{
@@ -120,29 +106,31 @@ func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) 
 		},
 	}
 	projectID := db.ProjectID(42)
-	mailNotification, err := template.Render(notification, projectID, now)
-	if respondwith.ErrorText(w, err) {
-		return
+
+	renderedTemplates := make(map[string]string)
+	for templateType, template := range templates {
+		mailNotification, err := template.Render(notification, projectID, now)
+		if err != nil {
+			respondwith.ErrorText(w, fmt.Errorf("failed to render template %q: %w", templateType, err))
+			return
+		}
+
+		err = isValidXML(mailNotification.Body)
+		if err != nil {
+			respondwith.ErrorText(w, fmt.Errorf("template %q returned invalid HTML: %w", templateType, err))
+			return
+		}
+
+		// Check for over-escaped content
+		if strings.Contains(mailNotification.Body, "\\u") {
+			respondwith.ErrorText(w, fmt.Errorf("template %q was escaped multiple times", templateType))
+			return
+		}
+
+		renderedTemplates[templateType] = mailNotification.Body
 	}
 
-	err = isValidXML(mailNotification.Body)
-	if err != nil {
-		respondwith.ErrorText(w, fmt.Errorf("mail template rendering returned invalid HTML: %w", err))
-		return
-	}
-
-	// Check for over-escaped content
-	if strings.Contains(mailNotification.Body, "\\u") {
-		respondwith.ErrorText(w, errors.New("mail template rendering was escaped multiple times"))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte(mailNotification.Body))
-	if err != nil {
-		logg.Error("cannot write response for %s %s: %s", r.Method, r.URL.Path, err.Error())
-	}
+	respondwith.JSON(w, http.StatusOK, renderedTemplates)
 }
 
 func isValidXML(body string) error {

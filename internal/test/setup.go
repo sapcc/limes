@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/must"
@@ -137,7 +138,7 @@ type Setup struct {
 	TokenValidator             *mock.Validator[*PolicyEnforcer]
 	Auditor                    *audittools.MockAuditor
 	LiquidClients              map[db.ServiceType]*MockLiquidClient
-	Handler                    http.Handler
+	Handler                    httptest.Handler
 	CurrentProjectCommitmentID *uint64
 	CurrentTransferTokenNumber *uint64
 	Collector                  *collector.Collector
@@ -262,12 +263,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	transferTokenGenerator, currentTransferTokenNumber := transferTokenGenerator()
 	s.CurrentProjectCommitmentID = currentProjectCommitmentID
 	s.CurrentTransferTokenNumber = currentTransferTokenNumber
-	s.Handler = httpapi.Compose(
+	s.Handler = httptest.NewHandler(httpapi.Compose(
 		append(params.APIMiddlewares,
 			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator, s.Registry),
 			httpapi.WithoutLogging(),
 		)...,
-	)
+	))
 
 	s.Collector = &collector.Collector{
 		Cluster:     s.Cluster,
