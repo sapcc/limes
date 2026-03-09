@@ -513,35 +513,29 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if err != nil {
 			return err
 		}
-		reportAZBreakdown := false
 		totalCapacity := uint64(0)
-		for az, azCapacity := range capacityPerAZ {
+		for _, azCapacity := range capacityPerAZ {
 			totalCapacity += azCapacity
-			if az != liquid.AvailabilityZoneAny {
-				reportAZBreakdown = true
-			}
 		}
 
 		behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 		apiIdentity := behavior.IdentityInV1API
-		if reportAZBreakdown {
-			for az, azCapacity := range capacityPerAZ {
-				if slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, az) && azCapacity == 0 {
-					// Skip "unknown" + "any" AZs with zero capacity.
-					// We have them in the DB for completeness, but the metrics are of no use in this case.
-					continue
-				}
-				azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
-					az, apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
-				)
-				metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
-				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
+		for az, azCapacity := range capacityPerAZ {
+			if slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, az) && azCapacity == 0 {
+				// Skip "unknown" + "any" AZs with zero capacity.
+				// We have them in the DB for completeness, but the metrics are of no use in this case.
+				continue
+			}
+			azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
+				az, apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+			)
+			metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
+			result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
 
-				azUsage := usagePerAZ[az]
-				if azUsage != nil && *azUsage != 0 {
-					metric := dataMetric{Labels: azLabels, Value: float64(*azUsage)}
-					result["limes_cluster_usage_per_az"] = append(result["limes_cluster_usage_per_az"], metric)
-				}
+			azUsage := usagePerAZ[az]
+			if azUsage != nil && *azUsage != 0 {
+				metric := dataMetric{Labels: azLabels, Value: float64(*azUsage)}
+				result["limes_cluster_usage_per_az"] = append(result["limes_cluster_usage_per_az"], metric)
 			}
 		}
 
