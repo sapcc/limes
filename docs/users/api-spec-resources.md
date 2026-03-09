@@ -954,6 +954,5 @@ Requires the `?service_type` and `?project_id` query parameters.
 
 ### GET /admin/mail/render
 
-Renders the mail template of the respective type using dummy values and
+Renders all available mail templates using dummy values and
 verifies that the generated content is valid HTML.
-Requires the `?template_type` query parameter.
