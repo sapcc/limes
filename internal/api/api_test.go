@@ -70,7 +70,7 @@ const (
 					],
 					"project_default": [
 						{"name": "service/shared/objects:create", "limit": 5, "window": "1m"},
-						{"name": "service/shared/objects:delete", "limit": 1, "window": "1m"},
+						{"name": "service/shared/objects:delete", "limit": 1, "window": "1m", "unit": "MiB"},
 						{"name": "service/shared/objects:update", "limit": 2, "window": "1s"},
 						{"name": "service/shared/objects:read/list", "limit": 3, "window": "1s"}
 					]

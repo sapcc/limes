@@ -428,6 +428,15 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	wantedResources := slices.Sorted(maps.Keys(serviceInfo.Resources))
 
+	// for unit changes, we need to have some special handling, else we will interpret
+	// the old values from the database with the new unit!
+
+	type unitChange struct {
+		oldUnit limes.Unit
+		newUnit limes.Unit
+	}
+	unitChangesByResourceID := make(map[db.ResourceID]unitChange)
+
 	// do update for resources
 	resourceUpdate := db.SetUpdate[db.Resource, liquid.ResourceName]{
 		ExistingRecords: dbResources,
@@ -460,6 +469,12 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
 			}
 			res.LiquidVersion = serviceInfo.Version
+			if res.Unit != serviceInfo.Resources[res.Name].Unit {
+				unitChangesByResourceID[res.ID] = unitChange{
+					oldUnit: res.Unit,
+					newUnit: serviceInfo.Resources[res.Name].Unit,
+				}
+			}
 			res.Unit = serviceInfo.Resources[res.Name].Unit
 			res.Topology = serviceInfo.Resources[res.Name].Topology
 			res.HasCapacity = serviceInfo.Resources[res.Name].HasCapacity
@@ -479,6 +494,64 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	_, err = tx.Exec(`DELETE FROM categories WHERE id NOT IN (SELECT DISTINCT category_id FROM resources)`)
 	if err != nil {
 		return srv, fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
+	}
+
+	// do resource unit updates if applicable
+	for resID, units := range unitChangesByResourceID {
+		oldBaseUnit, oldFactor := units.oldUnit.Base()
+		newBaseUnit, newFactor := units.newUnit.Base()
+		if oldBaseUnit != newBaseUnit {
+			// the mitigation for this failing is probably to delete the resources from the database and read them fresh?
+			return srv, fmt.Errorf("cannot change unit of resource with id %d from %q to %q, because the base units differ", resID, units.oldUnit, units.newUnit)
+		}
+
+		// For all values which change with the next scrape or from config, we assume rounding is okay.
+		// For commitments, our strategy cannot be rounding, because this has billing impact.
+		// Therefore, we block it - any operation where we would have to round prevents the unit change.
+		// We use integer modulo arithmetic to avoid floating-point precision issues.
+		nonConvertibleEntries, err := tx.SelectInt(sqlext.SimplifyWhitespace(`SELECT COUNT(*)
+			FROM project_commitments pc
+			JOIN az_resources azr ON pc.az_resource_id = azr.id
+			WHERE (pc.amount::NUMERIC * $1) % $2 != 0 AND azr.resource_id = $3`), oldFactor, newFactor, resID)
+		if err != nil {
+			return srv, fmt.Errorf("error while retrieving non-convertible project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+		}
+		if nonConvertibleEntries > 0 {
+			return srv, fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
+		}
+		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
+			SET amount = pc.amount * $1 / $2
+			FROM az_resources azr
+			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
+		if err != nil {
+			return srv, fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+		}
+
+		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE az_resources
+			SET raw_capacity = ROUND(raw_capacity * $1 / $2),
+			usage = ROUND(usage * $1 / $2),
+			last_nonzero_raw_capacity = ROUND(last_nonzero_raw_capacity * $1 / $2)
+			WHERE resource_id = $3`), oldFactor, newFactor, resID)
+		if err != nil {
+			return srv, fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+		}
+		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_resources
+			SET max_quota_from_outside_admin = ROUND(max_quota_from_outside_admin * $1 / $2),
+			override_quota_from_config = ROUND(override_quota_from_config * $1 / $2)
+			WHERE resource_id = $3`), oldFactor, newFactor, resID)
+		if err != nil {
+			return srv, fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+		}
+		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
+			SET quota = ROUND(pazr.quota * $1 / $2),
+			usage = ROUND(pazr.usage * $1 / $2),
+			physical_usage = ROUND(pazr.physical_usage * $1 / $2),
+			backend_quota = ROUND(pazr.backend_quota * $1 / $2)
+			FROM az_resources azr
+			WHERE pazr.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
+		if err != nil {
+			return srv, fmt.Errorf("error while updating project_az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+		}
 	}
 
 	// collect existing az_resources
@@ -537,18 +610,30 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	if err != nil {
 		return srv, fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
 	}
-	wantedRates := slices.Collect(maps.Keys(serviceInfo.Rates))
-	// extend the list of wanted rates with the rates which are configured (they may not be in the serviceInfo.Rates)
+	liquidRateUnitsByName := make(map[liquid.RateName]liquid.Unit, len(serviceInfo.Rates))
+	globalLimitUnitsByName := make(map[liquid.RateName]liquid.Unit, len(rateLimits.Global))
+	projectLimitUnitsByName := make(map[liquid.RateName]liquid.Unit, len(rateLimits.ProjectDefault))
+	for rateName, rate := range serviceInfo.Rates {
+		liquidRateUnitsByName[rateName] = rate.Unit
+	}
 	for _, rateLimit := range rateLimits.Global {
-		wantedRates = append(wantedRates, rateLimit.Name)
+		globalLimitUnitsByName[rateLimit.Name] = rateLimit.Unit
 	}
 	for _, rateLimit := range rateLimits.ProjectDefault {
-		wantedRates = append(wantedRates, rateLimit.Name)
+		projectLimitUnitsByName[rateLimit.Name] = rateLimit.Unit
 	}
+	// extend the list of wanted rates with the rates from limits which are configured (they may not be in the serviceInfo.Rates)
+	wantedRates := slices.Collect(maps.Keys(liquidRateUnitsByName))
+	wantedRates = append(wantedRates, slices.Collect(maps.Keys(globalLimitUnitsByName))...)
+	wantedRates = append(wantedRates, slices.Collect(maps.Keys(projectLimitUnitsByName))...)
 	slices.Sort(wantedRates)
 	wantedRates = slices.Compact(wantedRates)
 
-	// do update for resources
+	// for unit changes, we need to have some special handling, else we will interpret
+	// the old values from the database with the new unit!
+	unitChangesByRateID := make(map[db.RateID]unitChange)
+
+	// do update for rates
 	rateUpdate := db.SetUpdate[db.Rate, liquid.RateName]{
 		ExistingRecords: dbRates,
 		WantedKeys:      wantedRates,
@@ -556,29 +641,91 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return rate.Name
 		},
 		Create: func(rateName liquid.RateName) (db.Rate, error) {
+			liquidUnit, liquidRateExists := liquidRateUnitsByName[rateName]
+			globalLimitUnit, globalLimitExists := globalLimitUnitsByName[rateName]
+			projectLimitUnit, projectLimitExists := projectLimitUnitsByName[rateName]
+			if (globalLimitExists && liquidRateExists && liquidUnit != globalLimitUnit) ||
+				(projectLimitExists && liquidRateExists && liquidUnit != projectLimitUnit) ||
+				(globalLimitExists && projectLimitExists && globalLimitUnit != projectLimitUnit) {
+				logg.Fatal(`cannot create rate %s/%s, because the units from the liquid and/ or the rate limit configuration don't match!`, serviceType, rateName)
+			}
+			unit := limes.UnitNone
+			topology := liquid.FlatTopology
+			hasUsage := false
+			switch {
+			case liquidRateExists:
+				unit = liquidUnit
+				topology = serviceInfo.Rates[rateName].Topology
+				hasUsage = serviceInfo.Rates[rateName].HasUsage
+			case globalLimitExists:
+				unit = globalLimitUnit
+			case projectLimitExists:
+				unit = projectLimitUnit
+			}
 			return db.Rate{
-				ServiceID: dbServices[0].ID,
-				Name:      rateName,
+				ServiceID:     dbServices[0].ID,
+				Name:          rateName,
+				LiquidVersion: serviceInfo.Version,
+				Unit:          unit,
+				Topology:      topology,
+				HasUsage:      hasUsage,
 			}, nil
 		},
 		Update: func(rate *db.Rate) (err error) {
-			rate.LiquidVersion = serviceInfo.Version
-			if rateInfo, exists := serviceInfo.Rates[rate.Name]; exists {
-				rate.Unit = rateInfo.Unit
-				rate.Topology = rateInfo.Topology
-				rate.HasUsage = rateInfo.HasUsage
-			} else {
-				// fallbacks for rates that are only declared in the config and not announced by the liquid
-				rate.Unit = liquid.UnitNone
-				rate.Topology = liquid.FlatTopology
-				rate.HasUsage = false
+			liquidUnit, liquidRateExists := liquidRateUnitsByName[rate.Name]
+			globalLimitUnit, globalLimitExists := globalLimitUnitsByName[rate.Name]
+			projectLimitUnit, projectLimitExists := projectLimitUnitsByName[rate.Name]
+			if (globalLimitExists && liquidRateExists && liquidUnit != globalLimitUnit) ||
+				(projectLimitExists && liquidRateExists && liquidUnit != projectLimitUnit) ||
+				(globalLimitExists && projectLimitExists && globalLimitUnit != projectLimitUnit) {
+				logg.Fatal(`cannot update rate %s/%s, because the units from the liquid and/ or the rate limit configuration don't match!`, serviceType, rate.Name)
 			}
+			newUnit := rate.Unit
+			rate.LiquidVersion = serviceInfo.Version
+			rate.Topology = liquid.FlatTopology
+			rate.HasUsage = false
+			switch {
+			case liquidRateExists:
+				newUnit = liquidUnit
+				rate.Topology = serviceInfo.Rates[rate.Name].Topology
+				rate.HasUsage = serviceInfo.Rates[rate.Name].HasUsage
+			case globalLimitExists:
+				newUnit = globalLimitUnit
+			case projectLimitExists:
+				newUnit = projectLimitUnit
+			}
+			if newUnit != rate.Unit {
+				unitChangesByRateID[rate.ID] = unitChange{
+					oldUnit: rate.Unit,
+					newUnit: newUnit,
+				}
+			}
+			rate.Unit = newUnit
 			return nil
 		},
 	}
 	_, err = rateUpdate.Execute(tx)
 	if err != nil {
 		return srv, err
+	}
+
+	// do rate unit updates if applicable
+	for rateID, units := range unitChangesByRateID {
+		oldBaseUnit, oldFactor := units.oldUnit.Base()
+		newBaseUnit, newFactor := units.newUnit.Base()
+		if oldBaseUnit != newBaseUnit {
+			// the mitigation for this failing is probably to delete the rates from the database and read them fresh?
+			return srv, fmt.Errorf("cannot change unit of rate with id %d from %q to %q, because the base units differ", rateID, units.oldUnit, units.newUnit)
+		}
+
+		// For all values which change with the next scrape or from config, we assume rounding is okay.
+		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_rates
+			SET rate_limit = ROUND(rate_limit * $1 / $2),
+			usage_as_bigint = ROUND(usage_as_bigint::BIGINT * $1 / $2)::TEXT
+			WHERE rate_id = $3`), oldFactor, newFactor, rateID)
+		if err != nil {
+			return srv, fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
+		}
 	}
 
 	return srv, tx.Commit()
