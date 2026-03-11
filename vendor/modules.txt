@@ -33,8 +33,8 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/gophercloud/gophercloud/v2 v2.11.0
-## explicit; go 1.25.7
+# github.com/gophercloud/gophercloud/v2 v2.11.1
+## explicit; go 1.25.0
 github.com/gophercloud/gophercloud/v2
 github.com/gophercloud/gophercloud/v2/openstack
 github.com/gophercloud/gophercloud/v2/openstack/baremetal/inventory
@@ -155,7 +155,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20260306103145-db6bddb66aec
+# github.com/sapcc/go-bits v0.0.0-20260311133606-85c1036e18a0
 ## explicit; go 1.26
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools

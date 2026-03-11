@@ -7,7 +7,7 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.4.0
-	github.com/gophercloud/gophercloud/v2 v2.11.0
+	github.com/gophercloud/gophercloud/v2 v2.11.1
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.11.2
 	github.com/majewsky/gg v1.5.0
@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/common v0.67.5
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.20.2
-	github.com/sapcc/go-bits v0.0.0-20260306103145-db6bddb66aec
+	github.com/sapcc/go-bits v0.0.0-20260311133606-85c1036e18a0
 )
 
 require (
