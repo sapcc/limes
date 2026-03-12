@@ -302,4 +302,26 @@ var sqlMigrations = map[string]string{
 			END;
 			$$ LANGUAGE plpgsql;
 	`),
+	`072_add_category_display_name.down.sql`: `
+		ALTER TABLE services
+			DROP COLUMN display_name;
+		ALTER TABLE resources
+			DROP COLUMN display_name,	
+			DROP COLUMN category_id;
+		DROP TABLE categories;
+	`,
+	`072_add_category_display_name.up.sql`: `
+		CREATE TABLE categories (
+			id BIGSERIAL NOT NULL PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			display_name TEXT NOT NULL
+		);
+		ALTER TABLE services 
+		    ADD COLUMN display_name TEXT NOT NULL;
+		ALTER TABLE resources
+		    ADD COLUMN display_name TEXT NOT NULL,
+		    -- fallback to 'default' is handled in application layer on read
+		    ADD COLUMN category_id BIGINT DEFAULT NULL 
+		    	REFERENCES categories ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
+	`,
 }

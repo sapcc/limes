@@ -110,14 +110,14 @@ func setupTest(t *testing.T) test.Setup {
 	// NOTE: For new tests, please try to use a more minimal setup that focuses on the specific needs of the test.
 	//       This test setup is designed to be backwards-compatible with the old start-data.sql fixture.
 
-	srvInfoShared := test.DefaultLiquidServiceInfo()
+	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"service/shared/objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/shared/objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"service/shared/objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/shared/objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
+	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"service/unshared/instances:create": {Topology: liquid.FlatTopology, HasUsage: true},
 		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
@@ -329,8 +329,8 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 				"unshared": {"area": "unshared"}
 			}
 		}`),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
-		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -917,7 +917,7 @@ func Test_EmptyProjectList(t *testing.T) {
 				"first": {"area": "first"}
 			}
 		}`),
-		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -973,8 +973,8 @@ func Test_LargeProjectList(t *testing.T) {
 
 	s := test.NewSetup(t,
 		test.WithConfig(configStr),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
-		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -1098,7 +1098,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 				"shared": {"area": "shared"}
 			}
 		}`),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -1230,8 +1230,8 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 				"unshared": {"area": "unshared"}
 			}
 		}`),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
-		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -1406,8 +1406,8 @@ func TestResourceRenaming(t *testing.T) {
 				}
 			}
 		}`),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
-		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)
@@ -1654,12 +1654,20 @@ const testAZSeparatedConfigJSON = `{
 
 func Test_SeparatedTopologyOperations(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Shared",
+		Categories: map[liquid.CategoryName]liquid.CategoryInfo{
+			"foo_category": {
+				DisplayName: "Foo Category",
+			},
+		},
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity_az_separated": {
-				Unit:     liquid.UnitBytes,
-				Topology: liquid.AZSeparatedTopology,
-				HasQuota: true,
+				DisplayName: "Capacity AZ Separated",
+				Category:    Some(liquid.CategoryName("foo_category")),
+				Unit:        liquid.UnitBytes,
+				Topology:    liquid.AZSeparatedTopology,
+				HasQuota:    true,
 			},
 		},
 	}

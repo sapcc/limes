@@ -19,6 +19,7 @@ import (
 type Service struct {
 	ID                 ServiceID         `db:"id"`
 	Type               ServiceType       `db:"type"`
+	DisplayName        string            `db:"display_name"`
 	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
 	SerializedMetrics  string            `db:"serialized_metrics"`
@@ -34,9 +35,11 @@ type Service struct {
 
 // Resource contains a record from the `resources` table.
 type Resource struct {
-	ID        ResourceID          `db:"id"`
-	ServiceID ServiceID           `db:"service_id"`
-	Name      liquid.ResourceName `db:"name"`
+	ID          ResourceID          `db:"id"`
+	ServiceID   ServiceID           `db:"service_id"`
+	Name        liquid.ResourceName `db:"name"`
+	DisplayName string              `db:"display_name"`
+	CategoryID  Option[CategoryID]  `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
 	Path string `db:"path"`
 
@@ -243,6 +246,13 @@ type MailNotification struct {
 	FailedSubmissions int64     `db:"failed_submissions"`
 }
 
+// Category contains a record from the `categories` table.
+type Category struct {
+	ID          CategoryID          `db:"id"`
+	Name        liquid.CategoryName `db:"name"`
+	DisplayName string              `db:"display_name"`
+}
+
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(Service{}, "services").SetKeys(true, "id")
@@ -257,4 +267,5 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(true, "id")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 	db.AddTableWithName(MailNotification{}, "project_mail_notifications").SetKeys(true, "id")
+	db.AddTableWithName(Category{}, "categories").SetKeys(true, "id")
 }

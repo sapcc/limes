@@ -14,6 +14,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/lib/pq"
 	. "github.com/majewsky/gg/option"
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -380,6 +381,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				NextScrapeAt:                    timeNow,
 				Type:                            serviceType,
 				LiquidVersion:                   serviceInfo.Version,
+				DisplayName:                     serviceInfo.DisplayName,
 				CapacityMetricFamiliesJSON:      cmf,
 				UsageMetricFamiliesJSON:         umf,
 				UsageReportNeedsProjectMetadata: serviceInfo.UsageReportNeedsProjectMetadata,
@@ -404,6 +406,20 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	srv = dbServices[0]
 
+	// The categories don't have a reference to the service, so we just add all categories which are new
+	// and delete the one's which are unused after the resources for this service were reconciled.
+	categoryByName, err := db.BuildIndexOfDBResult(tx, func(category db.Category) liquid.CategoryName { return category.Name }, `SELECT * from categories`)
+	for name, categoryInfo := range serviceInfo.Categories {
+		if _, exists := categoryByName[name]; !exists {
+			newCategory := db.Category{Name: name, DisplayName: categoryInfo.DisplayName}
+			err = tx.Insert(&newCategory)
+			if err != nil {
+				return srv, fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
+			}
+			categoryByName[name] = newCategory
+		}
+	}
+
 	// collect existing resources and the wanted resources
 	var dbResources []db.Resource
 	_, err = tx.Select(&dbResources, `SELECT * FROM resources WHERE service_id = $1`, srv.ID)
@@ -421,9 +437,13 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		},
 		Create: func(resourceName liquid.ResourceName) (db.Resource, error) {
 			logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
+			categoryID := options.Map(serviceInfo.Resources[resourceName].Category,
+				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
 				ServiceID:           srv.ID,
 				Name:                resourceName,
+				DisplayName:         serviceInfo.Resources[resourceName].DisplayName,
+				CategoryID:          categoryID,
 				Path:                fmt.Sprintf("%s/%s", serviceType, resourceName),
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                serviceInfo.Resources[resourceName].Unit,
@@ -453,6 +473,12 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	dbResources, err = resourceUpdate.Execute(tx)
 	if err != nil {
 		return srv, err
+	}
+
+	// remove unused categories (categories which are not referenced by any resource anymore)
+	_, err = tx.Exec(`DELETE FROM categories WHERE id NOT IN (SELECT DISTINCT category_id FROM resources)`)
+	if err != nil {
+		return srv, fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
 	}
 
 	// collect existing az_resources
