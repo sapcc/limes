@@ -19,7 +19,7 @@ import (
 
 func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Unit Test")
 	s := test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigJSON),
 		test.WithMockLiquidClient("unittest", srvInfo),

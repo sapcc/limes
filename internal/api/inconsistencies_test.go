@@ -33,7 +33,7 @@ func TestInconsistencyReport(t *testing.T) {
 				"shared": {"area": "shared"}
 			}
 		}`),
-		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo()),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
 	)

@@ -72,8 +72,8 @@ func TestMain(m *testing.M) {
 }
 
 func Test_ClusterSaveServiceInfo(t *testing.T) {
-	srvInfoShared := test.DefaultLiquidServiceInfo()
-	srvInfoUnshared := test.DefaultLiquidServiceInfo()
+	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
+	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
@@ -105,9 +105,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (4, 2, 'only_in_global', 1, 'flat');
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE);
 		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (6, 2, 'only_in_project', 1, 'flat');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', 0, 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 1, 'Unshared');
 	`)
 
 	// Now, we update the serviceInfo of the shared service, updates should be done
@@ -122,12 +122,12 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		UPDATE resources SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
 		DELETE FROM resources WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 2);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 2, 'Shared');
 	`)
 
 	// Now, we add the "things" resource back to the shared service, it should be added again.
 	s.LiquidClients["shared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
-		*info = test.DefaultLiquidServiceInfo()
+		*info = test.DefaultLiquidServiceInfo("Shared")
 		info.Version = 3
 	})
 	generateNewClusterWithPersistingServiceInfo(t, s)
@@ -135,9 +135,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (15, 5, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (16, 5, 'total', 0, 'shared/things/total');
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (5, 1, 'things', 3, 'flat', TRUE, 'shared/things');
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (5, 1, 'things', 3, 'flat', TRUE, 'shared/things', 'Things');
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 2;
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 3);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 3, 'Shared');
 	`)
 
 	// just an increase of the LiquidVersion
@@ -149,6 +149,6 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		UPDATE resources SET liquid_version = 4 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
 		UPDATE resources SET liquid_version = 4 WHERE id = 5 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 3;
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', 0, 4);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 4, 'Shared');
 	`)
 }

@@ -197,11 +197,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.t = t
 
 	s.DB = db.InitORM(easypg.ConnectForTest(t, db.Configuration(),
-		easypg.ClearTables("project_commitments", "services", "domains"),
+		easypg.ClearTables("project_commitments", "services", "domains", "categories"),
 		easypg.ResetPrimaryKeys(
 			"services", "resources", "rates", "az_resources",
 			"domains", "projects", "project_commitments", "project_mail_notifications",
 			"project_services", "project_resources", "project_az_resources", "project_rates",
+			"categories",
 		),
 	))
 

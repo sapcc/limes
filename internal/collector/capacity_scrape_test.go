@@ -83,9 +83,11 @@ const (
 
 func Test_ScanCapacity(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Shared",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
@@ -94,9 +96,11 @@ func Test_ScanCapacity(t *testing.T) {
 		},
 	}
 	srvInfo2 := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Unshared",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
+				DisplayName: "Capacity",
 				Unit:        liquid.UnitBytes,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
@@ -145,10 +149,10 @@ func Test_ScanCapacity(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'total', 0, 'shared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 2, 'any', 0, 'unshared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 2, 'total', 0, 'unshared/capacity/total');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE, 'shared/things');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path) VALUES (2, 2, 'capacity', 1, 'B', 'flat', TRUE, TRUE, 'unshared/capacity');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (2, 'unshared', %[1]d, 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE, 'shared/things', 'Things');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path, display_name) VALUES (2, 2, 'capacity', 1, 'B', 'flat', TRUE, TRUE, 'unshared/capacity', 'Capacity');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', %[1]d, 1, 'Unshared');
 	`, s.Clock.Now().Unix())
 
 	// check that capacity records are created correctly (and that nonexistent
@@ -220,11 +224,11 @@ func Test_ScanCapacity(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, path) VALUES (7, 4, 'total', 23, 4, 'shared/things/total');
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		DELETE FROM resources WHERE id = 3 AND service_id = 2 AND name = 'unknown' AND path = 'unshared/unknown';
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE, 'shared/things');
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path, display_name) VALUES (4, 1, 'things', 2, 'flat', TRUE, TRUE, 'shared/things', 'Things');
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %d, 5, '{}', %d, 2);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %d, 5, '{}', %d, 2, 'Shared');
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (2, 'unshared', %d, 5, '{}', %d, 2);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', %d, 5, '{}', %d, 2, 'Unshared');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -242,9 +246,11 @@ func Test_ScanCapacity(t *testing.T) {
 
 func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Shared",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
@@ -270,8 +276,8 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'total', 0, 'shared/things/total');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE, 'shared/things');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version, capacity_metric_families_json) VALUES (1, 'shared', %[1]d, 1, '{"limes_unittest_capacity_larger_half":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_capacity_smaller_half":{"type":"gauge","help":"","labelKeys":null}}');
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'flat', TRUE, TRUE, 'shared/things', 'Things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, capacity_metric_families_json, display_name) VALUES (1, 'shared', %[1]d, 1, '{"limes_unittest_capacity_larger_half":{"type":"gauge","help":"","labelKeys":null},"limes_unittest_capacity_smaller_half":{"type":"gauge","help":"","labelKeys":null}}', 'Shared');
 	`, s.Clock.Now().Unix())
 
 	// check that scraping correctly updates subcapacities on an existing record
@@ -355,9 +361,11 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 func Test_ScanCapacityAZAware(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Shared",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.AZAwareTopology,
 				HasCapacity: true,
@@ -382,8 +390,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'shared/things/az-two');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'total', 0, 'shared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 1, 'unknown', 0, 'shared/things/unknown');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, TRUE, 'shared/things');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_capacity, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, TRUE, 'shared/things', 'Things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
 	`, s.Clock.Now().Unix())
 
 	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
@@ -452,7 +460,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 func TestScanCapacityReportsZeroValues(t *testing.T) {
 	// setup both "capacity" and "things" with HasCapacity = true
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Shared")
 	res := srvInfo.Resources["things"]
 	res.HasCapacity = true
 	srvInfo.Resources["things"] = res
@@ -544,7 +552,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 func Test_ScanCapacityAZVanishes(t *testing.T) {
 	// setup just "capacity"
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Shared")
 	delete(srvInfo.Resources, "things")
 
 	s := test.NewSetup(t,
@@ -622,7 +630,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	// test ScanCapacity on a LIQUID with no resources
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacitySingleLiquidConfigJSON),
-		test.WithMockLiquidClient("shared", liquid.ServiceInfo{Version: 1, Resources: nil}),
+		test.WithMockLiquidClient("shared", liquid.ServiceInfo{Version: 1, DisplayName: "Shared", Resources: nil}),
 		// services must be created as a baseline
 		test.WithLiquidConnections,
 	)
@@ -632,7 +640,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	// check baseline
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
 	`,
 		s.Clock.Now().Unix(),
 	)
@@ -672,14 +680,14 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2, 'Shared');
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 }
 
 func Test_ScanManualCapacity(t *testing.T) {
-	srvInfo := test.DefaultLiquidServiceInfo()
+	srvInfo := test.DefaultLiquidServiceInfo("Shared")
 	testScanCapacityManualConfigJSON := testScanCapacitySingleLiquidConfigJSON[:len(testScanCapacitySingleLiquidConfigJSON)-1] + `,
 		"liquids": {
 			"shared": {
@@ -708,9 +716,10 @@ func Test_ScanManualCapacity(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 1, 'unknown', 0, 'shared/capacity/unknown');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 2, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 2, 'total', 0, 'shared/things/total');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path) VALUES (2, 1, 'things', 1, 'flat', TRUE, 'shared/things');
-		INSERT INTO services (id, type, next_scrape_at, liquid_version) VALUES (1, 'shared', %[1]d, 1);
+		INSERT INTO categories (id, name, display_name) VALUES (1, 'foo_category', 'Foo Category');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity', 'Capacity', 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'flat', TRUE, 'shared/things', 'Things');
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
 	`,
 		s.Clock.Now().Unix(),
 	)
@@ -746,10 +755,12 @@ func Test_ScanManualCapacity(t *testing.T) {
 }
 
 func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liquidHandlesCommitments bool) (s test.Setup, add func(db.ProjectCommitment) db.ProjectCommitmentID) {
-	srvInfo := liquid.ServiceInfo{
-		Version: 1,
+	srvInfoFirst := liquid.ServiceInfo{
+		Version:     1,
+		DisplayName: "First",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
+				DisplayName: "Capacity",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.AZAwareTopology,
 				HasCapacity: true,
@@ -758,6 +769,7 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 				HandlesCommitments: liquidHandlesCommitments,
 			},
 			"things": {
+				DisplayName: "Things",
 				Unit:        liquid.UnitNone,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: true,
@@ -768,6 +780,8 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 		},
 		CommitmentHandlingNeedsProjectMetadata: true,
 	}
+	srvInfoSecond := srvInfoFirst
+	srvInfoSecond.DisplayName = "Second"
 
 	azReportForFirst := liquid.AZResourceCapacityReport{Capacity: 42, Usage: Some[uint64](8)}
 	firstCapacityReport := liquid.ServiceCapacityReport{
@@ -791,8 +805,8 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 
 	s = test.NewSetup(t,
 		test.WithConfig(configYaml),
-		test.WithMockLiquidClient("first", srvInfo),
-		test.WithMockLiquidClient("second", srvInfo),
+		test.WithMockLiquidClient("first", srvInfoFirst),
+		test.WithMockLiquidClient("second", srvInfoSecond),
 		test.WithLiquidConnections,
 		test.WithInitialDiscovery,
 		test.WithEmptyRecordsAsNeeded,
@@ -1220,6 +1234,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	})
 	s.LiquidClients["first"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
 		delete(info.Resources, "capacity")
+		delete(info.Categories, "foo_category")
 		info.Version = 2
 	})
 
@@ -1250,7 +1265,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		DELETE FROM resources WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'first/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'first/things';
 		DELETE FROM services WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version) VALUES (1, 'first', 1216885, 5, '{}', 1217785, 2);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'first', 1216885, 5, '{}', 1217785, 2, 'First');
 		UPDATE services SET scraped_at = 1216890, next_scrape_at = 1217790 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 	`)
 
@@ -1261,6 +1276,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	})
 	s.LiquidClients["second"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
 		delete(info.Resources, "capacity")
+		delete(info.Categories, "foo_category")
 		info.Version = 2
 	})
 

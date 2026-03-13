@@ -204,9 +204,10 @@ const testConvertCommitmentsJSON = `{
 func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 	// setup ServiceInfo to mimic the old `fixtures/start-data-commitments.sql`
 	// as closely as possible
-	resInfoLikeCapacity := test.DefaultLiquidServiceInfo().Resources["capacity"]
+	resInfoLikeCapacity := test.DefaultLiquidServiceInfo("").Resources["capacity"]
 	resInfoLikeCapacity.HandlesCommitments = true
-	resInfoLikeThings := test.DefaultLiquidServiceInfo().Resources["things"]
+	resInfoLikeCapacity.Category = None[liquid.CategoryName]()
+	resInfoLikeThings := test.DefaultLiquidServiceInfo("").Resources["things"]
 	resInfoLikeThings.HandlesCommitments = true
 	resInfoConvertible := liquid.ResourceInfo{
 		Unit:               liquid.UnitBytes,
@@ -215,7 +216,8 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 	}
 
 	srvInfoFirst := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "First",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": resInfoLikeCapacity,
 			"things":   resInfoLikeThings,
@@ -223,7 +225,8 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		},
 	}
 	srvInfoSecond := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Second",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": resInfoLikeCapacity,
 			"things":   resInfoLikeThings,
@@ -231,7 +234,8 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		},
 	}
 	srvInfoThird := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Third",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity_c32":   resInfoConvertible,
 			"capacity_c48":   resInfoConvertible,
@@ -241,7 +245,8 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		},
 	}
 	srvInfoFourth := liquid.ServiceInfo{
-		Version: 1,
+		Version:     1,
+		DisplayName: "Fourth",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity_a": resInfoLikeCapacity,
 			"capacity_b": resInfoLikeCapacity,
