@@ -168,8 +168,8 @@ func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.Serv
 	return Some(connection.ServiceInfo()), nil
 }
 
-// This is used to reach ConfigSets stored inside type ServiceConfiguration.
-func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfiguration {
+// ConfigForService is used to reach ConfigSets stored inside type ServiceConfiguration.
+func (c *Cluster) ConfigForService(serviceType db.ServiceType) LiquidConfiguration {
 	for st, l := range c.Config.Liquids {
 		if st == serviceType {
 			return l
@@ -180,7 +180,7 @@ func (c *Cluster) configForService(serviceType db.ServiceType) LiquidConfigurati
 
 // CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
 func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentBehavior {
-	return c.configForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
+	return c.ConfigForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in the given service.

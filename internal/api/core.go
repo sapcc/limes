@@ -104,6 +104,41 @@ func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 	return p
 }
 
+type v2Provider struct {
+	Cluster        *core.Cluster
+	DB             *gorp.DbMap
+	VersionData    VersionData
+	tokenValidator gopherpolicy.Validator
+	auditor        audittools.Auditor
+
+	// slots for test doubles
+	timeNow func() time.Time
+}
+
+// NewV2API creates an httpapi.API that serves the Limes v2 API.
+// It also returns the VersionData for this API version which is needed for the
+// version advertisement on "GET /".
+func NewV2API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time) httpapi.API {
+	p := &v2Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
+	p.VersionData = VersionData{
+		Status: "CURRENT",
+		ID:     "v2",
+		Links: []VersionLinkData{
+			{
+				Relation: "self",
+				URL:      p.Path(),
+			},
+			{
+				Relation: "describedby",
+				URL:      "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md",
+				Type:     "text/html",
+			},
+		},
+	}
+
+	return p
+}
+
 // NewTokenValidator constructs a gopherpolicy.TokenValidator instance.
 func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (gopherpolicy.Validator, error) {
 	identityV3, err := openstack.NewIdentityV3(provider, eo)
@@ -180,6 +215,23 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("GET").Path("/admin/mail/render").HandlerFunc(p.RenderMailTemplate)
 }
 
+// AddTo implements the httpapi.API interface.
+func (p *v2Provider) AddTo(r *mux.Router) {
+	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/")
+		httpapi.SkipRequestLog(r)
+		respondwith.JSON(w, 300, map[string]any{"versions": []VersionData{p.VersionData}})
+	})
+
+	r.Methods("GET").Path("/v2/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/v2/")
+		httpapi.SkipRequestLog(r)
+		respondwith.JSON(w, 200, map[string]any{"version": p.VersionData})
+	})
+
+	r.Methods("GET").Path("/v2/info").HandlerFunc(p.GetInfo)
+}
+
 // RequireJSON will parse the request body into the given data structure, or
 // write an error response if that fails.
 func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
@@ -191,23 +243,41 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
 	return true
 }
 
-// Path constructs a full URL for a given URL path below the /v1/ endpoint.
-func (p *v1Provider) Path(elements ...string) string {
-	parts := []string{
-		strings.TrimSuffix(p.Cluster.Config.CatalogURL, "/"),
-		"v1",
-	}
+func path(catalogURL, apiVersion string, elements ...string) string {
+	parts := []string{strings.TrimSuffix(catalogURL, "/"), apiVersion}
 	parts = append(parts, elements...)
 	return strings.Join(parts, "/")
+}
+
+// Path constructs a full URL for a given URL path below the /v1/ endpoint.
+func (p *v1Provider) Path(elements ...string) string {
+	return path(p.Cluster.Config.CatalogURL, "v1", elements...)
+}
+
+// Path constructs a full URL for a given URL path below the /v2/ endpoint.
+func (p *v2Provider) Path(elements ...string) string {
+	return path(p.Cluster.Config.CatalogURL, "v2", elements...)
+}
+
+// checkToken is a local helper to service the CheckToken functions of the different providers.
+func checkToken(r *http.Request, tokenValidator gopherpolicy.Validator) *gopherpolicy.Token {
+	t := tokenValidator.CheckToken(r)
+	t.Context.Request = mux.Vars(r)
+	return t
 }
 
 // CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
 // returns a Token instance for checking authorization. Any errors that occur
 // during this function are deferred until Require() is called.
 func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
-	t := p.tokenValidator.CheckToken(r)
-	t.Context.Request = mux.Vars(r)
-	return t
+	return checkToken(r, p.tokenValidator)
+}
+
+// CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
+// returns a Token instance for checking authorization. Any errors that occur
+// during this function are deferred until Require() is called.
+func (p *v2Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
+	return checkToken(r, p.tokenValidator)
 }
 
 // FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
