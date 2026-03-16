@@ -317,9 +317,9 @@ var sqlMigrations = map[string]string{
 			display_name TEXT NOT NULL
 		);
 		ALTER TABLE services 
-		    ADD COLUMN display_name TEXT NOT NULL;
+		    ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
 		ALTER TABLE resources
-		    ADD COLUMN display_name TEXT NOT NULL,
+		    ADD COLUMN display_name TEXT NOT NULL DEFAULT '',
 		    -- fallback to 'default' is handled in application layer on read
 		    ADD COLUMN category_id BIGINT DEFAULT NULL 
 		    	REFERENCES categories ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
