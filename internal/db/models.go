@@ -79,6 +79,8 @@ type Rate struct {
 	ID        RateID          `db:"id"`
 	ServiceID ServiceID       `db:"service_id"`
 	Name      liquid.RateName `db:"name"`
+	// a unique identifier for this record in the form "servicetype/ratename"; mostly intended for manual lookup
+	Path string `db:"path"`
 	// following fields get filled from liquid.ServiceInfo
 	LiquidVersion int64           `db:"liquid_version"`
 	Unit          liquid.Unit     `db:"unit"`

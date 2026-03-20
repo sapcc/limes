@@ -113,12 +113,12 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (14, 4, 'total', 0, 'unshared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (2, 2, 'in_global_and_project', 1, 'flat');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (4, 2, 'only_in_global', 1, 'flat');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (6, 2, 'only_in_project', 1, 'flat');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/in_global_and_liquid');
+		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (2, 2, 'in_global_and_project', 1, 'flat', 'unshared/in_global_and_project');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE, 'unshared/in_liquid_and_project');
+		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (4, 2, 'only_in_global', 1, 'flat', 'unshared/only_in_global');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid');
+		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (6, 2, 'only_in_project', 1, 'flat', 'unshared/only_in_project');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 1, 'Unshared');
@@ -335,7 +335,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	assert.Equal(t, len(errs), 0)
 	tr.DBChanges().AssertEqual(`
 		UPDATE project_rates SET rate_limit = 10, usage_as_bigint = '5' WHERE id = 1 AND project_id = 1 AND rate_id = 5;
-		UPDATE rates SET unit = 'GiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid';
+		UPDATE rates SET unit = 'GiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
 	`)
 
 	// check that rounding is ignored for rates also
@@ -348,7 +348,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	assert.Equal(t, len(errs), 0)
 	tr.DBChanges().AssertEqual(`
 		UPDATE project_rates SET rate_limit = 1, usage_as_bigint = '1' WHERE id = 1 AND project_id = 1 AND rate_id = 5;
-		UPDATE rates SET unit = 'TiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid';
+		UPDATE rates SET unit = 'TiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
 	`)
 }
 

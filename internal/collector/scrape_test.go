@@ -119,6 +119,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	s.MustDBInsert(&db.Rate{
 		ServiceID:     1,
 		Name:          "xAnotherRate",
+		Path:          "unittest/xAnotherRate",
 		LiquidVersion: 1,
 	})
 	s.MustDBInsert(&db.ProjectRate{
@@ -824,10 +825,10 @@ func Test_TopologyScrapes(t *testing.T) {
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (4, 2, 2);
 		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
-		UPDATE rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
-		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
-		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
-		DELETE FROM rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate' AND path = 'unittest/firstrate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate' AND path = 'unittest/xOtherRate';
+		DELETE FROM rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate' AND path = 'unittest/xAnotherRate';
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
@@ -913,9 +914,9 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 8 AND project_id = 2 AND az_resource_id = 3;
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
-		UPDATE rates SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'firstrate';
-		UPDATE rates SET liquid_version = 3 WHERE id = 2 AND service_id = 1 AND name = 'secondrate';
-		UPDATE rates SET liquid_version = 3 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate';
+		UPDATE rates SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'firstrate' AND path = 'unittest/firstrate';
+		UPDATE rates SET liquid_version = 3 WHERE id = 2 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
+		UPDATE rates SET liquid_version = 3 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate' AND path = 'unittest/xOtherRate';
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 3, topology = 'az-aware' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 2;
