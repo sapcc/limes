@@ -665,6 +665,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return db.Rate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
+				Path:          fmt.Sprintf("%s/%s", serviceType, rateName),
 				LiquidVersion: serviceInfo.Version,
 				Unit:          unit,
 				Topology:      topology,

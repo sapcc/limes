@@ -20,10 +20,10 @@ INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at)
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
 
-INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE);
-INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE);
-INSERT INTO rates (id, service_id, name, liquid_version, topology) VALUES (3, 1, 'xOtherRate', 1, 'flat');
-INSERT INTO rates (id, service_id, name, liquid_version) VALUES (4, 1, 'xAnotherRate', 1);
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage, path) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE, 'unittest/firstrate');
+INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE, 'unittest/secondrate');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (3, 1, 'xOtherRate', 1, 'flat', 'unittest/xOtherRate');
+INSERT INTO rates (id, service_id, name, liquid_version, path) VALUES (4, 1, 'xAnotherRate', 1, 'unittest/xAnotherRate');
 
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity', 'Capacity');
 INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'az-aware', TRUE, 'unittest/things', 'Things');

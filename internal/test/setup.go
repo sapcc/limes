@@ -357,10 +357,9 @@ func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceNa
 
 // GetRateID is a helper function for finding the ID of a db.Rate record.
 func (s Setup) GetRateID(srvType db.ServiceType, rateName liquid.RateName) (result db.RateID) {
-	// TODO: we should have a `path` attribute on `rates`, too
 	s.t.Helper()
 	path := string(srvType) + "/" + string(rateName)
-	err := s.DB.QueryRow(`SELECT id FROM rates WHERE service_id = $1 AND name = $2`, s.GetServiceID(srvType), rateName).Scan(&result)
+	err := s.DB.QueryRow(`SELECT id FROM rates WHERE path = $1`, path).Scan(&result)
 	if err != nil {
 		s.t.Fatalf("could not find rates.id for path = %q: %s", path, err.Error())
 	}

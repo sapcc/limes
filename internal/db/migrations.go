@@ -324,4 +324,75 @@ var sqlMigrations = map[string]string{
 		    ADD COLUMN category_id BIGINT DEFAULT NULL 
 		    	REFERENCES categories ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
 	`,
+	`073_add_rate_path.down.sql`: `
+		DROP TRIGGER rates_check_path_values_trigger ON rates;
+		CREATE OR REPLACE FUNCTION check_path_values_trigger_function()
+			RETURNS trigger AS $$
+			DECLARE
+				problem RECORD;
+			BEGIN
+				FOR problem IN
+					SELECT r.id AS id, r.path AS actual, CONCAT(s.type, '/', r.name) AS expected
+					FROM resources r JOIN services s ON r.service_id = s.id
+					WHERE r.path != CONCAT(s.type, '/', r.name)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				FOR problem IN
+					SELECT azr.id AS id, azr.path AS actual, CONCAT(r.path, '/', azr.az) AS expected
+					FROM az_resources azr JOIN resources r ON azr.resource_id = r.id
+					WHERE azr.path != CONCAT(r.path, '/', azr.az)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for az_resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql;
+		ALTER TABLE rates DROP COLUMN path;
+	`,
+	`073_add_rate_path.up.sql`: `
+		ALTER TABLE rates ADD COLUMN path TEXT NOT NULL DEFAULT '';
+		UPDATE rates SET path = CONCAT(s.type, '/', rates.name) FROM services s WHERE rates.service_id = s.id;
+		ALTER TABLE rates ALTER COLUMN path DROP DEFAULT;
+		ALTER TABLE rates ADD CONSTRAINT rates_path_key UNIQUE (path);
+		CREATE OR REPLACE FUNCTION check_path_values_trigger_function()
+			RETURNS trigger AS $$
+			DECLARE
+				problem RECORD;
+			BEGIN
+				FOR problem IN
+					SELECT r.id AS id, r.path AS actual, CONCAT(s.type, '/', r.name) AS expected
+					FROM resources r JOIN services s ON r.service_id = s.id
+					WHERE r.path != CONCAT(s.type, '/', r.name)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				FOR problem IN
+					SELECT azr.id AS id, azr.path AS actual, CONCAT(r.path, '/', azr.az) AS expected
+					FROM az_resources azr JOIN resources r ON azr.resource_id = r.id
+					WHERE azr.path != CONCAT(r.path, '/', azr.az)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for az_resources.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				FOR problem IN
+					SELECT ra.id AS id, ra.path AS actual, CONCAT(s.type, '/', ra.name) AS expected
+					FROM rates ra JOIN services s ON ra.service_id = s.id
+					WHERE ra.path != CONCAT(s.type, '/', ra.name)
+				LOOP
+					RAISE EXCEPTION 'inconsistent value for rates.path: expected "%", but got "%" for ID %', problem.expected, problem.actual, problem.id;
+				END LOOP;
+
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql;
+		CREATE CONSTRAINT TRIGGER rates_check_path_values_trigger
+			AFTER INSERT OR UPDATE ON rates
+			DEFERRABLE INITIALLY DEFERRED
+			FOR EACH ROW
+			EXECUTE FUNCTION check_path_values_trigger_function();
+	`,
 }
