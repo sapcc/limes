@@ -168,8 +168,36 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		resources[l.pooledResourceName(attrs.Flavor.HWVersion, "ram")].AddLocalizedUsage(az, attrs.Flavor.MemoryMiB)
 	}
 
-	return liquid.ServiceUsageReport{
+	result := liquid.ServiceUsageReport{
 		InfoVersion: serviceInfo.Version,
 		Resources:   resources,
-	}, nil
+	}
+
+	// if delegation is requested, merge the other liquid's ServiceUsageReport into ours
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+		delegatedInfo := l.delegatedInfo.Get()
+		delegatedReport, err := client.GetUsageReport(ctx, projectUUID, req)
+		if err != nil {
+			return liquid.ServiceUsageReport{}, fmt.Errorf("while getting ServiceUsageReport from %s: %w", l.DelegationEndpoint, err)
+		}
+		if delegatedInfo.Version != delegatedReport.InfoVersion {
+			// we cannot trigger BuildServiceInfo() directly, so we just have to wait this out
+			//
+			// NOTE: if this method turns out to be untenable in practical operations, we need to extend go-bits/liquidapi
+			// and support returning a sentinel error here which forces an immediate re-run of BuildServiceInfo();
+			// if we do that, we should remove the ServiceInfoRefreshInterval customization in main.go
+			return liquid.ServiceUsageReport{}, fmt.Errorf(
+				"need to retry after next ServiceInfo update (%s appears to have increased its ServiceInfo.Version from %d to %d)",
+				l.DelegationEndpoint, delegatedInfo.Version, delegatedReport.InfoVersion,
+			)
+		}
+		for resName := range delegatedInfo.Resources {
+			result.Resources[resName] = delegatedReport.Resources[resName]
+		}
+		result.Rates = delegatedReport.Rates
+		result.Metrics = delegatedReport.Metrics
+		result.SerializedState = delegatedReport.SerializedState
+	}
+
+	return result, nil
 }

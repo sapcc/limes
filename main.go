@@ -101,6 +101,10 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
 		case "nova":
 			opts.TakesConfiguration = true
+			// when using delegation, most operations are blocked when the delegate
+			// has updated their ServiceInfo and we have not updated ours yet;
+			// as a workaround, we refresh our ServiceInfo much more often than usual
+			opts.ServiceInfoRefreshInterval = 30 * time.Second
 			must.Succeed(liquidapi.Run(ctx, &nova.Logic{}, opts))
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))

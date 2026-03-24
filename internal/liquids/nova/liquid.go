@@ -39,15 +39,18 @@ type Logic struct {
 	BinpackBehavior        binpackBehavior                                               `json:"binpack_behavior"`
 	IgnoredTraits          []string                                                      `json:"ignored_traits"`
 	CategoryForSplitFlavor regexpext.ConfigSet[liquid.ResourceName, categoryDeclaration] `json:"category_for_split_flavor"`
+	DelegationEndpoint     string                                                        `json:"delegation_endpoint"`
 	// connections
-	NovaV2            *gophercloud.ServiceClient `json:"-"`
-	PlacementV1       *gophercloud.ServiceClient `json:"-"`
-	OSTypeProber      *liquidapi.OSTypeProber    `json:"-"`
-	ServerGroupProber *ServerGroupProber         `json:"-"`
+	NovaV2                *gophercloud.ServiceClient `json:"-"`
+	PlacementV1           *gophercloud.ServiceClient `json:"-"`
+	OSTypeProber          *liquidapi.OSTypeProber    `json:"-"`
+	ServerGroupProber     *ServerGroupProber         `json:"-"`
+	DelegatedLiquidClient Option[*liquidapi.Client]  `json:"-"`
 	// computed state
 	ignoredFlavorNames liquidapi.State[[]string]                                `json:"-"`
 	hasPooledResource  liquidapi.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
 	hwVersionResources liquidapi.State[[]liquid.ResourceName]                   `json:"-"`
+	delegatedInfo      liquidapi.State[liquid.ServiceInfo]                      `json:"-"`
 }
 
 type categoryDeclaration struct {
@@ -75,6 +78,16 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	}
 
 	l.ServerGroupProber = NewServerGroupProber(l.NovaV2)
+
+	if l.DelegationEndpoint != "" {
+		client, err := liquidapi.NewClient(provider, eo, liquidapi.ClientOpts{
+			EndpointOverride: l.DelegationEndpoint,
+		})
+		if err != nil {
+			return err
+		}
+		l.DelegatedLiquidClient = Some(client)
+	}
 
 	return nil
 }
@@ -238,25 +251,97 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	l.hwVersionResources.Set(slices.Collect(maps.Keys(hwVersionByResourceName)))
 	l.ignoredFlavorNames.Set(ignoredFlavorNames)
 
-	return liquid.ServiceInfo{
+	result := liquid.ServiceInfo{
 		Version:     time.Now().Unix(),
 		DisplayName: "Compute",
 		Categories:  categories,
 		Resources:   resources,
-	}, nil
+	}
+
+	// if delegation is requested, merge the other liquid's ServiceInfo into ours
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+		delegatedInfo, err := client.GetInfo(ctx)
+		if err != nil {
+			return liquid.ServiceInfo{}, fmt.Errorf("while getting ServiceInfo from %s: %w", l.DelegationEndpoint, err)
+		}
+
+		for categoryName, category := range delegatedInfo.Categories {
+			if _, exists := result.Categories[categoryName]; exists {
+				return liquid.ServiceInfo{}, fmt.Errorf("cannot merge ServiceInfo from %s: category %q is owned by us", l.DelegationEndpoint, categoryName)
+			}
+			result.Categories[categoryName] = category
+		}
+		for resourceName, resource := range delegatedInfo.Resources {
+			if _, exists := result.Resources[resourceName]; exists {
+				return liquid.ServiceInfo{}, fmt.Errorf("cannot merge ServiceInfo from %s: resource %q is owned by us", l.DelegationEndpoint, resourceName)
+			}
+			result.Resources[resourceName] = resource
+		}
+		result.Rates = delegatedInfo.Rates // no merge checks necessary here, liquid-nova itself does not define any rates
+		result.CapacityMetricFamilies = delegatedInfo.CapacityMetricFamilies
+		result.UsageMetricFamilies = delegatedInfo.UsageMetricFamilies
+		result.UsageReportNeedsProjectMetadata = delegatedInfo.UsageReportNeedsProjectMetadata
+		result.QuotaUpdateNeedsProjectMetadata = delegatedInfo.QuotaUpdateNeedsProjectMetadata
+		result.CommitmentHandlingNeedsProjectMetadata = delegatedInfo.CommitmentHandlingNeedsProjectMetadata
+
+		l.delegatedInfo.Set(delegatedInfo)
+	}
+
+	return result, nil
 }
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	opts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
+	delegatedInfo := l.delegatedInfo.Get()
+
+	// split quota request into one for Nova and one for the delegate (if any)
+	delegatedRequests := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(delegatedInfo.Resources))
+	novaUpdateOpts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
 	for resName := range serviceInfo.Resources {
-		opts[string(resName)] = req.Resources[resName].Quota
+		if _, exists := delegatedInfo.Resources[resName]; exists {
+			delegatedRequests[resName] = req.Resources[resName]
+		} else {
+			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
+		}
 	}
-	return quotasets.Update(ctx, l.NovaV2, projectUUID, opts).Err
+
+	// forward requests into the respective backend systems
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+		delegatedRequest := liquid.ServiceQuotaRequest{Resources: delegatedRequests}
+		if delegatedInfo.QuotaUpdateNeedsProjectMetadata {
+			delegatedRequest.ProjectMetadata = req.ProjectMetadata
+		}
+		err := client.PutQuota(ctx, projectUUID, delegatedRequest)
+		if err != nil {
+			return fmt.Errorf("while delegating to %s: %w", l.DelegationEndpoint, err)
+		}
+	}
+	return quotasets.Update(ctx, l.NovaV2, projectUUID, novaUpdateOpts).Err
 }
 
 // ReviewCommitmentChange implements the liquidapi.Logic interface.
 func (l *Logic) ReviewCommitmentChange(ctx context.Context, req liquid.CommitmentChangeRequest, serviceInfo liquid.ServiceInfo) (liquid.CommitmentChangeResponse, error) {
+	// this liquid itself does not manage commitments, but if the request only concerns delegated resources, we can delegate it
+	delegatedInfo := l.delegatedInfo.Get()
+	for _, pcc := range req.ByProject {
+		for resName := range pcc.ByResource {
+			if _, exists := delegatedInfo.Resources[resName]; !exists {
+				err := fmt.Errorf("this liquid does not manage commitments for resource %q", string(resName))
+				return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
+			}
+		}
+	}
+
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+		req.InfoVersion = delegatedInfo.Version
+		resp, err := client.ChangeCommitments(ctx, req)
+		if err != nil {
+			err = fmt.Errorf("while delegating to %s: %w", l.DelegationEndpoint, err)
+		}
+		return resp, err
+	}
+
+	// defense in depth: this branch is only reachable if the change request has zero actual changes in it
 	err := errors.New("this liquid does not manage commitments")
 	return liquid.CommitmentChangeResponse{}, respondwith.CustomStatus(http.StatusBadRequest, err)
 }

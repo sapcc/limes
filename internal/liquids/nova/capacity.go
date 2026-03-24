@@ -491,8 +491,44 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 	}
 
-	return liquid.ServiceCapacityReport{
+	result := liquid.ServiceCapacityReport{
 		InfoVersion: serviceInfo.Version,
 		Resources:   capacities,
-	}, nil
+	}
+
+	// if delegation is requested, merge the other liquid's ServiceUsageReport into ours
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+		delegatedInfo := l.delegatedInfo.Get()
+		delegatedRequest := liquid.ServiceCapacityRequest{
+			AllAZs:           req.AllAZs,
+			DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand),
+		}
+		for resName := range delegatedInfo.Resources {
+			if demand, exists := req.DemandByResource[resName]; exists {
+				delegatedRequest.DemandByResource[resName] = demand
+			}
+		}
+
+		delegatedReport, err := client.GetCapacityReport(ctx, delegatedRequest)
+		if err != nil {
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("while getting ServiceCapacityReport from %s: %w", l.DelegationEndpoint, err)
+		}
+		if delegatedInfo.Version != delegatedReport.InfoVersion {
+			// we cannot trigger BuildServiceInfo() directly, so we just have to wait this out
+			//
+			// NOTE: if this method turns out to be untenable in practical operations, we need to extend go-bits/liquidapi
+			// and support returning a sentinel error here which forces an immediate re-run of BuildServiceInfo();
+			// if we do that, we should remove the ServiceInfoRefreshInterval customization in main.go
+			return liquid.ServiceCapacityReport{}, fmt.Errorf(
+				"need to retry after next ServiceInfo update (%s appears to have increased its ServiceInfo.Version from %d to %d)",
+				l.DelegationEndpoint, delegatedInfo.Version, delegatedReport.InfoVersion,
+			)
+		}
+		for resName := range delegatedInfo.Resources {
+			result.Resources[resName] = delegatedReport.Resources[resName]
+		}
+		result.Metrics = delegatedReport.Metrics
+	}
+
+	return result, nil
 }
