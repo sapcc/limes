@@ -34,6 +34,8 @@ A `CategoryDeclaration` has the following fields:
 | `name` | string | The name of the category to use for this resource. |
 | `display_name` | string | The display name of the category to use for this resource. |
 
+**TODO:** The additional field `with_hw_version_resources` may be set to `true` to enable pre-alpha support for `hw_version`-separated pooled quotas. This feature is not completed yet and may randomly break, so it is not documented yet.
+
 ## Resources
 
 The standard roster of Nova quotas is supported:

@@ -35,6 +35,7 @@ type Logic struct {
 	FlavorSelection        FlavorSelection                                               `json:"flavor_selection"`
 	WithSubresources       bool                                                          `json:"with_subresources"`
 	WithSubcapacities      bool                                                          `json:"with_subcapacities"`
+	WithHWVersionResources bool                                                          `json:"with_hw_version_resources"`
 	BinpackBehavior        binpackBehavior                                               `json:"binpack_behavior"`
 	IgnoredTraits          []string                                                      `json:"ignored_traits"`
 	CategoryForSplitFlavor regexpext.ConfigSet[liquid.ResourceName, categoryDeclaration] `json:"category_for_split_flavor"`
@@ -102,30 +103,32 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
 	//
 	// This initialization enumerates which such pooled resources exist.
-	defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, l.NovaV2)
-	if err != nil {
-		return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
-	}
 	hasPooledResource := make(map[string]map[liquid.ResourceName]bool)
 	hwVersionByResourceName := make(map[liquid.ResourceName]string, 0)
-	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
-	for resourceName := range defaultQuotaClassSet {
-		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
-		if match == nil {
-			continue
+	if l.WithHWVersionResources {
+		defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, l.NovaV2)
+		if err != nil {
+			return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
 		}
-		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
+		hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
+		for resourceName := range defaultQuotaClassSet {
+			match := hwVersionResourceRx.FindStringSubmatch(resourceName)
+			if match == nil {
+				continue
+			}
+			hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
 
-		hwVersionByResourceName[liquid.ResourceName(resourceName)] = hwVersion
+			hwVersionByResourceName[liquid.ResourceName(resourceName)] = hwVersion
 
-		if hasPooledResource[hwVersion] == nil {
-			hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
+			if hasPooledResource[hwVersion] == nil {
+				hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
+			}
+			hasPooledResource[hwVersion][baseResourceName] = true
 		}
-		hasPooledResource[hwVersion][baseResourceName] = true
 	}
 
 	var ignoredFlavorNames []string
-	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
+	err := FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
 		if IsIronicFlavor(f) {
 			ignoredFlavorNames = append(ignoredFlavorNames, f.Name)
 		}
