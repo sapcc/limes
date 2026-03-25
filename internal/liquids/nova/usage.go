@@ -138,6 +138,13 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 			continue
 		}
 
+		// for compatibility with Cortex, we need to ignore subresources that are managed by Cortex,
+		// except for the fact that they still count towards the `instances` quota
+		if attrs.Flavor.HWVersion != "" && !l.WithHWVersionResources {
+			resources["instances"].AddLocalizedUsage(az, 1)
+			continue
+		}
+
 		// use separate instance resource if we have a matching "instances_$FLAVOR" resource
 		instanceResourceName := ResourceNameForFlavor(attrs.Flavor.Name)
 		isPooled := false
