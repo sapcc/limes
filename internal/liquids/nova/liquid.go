@@ -299,15 +299,18 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	delegatedRequests := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(delegatedInfo.Resources))
 	novaUpdateOpts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
 	for resName, resInfo := range serviceInfo.Resources {
+		if !resInfo.HasQuota {
+			continue
+		}
 		if _, exists := delegatedInfo.Resources[resName]; exists {
 			delegatedRequests[resName] = req.Resources[resName]
-		} else if resInfo.HasQuota {
+		} else {
 			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
 		}
 	}
 
-	// forward requests into the respective backend systems
-	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
+	// forward requests into the respective backend systems (unless they're empty)
+	if client, ok := l.DelegatedLiquidClient.Unpack(); ok && len(delegatedRequests) > 0 {
 		delegatedRequest := liquid.ServiceQuotaRequest{Resources: delegatedRequests}
 		if delegatedInfo.QuotaUpdateNeedsProjectMetadata {
 			delegatedRequest.ProjectMetadata = req.ProjectMetadata
