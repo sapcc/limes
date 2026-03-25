@@ -26,6 +26,7 @@ This liquid provides support for the compute service Nova.
 | `with_subcapacities` | boolean | If true, subcapacities are reported. |
 | `with_subresources` | boolean | If true, subresources are reported. |
 | `category_for_split_flavor` | [ConfigSet](../operators/config.md#configset) keyed on `liquid.ResourceName` with `CategoryDeclaration` as value | Describes which category to use for which resource. If not set for a resource that is automatically constructed from a flavor, the resource will not get a category. |
+| `delegation_endpoint` | string | If set to a URL, then this liquid will query the liquid running under that base URL and extend its own responses accordingly. All resources declared by the other liquid will be in this liquid's ServiceInfo. Requests for usage and capacity reports will be multiplexed to that liquid and the results merged with this liquid's own report in the appropriate fashion. Requests to set quota or change commitments will be passed on to the other liquid as necessary. |
 
 A `CategoryDeclaration` has the following fields:
 
@@ -33,6 +34,8 @@ A `CategoryDeclaration` has the following fields:
 | ----- | ---- | ----------- |
 | `name` | string | The name of the category to use for this resource. |
 | `display_name` | string | The display name of the category to use for this resource. |
+
+**TODO:** The additional field `with_hw_version_resources` may be set to `true` to enable pre-alpha support for `hw_version`-separated pooled quotas. This feature is not completed yet and may randomly break, so it is not documented yet.
 
 ## Resources
 
