@@ -103,19 +103,19 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	for hwVersion, limits := range limitsData.Limits.AbsolutePerHWVersion {
 		if l.hasPooledResource.Get()[hwVersion]["cores"] {
 			resources[l.pooledResourceName(hwVersion, "cores")] = &liquid.ResourceUsageReport{
-				Quota: Some(limits.MaxTotalCores),
+				Quota: None[int64](), // Some(limits.MaxTotalCores), // NOTE: disabled because HasQuota = false
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalCoresUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
 		if l.hasPooledResource.Get()[hwVersion]["instances"] {
 			resources[l.pooledResourceName(hwVersion, "instances")] = &liquid.ResourceUsageReport{
-				Quota: Some(limits.MaxTotalInstances),
+				Quota: None[int64](), // Some(limits.MaxTotalInstances), // NOTE: disabled because HasQuota = false
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
 		if l.hasPooledResource.Get()[hwVersion]["ram"] {
 			resources[l.pooledResourceName(hwVersion, "ram")] = &liquid.ResourceUsageReport{
-				Quota: Some(limits.MaxTotalRAMSize),
+				Quota: None[int64](), // Some(limits.MaxTotalRAMSize), // NOTE: disabled because HasQuota = false
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalRAMUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
