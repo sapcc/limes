@@ -157,8 +157,10 @@ func (p *OSTypeProber) findFromBootVolume(ctx context.Context, instanceID string
 		return "", err
 	}
 
-	if isValidVMwareOSType[volume.ImageMetadata.VMwareOSType] {
-		return volume.ImageMetadata.VMwareOSType, nil
+	for _, regex := range isValidVMwareOSTypeRegex {
+		if regex.MatchString(volume.ImageMetadata.VMwareOSType) {
+			return volume.ImageMetadata.VMwareOSType, nil
+		}
 	}
 	return "unknown", nil
 }
@@ -179,8 +181,10 @@ func (p *OSTypeProber) findFromImage(ctx context.Context, imageID string) (strin
 	}
 
 	// prefer vmware_ostype attribute since this is validated by Nova upon booting the VM
-	if isValidVMwareOSType[result.VMwareOSType] {
-		return result.VMwareOSType, nil
+	for _, regex := range isValidVMwareOSTypeRegex {
+		if regex.MatchString(result.VMwareOSType) {
+			return result.VMwareOSType, nil
+		}
 	}
 	// look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
 	osType := ""
