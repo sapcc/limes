@@ -95,6 +95,6 @@ type ClusterResourceReports map[ResourceName]*ClusterResourceReport
 // using a map, but serializes to JSON as a list.
 type ClusterAvailabilityZoneReports map[limes.AvailabilityZone]*ClusterAvailabilityZoneReport
 
-// ClusterAZResourceReport is a substructure of ClusterResourceReport that breaks
+// ClusterAZResourceReports is a substructure of ClusterResourceReport that breaks
 // down capacity and usage data for a single resource by availability zone.
 type ClusterAZResourceReports map[limes.AvailabilityZone]*ClusterAZResourceReport

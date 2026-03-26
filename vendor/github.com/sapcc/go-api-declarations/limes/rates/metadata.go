@@ -14,5 +14,5 @@ type RateName string
 // events from a backend service).
 type RateInfo struct {
 	Name RateName   `json:"name"`
-	Unit limes.Unit `json:"unit,omitempty"`
+	Unit limes.Unit `json:"unit,omitzero"`
 }

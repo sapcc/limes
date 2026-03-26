@@ -14,7 +14,7 @@ import (
 // This type is used to serialize JSON request bodies in PUT requests on projects.
 type RateRequest map[limes.ServiceType]ServiceRequest
 
-// ServiceQuotaRequest contains new rate limit values for rates in a single
+// ServiceRequest contains new rate limit values for rates in a single
 // service. This type appears in type RateRequest.
 type ServiceRequest map[RateName]RateLimitRequest
 

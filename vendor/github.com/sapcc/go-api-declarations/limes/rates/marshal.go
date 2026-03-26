@@ -8,26 +8,40 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
-func (r ClusterRateReports) MarshalJSON() ([]byte, error)    { return marshal.MapAsList(r) }
+// MarshalJSON implements the json.Marshaler interface.
+func (r ClusterRateReports) MarshalJSON() ([]byte, error) { return marshal.MapAsList(r) }
+
+// MarshalJSON implements the json.Marshaler interface.
 func (s ClusterServiceReports) MarshalJSON() ([]byte, error) { return marshal.MapAsList(s) }
-func (r ProjectRateReports) MarshalJSON() ([]byte, error)    { return marshal.MapAsList(r) }
+
+// MarshalJSON implements the json.Marshaler interface.
+func (r ProjectRateReports) MarshalJSON() ([]byte, error) { return marshal.MapAsList(r) }
+
+// MarshalJSON implements the json.Marshaler interface.
 func (s ProjectServiceReports) MarshalJSON() ([]byte, error) { return marshal.MapAsList(s) }
 
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (r *ClusterRateReports) UnmarshalJSON(buf []byte) error {
 	m, err := marshal.MapFromList(buf, func(r *ClusterRateReport) RateName { return r.Name })
 	*r = ClusterRateReports(m)
 	return err
 }
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (s *ClusterServiceReports) UnmarshalJSON(buf []byte) error {
 	m, err := marshal.MapFromList(buf, func(s *ClusterServiceReport) limes.ServiceType { return s.Type })
 	*s = ClusterServiceReports(m)
 	return err
 }
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (r *ProjectRateReports) UnmarshalJSON(buf []byte) error {
 	m, err := marshal.MapFromList(buf, func(r *ProjectRateReport) RateName { return r.Name })
 	*r = ProjectRateReports(m)
 	return err
 }
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (s *ProjectServiceReports) UnmarshalJSON(buf []byte) error {
 	m, err := marshal.MapFromList(buf, func(s *ProjectServiceReport) limes.ServiceType { return s.Type })
 	*s = ProjectServiceReports(m)

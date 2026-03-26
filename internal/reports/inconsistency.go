@@ -30,7 +30,7 @@ type OverspentProjectQuota struct {
 	Project  core.KeystoneProject        `json:"project"`
 	Service  limes.ServiceType           `json:"service"`
 	Resource limesresources.ResourceName `json:"resource"`
-	Unit     limes.Unit                  `json:"unit,omitempty"`
+	Unit     limes.Unit                  `json:"unit,omitzero"`
 	Quota    uint64                      `json:"quota"`
 	Usage    uint64                      `json:"usage"`
 }
@@ -42,7 +42,7 @@ type MismatchProjectQuota struct {
 	Project      core.KeystoneProject        `json:"project"`
 	Service      limes.ServiceType           `json:"service"`
 	Resource     limesresources.ResourceName `json:"resource"`
-	Unit         limes.Unit                  `json:"unit,omitempty"`
+	Unit         limes.Unit                  `json:"unit,omitzero"`
 	Quota        uint64                      `json:"quota"`
 	BackendQuota int64                       `json:"backend_quota"`
 }
