@@ -298,10 +298,10 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 	// split quota request into one for Nova and one for the delegate (if any)
 	delegatedRequests := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(delegatedInfo.Resources))
 	novaUpdateOpts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
-	for resName := range serviceInfo.Resources {
+	for resName, resInfo := range serviceInfo.Resources {
 		if _, exists := delegatedInfo.Resources[resName]; exists {
 			delegatedRequests[resName] = req.Resources[resName]
-		} else {
+		} else if resInfo.HasQuota {
 			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
 		}
 	}
