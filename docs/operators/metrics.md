@@ -45,10 +45,18 @@ For the scraping metrics, the `service` label contains the type of the backend s
 service catalog), and the `service_name` label contains the product name (in lower case) of the reference implementation
 of this service, for instance, `service_name="nova"` for `service="compute"`.
 
+### Quota/capacity collection metrics
+
+Quota and capacity querying is done by liquids. The collection processes for them can emit metrics.
+
+| Type | Metric | Labels |
+| --- | --- | --- |
+| Gauge | `limes_capacity_collection_metrics_ok` | `service_type` |
+| Gauge | `limes_usage_collection_metrics_ok` | `domain`, `domain_id`, `project`, `project_id`, `service`, `service_name` |
+
 ## Data metrics
 
-With the configuration option `collector.data_metrics` set to true, the collector service will report the following
-additional metrics:
+The data metrics service will report the following metrics:
 
 | Type | Metric | Labels |
 | --- | --- | --- |
@@ -71,11 +79,10 @@ additional metrics:
 | Gauge | `limes_project_used_and_or_committed_per_az` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id`, `availabilityZone` |
 | Gauge | `limes_unit_multiplier` | `service`, `resource` |
 
-### Quota/capacity collection metrics
+## Data metrics v2
 
-Quota and capacity querying is done by liquids. The collection processes for them can emit metrics.
+The data metrics service v2 will report the following metrics (all of type `Gauge`):
 
-| Type | Metric | Labels |
+| Metric | Labels | Description |
 | --- | --- | --- |
-| Gauge | `limes_capacity_collection_metrics_ok` | `service_type` |
-| Gauge | `limes_usage_collection_metrics_ok` | `domain`, `domain_id`, `project`, `project_id`, `service`, `service_name` |
+| `limitas_resource_unit_multiplier` | `base_unit`, `resource`, `service` | Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time. |

@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 
@@ -503,24 +504,29 @@ func Test_ScrapeSuccess(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 
-	dmr := &collector.DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics.prom"),
-	}.Check(t, dmr)
+	}.Check(t, dmrV1)
 
 	// check data metrics with the skip_zero flag set
-	dmr.ReportZeroes = false
+	dmrV1.ReportZeroes = false
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics_skipzero.prom"),
-	}.Check(t, dmr)
+	}.Check(t, dmrV1)
+
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB})
+	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics_v2.prom")
 }
 
 func Test_ScrapeFailure(t *testing.T) {

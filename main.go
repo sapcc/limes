@@ -159,7 +159,9 @@ func main() {
 	case "serve":
 		taskServe(ctx, cluster, remainingArgs, provider, eo)
 	case "serve-data-metrics":
-		taskServeDataMetrics(ctx, cluster, remainingArgs)
+		taskServeDataMetricsV1(ctx, cluster, remainingArgs)
+	case "serve-data-metrics-v2":
+		taskServeDataMetricsV2(ctx, cluster, remainingArgs)
 	default:
 		printUsageAndExit(1)
 	}
@@ -167,7 +169,7 @@ func main() {
 
 var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
-\t%s (collect|serve|serve-data-metrics) <config-file>
+\t%s (collect|serve|serve-data-metrics|serve-data-metrics-v2) <config-file>
 \t%s liquid <service-type>
 \t%s test-list-domains
 \t%s test-list-projects <domain-name-or-uuid>
@@ -293,17 +295,44 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve data metrics
 
-func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []string) {
+func taskServeDataMetricsV1(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
 
 	// serve data metrics
 	skipZero := osext.GetenvBool("LIMES_DATA_METRICS_SKIP_ZERO")
-	dmr := collector.DataMetricsReporter{
+	dmr := collector.DataMetricsV1Reporter{
 		Cluster:      cluster,
 		DB:           cluster.DB,
 		ReportZeroes: !skipZero,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.Compose(
+		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{
+			SkipRequestLog: true,
+			Check: func() error {
+				return cluster.DB.Db.PingContext(ctx)
+			},
+		},
+	))
+	mux.Handle("/metrics", &dmr)
+
+	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
+	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
+}
+
+func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []string) {
+	if len(args) != 0 {
+		printUsageAndExit(1)
+	}
+
+	// serve data metrics
+	dmr := collector.DataMetricsV2Reporter{
+		Cluster: cluster,
+		DB:      cluster.DB,
 	}
 
 	mux := http.NewServeMux()

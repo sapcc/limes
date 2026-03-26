@@ -313,7 +313,7 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 ////////////////////////////////////////////////////////////////////////////////
 // data metrics
 
-// DataMetricsReporter renders Prometheus metrics for data attributes (quota,
+// DataMetricsV1Reporter renders Prometheus metrics for data attributes (quota,
 // usage, etc.) for all projects known to Limes.
 //
 // It is an http.Handler, instead of implementing the prometheus.Collector
@@ -334,7 +334,7 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 // This exporter cannot use Cluster.LiquidConnections, because it runs outside
 // of the collect task. Therefore, it uses the convenience methods of the Cluster
 // to get the necessary liquid.ResourceInfo data.
-type DataMetricsReporter struct {
+type DataMetricsV1Reporter struct {
 	Cluster      *core.Cluster
 	DB           *gorp.DbMap
 	ReportZeroes bool
@@ -348,7 +348,7 @@ type DataMetricsReporter struct {
 const ContentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=underscores"
 
 // ServeHTTP implements the http.Handler interface.
-func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (d *DataMetricsV1Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricsBySeries, err := d.collectMetricsBySeries()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
@@ -380,7 +380,7 @@ func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	err = bw.Flush()
 	if err != nil {
-		logg.Error("in DataMetricsReporter.ServeHTTP: " + err.Error())
+		logg.Error("in DataMetricsV1Reporter.ServeHTTP: " + err.Error())
 	}
 }
 
@@ -479,7 +479,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	 WHERE pra.usage_as_bigint != ''
 `)
 
-func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
+func (d *DataMetricsV1Reporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
 	serviceInfos, err := d.Cluster.AllServiceInfos()
 	if err != nil {
@@ -797,6 +797,88 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("during projectRateMetricsQuery: %w", err)
+	}
+
+	return result, nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// data metrics v2
+
+// DataMetricsV2Reporter renders Prometheus metrics for data attributes
+// (quota, usage, etc.) for all projects known to Limitas.
+//
+// It is an http.Handler, instead of implementing the prometheus.Collector
+// interface (like all the other Collector types in this package) and going
+// through the normal promhttp facility.
+//
+// We are not going through promhttp here because promhttp insists on holding
+// all metrics in memory before rendering them out (in order to sort them).
+// Given the extremely high cardinality of these metrics, this results in
+// unreasonably high memory usage spikes.
+//
+// This implementation also holds all the metrics in memory (because ORDER BY
+// on database level turned out to be prohibitively expensive), but we hold
+// their rendered forms (i.e. something like `{bar="bar",foo="foo"} 42` instead
+// of a dozen allocations for each label name, label value, label pair, a map
+// of label pairs, and so on) in order to save memory.
+type DataMetricsV2Reporter struct {
+	Cluster *core.Cluster
+	DB      *gorp.DbMap
+}
+
+// ServeHTTP implements the http.Handler interface.
+func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	metricsBySeries, err := d.collectMetricsBySeries()
+	if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
+	w.WriteHeader(http.StatusOK)
+
+	// NOTE: Keep metrics ordered by name!
+	bw := bufio.NewWriter(w)
+	printDataMetrics(bw, metricsBySeries, "limitas_resource_unit_multiplier", `Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`)
+
+	err = bw.Flush()
+	if err != nil {
+		logg.Error("in DataMetricsV1Reporter.ServeHTTP: " + err.Error())
+	}
+}
+
+var (
+	// dmv2 = data metrics v2
+	dmv2ResourceInfoQuery = sqlext.SimplifyWhitespace(`
+		SELECT s.type, r.name, r.unit
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+	`)
+)
+
+func (d *DataMetricsV2Reporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
+	result := make(map[string][]dataMetric)
+
+	// fetch resource info
+	err := sqlext.ForeachRow(d.DB, dmv2ResourceInfoQuery, nil, func(rows *sql.Rows) error {
+		var (
+			srvType db.ServiceType
+			resName liquid.ResourceName
+			unit    liquid.Unit
+		)
+		err := rows.Scan(&srvType, &resName, &unit)
+		if err != nil {
+			return err
+		}
+
+		baseUnit, multiplier := unit.Base()
+		labels := fmt.Sprintf(`base_unit=%q,resource=%q,service=%q`, baseUnit.String(), srvType, resName)
+		metric := dataMetric{Labels: labels, Value: float64(multiplier)}
+		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
 	}
 
 	return result, nil
