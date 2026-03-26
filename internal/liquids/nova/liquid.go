@@ -242,8 +242,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			DisplayName: displayName,
 			Category:    Some(category),
 			Unit:        unit,
-			HasQuota:    true,
-			Topology:    liquid.AZAwareTopology,
+			// for now, we don't set quota for hw-versions
+			HasQuota: false,
+			Topology: liquid.AZAwareTopology,
 		}
 	}
 
