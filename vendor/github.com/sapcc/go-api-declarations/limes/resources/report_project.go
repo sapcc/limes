@@ -60,6 +60,8 @@ type ProjectAZResourceReport struct {
 	Subresources       json.RawMessage   `json:"subresources,omitempty"`
 }
 
+// HistoricalReport provides information about historical data and
+// appears in type ProjectAZResourceReport.
 type HistoricalReport struct {
 	MinUsage uint64             `json:"min_usage,omitempty"`
 	MaxUsage uint64             `json:"max_usage,omitempty"`
@@ -74,6 +76,6 @@ type ProjectServiceReports map[limes.ServiceType]*ProjectServiceReport
 // to JSON as a list.
 type ProjectResourceReports map[ResourceName]*ProjectResourceReport
 
-// ProjectAZResourceReport is a substructure of ProjectResourceReport that breaks
+// ProjectAZResourceReports is a substructure of ProjectResourceReport that breaks
 // down quota and usage data for a single resource by availability zone.
 type ProjectAZResourceReports map[limes.AvailabilityZone]*ProjectAZResourceReport

@@ -95,7 +95,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		},
 		Rates: map[liquid.RateName]liquid.RateInfo{
 			"firstrate":  {Topology: liquid.FlatTopology, HasUsage: true},
-			"secondrate": {Unit: "KiB", Topology: liquid.FlatTopology, HasUsage: true},
+			"secondrate": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},

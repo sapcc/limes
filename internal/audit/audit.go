@@ -98,7 +98,7 @@ type RateLimitEventTarget struct {
 
 // RateLimitChange appears in type rateLimitEventTarget.
 type RateLimitChange struct {
-	Unit         limes.Unit        `json:"unit,omitempty"`
+	Unit         limes.Unit        `json:"unit,omitzero"`
 	OldLimit     uint64            `json:"oldLimit"`
 	NewLimit     uint64            `json:"newLimit"`
 	OldWindow    limesrates.Window `json:"oldWindow"`

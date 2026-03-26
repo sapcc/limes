@@ -65,6 +65,6 @@ type DomainServiceReports map[limes.ServiceType]*DomainServiceReport
 // to JSON as a list.
 type DomainResourceReports map[ResourceName]*DomainResourceReport
 
-// DomainAZResourceReport is a substructure of DomainResourceReport that breaks
+// DomainAZResourceReports is a substructure of DomainResourceReport that breaks
 // down quota and usage data for a single resource by availability zone.
 type DomainAZResourceReports map[limes.AvailabilityZone]*DomainAZResourceReport

@@ -1198,7 +1198,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
 		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000, "unit": "MiB"}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value from MiB to <count> because units are incompatible\n"),
+		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value \"1000 MiB\" to <count> because units are incompatible\n"),
 	}.Check(t, s.Handler)
 }
 

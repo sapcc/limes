@@ -20,7 +20,7 @@ type ResourceName string
 // quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
 	Name ResourceName `json:"name"`
-	Unit limes.Unit   `json:"unit,omitempty"`
+	Unit limes.Unit   `json:"unit,omitzero"`
 	// Category is an optional hint that UIs can use to group resources of one
 	// service into subgroups. If it is used, it should be set on all
 	// ResourceInfos reported by the same QuotaPlugin.
