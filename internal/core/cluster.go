@@ -393,6 +393,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				logg.Info("SaveServiceInfoToDB: updating Service %s from LiquidVersion = %d to %d", service.Type, service.LiquidVersion, serviceInfo.Version)
 			}
 			service.LiquidVersion = serviceInfo.Version
+			service.DisplayName = serviceInfo.DisplayName
 			service.CapacityMetricFamiliesJSON = cmf
 			service.UsageMetricFamiliesJSON = umf
 			service.UsageReportNeedsProjectMetadata = serviceInfo.UsageReportNeedsProjectMetadata
@@ -475,6 +476,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 					newUnit: serviceInfo.Resources[res.Name].Unit,
 				}
 			}
+			res.DisplayName = serviceInfo.Resources[res.Name].DisplayName
 			res.Unit = serviceInfo.Resources[res.Name].Unit
 			res.Topology = serviceInfo.Resources[res.Name].Topology
 			res.HasCapacity = serviceInfo.Resources[res.Name].HasCapacity
@@ -665,6 +667,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return db.Rate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
+				DisplayName:   serviceInfo.Rates[rateName].DisplayName,
 				Path:          fmt.Sprintf("%s/%s", serviceType, rateName),
 				LiquidVersion: serviceInfo.Version,
 				Unit:          unit,
@@ -683,6 +686,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			}
 			newUnit := rate.Unit
 			rate.LiquidVersion = serviceInfo.Version
+			rate.DisplayName = serviceInfo.Rates[rate.Name].DisplayName
 			rate.Topology = liquid.FlatTopology
 			rate.HasUsage = false
 			switch {

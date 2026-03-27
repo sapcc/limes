@@ -395,4 +395,12 @@ var sqlMigrations = map[string]string{
 			FOR EACH ROW
 			EXECUTE FUNCTION check_path_values_trigger_function();
 	`,
+	`074_add_rate_display_name.down.sql`: `
+		ALTER TABLE rates
+			DROP COLUMN display_name;
+	`,
+	`074_073_add_rate_display_name.up.sql`: `
+		ALTER TABLE rates
+		    ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+	`,
 }
