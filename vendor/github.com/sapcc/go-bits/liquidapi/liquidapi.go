@@ -266,7 +266,10 @@ func (rt *runtime) getServiceInfo() liquid.ServiceInfo {
 }
 
 var diffOptions = append(
-	[]cmp.Option{cmpopts.IgnoreFields(liquid.ServiceInfo{}, "Version")},
+	[]cmp.Option{
+		cmpopts.IgnoreFields(liquid.ServiceInfo{}, "Version"),
+		cmpopts.EquateComparable(liquid.Unit{}),
+	},
 	liquid.ForeachOptionType(cmpopts.EquateComparable)...,
 )
 
