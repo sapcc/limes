@@ -119,6 +119,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	s.MustDBInsert(&db.Rate{
 		ServiceID:     1,
 		Name:          "xAnotherRate",
+		DisplayName:   "X Another Rate",
 		Path:          "unittest/xAnotherRate",
 		LiquidVersion: 1,
 	})
