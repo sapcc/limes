@@ -36,6 +36,7 @@ Limes consists of two basic services:
   - all other supported OpenStack services to gather quota/usage/capacity data.
 - Both services emit Prometheus metrics. See [List of metrics](./metrics.md) for details.
 - The optional **data metrics service** `limes serve-data-metrics` exposes all quota, usage and capacity data as Prometheus metrics.
+  - A new version of this component, providing a cleaned up and backwards-incompatible set of metrics, is under development and can be accessed as `limes serve-data-metrics-v2`.
 - Persistence is provided by a PostgreSQL database which is accessible to both services.
 
 # Building

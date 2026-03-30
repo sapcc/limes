@@ -15,6 +15,8 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit. (Mnemonic: The original Limes was installed when the Romans wanted to put a quota on Germanic land use.)
 
+**Heads-up:** Limes will be renamed to Limitas in the future. The new name will appear from the start in the v2 API and metrics; the renaming will take place once the v1 API and metrics have been removed.
+
 ## The idea: Automatic quota distribution
 
 Limes can discover capacity and usage for various types of OpenStack resources.

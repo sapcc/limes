@@ -91,12 +91,12 @@ the v1 API. The values are either numbers (to override quotas on counted resourc
 }
 ```
 
-## Environment variables for `limes serve-data-metrics` only
+## Environment variables for `limes serve-data-metrics` and `limes serve-data-metrics-v2` only
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_DATA_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
-| `LIMES_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted, at the expense of making some PromQL queries harder to formulate. |
+| `LIMES_DATA_METRICS_SKIP_ZERO` | `false` | *(v1 only)* If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted, at the expense of making some PromQL queries harder to formulate. For `limes serve-data-metrics-v2`, this is always set to `true`. |
 
 ## Configuration file
 
