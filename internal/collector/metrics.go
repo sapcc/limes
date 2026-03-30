@@ -349,7 +349,7 @@ const ContentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-
 
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsV1Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	metricsBySeries, err := d.collectMetricsBySeries()
+	metricSet, err := d.collectMetrics()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -357,26 +357,26 @@ func (d *DataMetricsV1Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
 	w.WriteHeader(http.StatusOK)
 
-	// NOTE: Keep metrics ordered by name!
+	// NOTE: Keep metric families ordered by name!
 	bw := bufio.NewWriter(w)
-	printDataMetrics(bw, metricsBySeries, "limes_autogrow_growth_multiplier", `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`)
-	printDataMetrics(bw, metricsBySeries, "limes_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`)
-	printDataMetrics(bw, metricsBySeries, "limes_available_commitment_duration", `Reports which commitment durations are available for new commitments on a Limes resource.`)
-	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity", `Reported capacity of a Limes resource for an OpenStack cluster.`)
-	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity_per_az", "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.")
-	printDataMetrics(bw, metricsBySeries, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
-	printDataMetrics(bw, metricsBySeries, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_commitment_min_expires_at", `Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_override_quota_from_config", `Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_quota", `Assigned quota of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_rate_usage", `Usage of a Limes rate for an OpenStack project. These are counters that never reset.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_usage", `Actual (logical) usage of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_usage_per_az", `Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`)
-	printDataMetrics(bw, metricsBySeries, "limes_project_used_and_or_committed_per_az", `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`)
-	printDataMetrics(bw, metricsBySeries, "limes_unit_multiplier", `Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`)
+	printDataMetrics(bw, metricSet, "limes_autogrow_growth_multiplier", `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`)
+	printDataMetrics(bw, metricSet, "limes_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`)
+	printDataMetrics(bw, metricSet, "limes_available_commitment_duration", `Reports which commitment durations are available for new commitments on a Limes resource.`)
+	printDataMetrics(bw, metricSet, "limes_cluster_capacity", `Reported capacity of a Limes resource for an OpenStack cluster.`)
+	printDataMetrics(bw, metricSet, "limes_cluster_capacity_per_az", "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.")
+	printDataMetrics(bw, metricSet, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
+	printDataMetrics(bw, metricSet, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
+	printDataMetrics(bw, metricSet, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricSet, "limes_project_commitment_min_expires_at", `Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`)
+	printDataMetrics(bw, metricSet, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
+	printDataMetrics(bw, metricSet, "limes_project_override_quota_from_config", `Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`)
+	printDataMetrics(bw, metricSet, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricSet, "limes_project_quota", `Assigned quota of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricSet, "limes_project_rate_usage", `Usage of a Limes rate for an OpenStack project. These are counters that never reset.`)
+	printDataMetrics(bw, metricSet, "limes_project_usage", `Actual (logical) usage of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricSet, "limes_project_usage_per_az", `Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`)
+	printDataMetrics(bw, metricSet, "limes_project_used_and_or_committed_per_az", `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`)
+	printDataMetrics(bw, metricSet, "limes_unit_multiplier", `Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`)
 
 	err = bw.Flush()
 	if err != nil {
@@ -389,18 +389,29 @@ type dataMetric struct {
 	Value  float64
 }
 
-func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seriesName, seriesHelp string) {
-	metrics := metricsBySeries[seriesName]
+type dataMetricSet struct {
+	ByFamily              map[string][]dataMetric
+	LastPrintedFamilyName string
+}
+
+func printDataMetrics(w io.Writer, metricSet *dataMetricSet, familyName, familyHelp string) {
+	// ensure that metric families are printed in alphabetical order as required by Prometheus
+	if metricSet.LastPrintedFamilyName != "" && metricSet.LastPrintedFamilyName > familyName {
+		panic(fmt.Sprintf("wrong ordering of printDataMetrics() calls: %q should be printed before %q",
+			familyName, metricSet.LastPrintedFamilyName))
+	}
+
+	metrics := metricSet.ByFamily[familyName]
 	if len(metrics) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n", seriesName, seriesHelp, seriesName)
+	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n", familyName, familyHelp, familyName)
 
 	slices.SortFunc(metrics, func(lhs, rhs dataMetric) int {
 		return strings.Compare(lhs.Labels, rhs.Labels)
 	})
 	for _, m := range metrics {
-		fmt.Fprintf(w, "%s{%s} %g\n", seriesName, m.Labels, m.Value)
+		fmt.Fprintf(w, "%s{%s} %g\n", familyName, m.Labels, m.Value)
 	}
 }
 
@@ -479,7 +490,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	 WHERE pra.usage_as_bigint != ''
 `)
 
-func (d *DataMetricsV1Reporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
+func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
 	serviceInfos, err := d.Cluster.AllServiceInfos()
 	if err != nil {
@@ -799,7 +810,7 @@ func (d *DataMetricsV1Reporter) collectMetricsBySeries() (map[string][]dataMetri
 		return nil, fmt.Errorf("during projectRateMetricsQuery: %w", err)
 	}
 
-	return result, nil
+	return &dataMetricSet{ByFamily: result}, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -829,7 +840,7 @@ type DataMetricsV2Reporter struct {
 
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	metricsBySeries, err := d.collectMetricsBySeries()
+	metricSet, err := d.collectMetrics()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -837,9 +848,9 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
 	w.WriteHeader(http.StatusOK)
 
-	// NOTE: Keep metrics ordered by name!
+	// NOTE: Keep metric families ordered by name!
 	bw := bufio.NewWriter(w)
-	printDataMetrics(bw, metricsBySeries, "limitas_resource_unit_multiplier", `Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`)
+	printDataMetrics(bw, metricSet, "limitas_resource_unit_multiplier", `Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`)
 
 	err = bw.Flush()
 	if err != nil {
@@ -856,7 +867,7 @@ var (
 	`)
 )
 
-func (d *DataMetricsV2Reporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
+func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 	result := make(map[string][]dataMetric)
 
 	// fetch resource info
@@ -881,7 +892,7 @@ func (d *DataMetricsV2Reporter) collectMetricsBySeries() (map[string][]dataMetri
 		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
 	}
 
-	return result, nil
+	return &dataMetricSet{ByFamily: result}, nil
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
