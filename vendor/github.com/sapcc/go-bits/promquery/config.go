@@ -4,18 +4,14 @@
 package promquery
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"time"
 
 	prom_api "github.com/prometheus/client_golang/api"
 	prom_v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
+	"github.com/sapcc/go-bits/internal/httputil"
 	"github.com/sapcc/go-bits/osext"
 )
 
@@ -64,42 +60,14 @@ func (cfg Config) Connect() (Client, error) {
 	if cfg.ServerURL == "" {
 		return Client{}, errors.New("cannot connect to Prometheus: missing server URL")
 	}
-	if cfg.ClientCertificatePath == "" && cfg.ClientCertificateKeyPath != "" {
-		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: private key given, but no client certificate given", cfg.ServerURL)
-	}
-	if cfg.ClientCertificatePath != "" && cfg.ClientCertificateKeyPath == "" {
-		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: client certificate given, but no private key given", cfg.ServerURL)
-	}
 
-	// same configuration as prom_api.DefaultRoundTripper (but we cannot just clone it because it contains a Mutex)
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-	transport.TLSClientConfig = &tls.Config{}
-
-	if cfg.ClientCertificatePath != "" {
-		clientCert, err := tls.LoadX509KeyPair(cfg.ClientCertificatePath, cfg.ClientCertificateKeyPath)
-		if err != nil {
-			return Client{}, fmt.Errorf("cannot load client certificate from %s and %s: %w",
-				cfg.ClientCertificatePath, cfg.ClientCertificateKeyPath, err)
-		}
-		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
-	}
-
-	if cfg.ServerCACertificatePath != "" {
-		serverCACert, err := os.ReadFile(cfg.ServerCACertificatePath)
-		if err != nil {
-			return Client{}, fmt.Errorf("cannot load CA certificate from %s: %w",
-				cfg.ServerCACertificatePath, err)
-		}
-		certPool := x509.NewCertPool()
-		certPool.AppendCertsFromPEM(serverCACert)
-		transport.TLSClientConfig.RootCAs = certPool
+	transport, err := httputil.NewTransport(httputil.TransportOpts{
+		ServerCACertificatePath:  cfg.ServerCACertificatePath,
+		ClientCertificatePath:    cfg.ClientCertificatePath,
+		ClientCertificateKeyPath: cfg.ClientCertificateKeyPath,
+	})
+	if err != nil {
+		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: %w", cfg.ServerURL, err)
 	}
 
 	promCfg := prom_api.Config{

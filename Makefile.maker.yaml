@@ -17,7 +17,9 @@ dockerfile:
     - /config-*.json
 
 golang:
-  autoupdateableDeps: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
+  autoupdateDependencies:
+    enabled: true
+    matchModule: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
   setGoModVersion: true
 
 golangciLint:
