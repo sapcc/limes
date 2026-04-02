@@ -403,4 +403,85 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE rates
 		    ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
 	`,
+
+	// The following block was auto-generated from `pg_dump --schema-only` of the database as of 074 like this:
+	// 1) in the shell: awk '/CREATE TABLE/{table=$3}/CONSTRAINT.*NOT NULL/{$1=table"."$1;print}' < pg_dump_output.sql
+	// 2) then in vim: s/^public\.\(\w*\)\.\(\w*\) .* CONSTRAINT \(\w*\) NOT NULL,\?$/\t\tALTER TABLE \1 RENAME CONSTRAINT \3 TO \1_\2_not_null;/
+	// 3) verified that `pg_dump --schema-only` now does not show any NOT NULL constraints with non-default names (the shell output from step 1 is empty now)
+	"075_normalize_nonnull_constraint_names.up.sql": `
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_id_not_null TO az_resources_id_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_resource_id_not_null TO az_resources_resource_id_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_az_not_null TO az_resources_az_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_raw_capacity_not_null TO az_resources_raw_capacity_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_subcapacities_not_null TO az_resources_subcapacities_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT cluster_az_resources_path_not_null TO az_resources_path_not_null;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_state_not_null TO project_commitments_status_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_id_not_null TO rates_id_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_service_id_not_null TO rates_service_id_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_name_not_null TO rates_name_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_liquid_version_not_null TO rates_liquid_version_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_unit_not_null TO rates_unit_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_topology_not_null TO rates_topology_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT cluster_rates_has_usage_not_null TO rates_has_usage_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_id_not_null TO resources_id_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_service_id_not_null TO resources_service_id_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_name_not_null TO resources_name_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_liquid_version_not_null TO resources_liquid_version_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_unit_not_null TO resources_unit_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_topology_not_null TO resources_topology_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_has_capacity_not_null TO resources_has_capacity_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_needs_resource_demand_not_null TO resources_needs_resource_demand_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_has_quota_not_null TO resources_has_quota_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_attributes_json_not_null TO resources_attributes_json_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT cluster_resources_path_not_null TO resources_path_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_id_not_null TO services_id_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_type_not_null TO services_type_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_scrape_duration_secs_not_null TO services_scrape_duration_secs_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_serialized_metrics_not_null TO services_serialized_metrics_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_next_scrape_at_not_null TO services_next_scrape_at_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_scrape_error_message_not_null TO services_scrape_error_message_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_liquid_version_not_null TO services_liquid_version_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_capacity_metric_families_json_not_null TO services_capacity_metric_families_json_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_usage_metric_families_json_not_null TO services_usage_metric_families_json_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_usage_report_needs_project_metadata_not_null TO services_usage_report_needs_project_metadata_not_null;
+		ALTER TABLE services RENAME CONSTRAINT cluster_services_quota_update_needs_project_metadata_not_null TO services_quota_update_needs_project_metadata_not_null;
+	`,
+	"075_normalize_nonnull_constraint_names.down.sql": `
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_id_not_null TO cluster_az_resources_id_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_resource_id_not_null TO cluster_az_resources_resource_id_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_az_not_null TO cluster_az_resources_az_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_raw_capacity_not_null TO cluster_az_resources_raw_capacity_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_subcapacities_not_null TO cluster_az_resources_subcapacities_not_null;
+		ALTER TABLE az_resources RENAME CONSTRAINT az_resources_path_not_null TO cluster_az_resources_path_not_null;
+		ALTER TABLE project_commitments RENAME CONSTRAINT project_commitments_status_not_null TO project_commitments_state_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_id_not_null TO cluster_rates_id_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_service_id_not_null TO cluster_rates_service_id_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_name_not_null TO cluster_rates_name_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_liquid_version_not_null TO cluster_rates_liquid_version_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_unit_not_null TO cluster_rates_unit_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_topology_not_null TO cluster_rates_topology_not_null;
+		ALTER TABLE rates RENAME CONSTRAINT rates_has_usage_not_null TO cluster_rates_has_usage_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_id_not_null TO cluster_resources_id_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_service_id_not_null TO cluster_resources_service_id_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_name_not_null TO cluster_resources_name_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_liquid_version_not_null TO cluster_resources_liquid_version_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_unit_not_null TO cluster_resources_unit_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_topology_not_null TO cluster_resources_topology_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_has_capacity_not_null TO cluster_resources_has_capacity_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_needs_resource_demand_not_null TO cluster_resources_needs_resource_demand_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_has_quota_not_null TO cluster_resources_has_quota_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_attributes_json_not_null TO cluster_resources_attributes_json_not_null;
+		ALTER TABLE resources RENAME CONSTRAINT resources_path_not_null TO cluster_resources_path_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_id_not_null TO cluster_services_id_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_type_not_null TO cluster_services_type_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_scrape_duration_secs_not_null TO cluster_services_scrape_duration_secs_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_serialized_metrics_not_null TO cluster_services_serialized_metrics_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_next_scrape_at_not_null TO cluster_services_next_scrape_at_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_scrape_error_message_not_null TO cluster_services_scrape_error_message_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_liquid_version_not_null TO cluster_services_liquid_version_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_capacity_metric_families_json_not_null TO cluster_services_capacity_metric_families_json_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_usage_metric_families_json_not_null TO cluster_services_usage_metric_families_json_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_usage_report_needs_project_metadata_not_null TO cluster_services_usage_report_needs_project_metadata_not_null;
+		ALTER TABLE services RENAME CONSTRAINT services_quota_update_needs_project_metadata_not_null TO cluster_services_quota_update_needs_project_metadata_not_null;
+	`,
 }
