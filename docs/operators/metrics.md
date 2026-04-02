@@ -85,4 +85,8 @@ The data metrics service v2 will report the following metrics (all of type `Gaug
 
 | Metric | Labels | Description |
 | --- | --- | --- |
-| `limitas_resource_unit_multiplier` | `base_unit`, `resource`, `service` | Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time. |
+| `limitas_resource_autogrow_growth_multiplier` | `resource`, `service` | For resources with quota distribution strategy "autogrow", shows the value of the `growth_multiplier` configuration option. |
+| `limitas_resource_autogrow_quota_overcommit_threshold_percent` | `resource`, `service` | For resources with quota distribution strategy "autogrow", shows the value of the `allow_quota_overcommit_until_allocated_percent` configuration option. |
+| `limitas_resource_info` | `category`, `display_name`, `has_quota`, `qdm`, `resource`, `service`, `topology`, `unit` | Info metric for resources. The value is always 1, and information can be found in labels. The label `qdm` contains the name of the quota distribution model that has been configured for this resource (currently the only possible value is `autogrow`). |
+| `limitas_resource_overcommit_factor` | `resource`, `service` | Multiplier for converting this resource's raw capacity into reported capacity. |
+| `limitas_resource_unit_multiplier` | `base_unit`, `resource`, `service` | Multiplier for converting a value of this resource to its base unit (e.g. `base_unit="B"` for bytes). Useful for comparing values across resources, or for resources whose unit may change over time. |

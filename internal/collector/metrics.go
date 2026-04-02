@@ -13,10 +13,12 @@ import (
 	"math/big"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
@@ -850,6 +852,10 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	// NOTE: Keep metric families ordered by name!
 	bw := bufio.NewWriter(w)
+	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
+	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`)
+	printDataMetrics(bw, metricSet, "limitas_resource_info", `Info metric for resources. The value is always 1, and information can be found in labels.`)
+	printDataMetrics(bw, metricSet, "limitas_resource_overcommit_factor", `Multiplier for converting this resource's raw capacity into reported capacity.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_unit_multiplier", `Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`)
 
 	err = bw.Flush()
@@ -861,9 +867,10 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 var (
 	// dmv2 = data metrics v2
 	dmv2ResourceInfoQuery = sqlext.SimplifyWhitespace(`
-		SELECT s.type, r.name, r.unit
+		SELECT s.type AS service_type, c.name AS category_name, r.*
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
+		  LEFT OUTER JOIN categories c ON r.category_id = c.id
 	`)
 )
 
@@ -871,26 +878,74 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 	result := make(map[string][]dataMetric)
 
 	// fetch resource info
-	err := sqlext.ForeachRow(d.DB, dmv2ResourceInfoQuery, nil, func(rows *sql.Rows) error {
-		var (
-			srvType db.ServiceType
-			resName liquid.ResourceName
-			unit    liquid.Unit
-		)
-		err := rows.Scan(&srvType, &resName, &unit)
-		if err != nil {
-			return err
-		}
-
-		baseUnit, multiplier := unit.Base()
-		labels := fmt.Sprintf(`base_unit=%q,resource=%q,service=%q`, baseUnit.String(), srvType, resName)
-		metric := dataMetric{Labels: labels, Value: float64(multiplier)}
-		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
-		return nil
-	})
+	var resourceRecords []struct {
+		ServiceType  db.ServiceType              `db:"service_type"`
+		CategoryName Option[liquid.CategoryName] `db:"category_name"`
+		db.Resource
+	}
+	_, err := d.DB.Select(&resourceRecords, dmv2ResourceInfoQuery)
 	if err != nil {
 		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
 	}
+	overcommitFactors := make(map[db.ServiceType]map[liquid.ResourceName]liquid.OvercommitFactor)
+	for _, record := range resourceRecords {
+		srvType, res := record.ServiceType, record.Resource
+
+		// remember overcommit factor for capacity calculations below (want to avoid calling BehaviorForResource multiple times)
+		overcommitFactor := d.Cluster.BehaviorForResource(srvType, res.Name).OvercommitFactor
+		if overcommitFactor == 0 {
+			overcommitFactor = 1
+		}
+		srvOvercommitFactors := overcommitFactors[srvType]
+		if srvOvercommitFactors == nil {
+			srvOvercommitFactors = make(map[liquid.ResourceName]liquid.OvercommitFactor)
+			overcommitFactors[srvType] = srvOvercommitFactors
+		}
+		srvOvercommitFactors[res.Name] = overcommitFactor
+
+		// emit limitas_resource_info
+		qdConfig := d.Cluster.QuotaDistributionConfigForResource(srvType, res.Name)
+		labels := fmt.Sprintf(`category=%q,display_name=%q,has_quota=%q,qdm=%q,resource=%q,service=%q,topology=%q,unit=%q`,
+			record.CategoryName.UnwrapOr(liquid.CategoryName(srvType)),
+			res.DisplayName, strconv.FormatBool(res.HasQuota),
+			qdConfig.Model, res.Name, srvType, res.Topology, res.Unit.String(),
+		)
+		metric := dataMetric{Labels: labels, Value: 1}
+		result["limitas_resource_info"] = append(result["limitas_resource_info"], metric)
+
+		// emit limitas_resource_overcommit_factor and limitas_resource_autogrow_*
+		// (those metrics are batched together here because they share the same `labels`)
+		labels = fmt.Sprintf(`resource=%q,service=%q`, res.Name, srvType)
+		metric = dataMetric{Labels: labels, Value: float64(overcommitFactor)}
+		result["limitas_resource_overcommit_factor"] = append(result["limitas_resource_overcommit_factor"], metric)
+
+		autogrowCfg, ok := qdConfig.Autogrow.Unpack()
+		if ok {
+			metric = dataMetric{Labels: labels, Value: autogrowCfg.GrowthMultiplier}
+			result["limitas_resource_autogrow_growth_multiplier"] = append(result["limitas_resource_autogrow_growth_multiplier"], metric)
+
+			metric = dataMetric{Labels: labels, Value: autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent}
+			result["limitas_resource_autogrow_quota_overcommit_threshold_percent"] = append(result["limitas_resource_autogrow_quota_overcommit_threshold_percent"], metric)
+		}
+
+		// emit limitas_resource_unit_multiplier
+		baseUnit, multiplier := res.Unit.Base()
+		labels = fmt.Sprintf(`base_unit=%q,resource=%q,service=%q`, baseUnit.String(), res.Name, srvType)
+		metric = dataMetric{Labels: labels, Value: float64(multiplier)}
+		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
+	}
+
+	// TODO: limitas_cluster_resource_capacity{az="...",resource="...",service="..."}
+	// TODO: limitas_cluster_resource_raw_capacity{az="...",resource="...",service="..."}
+	// TODO: limitas_project_resource_allocation{az="...",committable="true|false",project_id="...",resource="...",service="..."} (used and/or committed)
+	// TODO: limitas_project_resource_quota{az="...",committable="true|false",project_id="...",resource="...",service="..."}
+	// TODO: limitas_project_resource_usage{az="...",committable="true|false",project_id="...",resource="...",service="..."}
+	// TODO: limitas_project_resource_commitment_amount{az="...",project_id="...",resource="...",service="...",status="...",transfer_status="...",uuid="..."}
+	// TODO: limitas_project_resource_commitment_expires_at{az="...",project_id="...",resource="...",service="...",status="...",transfer_status="...",uuid="..."}
+	//
+	// NOTE: project_id="..." above is a stand-in for the standard set of four labels (domain, domain_id, project, project_id)
+	//
+	// TODO: metrics for rates
 
 	return &dataMetricSet{ByFamily: result}, nil
 }
