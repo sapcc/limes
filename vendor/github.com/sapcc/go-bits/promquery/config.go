@@ -11,7 +11,7 @@ import (
 	prom_api "github.com/prometheus/client_golang/api"
 	prom_v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
-	"github.com/sapcc/go-bits/internal/httputil"
+	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/osext"
 )
 
@@ -61,7 +61,7 @@ func (cfg Config) Connect() (Client, error) {
 		return Client{}, errors.New("cannot connect to Prometheus: missing server URL")
 	}
 
-	transport, err := httputil.NewTransport(httputil.TransportOpts{
+	transport, err := httpext.NewTransport(httpext.TransportOpts{
 		ServerCACertificatePath:  cfg.ServerCACertificatePath,
 		ClientCertificatePath:    cfg.ClientCertificatePath,
 		ClientCertificateKeyPath: cfg.ClientCertificateKeyPath,
