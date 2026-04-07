@@ -40,6 +40,7 @@ const (
 				}
 			}
 		},
+		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 		"liquids": {
 			"first": {"area": "first"},
 			"second": {"area": "second"}
@@ -66,6 +67,7 @@ const (
 				}
 			}
 		},
+		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 		"liquids": {
 			"first": {"area": "first"},
 			"second": {"area": "second"}

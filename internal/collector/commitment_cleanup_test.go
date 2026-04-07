@@ -42,6 +42,7 @@ const (
 				}
 			}
 		},
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"unittest": {
 				"area": "testing",

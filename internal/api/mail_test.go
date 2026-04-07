@@ -27,6 +27,7 @@ func TestRenderMailTemplate(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }},
 			"liquids": {
 				"shared": {"area": "shared"}
 			},
@@ -81,6 +82,7 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }},
 			"liquids": {
 				"shared": {"area": "shared"}
 			},
@@ -123,6 +125,7 @@ func TestRenderMailTemplateOverEscaped(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }},
 			"liquids": {
 				"shared": {"area": "shared"}
 			},

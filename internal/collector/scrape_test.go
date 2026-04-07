@@ -54,6 +54,7 @@ const (
 				}
 			}
 		},
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"unittest": {
 				"area": "testing",
@@ -673,6 +674,7 @@ const (
 				}
 			}
 		},
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"noop": {
 				"area": "testing"

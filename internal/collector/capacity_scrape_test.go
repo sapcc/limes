@@ -50,6 +50,7 @@ const (
 				}
 			}
 		},
+		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 		"liquids": {
 			"shared": {"area": "shared"},
 			"unshared": {"area": "unshared"}
@@ -76,6 +77,7 @@ const (
 				}
 			}
 		},
+		"areas": { "shared": { "display_name": "Shared" }},
 		"liquids": {
 			"shared": {"area": "shared"}
 		}
@@ -860,6 +862,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 				}
 			}
 		},
+		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 		"liquids": {
 			"first": {
 				"area": "first",
@@ -1322,6 +1325,7 @@ const commitmentConfigWithoutOvercommitJSON = `{
 			}
 		}
 	},
+	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 	"liquids": {
 		"first": {
 			"area": "first",

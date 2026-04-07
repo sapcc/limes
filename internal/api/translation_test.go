@@ -27,6 +27,7 @@ const testTranslationConfigJSON = `{
 			}
 		}
 	},
+	"areas": { "first": { "display_name": "First" }},
 	"liquids": {
 		"first": {"area": "first"}
 	}

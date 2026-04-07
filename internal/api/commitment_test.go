@@ -48,6 +48,7 @@ const testCommitmentsJSON = `{
 			}
 		}
 	},
+	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 	"liquids": {
 		"first": {
 			"area": "first",
@@ -87,6 +88,7 @@ const testCommitmentsJSONWithoutMinConfirmDate = `{
 			}
 		}
 	},
+	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 	"liquids": {
 		"first": {
 			"area": "first",
@@ -126,6 +128,7 @@ const testConvertCommitmentsJSON = `{
 			}
 		}
 	},
+	"areas": { "third": { "display_name": "Third" }, "fourth": { "display_name": "Fourth" }},
 	"liquids": {
 		"third": {
 			"area": "third",

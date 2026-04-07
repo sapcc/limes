@@ -36,6 +36,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "testing": { "display_name": "Testing" }},
 			"liquids": {
 				"first": {"area": "testing"}
 			},
