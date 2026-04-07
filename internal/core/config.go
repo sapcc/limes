@@ -31,6 +31,7 @@ type ClusterConfiguration struct {
 	AvailabilityZones        []limes.AvailabilityZone               `json:"availability_zones"`
 	CatalogURL               string                                 `json:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `json:"discovery"`
+	Areas                    map[string]AreaInfo                    `json:"areas"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `json:"liquids"`
 	ResourceBehaviors        []ResourceBehavior                     `json:"resource_behavior"`
 	RateBehaviors            []RateBehavior                         `json:"rate_behavior"`
@@ -82,6 +83,12 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 		result = append(result, domain)
 	}
 	return result
+}
+
+// AreaInfo describes an area that can group services in form of liquids.
+// This type appears in type ClusterConfiguration.
+type AreaInfo struct {
+	DisplayName string `json:"display_name"`
 }
 
 // LiquidConfiguration describes a service that is enabled for a certain cluster by means of a corresponding running liquid.
@@ -208,14 +215,18 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		missing("liquids[]")
 	}
 
+	usedAreas := make(map[string]bool)
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
 	var occupiedConversionIdentifiers []string
-	// sorted f
+	// sorted for deterministic test order
 	for _, serviceType := range slices.Sorted(maps.Keys(cluster.Liquids)) {
 		l := cluster.Liquids[serviceType]
 		if l.Area == "" {
 			missing(fmt.Sprintf("liquids.%s.area", string(serviceType)))
+		} else if _, exists := cluster.Areas[l.Area]; !exists {
+			errs.Addf(`liquids.%s has area %s which is not defined in areas`, string(serviceType), l.Area)
 		}
+		usedAreas[l.Area] = true
 		serviceIdentifiers := make([]string, 0, len(l.CommitmentBehaviorPerResource))
 		for idx2, behavior := range l.CommitmentBehaviorPerResource {
 			var (
@@ -227,6 +238,17 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			serviceIdentifiers = append(serviceIdentifiers, serviceIdentifier)
 		}
 		occupiedConversionIdentifiers = append(occupiedConversionIdentifiers, serviceIdentifiers...)
+	}
+
+	// sorted for deterministic test order
+	for _, area := range slices.Sorted(maps.Keys(cluster.Areas)) {
+		areaInfo := cluster.Areas[area]
+		if areaInfo.DisplayName == "" {
+			errs.Addf(`invalid value for areas[%s].display_name: must not be ""`, area)
+		}
+		if !usedAreas[area] {
+			errs.Addf(`areas[%s]: not referenced by any liquids[].area`, area)
+		}
 	}
 
 	for idx, behavior := range cluster.ResourceBehaviors {

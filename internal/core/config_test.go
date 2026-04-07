@@ -45,6 +45,7 @@ func TestConfigValidation(t *testing.T) {
 	// invalid AZs
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "", "any" ],
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"
@@ -62,9 +63,33 @@ func TestConfigValidation(t *testing.T) {
 	}`), time.Now, nil, true)
 	assert.Equal(t, errs.Join(","), "missing configuration value: liquids.shared.area")
 
+	// area not in areas
+	_, errs = core.NewClusterFromJSON([]byte(`{
+		"availability_zones": [ "foo" ],
+		"liquids": {
+			"shared": {
+				"area": "testing"
+			}
+		}
+	}`), time.Now, nil, true)
+	assert.Equal(t, errs.Join(","), "liquids.shared has area testing which is not defined in areas")
+
+	// area defined but empty display name and unused area
+	_, errs = core.NewClusterFromJSON([]byte(`{
+		"availability_zones": [ "foo" ],
+		"areas": { "testing": { "display_name": "" }, "foo" : { "display_name": "bar" }},
+		"liquids": {
+			"shared": {
+				"area": "testing"
+			}
+		}
+	}`), time.Now, nil, true)
+	assert.Equal(t, errs.Join(","), `areas[foo]: not referenced by any liquids[].area,invalid value for areas[testing].display_name: must not be ""`)
+
 	// empty resource/rate behaviors
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "foo" ],
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"
@@ -82,6 +107,7 @@ func TestConfigValidation(t *testing.T) {
 	// quota distribution config: empty resource name and invalid model
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "foo" ],
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"
@@ -103,6 +129,7 @@ func TestConfigValidation(t *testing.T) {
 	// quota distribution config: missing autogrow configuration
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "foo" ],
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"
@@ -120,6 +147,7 @@ func TestConfigValidation(t *testing.T) {
 	// quota distribution config: invalid growth multiplier and invalid retention period
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "foo" ],
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"
@@ -141,6 +169,7 @@ func TestConfigValidation(t *testing.T) {
 	// commitment conversion: overlapping flavors
 	_, errs = core.NewClusterFromJSON([]byte(`{
 		"availability_zones": [ "az-one", "az-two" ],
+		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
 		"liquids": {
 			"first": {
 				"area": "first",
@@ -207,6 +236,7 @@ func TestConfigValidation(t *testing.T) {
 		"discovery": {
 			"method": ""
 		},
+		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"shared": {
 				"area": "testing"

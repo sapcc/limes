@@ -37,6 +37,7 @@ func TestForbidClusterIDHeader(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "testing": { "display_name": "Testing" }},
 			"liquids": {
 				"foo": {
 					"area": "testing"

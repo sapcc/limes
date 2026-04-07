@@ -29,6 +29,7 @@ func TestInconsistencyReport(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }},
 			"liquids": {
 				"shared": {"area": "shared"}
 			}

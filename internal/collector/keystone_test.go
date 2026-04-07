@@ -43,6 +43,7 @@ const (
 				}
 			}
 		},
+		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 		"liquids": {
 			"shared": {"area": "shared"},
 			"unshared": {"area": "unshared"}

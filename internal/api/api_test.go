@@ -61,6 +61,7 @@ const (
 				}
 			}
 		},
+		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 		"liquids": {
 			"shared": {
 				"area": "shared",
@@ -324,6 +325,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 			"liquids": {
 				"shared": {"area": "shared"},
 				"unshared": {"area": "unshared"}
@@ -913,6 +915,7 @@ func Test_EmptyProjectList(t *testing.T) {
 					"projects": {"uuid-for-germany": []}
 				}
 			},
+			"areas": { "first": { "display_name": "First" }},
 			"liquids": {
 				"first": {"area": "first"}
 			}
@@ -964,6 +967,10 @@ func Test_LargeProjectList(t *testing.T) {
 				Domains:  []core.KeystoneDomain{{Name: "germany", UUID: "uuid-for-germany"}},
 				Projects: map[string][]core.KeystoneProject{"uuid-for-germany": projectsAsConfigured},
 			},
+		},
+		Areas: map[string]core.AreaInfo{
+			"shared":   {DisplayName: "Shared"},
+			"unshared": {DisplayName: "Unshared"},
 		},
 		Liquids: map[db.ServiceType]core.LiquidConfiguration{
 			"shared":   {Area: "shared"},
@@ -1094,6 +1101,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }},
 			"liquids": {
 				"shared": {"area": "shared"}
 			}
@@ -1215,6 +1223,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 			"liquids": {
 				"shared": {
 					"area": "shared",
@@ -1389,6 +1398,7 @@ func TestResourceRenaming(t *testing.T) {
 					}
 				}
 			},
+			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 			"liquids": {
 				"shared": {
 					"area": "shared",
@@ -1638,6 +1648,7 @@ const testAZSeparatedConfigJSON = `{
 			}
 		}
 	},
+	"areas": { "shared": { "display_name": "Shared" }},
 	"liquids": {
 		"shared": {
 			"area": "shared"
