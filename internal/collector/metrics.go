@@ -905,10 +905,14 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 
 		// emit limitas_resource_info
 		qdConfig := d.Cluster.QuotaDistributionConfigForResource(srvType, res.Name)
+		qdmLabel := qdConfig.Model
+		if !res.HasQuota {
+			qdmLabel = ""
+		}
 		labels := fmt.Sprintf(`category=%q,display_name=%q,has_quota=%q,qdm=%q,resource=%q,service=%q,topology=%q,unit=%q`,
 			record.CategoryName.UnwrapOr(liquid.CategoryName(srvType)),
 			res.DisplayName, strconv.FormatBool(res.HasQuota),
-			qdConfig.Model, res.Name, srvType, res.Topology, res.Unit.String(),
+			qdmLabel, res.Name, srvType, res.Topology, res.Unit.String(),
 		)
 		metric := dataMetric{Labels: labels, Value: 1}
 		result["limitas_resource_info"] = append(result["limitas_resource_info"], metric)
