@@ -20,12 +20,14 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -851,8 +853,22 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
 	w.WriteHeader(http.StatusOK)
 
-	// NOTE: Keep metric families ordered by name!
+	// NOTE 1: The naming scheme for metrics is:
+	//         - `limitas_{rate,resource}_*` for metadata from LIQUID and configuration from limes.json config file
+	//         - `limitas_cluster_{rate,resource}_*` for cluster-level data (capacity)
+	//         - `limitas_project_{rate,resource}_*` for project-level data (quota, usage, commitments)
+	//
+	//         This scheme is intended to make it easy to filter metrics by audience.
+	//         For example, a project admin should be allowed to have access to general metadata and config metrics,
+	//         as well as their own project data metrics, but not to cluster data metrics. In this scheme, this can be expressed as
+	//
+	//         - {__name__=~"limitas_(?:rate|resource)_.*"}
+	//         - {__name__=~"limitas_project_.*",project_id="$UUID"}
+	//
+	// NOTE 2: Keep metric families ordered by name! Otherwise printDataMetrics() will panic.
 	bw := bufio.NewWriter(w)
+	printDataMetrics(bw, metricSet, "limitas_cluster_resource_capacity", `Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`)
+	printDataMetrics(bw, metricSet, "limitas_cluster_resource_raw_capacity", `Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_info", `Info metric for resources. The value is always 1, and information can be found in labels.`)
@@ -872,6 +888,12 @@ var (
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  LEFT OUTER JOIN categories c ON r.category_id = c.id
+	`)
+	dmv2ClusterResourceDataQuery = sqlext.SimplifyWhitespace(`
+		SELECT azr.id AS az_resource_id, s.type AS service_type, r.name AS resource_name, azr.az, r.topology, azr.raw_capacity
+		  FROM services s
+		  JOIN resources r ON r.service_id = s.id
+		  JOIN az_resources azr ON azr.resource_id = r.id
 	`)
 )
 
@@ -940,8 +962,57 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
 	}
 
-	// TODO: limitas_cluster_resource_capacity{az="...",resource="...",service="..."}
-	// TODO: limitas_cluster_resource_raw_capacity{az="...",resource="...",service="..."}
+	// fetch cluster-scoped data (while also building a cached mapping of AZResourceID => ServiceType/ResourceName/AvailabilityZone for later)
+	type clusterResourceRecord struct {
+		AZResourceID     db.AZResourceID        `db:"az_resource_id"`
+		ServiceType      db.ServiceType         `db:"service_type"`
+		ResourceName     liquid.ResourceName    `db:"resource_name"`
+		AvailabilityZone limes.AvailabilityZone `db:"az"`
+		Topology         liquid.Topology        `db:"topology"`
+		RawCapacity      uint64                 `db:"raw_capacity"`
+	}
+	var clusterResourceRecords []clusterResourceRecord
+	_, err = d.DB.Select(&clusterResourceRecords, dmv2ClusterResourceDataQuery)
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
+	}
+	clusterResourceRecordsByID := make(map[db.AZResourceID]clusterResourceRecord, len(clusterResourceRecords))
+	for _, cr := range clusterResourceRecords {
+		clusterResourceRecordsByID[cr.AZResourceID] = cr
+
+		// skip reporting AZ "total"
+		//
+		// If we were to report it, it would need to be in a separate metric family
+		// (e.g. `limitas_cluster_resource_capacity_total`) because otherwise intuitive expressions like
+		// `sum (limitas_cluster_resource_capacity) by (service, resource)` would produce unexpected results
+		// through double counting. But then this separate metric family can just be an aggregation rule in Prometheus.
+		if cr.AvailabilityZone == liquid.AvailabilityZoneTotal {
+			continue
+		}
+
+		// skip reporting AZ "unknown" unless it actually holds capacity
+		if cr.RawCapacity == 0 && cr.AvailabilityZone == liquid.AvailabilityZoneUnknown {
+			continue
+		}
+
+		// skip az_resources records that only exist as scaffolding and do not hold capacity
+		// (e.g. on AZAwareTopology, AvailabilityZoneAny is irrelevant for capacity metrics,
+		// but exists in the DB because it needs to hold quota on the project level)
+		if cr.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(cr.Topology, cr.AvailabilityZone) {
+			continue
+		}
+
+		// emit limitas_cluster_resource_raw_capacity
+		labels := fmt.Sprintf(`az=%q,resource=%q,service=%q`, cr.AvailabilityZone, cr.ResourceName, cr.ServiceType)
+		metric := dataMetric{Labels: labels, Value: float64(cr.RawCapacity)}
+		result["limitas_cluster_resource_raw_capacity"] = append(result["limitas_cluster_resource_raw_capacity"], metric)
+
+		// emit limitas_cluster_resource_capacity
+		capacity := overcommitFactors[cr.ServiceType][cr.ResourceName].ApplyTo(cr.RawCapacity)
+		metric = dataMetric{Labels: labels, Value: float64(capacity)}
+		result["limitas_cluster_resource_capacity"] = append(result["limitas_cluster_resource_capacity"], metric)
+	}
+
 	// TODO: limitas_project_resource_allocation{az="...",committable="true|false",project_id="...",resource="...",service="..."} (used and/or committed)
 	// TODO: limitas_project_resource_quota{az="...",committable="true|false",project_id="...",resource="...",service="..."}
 	// TODO: limitas_project_resource_usage{az="...",committable="true|false",project_id="...",resource="...",service="..."}

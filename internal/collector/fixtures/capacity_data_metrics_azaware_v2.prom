@@ -1,3 +1,11 @@
+# HELP limitas_cluster_resource_capacity Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.
+# TYPE limitas_cluster_resource_capacity gauge
+limitas_cluster_resource_capacity{az="az-one",resource="things",service="shared"} 15
+limitas_cluster_resource_capacity{az="az-two",resource="things",service="shared"} 15
+# HELP limitas_cluster_resource_raw_capacity Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).
+# TYPE limitas_cluster_resource_raw_capacity gauge
+limitas_cluster_resource_raw_capacity{az="az-one",resource="things",service="shared"} 15
+limitas_cluster_resource_raw_capacity{az="az-two",resource="things",service="shared"} 15
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="things",service="shared"} 1
