@@ -402,6 +402,7 @@ func printDataMetrics(w io.Writer, metricSet *dataMetricSet, familyName, familyH
 		panic(fmt.Sprintf("wrong ordering of printDataMetrics() calls: %q should be printed before %q",
 			familyName, metricSet.LastPrintedFamilyName))
 	}
+	metricSet.LastPrintedFamilyName = familyName
 
 	metrics := metricSet.ByFamily[familyName]
 	if len(metrics) == 0 {
