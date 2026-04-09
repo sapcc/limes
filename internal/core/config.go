@@ -185,7 +185,6 @@ type MailTemplateConfiguration struct {
 
 // NewClusterFromJSON reads and validates the configuration in the given JSON document.
 // Errors are logged and will result in program termination, causing the function to not return.
-// dbURL must be filled when fillLiquidConnections is false, to ensure ServiceInfo stays up to date.
 func NewClusterFromJSON(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := json.Unmarshal(configBytes, &config)

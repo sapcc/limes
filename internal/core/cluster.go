@@ -96,11 +96,10 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp
 //
 // It also loads the QuotaOverrides for this cluster, if configured.
 // We also validate if Config.ResourceBehavior[].ScalesWith refers to existing resources.
-// We cannot do any of this earlier because we only know all resources after
-// calling Init() on all LiquidConnections.
+// We cannot do any of this earlier because we only know all resources after calling Init() on all LiquidConnections.
 //
-// The ServiceInfoCache is assembled here, because we need to use the Config in the test
-// setup before Connect.
+// The ServiceInfoCache is assembled here, because we need to use the Config in the test setup before Connect.
+// A dbURL needs to be provided when c.LiquidConnections is empty, to ensure ServiceInfo stays up to date.
 func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error), dbURL Option[url.URL]) (errs errext.ErrorSet) {
 	// save factory for possible later use
 	c.LiquidClientFactory = liquidClientFactory
@@ -183,19 +182,9 @@ func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.Serv
 	return Some(connection.ServiceInfo()), nil
 }
 
-// ConfigForService is used to reach ConfigSets stored inside type ServiceConfiguration.
-func (c *Cluster) ConfigForService(serviceType db.ServiceType) LiquidConfiguration {
-	for st, l := range c.Config.Liquids {
-		if st == serviceType {
-			return l
-		}
-	}
-	return LiquidConfiguration{}
-}
-
 // CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
 func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentBehavior {
-	return c.ConfigForService(serviceType).CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
+	return c.Config.Liquids[serviceType].CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in the given service.

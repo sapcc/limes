@@ -116,7 +116,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		if !serviceTypeOK {
 			continue
 		}
-		config := p.Cluster.ConfigForService(serviceType)
+		config := p.Cluster.Config.Liquids[serviceType]
 		area := config.Area
 		// defense in depth: config should be in sync with serviceInfo
 		if area == "" {
@@ -201,7 +201,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
-		config := p.Cluster.ConfigForService(serviceType)
+		config := p.Cluster.Config.Liquids[serviceType]
 		area := config.Area
 		// defense in depth: config should be in sync with serviceInfo
 		if area == "" {

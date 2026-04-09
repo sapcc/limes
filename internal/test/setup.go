@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/majewsky/gg/option"
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -249,7 +249,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 		_ = must.ReturnT(core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))(t)
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, option.None[url.URL]())
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
 	failIfErrs(t, errs)
 
 	s.Registry = prometheus.NewPedanticRegistry()

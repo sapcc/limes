@@ -111,8 +111,7 @@ func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) (errorMsg
 
 // ForAPI converts this behavior into its API representation.
 func (b ScopedCommitmentBehavior) ForAPI(now time.Time) Option[limesresources.CommitmentConfiguration] {
-	maybeV2Result := b.ForV2API(now)
-	if v2Result, ok := maybeV2Result.Unpack(); ok {
+	if v2Result, ok := b.ForV2API(now).Unpack(); ok {
 		return Some(limesresources.CommitmentConfiguration{
 			Durations:    v2Result.Durations,
 			MinConfirmBy: v2Result.MinConfirmBy.AsPointer(),

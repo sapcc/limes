@@ -4,7 +4,7 @@
 package resourcesv2
 
 import (
-	"github.com/majewsky/gg/option"
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
@@ -16,5 +16,5 @@ type CommitmentConfiguration struct {
 	// Allowed durations for commitments on this resource.
 	Durations []limesresources.CommitmentDuration `json:"durations"`
 	// If shown, commitments must be created with `confirm_by` at or after this timestamp.
-	MinConfirmBy option.Option[limes.UnixEncodedTime] `json:"min_confirm_by,omitzero"`
+	MinConfirmBy Option[limes.UnixEncodedTime] `json:"min_confirm_by,omitzero"`
 }

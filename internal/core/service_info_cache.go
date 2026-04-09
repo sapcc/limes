@@ -47,7 +47,8 @@ type ServiceInfoCache struct {
 	// successful cache invalidation triggered by pg-notify. Used in tests to
 	// synchronize with the asynchronous notification mechanism. The send is
 	// non-blocking so production code is unaffected when nobody reads.
-	OnInvalidate chan struct{}
+	OnInvalidate   <-chan struct{}
+	sendInvalidate chan<- struct{}
 
 	// data
 	servicesByType              map[db.ServiceType]db.Service
@@ -77,7 +78,9 @@ func NewServiceInfoCache(dbm *gorp.DbMap, dbURL Option[url.URL]) (*ServiceInfoCa
 
 	// set up NOTIFY listener if a DB URL was provided (disabled in tests)
 	if u, ok := dbURL.Unpack(); ok {
-		sic.OnInvalidate = make(chan struct{}, 1)
+		ch := make(chan struct{}, 1)
+		sic.OnInvalidate = ch
+		sic.sendInvalidate = ch
 		sic.listener = pq.NewListener(
 			u.String(),
 			10*time.Second,
@@ -135,9 +138,9 @@ func (s *ServiceInfoCache) Close() {
 // signalInvalidation sends a non-blocking signal on OnInvalidate (if set)
 // to notify waiters that a cache invalidation has completed.
 func (s *ServiceInfoCache) signalInvalidation() {
-	if s.OnInvalidate != nil {
+	if s.sendInvalidate != nil {
 		select {
-		case s.OnInvalidate <- struct{}{}:
+		case s.sendInvalidate <- struct{}{}:
 		default:
 		}
 	}

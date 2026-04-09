@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/majewsky/gg/option"
+	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -74,7 +74,7 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 	for _, err := range errs {
 		t.Fatal(err)
 	}
-	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, option.None[url.URL]())
+	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
 	if failOnConnectError {
 		for _, err := range errs {
 			t.Fatal(err)
@@ -209,16 +209,16 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	s.MustDBInsert(&db.ProjectResource{
 		ProjectID:                1,
 		ResourceID:               sharedCapacityID,
-		MaxQuotaFromOutsideAdmin: option.Some(uint64(10 * 1024 * 1024 * 1024)),
-		OverrideQuotaFromConfig:  option.Some(uint64(5 * 1024 * 1024 * 1024)),
+		MaxQuotaFromOutsideAdmin: Some(uint64(10 * 1024 * 1024 * 1024)),
+		OverrideQuotaFromConfig:  Some(uint64(5 * 1024 * 1024 * 1024)),
 	})
 	s.MustDBInsert(&db.ProjectAZResource{
 		ProjectID:     1,
 		AZResourceID:  sharedCapacityAZOneID,
-		Quota:         option.Some(uint64(7 * 1024 * 1024 * 1024)),
-		BackendQuota:  option.Some(int64(7 * 1024 * 1024 * 1024)),
+		Quota:         Some(uint64(7 * 1024 * 1024 * 1024)),
+		BackendQuota:  Some(int64(7 * 1024 * 1024 * 1024)),
 		Usage:         uint64(5 * 1024 * 1024 * 1024),
-		PhysicalUsage: option.Some(uint64(2 * 1024 * 1024 * 1024)),
+		PhysicalUsage: Some(uint64(2 * 1024 * 1024 * 1024)),
 	})
 	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                s.Collector.GenerateProjectCommitmentUUID(),
@@ -229,7 +229,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 		CreatedAt:           s.Clock.Now(),
 		CreatorUUID:         "dummy",
 		CreatorName:         "dummy",
-		ConfirmedAt:         option.Some(s.Clock.Now()),
+		ConfirmedAt:         Some(s.Clock.Now()),
 		CreationContextJSON: json.RawMessage(`{}`),
 		ExpiresAt:           s.Clock.Now().Add(10 * 24 * time.Hour),
 		Status:              "confirmed",
@@ -327,8 +327,8 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	s.MustDBInsert(&db.ProjectRate{
 		ProjectID:     1,
 		RateID:        unsharedRateOnlyInLiquidID,
-		Limit:         option.Some(uint64(10 * 1024)),
-		Window:        option.Some(must.Return(limesrates.ParseWindow("1m"))),
+		Limit:         Some(uint64(10 * 1024)),
+		Window:        Some(must.Return(limesrates.ParseWindow("1m"))),
 		UsageAsBigint: "5120",
 	})
 	tr.DBChanges().Ignore()
