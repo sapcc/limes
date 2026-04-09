@@ -287,9 +287,10 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id", "X-Limes-V2-Api-Preview", "Transfer-Token"},
 	})
 	mux := http.NewServeMux()
+	commonAuditor := generateAuditor(ctx)
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, tokenValidator, generateAuditor(ctx), time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
-		api_v2.NewV2API(cluster, tokenValidator, generateAuditor(ctx), time.Now),
+		api.NewV1API(cluster, tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
+		api_v2.NewV2API(cluster, tokenValidator, commonAuditor, time.Now),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),

@@ -17,6 +17,8 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
+	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
+	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/db"
 
 	. "github.com/majewsky/gg/option"
@@ -45,7 +47,7 @@ var findRateLimitForProject = sqlext.SimplifyWhitespace(`
 	AND r.name = $3
 `)
 
-func (p *v2Provider) handleInfoGeneric(w http.ResponseWriter, r *http.Request) (token *gopherpolicy.Token, projectUUID, domainUUID string, err error) {
+func (p *v2Provider) authenticateInfoRequest(r *http.Request) (token *gopherpolicy.Token, projectUUID, domainUUID string, err error) {
 	token = p.CheckToken(r)
 	projectUUID = token.ProjectScopeUUID()
 	projectDomainUUID := token.ProjectScopeDomainUUID()
@@ -61,25 +63,24 @@ func (p *v2Provider) handleInfoGeneric(w http.ResponseWriter, r *http.Request) (
 		token.Context.Request["domain_id"] = domainUUID
 	}
 
-	// the user must have any viewer permission
-	if !token.Require(w, "project:show") {
-		return token, projectUUID, domainUUID, errors.New("Unauthorized")
+	switch {
+	case token.Check("v2:cluster:info"):
+		return token, "", "", nil
+	case token.Check("v2:domain:info"):
+		return token, "", domainUUID, nil
+	case token.Check("v2:project:info"):
+		return token, projectUUID, projectDomainUUID, nil
+	default:
+		return nil, "", "", respondwith.CustomStatus(http.StatusUnauthorized, errors.New("unauthorized"))
 	}
-
-	// a cluster admin can see everything, regardless of the scope of his token
-	if token.Check("cluster:show") {
-		projectUUID = ""
-		domainUUID = ""
-	}
-	return token, projectUUID, domainUUID, nil
 }
 
 // GetResourcesInfo handles GET /resources/v2/info.
 func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
 
-	token, projectUUID, domainUUID, err := p.handleInfoGeneric(w, r)
-	if err != nil {
+	token, projectUUID, domainUUID, err := p.authenticateInfoRequest(r)
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
@@ -92,9 +93,6 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		)
 		err := rows.Scan(&serviceType, &resourceName)
 		if err == nil {
-			if _, exists := allowedResourcesByService[serviceType]; !exists {
-				allowedResourcesByService[serviceType] = make([]liquid.ResourceName, 0)
-			}
 			allowedResourcesByService[serviceType] = append(allowedResourcesByService[serviceType], resourceName)
 		}
 		return err
@@ -104,8 +102,8 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// assemble the report
-	report := V2ResourcesInfoReport{
-		Areas: make(map[string]V2ResourcesAreaReport),
+	report := resourcesv2.InfoReport{
+		Areas: make(map[string]resourcesv2.AreaReport),
 	}
 	services := p.Cluster.ServiceInfoCache.GetServices()
 	resources := p.Cluster.ServiceInfoCache.GetResources()
@@ -131,15 +129,15 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, exists := report.Areas[area]; !exists {
-			report.Areas[area] = V2ResourcesAreaReport{
+			report.Areas[area] = resourcesv2.AreaReport{
 				DisplayName: areaDisplayName,
-				Services:    make(map[db.ServiceType]V2ResourcesServiceInfoReport),
+				Services:    make(map[db.ServiceType]resourcesv2.ServiceInfoReport),
 			}
 		}
-		report.Areas[area].Services[serviceType] = V2ResourcesServiceInfoReport{
+		report.Areas[area].Services[serviceType] = resourcesv2.ServiceInfoReport{
 			Version:     service.LiquidVersion,
 			DisplayName: service.DisplayName,
-			Categories:  make(map[liquid.CategoryName]V2ResourcesCategoryReport),
+			Categories:  make(map[liquid.CategoryName]resourcesv2.CategoryReport),
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
@@ -156,9 +154,9 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 				categoryDisplayName = categories[categoryID].DisplayName
 			}
 			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = V2ResourcesCategoryReport{
+				serviceReport.Categories[category] = resourcesv2.CategoryReport{
 					DisplayName: categoryDisplayName,
-					Resources:   make(map[liquid.ResourceName]V2ResourcesResourceInfoReport),
+					Resources:   make(map[liquid.ResourceName]resourcesv2.ResourceInfoReport),
 				}
 			}
 			unit := None[liquid.Unit]()
@@ -172,13 +170,13 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 			if !token.Check("cluster:show") && !token.Check("domain:show") {
 				scopedCommitmentBehavior = p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForDomain(token.ProjectScopeDomainName())
 			}
-			serviceReport.Categories[category].Resources[resourceName] = V2ResourcesResourceInfoReport{
+			serviceReport.Categories[category].Resources[resourceName] = resourcesv2.ResourceInfoReport{
 				DisplayName:      resource.DisplayName,
 				Unit:             unit,
 				Topology:         resource.Topology,
 				HasCapacity:      resource.HasCapacity,
 				HasQuota:         resource.HasQuota,
-				CommitmentConfig: scopedCommitmentBehavior.ForAPI(p.timeNow()),
+				CommitmentConfig: scopedCommitmentBehavior.ForV2API(p.timeNow()),
 			}
 		}
 	}
@@ -189,14 +187,14 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
 
-	token, projectUUID, _, err := p.handleInfoGeneric(w, r)
-	if err != nil {
+	token, projectUUID, _, err := p.authenticateInfoRequest(r)
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// assemble the report
-	report := V2RatesInfoReport{
-		Areas: make(map[string]V2RatesAreaReport),
+	report := ratesv2.InfoReport{
+		Areas: make(map[string]ratesv2.AreaReport),
 	}
 	services := p.Cluster.ServiceInfoCache.GetServices()
 	rates := p.Cluster.ServiceInfoCache.GetRates()
@@ -216,30 +214,30 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, exists := report.Areas[area]; !exists {
-			report.Areas[area] = V2RatesAreaReport{
+			report.Areas[area] = ratesv2.AreaReport{
 				DisplayName: areaDisplayName,
-				Services:    make(map[db.ServiceType]V2RatesServiceInfoReport),
+				Services:    make(map[db.ServiceType]ratesv2.ServiceInfoReport),
 			}
 		}
-		report.Areas[area].Services[serviceType] = V2RatesServiceInfoReport{
+		report.Areas[area].Services[serviceType] = ratesv2.ServiceInfoReport{
 			Version:     service.LiquidVersion,
 			DisplayName: service.DisplayName,
-			Rates:       make(map[liquid.RateName]V2RatesRateInfoReport),
+			Rates:       make(map[liquid.RateName]ratesv2.RateInfoReport),
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
 		for _, rateName := range slices.Sorted(maps.Keys(rates[serviceType])) {
 			rate := rates[serviceType][rateName]
-			var rateLimits Option[V2RatesRateLimitReport]
+			var rateLimits Option[ratesv2.RateLimitReport]
 			if rateConfig, ok := config.RateLimits.GetGlobalDefaultRateLimit(rateName); ok && token.Check("cluster:show") {
-				rateLimits = Some(V2RatesRateLimitReport{
+				rateLimits = Some(ratesv2.RateLimitReport{
 					DefaultLimit:  rateConfig.Limit,
 					DefaultWindow: Some(rateConfig.Window),
 				})
 			} else if token.Check("project:show") && !token.Check("domain:show") {
 				// TODO: I find it to be clearer for the customer, if we show the default limits separately. Ok?
 				if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); ok {
-					rateLimits = Some(V2RatesRateLimitReport{
+					rateLimits = Some(ratesv2.RateLimitReport{
 						DefaultLimit:  rateConfig.Limit,
 						DefaultWindow: Some(rateConfig.Window),
 					})
@@ -258,7 +256,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 				if projectLimit != nil && projectWindow != nil {
 					rl, exists := rateLimits.Unpack()
 					if !exists {
-						rl = V2RatesRateLimitReport{}
+						rl = ratesv2.RateLimitReport{}
 					}
 					rl.Limit = *projectLimit
 					rl.Window = options.FromPointer(projectWindow)
@@ -269,7 +267,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 			if !rate.Unit.IsZero() {
 				unit = Some(rate.Unit)
 			}
-			serviceReport.Rates[rateName] = V2RatesRateInfoReport{
+			serviceReport.Rates[rateName] = ratesv2.RateInfoReport{
 				DisplayName: rate.DisplayName,
 				Unit:        unit,
 				Topology:    rate.Topology,
