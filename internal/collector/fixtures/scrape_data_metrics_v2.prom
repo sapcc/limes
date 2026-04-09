@@ -1,3 +1,17 @@
+# HELP limitas_cluster_resource_capacity Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.
+# TYPE limitas_cluster_resource_capacity gauge
+limitas_cluster_resource_capacity{az="az-one",resource="capacity",service="unittest"} 0
+limitas_cluster_resource_capacity{az="az-one",resource="things",service="unittest"} 0
+limitas_cluster_resource_capacity{az="az-two",resource="capacity",service="unittest"} 0
+limitas_cluster_resource_capacity{az="az-two",resource="things",service="unittest"} 0
+limitas_cluster_resource_capacity{az="unknown",resource="capacity",service="unittest"} 1234
+# HELP limitas_cluster_resource_raw_capacity Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).
+# TYPE limitas_cluster_resource_raw_capacity gauge
+limitas_cluster_resource_raw_capacity{az="az-one",resource="capacity",service="unittest"} 0
+limitas_cluster_resource_raw_capacity{az="az-one",resource="things",service="unittest"} 0
+limitas_cluster_resource_raw_capacity{az="az-two",resource="capacity",service="unittest"} 0
+limitas_cluster_resource_raw_capacity{az="az-two",resource="things",service="unittest"} 0
+limitas_cluster_resource_raw_capacity{az="unknown",resource="capacity",service="unittest"} 617
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unittest"} 1
@@ -12,7 +26,7 @@ limitas_resource_info{category="unittest",display_name="Capacity",has_quota="tru
 limitas_resource_info{category="unittest",display_name="Things",has_quota="true",qdm="autogrow",resource="things",service="unittest",topology="az-aware",unit=""} 1
 # HELP limitas_resource_overcommit_factor Multiplier for converting this resource's raw capacity into reported capacity.
 # TYPE limitas_resource_overcommit_factor gauge
-limitas_resource_overcommit_factor{resource="capacity",service="unittest"} 1
+limitas_resource_overcommit_factor{resource="capacity",service="unittest"} 2
 limitas_resource_overcommit_factor{resource="things",service="unittest"} 1
 # HELP limitas_resource_unit_multiplier Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.
 # TYPE limitas_resource_unit_multiplier gauge

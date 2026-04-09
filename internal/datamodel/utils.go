@@ -39,3 +39,17 @@ func AZHasBackendQuotaForTopology(topology liquid.Topology, az liquid.Availabili
 		panic("do not know how to handle topology: " + string(topology))
 	}
 }
+
+// AZHasLiquidReportForTopology returns true if the given availability zone can appear in the PerAZ section
+// of [liquid.ResourceCapacityReport] or [liquid.ResourceUsageReport] for resources with the given topology.
+func AZHasLiquidReportForTopology(topology liquid.Topology, az liquid.AvailabilityZone) bool {
+	switch topology {
+	case liquid.FlatTopology:
+		return az == liquid.AvailabilityZoneAny
+	case liquid.AZAwareTopology, liquid.AZSeparatedTopology:
+		return az.IsReal() || az == liquid.AvailabilityZoneUnknown
+	default:
+		// require an explicit update to this function when new topologies are added
+		panic("do not know how to handle topology: " + string(topology))
+	}
+}
