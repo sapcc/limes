@@ -12,10 +12,6 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-////////////////////////////////////////////////////////////////////////////////
-// /rates/v2/info API
-////////////////////////////////////////////////////////////////////////////////
-
 // InfoReport is the response type for GET /rates/v2/info.
 // It contains all metadata information about the clusters services and rates.
 type InfoReport struct {

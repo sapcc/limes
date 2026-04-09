@@ -185,7 +185,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 
 // GetRatesInfo handles GET /rates/v2/info.
 func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
+	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
 
 	token, projectUUID, _, err := p.authenticateInfoRequest(r)
 	if respondwith.ErrorText(w, err) {

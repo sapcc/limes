@@ -204,7 +204,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 
 	// validate selected options
-	if params.WithEmptyResourceRecordsAsNeeded && !params.WithInitialDiscovery {
+	if (params.WithEmptyResourceRecordsAsNeeded || params.WithEmptyRateRecordsAsNeeded) && !params.WithInitialDiscovery {
 		t.Fatal("can not create empty DB records since no projects are being discovered during setup")
 	}
 

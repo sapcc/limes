@@ -252,11 +252,26 @@ func (s *ServiceInfoCache) fillData(serviceTypes ...db.ServiceType) error {
 	return nil
 }
 
+// deepCloneMap returns a deep copy of a map by cloning each value using the
+// provided cloneValue function. For leaf maps (where values are not maps),
+// pass maps.Clone directly. For nested maps, pass a function that itself
+// calls deepCloneMap to clone the next level.
+func deepCloneMap[M ~map[K]V, K comparable, V any](m M, cloneValue func(V) V) M {
+	if m == nil {
+		return nil
+	}
+	result := make(M, len(m))
+	for k, v := range m {
+		result[k] = cloneValue(v)
+	}
+	return result
+}
+
 // GetServices returns a map of all cached services keyed by their service type.
 func (s *ServiceInfoCache) GetServices() map[db.ServiceType]db.Service {
 	s.servicesByTypeMutex.RLock()
 	defer s.servicesByTypeMutex.RUnlock()
-	return s.servicesByType
+	return maps.Clone(s.servicesByType)
 }
 
 // GetServiceForType returns the cached service for the given service type.
@@ -270,14 +285,14 @@ func (s *ServiceInfoCache) GetServiceForType(serviceType db.ServiceType) db.Serv
 func (s *ServiceInfoCache) GetResources() map[db.ServiceType]map[liquid.ResourceName]db.Resource {
 	s.resourcesByNameByTypeMutex.RLock()
 	defer s.resourcesByNameByTypeMutex.RUnlock()
-	return s.resourcesByNameByType
+	return deepCloneMap(s.resourcesByNameByType, maps.Clone)
 }
 
 // GetResourcesForType returns all cached resources for the given service type, keyed by resource name.
 func (s *ServiceInfoCache) GetResourcesForType(serviceType db.ServiceType) map[liquid.ResourceName]db.Resource {
 	s.resourcesByNameByTypeMutex.RLock()
 	defer s.resourcesByNameByTypeMutex.RUnlock()
-	return s.resourcesByNameByType[serviceType]
+	return maps.Clone(s.resourcesByNameByType[serviceType])
 }
 
 // GetResourceForTypeName returns the cached resource for the given service type and resource name.
@@ -291,21 +306,23 @@ func (s *ServiceInfoCache) GetResourceForTypeName(serviceType db.ServiceType, re
 func (s *ServiceInfoCache) GetAZResources() map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource {
 	s.azResourcesByAZByNameByTypeMutex.RLock()
 	defer s.azResourcesByAZByNameByTypeMutex.RUnlock()
-	return s.azResourcesByAZByNameByType
+	return deepCloneMap(s.azResourcesByAZByNameByType, func(inner map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource) map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource {
+		return deepCloneMap(inner, maps.Clone)
+	})
 }
 
 // GetAZResourcesForType returns all cached AZ resources for the given service type, keyed by resource name and availability zone.
 func (s *ServiceInfoCache) GetAZResourcesForType(serviceType db.ServiceType) map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource {
 	s.azResourcesByAZByNameByTypeMutex.RLock()
 	defer s.azResourcesByAZByNameByTypeMutex.RUnlock()
-	return s.azResourcesByAZByNameByType[serviceType]
+	return deepCloneMap(s.azResourcesByAZByNameByType[serviceType], maps.Clone)
 }
 
 // GetAZResourcesForTypeName returns all cached AZ resources for the given service type, resource name, keyed by availability zone.
 func (s *ServiceInfoCache) GetAZResourcesForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) map[limes.AvailabilityZone]db.AZResource {
 	s.azResourcesByAZByNameByTypeMutex.RLock()
 	defer s.azResourcesByAZByNameByTypeMutex.RUnlock()
-	return s.azResourcesByAZByNameByType[serviceType][resourceName]
+	return maps.Clone(s.azResourcesByAZByNameByType[serviceType][resourceName])
 }
 
 // GetAZResourceForTypeNameAZ returns the cached AZ resource for the given service type, resource name, and availability zone.
@@ -319,14 +336,14 @@ func (s *ServiceInfoCache) GetAZResourceForTypeNameAZ(serviceType db.ServiceType
 func (s *ServiceInfoCache) GetRates() map[db.ServiceType]map[liquid.RateName]db.Rate {
 	s.ratesByNameByTypeMutex.RLock()
 	defer s.ratesByNameByTypeMutex.RUnlock()
-	return s.ratesByNameByType
+	return deepCloneMap(s.ratesByNameByType, maps.Clone)
 }
 
 // GetRatesForType returns all cached rates, indexed by service type and rate name.
 func (s *ServiceInfoCache) GetRatesForType(serviceType db.ServiceType) map[liquid.RateName]db.Rate {
 	s.ratesByNameByTypeMutex.RLock()
 	defer s.ratesByNameByTypeMutex.RUnlock()
-	return s.ratesByNameByType[serviceType]
+	return maps.Clone(s.ratesByNameByType[serviceType])
 }
 
 // GetRateForTypeName returns the cached rate for the given service type and rate name.
@@ -340,7 +357,7 @@ func (s *ServiceInfoCache) GetRateForTypeName(serviceType db.ServiceType, rateNa
 func (s *ServiceInfoCache) GetCategories() map[db.CategoryID]db.Category {
 	s.categoriesByIDMutex.RLock()
 	defer s.categoriesByIDMutex.RUnlock()
-	return s.categoriesByID
+	return maps.Clone(s.categoriesByID)
 }
 
 // GetCategoryForID returns the cached category for the given category ID.
