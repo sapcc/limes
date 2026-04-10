@@ -153,10 +153,6 @@ func TestV2RatesInfoAPI(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 		test.WithEmptyRateRecordsAsNeeded,
 	)
-	firstObjectsUpdate := s.GetRateID("first", "objects:update")
-	firstObjectsDelete := s.GetRateID("first", "objects:delete")
-	paris := s.GetProjectID("paris")
-	s.MustDBExec(`UPDATE project_rates pra SET rate_limit = 1234, window_ns = 1800000000000 WHERE pra.project_id = $1 AND pra.rate_id IN ($2, $3)`, paris, firstObjectsUpdate, firstObjectsDelete)
 	fixturePath := "./fixtures/rate-info.json"
 
 	// we start with cloud_admin permissions, the scope does not matter for this case
@@ -169,34 +165,27 @@ func TestV2RatesInfoAPI(t *testing.T) {
 		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
 		"domain_id": "uuid-for-france", "domain_name": "france",
 	})
-	globalDefaultLimitMod := `del(.service_areas.first.services.first.rates["objects:create"].limits)`
+	path := `.service_areas.first.services.first.rates["objects:create"]`
+	globalDefaultLimitMods := []string{
+		fmt.Sprintf(`del(%s.default_limit)`, path),
+		fmt.Sprintf(`del(%s.default_window)`, path),
+	}
+
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-no-global-limit").
-			Modify(globalDefaultLimitMod))
+			Modify(globalDefaultLimitMods...))
 
-	// now a project admin with a project scoped token, no custom limits but the project default limits
+	// now a project admin with a project scoped token, he sees project default limits
 	s.TokenValidator.Enforcer.AllowDomain = false
 	s.UpdateMockUserIdentity(map[string]string{
 		"domain_id": "", "domain_name": "",
 		"project_id": "uuid-for-dresden", "project_name": "dresden", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
 	})
 	projectDefaultLimitMods := []string{
-		`.service_areas.first.services.first.rates["objects:create"].limits = {"default_limit": 5, "default_window": "1m"}`,
-		`.service_areas.first.services.first.rates["objects:update"].limits += {"default_limit": 2, "default_window": "1s"}`,
+		`.service_areas.first.services.first.rates["objects:create"] += {"default_limit": 5, "default_window": "1m"}`,
+		`.service_areas.first.services.first.rates["objects:update"] += {"default_limit": 2, "default_window": "1s"}`,
 	}
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-no-custom-limit").
-			Modify(globalDefaultLimitMod).Modify(projectDefaultLimitMods...))
-
-	// now a project admin with a project scoped token, with custom limits but no default limits
-	s.UpdateMockUserIdentity(map[string]string{
-		"project_id": "uuid-for-paris", "project_name": "paris", "project_domain_id": "uuid-for-france", "project_domain_name": "france",
-	})
-	projectCustomLimitMods := []string{
-		`.service_areas.first.services.first.rates["objects:update"].limits = {"limit": 1234, "window": "30m"}`,
-		`.service_areas.first.services.first.rates["objects:delete"].limits = {"limit": 1234, "window": "30m"}`,
-	}
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
-		httptest.NewJQModifiableJSONFixture(fixturePath, "project-custom-limit").
-			Modify(globalDefaultLimitMod).Modify(projectCustomLimitMods...).Modify(projectDefaultLimitMods...))
+			Modify(globalDefaultLimitMods...).Modify(projectDefaultLimitMods...))
 }

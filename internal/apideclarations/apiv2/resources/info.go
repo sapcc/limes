@@ -16,33 +16,33 @@ import (
 type InfoReport struct {
 	// The Area is a grouping of multiple services, which serve the same purpose.
 	// E.g. compute, storage, network, etc.
-	Areas map[string]AreaReport `json:"service_areas"`
+	Areas map[string]AreaInfoReport `json:"service_areas"`
 }
 
-// AreaReport groups services into areas, which are defined in the config.
+// AreaInfoReport groups services into areas, which are defined in the config.
 // It appears in InfoReport.
-type AreaReport struct {
+type AreaInfoReport struct {
 	DisplayName string                               `json:"display_name"`
 	Services    map[db.ServiceType]ServiceInfoReport `json:"services"`
 }
 
 // ServiceInfoReport contains details about a service.
-// It appears in AreaReport.
+// It appears in AreaInfoReport.
 type ServiceInfoReport struct {
-	Version     int64                                  `json:"version"`
-	DisplayName string                                 `json:"display_name"`
-	Categories  map[liquid.CategoryName]CategoryReport `json:"categories"`
+	Version     int64                                      `json:"version"`
+	DisplayName string                                     `json:"display_name"`
+	Categories  map[liquid.CategoryName]CategoryInfoReport `json:"categories"`
 }
 
-// CategoryReport groups resources into categories, which are defined in the config.
+// CategoryInfoReport groups resources into categories, which are defined in the config.
 // It appears in ServiceInfoReport.
-type CategoryReport struct {
+type CategoryInfoReport struct {
 	DisplayName string                                     `json:"display_name"`
 	Resources   map[liquid.ResourceName]ResourceInfoReport `json:"resources"`
 }
 
 // ResourceInfoReport contains details about a resource.
-// It appears in CategoryReport.
+// It appears in CategoryInfoReport.
 type ResourceInfoReport struct {
 	DisplayName      string                          `json:"display_name"`
 	Unit             Option[liquid.Unit]             `json:"unit,omitzero"`

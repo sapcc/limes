@@ -11,10 +11,8 @@
               "display_name": "Object Creations",
               "topology": "flat",
               "has_usage": true,
-              "limits": {
-                "default_limit": 5000,
-                "default_window": "1s"
-              }
+              "default_limit": 5000,
+              "default_window": "1s"
             },
             "objects:delete": {
               "display_name": "Object Deletions",

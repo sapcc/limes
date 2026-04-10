@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -22,7 +21,6 @@ import (
 	"github.com/sapcc/limes/internal/db"
 
 	. "github.com/majewsky/gg/option"
-	"github.com/majewsky/gg/options"
 )
 
 var findAllowedResources = sqlext.SimplifyWhitespace(`
@@ -34,17 +32,6 @@ var findAllowedResources = sqlext.SimplifyWhitespace(`
 	JOIN domains d ON p.domain_id = d.id
 	WHERE ((p.uuid = $1 OR $1 = '') AND (d.uuid = $2 OR $2 = ''))
 	AND pr.forbidden = false
-`)
-
-var findRateLimitForProject = sqlext.SimplifyWhitespace(`
-	SELECT pra.rate_limit, pra.window_ns
-	FROM project_rates pra
-	JOIN rates r ON pra.rate_id = r.id
-	JOIN services s ON r.service_id = s.id
-	JOIN projects p ON pra.project_id = p.id
-	WHERE (p.uuid = $1 OR $1 = '')
-	AND s.type = $2
-	AND r.name = $3
 `)
 
 func (p *v2Provider) authenticateInfoRequest(r *http.Request) (token *gopherpolicy.Token, projectUUID, domainUUID string, err error) {
@@ -103,7 +90,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 
 	// assemble the report
 	report := resourcesv2.InfoReport{
-		Areas: make(map[string]resourcesv2.AreaReport),
+		Areas: make(map[string]resourcesv2.AreaInfoReport),
 	}
 	services := p.Cluster.ServiceInfoCache.GetServices()
 	resources := p.Cluster.ServiceInfoCache.GetResources()
@@ -129,7 +116,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, exists := report.Areas[area]; !exists {
-			report.Areas[area] = resourcesv2.AreaReport{
+			report.Areas[area] = resourcesv2.AreaInfoReport{
 				DisplayName: areaDisplayName,
 				Services:    make(map[db.ServiceType]resourcesv2.ServiceInfoReport),
 			}
@@ -137,7 +124,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		report.Areas[area].Services[serviceType] = resourcesv2.ServiceInfoReport{
 			Version:     service.LiquidVersion,
 			DisplayName: service.DisplayName,
-			Categories:  make(map[liquid.CategoryName]resourcesv2.CategoryReport),
+			Categories:  make(map[liquid.CategoryName]resourcesv2.CategoryInfoReport),
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
@@ -154,7 +141,7 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 				categoryDisplayName = categories[categoryID].DisplayName
 			}
 			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = resourcesv2.CategoryReport{
+				serviceReport.Categories[category] = resourcesv2.CategoryInfoReport{
 					DisplayName: categoryDisplayName,
 					Resources:   make(map[liquid.ResourceName]resourcesv2.ResourceInfoReport),
 				}
@@ -164,10 +151,10 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 				unit = Some(resource.Unit)
 			}
 			scopedCommitmentBehavior := p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
-			if !token.Check("cluster:show") && token.Check("domain:show") {
+			if domainUUID != "" && projectUUID == "" {
 				scopedCommitmentBehavior = p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForDomain(token.DomainScopeName())
 			}
-			if !token.Check("cluster:show") && !token.Check("domain:show") {
+			if domainUUID != "" && projectUUID != "" {
 				scopedCommitmentBehavior = p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForDomain(token.ProjectScopeDomainName())
 			}
 			serviceReport.Categories[category].Resources[resourceName] = resourcesv2.ResourceInfoReport{
@@ -187,14 +174,14 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
 
-	token, projectUUID, _, err := p.authenticateInfoRequest(r)
+	_, projectUUID, domainUUID, err := p.authenticateInfoRequest(r)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// assemble the report
 	report := ratesv2.InfoReport{
-		Areas: make(map[string]ratesv2.AreaReport),
+		Areas: make(map[string]ratesv2.AreaInfoReport),
 	}
 	services := p.Cluster.ServiceInfoCache.GetServices()
 	rates := p.Cluster.ServiceInfoCache.GetRates()
@@ -214,7 +201,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, exists := report.Areas[area]; !exists {
-			report.Areas[area] = ratesv2.AreaReport{
+			report.Areas[area] = ratesv2.AreaInfoReport{
 				DisplayName: areaDisplayName,
 				Services:    make(map[db.ServiceType]ratesv2.ServiceInfoReport),
 			}
@@ -228,52 +215,23 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 
 		for _, rateName := range slices.Sorted(maps.Keys(rates[serviceType])) {
 			rate := rates[serviceType][rateName]
-			var rateLimits Option[ratesv2.RateLimitReport]
-			if rateConfig, ok := config.RateLimits.GetGlobalDefaultRateLimit(rateName); ok && token.Check("cluster:show") {
-				rateLimits = Some(ratesv2.RateLimitReport{
-					DefaultLimit:  rateConfig.Limit,
-					DefaultWindow: Some(rateConfig.Window),
-				})
-			} else if token.Check("project:show") && !token.Check("domain:show") {
-				// TODO: I find it to be clearer for the customer, if we show the default limits separately. Ok?
-				if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); ok {
-					rateLimits = Some(ratesv2.RateLimitReport{
-						DefaultLimit:  rateConfig.Limit,
-						DefaultWindow: Some(rateConfig.Window),
-					})
-				}
-
-				var (
-					projectLimit  *uint64
-					projectWindow *limesrates.Window
-				)
-				err = p.DB.QueryRow(findRateLimitForProject, projectUUID, serviceType, rateName).
-					Scan(&projectLimit, &projectWindow)
-				// the rate should always be there, only the values could be null
-				if respondwith.ObfuscatedErrorText(w, err) {
-					return
-				}
-				if projectLimit != nil && projectWindow != nil {
-					rl, exists := rateLimits.Unpack()
-					if !exists {
-						rl = ratesv2.RateLimitReport{}
-					}
-					rl.Limit = *projectLimit
-					rl.Window = options.FromPointer(projectWindow)
-					rateLimits = Some(rl)
-				}
-			}
-			unit := None[liquid.Unit]()
-			if !rate.Unit.IsZero() {
-				unit = Some(rate.Unit)
-			}
-			serviceReport.Rates[rateName] = ratesv2.RateInfoReport{
+			rir := ratesv2.RateInfoReport{
 				DisplayName: rate.DisplayName,
-				Unit:        unit,
 				Topology:    rate.Topology,
 				HasUsage:    rate.HasUsage,
-				Limits:      rateLimits,
 			}
+			if !rate.Unit.IsZero() {
+				rir.Unit = Some(rate.Unit)
+			}
+			if rateConfig, ok := config.RateLimits.GetGlobalDefaultRateLimit(rateName); domainUUID == "" && projectUUID == "" && ok {
+				rir.DefaultLimit = rateConfig.Limit
+				rir.DefaultWindow = Some(rateConfig.Window)
+			}
+			if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); domainUUID != "" && projectUUID != "" && ok {
+				rir.DefaultLimit = rateConfig.Limit
+				rir.DefaultWindow = Some(rateConfig.Window)
+			}
+			serviceReport.Rates[rateName] = rir
 		}
 	}
 	respondwith.JSON(w, 200, report)

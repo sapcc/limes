@@ -17,18 +17,18 @@ import (
 type InfoReport struct {
 	// The Area is a grouping of multiple services, which serve the same purpose.
 	// E.g. compute, storage, network, etc.
-	Areas map[string]AreaReport `json:"service_areas"`
+	Areas map[string]AreaInfoReport `json:"service_areas"`
 }
 
-// AreaReport groups services into areas, which are defined in the config.
+// AreaInfoReport groups services into areas, which are defined in the config.
 // It appears in InfoReport.
-type AreaReport struct {
+type AreaInfoReport struct {
 	DisplayName string                               `json:"display_name"`
 	Services    map[db.ServiceType]ServiceInfoReport `json:"services"`
 }
 
 // ServiceInfoReport contains details about a service.
-// It appears in AreaReport.
+// It appears in AreaInfoReport.
 type ServiceInfoReport struct {
 	Version     int64                              `json:"version"`
 	DisplayName string                             `json:"display_name"`
@@ -38,20 +38,10 @@ type ServiceInfoReport struct {
 // RateInfoReport contains details about a rate.
 // It appears in ServiceInfoReport.
 type RateInfoReport struct {
-	DisplayName string                  `json:"display_name"`
-	Unit        Option[liquid.Unit]     `json:"unit,omitzero"`
-	Topology    liquid.Topology         `json:"topology"`
-	HasUsage    bool                    `json:"has_usage"`
-	Limits      Option[RateLimitReport] `json:"limits,omitzero"`
-}
-
-// RateLimitReport contains details about the limits of a rate.
-// Default limits might exist on cluster and project level.
-// Additionally, the local limit might be set on project level.
-// This object cannot exist on domain level.
-type RateLimitReport struct {
-	Limit         uint64                    `json:"limit,omitempty"`
-	Window        Option[limesrates.Window] `json:"window,omitzero"`
+	DisplayName   string                    `json:"display_name"`
+	Unit          Option[liquid.Unit]       `json:"unit,omitzero"`
+	Topology      liquid.Topology           `json:"topology"`
+	HasUsage      bool                      `json:"has_usage"`
 	DefaultLimit  uint64                    `json:"default_limit,omitempty"`
 	DefaultWindow Option[limesrates.Window] `json:"default_window,omitzero"`
 }

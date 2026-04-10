@@ -747,6 +747,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 // inconsistencies of the database can be reported more precisely.
 func readServiceInfoFromDB(dbm *gorp.DbMap, serviceTypeOpt Option[db.ServiceType]) (map[db.ServiceType]liquid.ServiceInfo, error) {
 	serviceType, applyFilter := serviceTypeOpt.Unpack()
+	// TODO: make use of the serviceInfoCache
 	var (
 		dbServices      []db.Service
 		err             error
