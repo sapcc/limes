@@ -12,6 +12,38 @@ limitas_cluster_resource_raw_capacity{az="az-one",resource="things",service="uni
 limitas_cluster_resource_raw_capacity{az="az-two",resource="capacity",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="az-two",resource="things",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="unknown",resource="capacity",service="unittest"} 617
+# HELP limitas_project_resource_allocation For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.
+# TYPE limitas_project_resource_allocation gauge
+limitas_project_resource_allocation{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 2
+limitas_project_resource_allocation{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 2
+limitas_project_resource_allocation{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 35
+limitas_project_resource_allocation{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 20
+limitas_project_resource_allocation{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 3
+limitas_project_resource_allocation{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 3
+# HELP limitas_project_resource_commitment_amount For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.
+# TYPE limitas_project_resource_commitment_amount gauge
+limitas_project_resource_commitment_amount{az="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000001"} 7
+limitas_project_resource_commitment_amount{az="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000002"} 28
+limitas_project_resource_commitment_amount{az="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000003"} 10
+limitas_project_resource_commitment_amount{az="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",status="pending",transfer_status="",uuid="00000000-0000-0000-0000-000000000004"} 10
+# HELP limitas_project_resource_commitment_expires_at For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.
+# TYPE limitas_project_resource_commitment_expires_at gauge
+limitas_project_resource_commitment_expires_at{az="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000001"} 3.154688e+07
+limitas_project_resource_commitment_expires_at{az="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000002"} 3.154688e+07
+limitas_project_resource_commitment_expires_at{az="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",status="confirmed",transfer_status="",uuid="00000000-0000-0000-0000-000000000003"} 3.154688e+07
+limitas_project_resource_commitment_expires_at{az="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",status="pending",transfer_status="",uuid="00000000-0000-0000-0000-000000000004"} 3.154688e+07
+# HELP limitas_project_resource_physical_usage For each project, resource and AZ, the amount of resource physically used by the project. Only reported for resources that have report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.
+# TYPE limitas_project_resource_physical_usage gauge
+limitas_project_resource_physical_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 10
+limitas_project_resource_physical_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 10
+# HELP limitas_project_resource_usage For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.
+# TYPE limitas_project_resource_usage gauge
+limitas_project_resource_usage{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 2
+limitas_project_resource_usage{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 2
+limitas_project_resource_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 20
+limitas_project_resource_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 20
+limitas_project_resource_usage{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 3
+limitas_project_resource_usage{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 3
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unittest"} 1

@@ -59,6 +59,14 @@ const (
 		"liquids": {
 			"unittest": {
 				"area": "testing",
+				// to check the "committable" label on project-scoped data metrics
+				"commitment_behavior_per_resource": [
+					{ "key": "capacity", "value": {
+						"durations_per_domain": [
+							{ "key": ".*", "value": [ "1 year" ] }
+						]
+					}}
+				],
 				// to check how they are merged with the ServiceInfo of the liquids
 				"rate_limits": {
 					"global": [
@@ -408,11 +416,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 	commitmentForOneYear, err := limesresources.ParseCommitmentDuration("1 year")
 	must.SucceedT(t, err)
 	now := s.Clock.Now()
-	// AZResourceID = 2 has two commitments in status "confirmed" to test summing by status
+	// ProjectID = 1 has two commitments in status "confirmed" to test summing by status
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
 	must.SucceedT(t, err)
-	for idx, amount := range []uint64{7, 8} {
+	for idx, amount := range []uint64{7, 28} {
 		s.MustDBInsert(&db.ProjectCommitment{
 			UUID:                liquid.CommitmentUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", idx+1)),
 			ProjectID:           1,
@@ -428,7 +436,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 			CreationContextJSON: buf,
 		})
 	}
-	// AZResourceID = 8 has two commitments in different statuses to test aggregation over different statuses
+	// ProjectID = 2 has two commitments in different statuses to test aggregation over different statuses
 	s.MustDBInsert(&db.ProjectCommitment{
 		UUID:                "00000000-0000-0000-0000-000000000003",
 		ProjectID:           2,

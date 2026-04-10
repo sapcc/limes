@@ -18,9 +18,11 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	"github.com/majewsky/gg/is"
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -869,6 +871,12 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	bw := bufio.NewWriter(w)
 	printDataMetrics(bw, metricSet, "limitas_cluster_resource_capacity", `Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`)
 	printDataMetrics(bw, metricSet, "limitas_cluster_resource_raw_capacity", `Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_allocation", `For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_amount", `For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_expires_at", `For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_physical_usage", `For each project, resource and AZ, the amount of resource physically used by the project. Only reported for resources that have report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_quota", `For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_usage", `For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_info", `Info metric for resources. The value is always 1, and information can be found in labels.`)
@@ -894,6 +902,20 @@ var (
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  JOIN az_resources azr ON azr.resource_id = r.id
+	`)
+	dmv2ProjectInfoQuery = sqlext.SimplifyWhitespace(`
+		SELECT p.id AS project_id, p.name AS project_name, p.uuid AS project_uuid, d.name AS domain_name, d.uuid AS domain_uuid
+		  FROM domains d
+		  JOIN projects p ON p.domain_id = d.id
+	`)
+	dmv2ProjectCommitmentDataQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT project_id, az_resource_id, uuid, amount, expires_at, status, transfer_status
+		  FROM project_commitments
+		 WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
+	`))
+	dmv2ProjectResourceDataQuery = sqlext.SimplifyWhitespace(`
+		SELECT project_id, az_resource_id, quota, usage, physical_usage
+		  FROM project_az_resources
 	`)
 )
 
@@ -977,8 +999,8 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		return nil, fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
 	}
 	clusterResourceRecordsByID := make(map[db.AZResourceID]clusterResourceRecord, len(clusterResourceRecords))
-	for _, cr := range clusterResourceRecords {
-		clusterResourceRecordsByID[cr.AZResourceID] = cr
+	for _, crr := range clusterResourceRecords {
+		clusterResourceRecordsByID[crr.AZResourceID] = crr
 
 		// skip reporting AZ "total"
 		//
@@ -986,41 +1008,179 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		// (e.g. `limitas_cluster_resource_capacity_total`) because otherwise intuitive expressions like
 		// `sum (limitas_cluster_resource_capacity) by (service, resource)` would produce unexpected results
 		// through double counting. But then this separate metric family can just be an aggregation rule in Prometheus.
-		if cr.AvailabilityZone == liquid.AvailabilityZoneTotal {
+		if crr.AvailabilityZone == liquid.AvailabilityZoneTotal {
 			continue
 		}
 
 		// skip reporting AZ "unknown" unless it actually holds capacity
-		if cr.RawCapacity == 0 && cr.AvailabilityZone == liquid.AvailabilityZoneUnknown {
+		if crr.RawCapacity == 0 && crr.AvailabilityZone == liquid.AvailabilityZoneUnknown {
 			continue
 		}
 
 		// skip az_resources records that only exist as scaffolding and do not hold capacity
 		// (e.g. on AZAwareTopology, AvailabilityZoneAny is irrelevant for capacity metrics,
 		// but exists in the DB because it needs to hold quota on the project level)
-		if cr.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(cr.Topology, cr.AvailabilityZone) {
+		if crr.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
 			continue
 		}
 
 		// emit limitas_cluster_resource_raw_capacity
-		labels := fmt.Sprintf(`az=%q,resource=%q,service=%q`, cr.AvailabilityZone, cr.ResourceName, cr.ServiceType)
-		metric := dataMetric{Labels: labels, Value: float64(cr.RawCapacity)}
+		labels := fmt.Sprintf(`az=%q,resource=%q,service=%q`, crr.AvailabilityZone, crr.ResourceName, crr.ServiceType)
+		metric := dataMetric{Labels: labels, Value: float64(crr.RawCapacity)}
 		result["limitas_cluster_resource_raw_capacity"] = append(result["limitas_cluster_resource_raw_capacity"], metric)
 
 		// emit limitas_cluster_resource_capacity
-		capacity := overcommitFactors[cr.ServiceType][cr.ResourceName].ApplyTo(cr.RawCapacity)
+		capacity := overcommitFactors[crr.ServiceType][crr.ResourceName].ApplyTo(crr.RawCapacity)
 		metric = dataMetric{Labels: labels, Value: float64(capacity)}
 		result["limitas_cluster_resource_capacity"] = append(result["limitas_cluster_resource_capacity"], metric)
 	}
 
-	// TODO: limitas_project_resource_allocation{az="...",committable="true|false",project_id="...",resource="...",service="..."} (used and/or committed)
-	// TODO: limitas_project_resource_quota{az="...",committable="true|false",project_id="...",resource="...",service="..."}
-	// TODO: limitas_project_resource_usage{az="...",committable="true|false",project_id="...",resource="...",service="..."}
-	// TODO: limitas_project_resource_commitment_amount{az="...",project_id="...",resource="...",service="...",status="...",transfer_status="...",uuid="..."}
-	// TODO: limitas_project_resource_commitment_expires_at{az="...",project_id="...",resource="...",service="...",status="...",transfer_status="...",uuid="..."}
+	// fetch project metadata:
 	//
-	// NOTE: project_id="..." above is a stand-in for the standard set of four labels (domain, domain_id, project, project_id)
-	//
+	// 1. as a cache for subsequent queries, to avoid duplicate fetches for names and UUIDs
+	// 2. to pre-compute resource committability per domain for later
+	type projectInfoRecord struct {
+		ProjectID   db.ProjectID `db:"project_id"`
+		ProjectName string       `db:"project_name"`
+		ProjectUUID string       `db:"project_uuid"`
+		DomainName  string       `db:"domain_name"`
+		DomainUUID  string       `db:"domain_uuid"`
+	}
+	var projectInfoRecords []projectInfoRecord
+	projectInfoRecordsByID := make(map[db.ProjectID]projectInfoRecord, len(projectInfoRecords))
+	_, err = d.DB.Select(&projectInfoRecords, dmv2ProjectInfoQuery)
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
+	}
+	isResourceCommittableForDomainName := make(map[string]map[db.AZResourceID]bool)
+	for _, pir := range projectInfoRecords {
+		projectInfoRecordsByID[pir.ProjectID] = pir
+
+		if _, ok := isResourceCommittableForDomainName[pir.DomainName]; !ok {
+			result := make(map[db.AZResourceID]bool, len(clusterResourceRecords))
+			for _, crr := range clusterResourceRecords {
+				cb := d.Cluster.CommitmentBehaviorForResource(crr.ServiceType, crr.ResourceName).ForDomain(pir.DomainName)
+				result[crr.AZResourceID] = len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(time.Now()))
+			}
+			isResourceCommittableForDomainName[pir.DomainName] = result
+		}
+	}
+
+	// fetch project-scoped commitment data (also take sums over commitments for the allocation metrics emitted later)
+	var projectCommitmentRecords []struct {
+		ProjectID      db.ProjectID                            `db:"project_id"`
+		AZResourceID   db.AZResourceID                         `db:"az_resource_id"`
+		UUID           liquid.CommitmentUUID                   `db:"uuid"`
+		Amount         uint64                                  `db:"amount"`
+		ExpiresAt      time.Time                               `db:"expires_at"`
+		Status         liquid.CommitmentStatus                 `db:"status"`
+		TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
+	}
+	_, err = d.DB.Select(&projectCommitmentRecords, dmv2ProjectCommitmentDataQuery)
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: %w", err)
+	}
+	confirmedCommitmentSums := make(map[db.AZResourceID]map[db.ProjectID]uint64)
+	for _, pcr := range projectCommitmentRecords {
+		crr, ok := clusterResourceRecordsByID[pcr.AZResourceID]
+		if !ok {
+			return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: saw unexpected AZResourceID %d", pcr.AZResourceID)
+		}
+		pir, ok := projectInfoRecordsByID[pcr.ProjectID]
+		if !ok {
+			// if a project is being created while this function is going through its motions,
+			// we will just ignore it until the next scrape
+			continue
+		}
+
+		labels := fmt.Sprintf(
+			`az=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,status=%q,transfer_status=%q,uuid=%q`,
+			crr.AvailabilityZone,
+			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
+			crr.ResourceName, crr.ServiceType,
+			pcr.Status, pcr.TransferStatus, pcr.UUID,
+		)
+
+		// emit limitas_project_resource_commitment_amount
+		metric := dataMetric{Labels: labels, Value: float64(pcr.Amount)}
+		result["limitas_project_resource_commitment_amount"] = append(result["limitas_project_resource_commitment_amount"], metric)
+
+		// emit limitas_project_resource_commitment_expires_at
+		metric = dataMetric{Labels: labels, Value: float64(pcr.ExpiresAt.Unix())}
+		result["limitas_project_resource_commitment_expires_at"] = append(result["limitas_project_resource_commitment_expires_at"], metric)
+
+		// compute running totals for all confirmed commitments for the allocation metric below
+		if pcr.Status == liquid.CommitmentStatusConfirmed {
+			m, ok := confirmedCommitmentSums[pcr.AZResourceID]
+			if !ok {
+				m = make(map[db.ProjectID]uint64)
+				confirmedCommitmentSums[pcr.AZResourceID] = m
+			}
+			m[pcr.ProjectID] += pcr.Amount
+		}
+	}
+
+	// fetch project-scoped utilization data
+	var projectResourceRecords []struct {
+		ProjectID     db.ProjectID    `db:"project_id"`
+		AZResourceID  db.AZResourceID `db:"az_resource_id"`
+		Quota         Option[uint64]  `db:"quota"`
+		Usage         uint64          `db:"usage"`
+		PhysicalUsage Option[uint64]  `db:"physical_usage"`
+	}
+	_, err = d.DB.Select(&projectResourceRecords, dmv2ProjectResourceDataQuery)
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: %w", err)
+	}
+	for _, prr := range projectResourceRecords {
+		crr, ok := clusterResourceRecordsByID[prr.AZResourceID]
+		if !ok {
+			return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: saw unexpected AZResourceID %d", prr.AZResourceID)
+		}
+		pir, ok := projectInfoRecordsByID[prr.ProjectID]
+		if !ok {
+			// if a project is being created while this function is going through its motions,
+			// we will just ignore it until the next scrape
+			continue
+		}
+
+		labels := fmt.Sprintf(
+			`az=%q,committable=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q`,
+			crr.AvailabilityZone, strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
+			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
+			crr.ResourceName, crr.ServiceType,
+		)
+
+		if datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
+			// emit limitas_project_resource_allocation
+			committed := confirmedCommitmentSums[prr.AZResourceID][prr.ProjectID]
+			if allocated := max(committed, prr.Usage); allocated != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(allocated)}
+				result["limitas_project_resource_allocation"] = append(result["limitas_project_resource_allocation"], metric)
+			}
+
+			// emit limitas_project_resource_physical_usage
+			if physicalUsage, ok := prr.PhysicalUsage.Unpack(); ok && physicalUsage != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(physicalUsage)}
+				result["limitas_project_resource_physical_usage"] = append(result["limitas_project_resource_physical_usage"], metric)
+			}
+
+			// emit limitas_project_resource_usage
+			if prr.Usage != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(prr.Usage)}
+				result["limitas_project_resource_usage"] = append(result["limitas_project_resource_usage"], metric)
+			}
+		}
+
+		// emit limitas_project_resource_quota
+		if crr.AvailabilityZone != liquid.AvailabilityZoneTotal {
+			if quota, ok := prr.Quota.Unpack(); ok && quota != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(quota)}
+				result["limitas_project_resource_quota"] = append(result["limitas_project_resource_quota"], metric)
+			}
+		}
+	}
+
 	// TODO: metrics for rates
 
 	return &dataMetricSet{ByFamily: result}, nil
