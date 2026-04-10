@@ -37,7 +37,6 @@ import (
 type v1Provider struct {
 	Cluster        *core.Cluster
 	DB             *gorp.DbMap
-	VersionData    api_v2.VersionData
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
 	// see comment in ListProjects() for details
@@ -54,36 +53,25 @@ type v1Provider struct {
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
 func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID, registerer prometheus.Registerer) httpapi.API {
+	p := &v1Provider{
+		Cluster:                       cluster,
+		DB:                            cluster.DB,
+		tokenValidator:                tokenValidator,
+		auditor:                       auditor,
+		timeNow:                       timeNow,
+		generateTransferToken:         generateTransferToken,
+		generateProjectCommitmentUUID: generateProjectCommitmentUUID,
+		reportSpecificityCounter: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "limes_report_specificity",
+				Help: "Number of API requests by endpoint type and number of services and resources that appear in the requested report.",
+			},
+			[]string{"type", "services", "resources"},
+		),
+	}
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer
 	}
-
-	p := &v1Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
-	p.VersionData = api_v2.VersionData{
-		Status: "CURRENT",
-		ID:     "v1",
-		Links: []api_v2.VersionLinkData{
-			{
-				Relation: "self",
-				URL:      p.Path(),
-			},
-			{
-				Relation: "describedby",
-				URL:      "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md",
-				Type:     "text/html",
-			},
-		},
-	}
-	p.generateTransferToken = generateTransferToken
-	p.generateProjectCommitmentUUID = generateProjectCommitmentUUID
-
-	p.reportSpecificityCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "limes_report_specificity",
-			Help: "Number of API requests by endpoint type and number of services and resources that appear in the requested report.",
-		},
-		[]string{"type", "services", "resources"},
-	)
 	registerer.MustRegister(p.reportSpecificityCounter)
 
 	return p
@@ -105,18 +93,6 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 
 // AddTo implements the httpapi.API interface.
 func (p *v1Provider) AddTo(r *mux.Router) {
-	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/")
-		httpapi.SkipRequestLog(r)
-		respondwith.JSON(w, 300, map[string]any{"versions": []api_v2.VersionData{p.VersionData}})
-	})
-
-	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/v1/")
-		httpapi.SkipRequestLog(r)
-		respondwith.JSON(w, 200, map[string]any{"version": p.VersionData})
-	})
-
 	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
 	r.Methods("GET").Path("/rates/v1/clusters/current").HandlerFunc(p.GetClusterRates)
 
@@ -174,11 +150,6 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
 		return false
 	}
 	return true
-}
-
-// Path constructs a full URL for a given URL path below the /v1/ endpoint.
-func (p *v1Provider) Path(elements ...string) string {
-	return api_v2.Path(p.Cluster.Config.CatalogURL, "v1", elements...)
 }
 
 // CheckToken checks the validity of the request's X-Auth-Token in Keystone, and

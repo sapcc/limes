@@ -155,37 +155,26 @@ func TestV2RatesInfoAPI(t *testing.T) {
 	)
 	fixturePath := "./fixtures/rate-info.json"
 
-	// we start with cloud_admin permissions, the scope does not matter for this case
+	// we start with cloud_admin permissions, the scope does not matter for rates
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "cloud-admin"))
 
-	// now a domain admin with a domain scoped token, he cannot see global limits
+	// now a domain admin with a domain scoped token
 	s.TokenValidator.Enforcer.AllowCluster = false
 	s.UpdateMockUserIdentity(map[string]string{
 		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
 		"domain_id": "uuid-for-france", "domain_name": "france",
 	})
-	path := `.service_areas.first.services.first.rates["objects:create"]`
-	globalDefaultLimitMods := []string{
-		fmt.Sprintf(`del(%s.default_limit)`, path),
-		fmt.Sprintf(`del(%s.default_window)`, path),
-	}
 
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
-		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-no-global-limit").
-			Modify(globalDefaultLimitMods...))
+		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-admin"))
 
-	// now a project admin with a project scoped token, he sees project default limits
+	// now a project admin with a project scoped token
 	s.TokenValidator.Enforcer.AllowDomain = false
 	s.UpdateMockUserIdentity(map[string]string{
 		"domain_id": "", "domain_name": "",
 		"project_id": "uuid-for-dresden", "project_name": "dresden", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
 	})
-	projectDefaultLimitMods := []string{
-		`.service_areas.first.services.first.rates["objects:create"] += {"default_limit": 5, "default_window": "1m"}`,
-		`.service_areas.first.services.first.rates["objects:update"] += {"default_limit": 2, "default_window": "1s"}`,
-	}
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
-		httptest.NewJQModifiableJSONFixture(fixturePath, "project-no-custom-limit").
-			Modify(globalDefaultLimitMods...).Modify(projectDefaultLimitMods...))
+		httptest.NewJQModifiableJSONFixture(fixturePath, "project-admin"))
 }

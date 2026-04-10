@@ -38,10 +38,10 @@ type ServiceInfoReport struct {
 // RateInfoReport contains details about a rate.
 // It appears in ServiceInfoReport.
 type RateInfoReport struct {
-	DisplayName   string                    `json:"display_name"`
-	Unit          Option[liquid.Unit]       `json:"unit,omitzero"`
-	Topology      liquid.Topology           `json:"topology"`
-	HasUsage      bool                      `json:"has_usage"`
-	DefaultLimit  uint64                    `json:"default_limit,omitempty"`
-	DefaultWindow Option[limesrates.Window] `json:"default_window,omitzero"`
+	DisplayName          string                    `json:"display_name"`
+	Unit                 liquid.Unit               `json:"unit,omitzero"`
+	Topology             liquid.Topology           `json:"topology"`
+	HasUsage             bool                      `json:"has_usage"`
+	ProjectDefaultLimit  uint64                    `json:"project_default_limit,omitempty"`
+	ProjectDefaultWindow Option[limesrates.Window] `json:"project_default_window,omitzero"`
 }

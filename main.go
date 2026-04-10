@@ -289,6 +289,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	mux := http.NewServeMux()
 	commonAuditor := generateAuditor(ctx)
 	mux.Handle("/", httpapi.Compose(
+		api_v2.NewVersionProviderAPI(cluster),
 		api.NewV1API(cluster, tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
 		api_v2.NewV2API(cluster, tokenValidator, commonAuditor, time.Now),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},

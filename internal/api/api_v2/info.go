@@ -11,19 +11,19 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 
 	. "github.com/majewsky/gg/option"
 )
 
-var findAllowedResources = sqlext.SimplifyWhitespace(`
+var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	SELECT DISTINCT s.type, r.name
 	FROM project_resources pr
 	JOIN resources r ON pr.resource_id = r.id
@@ -34,31 +34,23 @@ var findAllowedResources = sqlext.SimplifyWhitespace(`
 	AND pr.forbidden = false
 `)
 
-func (p *v2Provider) authenticateInfoRequest(r *http.Request) (token *gopherpolicy.Token, projectUUID, domainUUID string, err error) {
-	token = p.CheckToken(r)
+func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, domainUUID, domainName string, err error) {
+	token := p.CheckToken(r)
 	projectUUID = token.ProjectScopeUUID()
 	projectDomainUUID := token.ProjectScopeDomainUUID()
+	projectDomainName := token.ProjectScopeDomainName()
 	domainUUID = token.DomainScopeUUID()
-
-	// a token.Require() check below cloud-level is only successful, when scope is in the context
-	// usually, this would come from vars in the URL
-	if projectUUID != "" {
-		token.Context.Request["project_id"] = projectUUID
-		token.Context.Request["domain_id"] = projectDomainUUID
-	}
-	if domainUUID != "" {
-		token.Context.Request["domain_id"] = domainUUID
-	}
+	domainName = token.DomainScopeName()
 
 	switch {
 	case token.Check("v2:cluster:info"):
-		return token, "", "", nil
+		return "", "", "", nil
 	case token.Check("v2:domain:info"):
-		return token, "", domainUUID, nil
+		return "", domainUUID, domainName, nil
 	case token.Check("v2:project:info"):
-		return token, projectUUID, projectDomainUUID, nil
+		return projectUUID, projectDomainUUID, projectDomainName, nil
 	default:
-		return nil, "", "", respondwith.CustomStatus(http.StatusUnauthorized, errors.New("unauthorized"))
+		return "", "", "", respondwith.CustomStatus(http.StatusUnauthorized, errors.New("unauthorized"))
 	}
 }
 
@@ -66,14 +58,14 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (token *gopherpoli
 func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
 
-	token, projectUUID, domainUUID, err := p.authenticateInfoRequest(r)
+	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(r)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	// collect allowed items for this user
 	allowedResourcesByService := make(map[db.ServiceType][]liquid.ResourceName)
-	err = sqlext.ForeachRow(p.DB, findAllowedResources, []any{projectUUID, domainUUID}, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(p.DB, findAllowedResourcesQuery, []any{projectUUID, domainUUID}, func(rows *sql.Rows) error {
 		var (
 			serviceType  db.ServiceType
 			resourceName liquid.ResourceName
@@ -146,20 +138,20 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 					Resources:   make(map[liquid.ResourceName]resourcesv2.ResourceInfoReport),
 				}
 			}
-			unit := None[liquid.Unit]()
-			if !resource.Unit.IsZero() {
-				unit = Some(resource.Unit)
-			}
-			scopedCommitmentBehavior := p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForCluster()
-			if domainUUID != "" && projectUUID == "" {
-				scopedCommitmentBehavior = p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForDomain(token.DomainScopeName())
-			}
-			if domainUUID != "" && projectUUID != "" {
-				scopedCommitmentBehavior = p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName).ForDomain(token.ProjectScopeDomainName())
+			commitmentBehavior := p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName)
+			var scopedCommitmentBehavior core.ScopedCommitmentBehavior
+
+			switch {
+			case domainUUID == "":
+				scopedCommitmentBehavior = commitmentBehavior.ForCluster()
+			case projectUUID == "":
+				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
+			default:
+				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
 			}
 			serviceReport.Categories[category].Resources[resourceName] = resourcesv2.ResourceInfoReport{
 				DisplayName:      resource.DisplayName,
-				Unit:             unit,
+				Unit:             resource.Unit,
 				Topology:         resource.Topology,
 				HasCapacity:      resource.HasCapacity,
 				HasQuota:         resource.HasQuota,
@@ -167,14 +159,14 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	respondwith.JSON(w, 200, report)
+	respondwith.JSON(w, http.StatusOK, report)
 }
 
 // GetRatesInfo handles GET /rates/v2/info.
 func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
 
-	_, projectUUID, domainUUID, err := p.authenticateInfoRequest(r)
+	_, _, _, err := p.authenticateInfoRequest(r)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -219,20 +211,14 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 				DisplayName: rate.DisplayName,
 				Topology:    rate.Topology,
 				HasUsage:    rate.HasUsage,
+				Unit:        rate.Unit,
 			}
-			if !rate.Unit.IsZero() {
-				rir.Unit = Some(rate.Unit)
-			}
-			if rateConfig, ok := config.RateLimits.GetGlobalDefaultRateLimit(rateName); domainUUID == "" && projectUUID == "" && ok {
-				rir.DefaultLimit = rateConfig.Limit
-				rir.DefaultWindow = Some(rateConfig.Window)
-			}
-			if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); domainUUID != "" && projectUUID != "" && ok {
-				rir.DefaultLimit = rateConfig.Limit
-				rir.DefaultWindow = Some(rateConfig.Window)
+			if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); ok {
+				rir.ProjectDefaultLimit = rateConfig.Limit
+				rir.ProjectDefaultWindow = Some(rateConfig.Window)
 			}
 			serviceReport.Rates[rateName] = rir
 		}
 	}
-	respondwith.JSON(w, 200, report)
+	respondwith.JSON(w, http.StatusOK, report)
 }

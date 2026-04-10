@@ -11,8 +11,8 @@
               "display_name": "Object Creations",
               "topology": "flat",
               "has_usage": true,
-              "default_limit": 5000,
-              "default_window": "1s"
+              "project_default_limit": 5,
+              "project_default_window": "1m"
             },
             "objects:delete": {
               "display_name": "Object Deletions",
@@ -29,7 +29,9 @@
             "objects:update": {
               "display_name": "Object Updates",
               "topology": "flat",
-              "has_usage": true
+              "has_usage": true,
+              "project_default_limit": 2,
+              "project_default_window": "1s"
             }
           }
         }

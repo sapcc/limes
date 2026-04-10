@@ -45,7 +45,7 @@ type CategoryInfoReport struct {
 // It appears in CategoryInfoReport.
 type ResourceInfoReport struct {
 	DisplayName      string                          `json:"display_name"`
-	Unit             Option[liquid.Unit]             `json:"unit,omitzero"`
+	Unit             liquid.Unit                     `json:"unit,omitzero"`
 	Topology         liquid.Topology                 `json:"topology"`
 	HasCapacity      bool                            `json:"has_capacity"`
 	HasQuota         bool                            `json:"has_quota"`
