@@ -843,6 +843,7 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 type DataMetricsV2Reporter struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
+	TimeNow func() time.Time
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -874,7 +875,7 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	printDataMetrics(bw, metricSet, "limitas_project_resource_allocation", `For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_amount", `For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_expires_at", `For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_physical_usage", `For each project, resource and AZ, the amount of resource physically used by the project. Only reported for resources that have report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
+	printDataMetrics(bw, metricSet, "limitas_project_resource_physical_usage", `For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_quota", `For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_usage", `For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
@@ -1047,11 +1048,11 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		DomainUUID  string       `db:"domain_uuid"`
 	}
 	var projectInfoRecords []projectInfoRecord
-	projectInfoRecordsByID := make(map[db.ProjectID]projectInfoRecord, len(projectInfoRecords))
 	_, err = d.DB.Select(&projectInfoRecords, dmv2ProjectInfoQuery)
 	if err != nil {
 		return nil, fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
 	}
+	projectInfoRecordsByID := make(map[db.ProjectID]projectInfoRecord, len(projectInfoRecords))
 	isResourceCommittableForDomainName := make(map[string]map[db.AZResourceID]bool)
 	for _, pir := range projectInfoRecords {
 		projectInfoRecordsByID[pir.ProjectID] = pir
@@ -1060,7 +1061,7 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 			result := make(map[db.AZResourceID]bool, len(clusterResourceRecords))
 			for _, crr := range clusterResourceRecords {
 				cb := d.Cluster.CommitmentBehaviorForResource(crr.ServiceType, crr.ResourceName).ForDomain(pir.DomainName)
-				result[crr.AZResourceID] = len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(time.Now()))
+				result[crr.AZResourceID] = len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(d.TimeNow()))
 			}
 			isResourceCommittableForDomainName[pir.DomainName] = result
 		}
