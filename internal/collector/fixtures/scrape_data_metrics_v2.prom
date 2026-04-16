@@ -36,6 +36,14 @@ limitas_project_resource_commitment_expires_at{az="az-one",domain="germany",doma
 # TYPE limitas_project_resource_physical_usage gauge
 limitas_project_resource_physical_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 10
 limitas_project_resource_physical_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 10
+# HELP limitas_project_resource_quota For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.
+# TYPE limitas_project_resource_quota gauge
+limitas_project_resource_quota{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 2
+limitas_project_resource_quota{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 2
+limitas_project_resource_quota{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 35
+limitas_project_resource_quota{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 20
+limitas_project_resource_quota{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 3
+limitas_project_resource_quota{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 3
 # HELP limitas_project_resource_usage For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.
 # TYPE limitas_project_resource_usage gauge
 limitas_project_resource_usage{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 2

@@ -22,8 +22,8 @@ limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",servi
 limes_cluster_capacity_per_az{availability_zone="unknown",resource="capacity",service="unittest",service_name="unittest"} 1234
 # HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
 # TYPE limes_domain_quota gauge
-limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest",service_name="unittest"} 40
-limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest",service_name="unittest"} 26
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest",service_name="unittest"} 55
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest",service_name="unittest"} 10
 # HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_backendquota gauge
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="unittest"} 20
@@ -47,10 +47,10 @@ limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",proje
 limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="unittest"} 10
 # HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_quota gauge
-limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="unittest"} 20
-limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="unittest"} 13
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="unittest"} 35
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="unittest"} 5
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="unittest"} 20
-limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="unittest"} 13
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="unittest"} 5
 # HELP limes_project_rate_usage Usage of a Limes rate for an OpenStack project. These are counters that never reset.
 # TYPE limes_project_rate_usage gauge
 limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest",service_name="unittest"} 2048
