@@ -246,7 +246,7 @@ func Test_ScanCapacity(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
 	}.Check(t, dmrV1)
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
@@ -366,7 +366,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_single.prom"),
 	}.Check(t, dmrV1)
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single_v2.prom")
@@ -461,7 +461,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
 	}.Check(t, dmrV1)
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")

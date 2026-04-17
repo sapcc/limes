@@ -333,6 +333,7 @@ func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []s
 	dmr := collector.DataMetricsV2Reporter{
 		Cluster: cluster,
 		DB:      cluster.DB,
+		TimeNow: time.Now,
 	}
 
 	mux := http.NewServeMux()
