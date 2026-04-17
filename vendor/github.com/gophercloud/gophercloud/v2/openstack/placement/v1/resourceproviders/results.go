@@ -56,6 +56,11 @@ type ResourceProviderInventories struct {
 	Inventories                map[string]Inventory `json:"inventories"`
 }
 
+type ResourceProviderInventory struct {
+	ResourceProviderGeneration int `json:"resource_provider_generation"`
+	Inventory
+}
+
 type ResourceProviderAllocations struct {
 	ResourceProviderGeneration int                   `json:"resource_provider_generation"`
 	Allocations                map[string]Allocation `json:"allocations"`
@@ -64,6 +69,12 @@ type ResourceProviderAllocations struct {
 type ResourceProviderTraits struct {
 	ResourceProviderGeneration int      `json:"resource_provider_generation"`
 	Traits                     []string `json:"traits"`
+}
+
+type ResourceProviderAggregates struct {
+	// ResourceProviderGeneration is available from microversion 1.19 and later.
+	ResourceProviderGeneration *int     `json:"resource_provider_generation"`
+	Aggregates                 []string `json:"aggregates"`
 }
 
 // resourceProviderResult is the response of a base ResourceProvider result.
@@ -153,6 +164,32 @@ func (r GetInventoriesResult) Extract() (*ResourceProviderInventories, error) {
 	return &s, err
 }
 
+// GetInventoryResult is the response of a Get inventory operation. Call its Extract method
+// to interpret it as a ResourceProviderInventory.
+type GetInventoryResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets a GetInventoryResult as a ResourceProviderInventory.
+func (r GetInventoryResult) Extract() (*ResourceProviderInventory, error) {
+	var s ResourceProviderInventory
+	err := r.ExtractInto(&s)
+	return &s, err
+}
+
+// UpdateInventoryResult is the response of an Update inventory operation. Call its Extract method
+// to interpret it as a ResourceProviderInventory.
+type UpdateInventoryResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets a UpdateInventoryResult as a ResourceProviderInventory.
+func (r UpdateInventoryResult) Extract() (*ResourceProviderInventory, error) {
+	var s ResourceProviderInventory
+	err := r.ExtractInto(&s)
+	return &s, err
+}
+
 // GetAllocationsResult is the response of a Get allocations operations. Call its Extract method
 // to interpret it as a ResourceProviderAllocations.
 type GetAllocationsResult struct {
@@ -175,6 +212,19 @@ type GetTraitsResult struct {
 // Extract interprets a GetTraitsResult as a ResourceProviderTraits.
 func (r GetTraitsResult) Extract() (*ResourceProviderTraits, error) {
 	var s ResourceProviderTraits
+	err := r.ExtractInto(&s)
+	return &s, err
+}
+
+// GetAggregatesResult is the response of a Get aggregates operations. Call its Extract method
+// to interpret it as a ResourceProviderAggregates.
+type GetAggregatesResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets a GetAggregatesResult as a ResourceProviderAggregates.
+func (r GetAggregatesResult) Extract() (*ResourceProviderAggregates, error) {
+	var s ResourceProviderAggregates
 	err := r.ExtractInto(&s)
 	return &s, err
 }
