@@ -7,7 +7,7 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.4.0
-	github.com/gophercloud/gophercloud/v2 v2.11.1
+	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.12.3
 	github.com/majewsky/gg v1.6.0
@@ -37,6 +37,6 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
