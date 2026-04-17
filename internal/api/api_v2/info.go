@@ -141,12 +141,9 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 			commitmentBehavior := p.Cluster.CommitmentBehaviorForResource(serviceType, resourceName)
 			var scopedCommitmentBehavior core.ScopedCommitmentBehavior
 
-			switch {
-			case domainUUID == "":
+			if domainUUID == "" {
 				scopedCommitmentBehavior = commitmentBehavior.ForCluster()
-			case projectUUID == "":
-				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
-			default:
+			} else {
 				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
 			}
 			serviceReport.Categories[category].Resources[resourceName] = resourcesv2.ResourceInfoReport{

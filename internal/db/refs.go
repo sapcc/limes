@@ -4,9 +4,9 @@
 package db
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -27,51 +27,55 @@ type ServiceID int64
 type ResourceID int64
 
 // ResourcePath is a concatenation of db.ServiceType + "/" + liquid.ResourceName.
-// This typedef is used to quickly retrieve the single components from the path.
-type ResourcePath string
-
-// ServiceType extracts the service type component from the ResourcePath.
-func (r ResourcePath) ServiceType() ServiceType {
-	return ServiceType(strings.SplitN(string(r), "/", 2)[0])
+// We form a struct type of it, so that we can throw proper errors when receiving
+// malformed strings from the database.
+type ResourcePath struct {
+	ServiceType  ServiceType
+	ResourceName liquid.ResourceName
 }
 
-// ResourceName extracts the resource name component from the ResourcePath.
-func (r ResourcePath) ResourceName() liquid.ResourceName {
-	return liquid.ResourceName(strings.SplitN(string(r), "/", 2)[1])
-}
-
-// NewResourcePath constructs a ResourcePath from a service type and resource name.
-func NewResourcePath(serviceType ServiceType, resourceName liquid.ResourceName) ResourcePath {
-	return ResourcePath(string(serviceType) + "/" + string(resourceName))
+// Scan implements the [sql.Scanner] interface.
+func (r *ResourcePath) Scan(src any) error {
+	srcStr, ok := src.(string)
+	if !ok {
+		return fmt.Errorf("invalid input type for %T.Scan(): %T", r, src)
+	}
+	first, second, ok := strings.Cut(srcStr, "/")
+	if !ok || strings.Contains(second, "/") {
+		return fmt.Errorf("invalid value for %T: %q", r, srcStr)
+	}
+	r.ServiceType = ServiceType(first)
+	r.ResourceName = liquid.ResourceName(second)
+	return nil
 }
 
 // AZResourceID is an ID into the az_resources table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type AZResourceID int64
 
-// AZResourcePath is a concatenation of db.ServiceType + "/" + liquid.ResourceName
-// + "/" + limes.AvailabilityZone. This typedef is used to quickly retrieve the
-// single components from the path.
-type AZResourcePath string
-
-// ServiceType extracts the service type component from the AZResourcePath.
-func (a AZResourcePath) ServiceType() ServiceType {
-	return ServiceType(strings.SplitN(string(a), "/", 3)[0])
+// AZResourcePath is a concatenation of db.ServiceType + "/" + liquid.ResourceName +
+// "/" + liquid.AvailabilityZone. We form a struct type of it, so that we can
+// throw proper errors when receiving malformed strings from the database.
+type AZResourcePath struct {
+	ServiceType      ServiceType
+	ResourceName     liquid.ResourceName
+	AvailabilityZone liquid.AvailabilityZone
 }
 
-// ResourceName extracts the resource name component from the AZResourcePath.
-func (a AZResourcePath) ResourceName() liquid.ResourceName {
-	return liquid.ResourceName(strings.SplitN(string(a), "/", 3)[1])
-}
-
-// AvailabilityZone extracts the availability zone component from the AZResourcePath.
-func (a AZResourcePath) AvailabilityZone() limes.AvailabilityZone {
-	return limes.AvailabilityZone(strings.SplitN(string(a), "/", 3)[2])
-}
-
-// NewAZResourcePath constructs an AZResourcePath from a service type, resource name, and availability zone.
-func NewAZResourcePath(serviceType ServiceType, resourceName liquid.ResourceName, availabilityZone limes.AvailabilityZone) AZResourcePath {
-	return AZResourcePath(string(serviceType) + "/" + string(resourceName) + "/" + string(availabilityZone))
+// Scan implements the [sql.Scanner] interface.
+func (r *AZResourcePath) Scan(src any) error {
+	srcStr, ok := src.(string)
+	if !ok {
+		return fmt.Errorf("invalid input type for %T.Scan(): %T", r, src)
+	}
+	parts := strings.SplitN(srcStr, "/", 3)
+	if len(parts) != 3 || strings.Contains(parts[2], "/") {
+		return fmt.Errorf("invalid value for %T: %q", r, srcStr)
+	}
+	r.ServiceType = ServiceType(parts[0])
+	r.ResourceName = liquid.ResourceName(parts[1])
+	r.AvailabilityZone = liquid.AvailabilityZone(parts[2])
+	return nil
 }
 
 // RateID is an ID into the rates table. This typedef is
@@ -79,22 +83,26 @@ func NewAZResourcePath(serviceType ServiceType, resourceName liquid.ResourceName
 type RateID int64
 
 // RatePath is a concatenation of db.ServiceType + "/" + liquid.RateName.
-// This typedef is used to quickly retrieve the single components from the path.
-type RatePath string
-
-// ServiceType extracts the service type component from the RatePath.
-func (r RatePath) ServiceType() ServiceType {
-	return ServiceType(strings.SplitN(string(r), "/", 2)[0])
+// We form a struct type of it, so that we can throw proper errors when receiving
+// malformed strings from the database.
+type RatePath struct {
+	ServiceType ServiceType
+	RateName    liquid.RateName
 }
 
-// RateName extracts the rate name component from the RatePath.
-func (r RatePath) RateName() liquid.RateName {
-	return liquid.RateName(strings.SplitN(string(r), "/", 2)[1])
-}
-
-// NewRatePath constructs a RatePath from a service type and rate name.
-func NewRatePath(serviceType ServiceType, rateName liquid.RateName) RatePath {
-	return RatePath(string(serviceType) + "/" + string(rateName))
+// Scan implements the [sql.Scanner] interface.
+func (r *RatePath) Scan(src any) error {
+	srcStr, ok := src.(string)
+	if !ok {
+		return fmt.Errorf("invalid input type for %T.Scan(): %T", r, src)
+	}
+	first, second, ok := strings.Cut(srcStr, "/")
+	if !ok || strings.Contains(second, "/") {
+		return fmt.Errorf("invalid value for %T: %q", r, srcStr)
+	}
+	r.ServiceType = ServiceType(first)
+	r.RateName = liquid.RateName(second)
+	return nil
 }
 
 // DomainID is an ID into the domains table. This typedef is

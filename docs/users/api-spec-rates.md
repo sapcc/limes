@@ -104,17 +104,17 @@ Returns 200 (OK) on success and a JSON document like this:
         "area": "storage",
         "rates": [
           {
-            "name": "service/shared/objects:create",
+            "name": "objects:create",
             "limit": 5000,
             "window": "1s"
           },
           {
-            "name": "service/shared/objects:update",
+            "name": "objects:update",
             "limit": 10000,
             "window": "1s"
           },
           {
-            "name": "service/shared/objects:delete",
+            "name": "objects:delete",
             "limit": 5000,
             "window": "1s"
           },

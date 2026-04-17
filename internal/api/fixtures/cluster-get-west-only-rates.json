@@ -7,7 +7,7 @@
         "area": "shared",
         "rates": [
           {
-            "name": "service/shared/objects:create",
+            "name": "objects:create",
             "limit": 5000,
             "window": "1s"
           }
