@@ -643,13 +643,16 @@ Returns 201 (Created) on success. Result is a JSON document like:
     "availability_zone": "west-1",
     "amount": 100,
     "duration": "2 years",
-    "created_at": 1696604400
+    "created_at": 1696604400,
+    "confirmed_at": 1696604400,
+    "expires_at": 1759762800
   }
 }
 ```
 
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
 If no `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
+The `expires_at` timestamp will be set to the result of adding `duration` to `confirm_by` (or the current time, if `confirm_by` was not set).
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/merge
 
@@ -769,6 +772,7 @@ In the example above the commitment that should be converted to the `target_reso
 
 
 Returns 202 (Accepted) on success, and returns the converted commitment as a JSON document.
+The converted commitment retains all timestamps (`confirm_by`, `confirmed_at`, `expires_at`, etc.) from the original commitment.
 
 ### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration"
 
