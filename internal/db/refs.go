@@ -4,6 +4,8 @@
 package db
 
 import (
+	_ "database/sql" // only used in docstring links
+	"database/sql/driver"
 	"fmt"
 	"strings"
 
@@ -34,6 +36,16 @@ type ResourcePath struct {
 	ResourceName liquid.ResourceName
 }
 
+// String implements the [fmt.Stringer] interface.
+func (r ResourcePath) String() string {
+	return strings.Join([]string{string(r.ServiceType), string(r.ResourceName)}, "/")
+}
+
+// Value implements the [driver.Valuer] interface.
+func (r ResourcePath) Value() (driver.Value, error) {
+	return r.String(), nil
+}
+
 // Scan implements the [sql.Scanner] interface.
 func (r *ResourcePath) Scan(src any) error {
 	srcStr, ok := src.(string)
@@ -62,6 +74,16 @@ type AZResourcePath struct {
 	AvailabilityZone liquid.AvailabilityZone
 }
 
+// String implements the [fmt.Stringer] interface.
+func (r AZResourcePath) String() string {
+	return strings.Join([]string{string(r.ServiceType), string(r.ResourceName), string(r.AvailabilityZone)}, "/")
+}
+
+// Value implements the [driver.Valuer] interface.
+func (r AZResourcePath) Value() (driver.Value, error) {
+	return r.String(), nil
+}
+
 // Scan implements the [sql.Scanner] interface.
 func (r *AZResourcePath) Scan(src any) error {
 	srcStr, ok := src.(string)
@@ -88,6 +110,16 @@ type RateID int64
 type RatePath struct {
 	ServiceType ServiceType
 	RateName    liquid.RateName
+}
+
+// String implements the [fmt.Stringer] interface.
+func (r RatePath) String() string {
+	return strings.Join([]string{string(r.ServiceType), string(r.RateName)}, "/")
+}
+
+// Value implements the [driver.Valuer] interface.
+func (r RatePath) Value() (driver.Value, error) {
+	return r.String(), nil
 }
 
 // Scan implements the [sql.Scanner] interface.

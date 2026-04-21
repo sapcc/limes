@@ -180,8 +180,8 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, resource := range resourcesByPath {
-		p := &db.ResourcePath{}
-		err = p.Scan(path)
+		var p db.ResourcePath
+		err = p.Scan(&path)
 		if err != nil {
 			return fmt.Errorf("error scanning resource path %q: %s", path, err.Error())
 		}
@@ -201,8 +201,8 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, azResource := range azResourcesByPath {
-		p := &db.AZResourcePath{}
-		err = p.Scan(path)
+		var p db.AZResourcePath
+		err = p.Scan(&path)
 		if err != nil {
 			return fmt.Errorf("error scanning az_resource path %q: %s", path, err.Error())
 		}
@@ -225,8 +225,8 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
 	for path, rate := range ratesByPath {
-		p := &db.RatePath{}
-		err = p.Scan(path)
+		var p db.RatePath
+		err = p.Scan(&path)
 		if err != nil {
 			return fmt.Errorf("error scanning rate path %q: %s", path, err.Error())
 		}
