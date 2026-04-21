@@ -80,7 +80,7 @@ func TestServiceInfoCache(t *testing.T) {
 	s.MustDBInsert(&db.AZResource{
 		ResourceID:       secondCapacity,
 		AvailabilityZone: "test",
-		Path:             "second/capacity/test",
+		Path:             db.AZResourcePath{ServiceType: "second", ResourceName: "capacity", AvailabilityZone: "test"},
 		RawCapacity:      123,
 	})
 	<-sic.OnInvalidate

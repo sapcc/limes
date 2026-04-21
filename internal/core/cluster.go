@@ -457,7 +457,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				Name:                resourceName,
 				DisplayName:         serviceInfo.Resources[resourceName].DisplayName,
 				CategoryID:          categoryID,
-				Path:                fmt.Sprintf("%s/%s", serviceType, resourceName),
+				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                serviceInfo.Resources[resourceName].Unit,
 				Topology:            serviceInfo.Resources[resourceName].Topology,
@@ -595,7 +595,11 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				return db.AZResource{
 					ResourceID:       res.ID,
 					AvailabilityZone: az,
-					Path:             fmt.Sprintf("%s/%s", res.Path, az),
+					Path: db.AZResourcePath{
+						ServiceType:      res.Path.ServiceType,
+						ResourceName:     res.Path.ResourceName,
+						AvailabilityZone: az,
+					},
 				}, nil
 			},
 			Update: func(azRes *db.AZResource) error {
@@ -671,7 +675,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
 				DisplayName:   serviceInfo.Rates[rateName].DisplayName,
-				Path:          fmt.Sprintf("%s/%s", serviceType, rateName),
+				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
 				LiquidVersion: serviceInfo.Version,
 				Unit:          unit,
 				Topology:      topology,

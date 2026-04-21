@@ -172,7 +172,7 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 
 	resourcesByPath, err := db.BuildIndexOfDBResult(
 		s.DB,
-		func(r db.Resource) string { return r.Path },
+		func(r db.Resource) db.ResourcePath { return r.Path },
 		"SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
 		serviceType,
 	)
@@ -180,20 +180,15 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, resource := range resourcesByPath {
-		var p db.ResourcePath
-		err = p.Scan(&path)
-		if err != nil {
-			return fmt.Errorf("error scanning resource path %q: %s", path, err.Error())
+		if _, sExists := s.resourcesByNameByType[path.ServiceType]; !sExists {
+			s.resourcesByNameByType[path.ServiceType] = make(map[liquid.ResourceName]db.Resource)
 		}
-		if _, sExists := s.resourcesByNameByType[p.ServiceType]; !sExists {
-			s.resourcesByNameByType[p.ServiceType] = make(map[liquid.ResourceName]db.Resource)
-		}
-		s.resourcesByNameByType[p.ServiceType][p.ResourceName] = resource
+		s.resourcesByNameByType[path.ServiceType][path.ResourceName] = resource
 	}
 
 	azResourcesByPath, err := db.BuildIndexOfDBResult(
 		s.DB,
-		func(a db.AZResource) string { return a.Path },
+		func(a db.AZResource) db.AZResourcePath { return a.Path },
 		"SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
 		serviceType,
 	)
@@ -201,23 +196,18 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, azResource := range azResourcesByPath {
-		var p db.AZResourcePath
-		err = p.Scan(&path)
-		if err != nil {
-			return fmt.Errorf("error scanning az_resource path %q: %s", path, err.Error())
+		if _, sExists := s.azResourcesByAZByNameByType[path.ServiceType]; !sExists {
+			s.azResourcesByAZByNameByType[path.ServiceType] = make(map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource)
 		}
-		if _, sExists := s.azResourcesByAZByNameByType[p.ServiceType]; !sExists {
-			s.azResourcesByAZByNameByType[p.ServiceType] = make(map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource)
+		if _, rExists := s.azResourcesByAZByNameByType[path.ServiceType][path.ResourceName]; !rExists {
+			s.azResourcesByAZByNameByType[path.ServiceType][path.ResourceName] = make(map[limes.AvailabilityZone]db.AZResource)
 		}
-		if _, rExists := s.azResourcesByAZByNameByType[p.ServiceType][p.ResourceName]; !rExists {
-			s.azResourcesByAZByNameByType[p.ServiceType][p.ResourceName] = make(map[limes.AvailabilityZone]db.AZResource)
-		}
-		s.azResourcesByAZByNameByType[p.ServiceType][p.ResourceName][p.AvailabilityZone] = azResource
+		s.azResourcesByAZByNameByType[path.ServiceType][path.ResourceName][path.AvailabilityZone] = azResource
 	}
 
 	ratesByPath, err := db.BuildIndexOfDBResult(
 		s.DB,
-		func(r db.Rate) string { return r.Path },
+		func(r db.Rate) db.RatePath { return r.Path },
 		"SELECT ra.* FROM rates ra JOIN services s ON ra.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
 		serviceType,
 	)
@@ -225,15 +215,10 @@ func (s *ServiceInfoCache) invalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
 	for path, rate := range ratesByPath {
-		var p db.RatePath
-		err = p.Scan(&path)
-		if err != nil {
-			return fmt.Errorf("error scanning rate path %q: %s", path, err.Error())
+		if _, rExists := s.ratesByNameByType[path.ServiceType]; !rExists {
+			s.ratesByNameByType[path.ServiceType] = make(map[liquid.RateName]db.Rate)
 		}
-		if _, rExists := s.ratesByNameByType[p.ServiceType]; !rExists {
-			s.ratesByNameByType[p.ServiceType] = make(map[liquid.RateName]db.Rate)
-		}
-		s.ratesByNameByType[p.ServiceType][p.RateName] = rate
+		s.ratesByNameByType[path.ServiceType][path.RateName] = rate
 	}
 
 	s.categoriesByID, err = db.BuildIndexOfDBResult(

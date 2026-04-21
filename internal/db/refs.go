@@ -38,7 +38,7 @@ type ResourcePath struct {
 
 // String implements the [fmt.Stringer] interface.
 func (r ResourcePath) String() string {
-	return strings.Join([]string{string(r.ServiceType), string(r.ResourceName)}, "/")
+	return string(r.ServiceType) + "/" + string(r.ResourceName)
 }
 
 // Value implements the [driver.Valuer] interface.
@@ -114,7 +114,7 @@ type RatePath struct {
 
 // String implements the [fmt.Stringer] interface.
 func (r RatePath) String() string {
-	return strings.Join([]string{string(r.ServiceType), string(r.RateName)}, "/")
+	return string(r.ServiceType) + "/" + string(r.RateName)
 }
 
 // Value implements the [driver.Valuer] interface.

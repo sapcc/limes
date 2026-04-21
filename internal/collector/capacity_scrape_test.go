@@ -175,14 +175,14 @@ func Test_ScanCapacity(t *testing.T) {
 	unknownRes := &db.Resource{
 		ServiceID:     2,
 		Name:          "unknown",
-		Path:          "unshared/unknown",
+		Path:          db.ResourcePath{ServiceType: "unshared", ResourceName: "unknown"},
 		LiquidVersion: 1,
 	}
 	s.MustDBInsert(unknownRes)
 	s.MustDBInsert(&db.AZResource{
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: liquid.AvailabilityZoneAny,
-		Path:             "unshared/unknown/" + string(liquid.AvailabilityZoneAny),
+		Path:             db.AZResourcePath{ServiceType: "unshared", ResourceName: "unknown", AvailabilityZone: liquid.AvailabilityZoneAny},
 		RawCapacity:      100,
 		Usage:            Some[uint64](50),
 	})
