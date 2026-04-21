@@ -198,7 +198,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 		report.Areas[area].Services[serviceType] = ratesv2.ServiceInfoReport{
 			Version:     service.LiquidVersion,
 			DisplayName: service.DisplayName,
-			Rates:       make(map[liquid.RateName]ratesv2.RateInfoReport),
+			Categories:  make(map[liquid.CategoryName]ratesv2.CategoryInfoReport),
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
@@ -214,7 +214,15 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 				rir.ProjectDefaultLimit = rateConfig.Limit
 				rir.ProjectDefaultWindow = Some(rateConfig.Window)
 			}
-			serviceReport.Rates[rateName] = rir
+			category := liquid.CategoryName(serviceType)
+			categoryDisplayName := service.DisplayName
+			if _, exists := serviceReport.Categories[category]; !exists {
+				serviceReport.Categories[category] = ratesv2.CategoryInfoReport{
+					DisplayName: categoryDisplayName,
+					Rates:       make(map[liquid.RateName]ratesv2.RateInfoReport),
+				}
+			}
+			serviceReport.Categories[category].Rates[rateName] = rir
 		}
 	}
 	respondwith.JSON(w, http.StatusOK, report)

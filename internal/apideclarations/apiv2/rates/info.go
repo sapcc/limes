@@ -21,22 +21,34 @@ type InfoReport struct {
 }
 
 // AreaInfoReport groups services into areas, which are defined in the config.
-// it appears in [InfoReport]
+// It appears in [InfoReport].
 type AreaInfoReport struct {
 	DisplayName string                               `json:"display_name"`
 	Services    map[db.ServiceType]ServiceInfoReport `json:"services"`
 }
 
 // ServiceInfoReport contains details about a service.
-// it appears in [AreaInfoReport]
+// It appears in [AreaInfoReport].
 type ServiceInfoReport struct {
-	Version     int64                              `json:"version"`
+	Version     int64                                      `json:"version"`
+	DisplayName string                                     `json:"display_name"`
+	Categories  map[liquid.CategoryName]CategoryInfoReport `json:"categories"`
+}
+
+// CategoryInfoReport groups rates into categories.
+// It appears in [ServiceInfoReport].
+//
+// Currently, there is no way to configure rates into categories, so all rates
+// reside within a category with the same name as the service.
+// This structure currently only exists for symmetry with resources.InfoReport,
+// and for being able to add full support for categories later if required.
+type CategoryInfoReport struct {
 	DisplayName string                             `json:"display_name"`
 	Rates       map[liquid.RateName]RateInfoReport `json:"rates"`
 }
 
 // RateInfoReport contains details about a rate.
-// it appears in [ServiceInfoReport]
+// It appears in [ServiceInfoReport].
 type RateInfoReport struct {
 	DisplayName          string                    `json:"display_name"`
 	Unit                 liquid.Unit               `json:"unit,omitzero"`

@@ -20,14 +20,14 @@ type InfoReport struct {
 }
 
 // AreaInfoReport groups services into areas, which are defined in the config.
-// it appears in [InfoReport]
+// It appears in [InfoReport].
 type AreaInfoReport struct {
 	DisplayName string                               `json:"display_name"`
 	Services    map[db.ServiceType]ServiceInfoReport `json:"services"`
 }
 
 // ServiceInfoReport contains details about a service.
-// it appears in [AreaInfoReport]
+// It appears in [AreaInfoReport].
 type ServiceInfoReport struct {
 	Version     int64                                      `json:"version"`
 	DisplayName string                                     `json:"display_name"`
@@ -35,14 +35,14 @@ type ServiceInfoReport struct {
 }
 
 // CategoryInfoReport groups resources into categories, which are defined in the config.
-// it appears in [ServiceInfoReport]
+// It appears in [ServiceInfoReport].
 type CategoryInfoReport struct {
 	DisplayName string                                     `json:"display_name"`
 	Resources   map[liquid.ResourceName]ResourceInfoReport `json:"resources"`
 }
 
 // ResourceInfoReport contains details about a resource.
-// it appears in [CategoryInfoReport]
+// It appears in [CategoryInfoReport].
 type ResourceInfoReport struct {
 	DisplayName      string                          `json:"display_name"`
 	Unit             liquid.Unit                     `json:"unit,omitzero"`
