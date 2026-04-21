@@ -174,6 +174,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	services := p.Cluster.ServiceInfoCache.GetServices()
 	rates := p.Cluster.ServiceInfoCache.GetRates()
+	categories := p.Cluster.ServiceInfoCache.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
@@ -216,6 +217,10 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 			}
 			category := liquid.CategoryName(serviceType)
 			categoryDisplayName := service.DisplayName
+			if categoryID, exists := rate.CategoryID.Unpack(); exists {
+				category = categories[categoryID].Name
+				categoryDisplayName = categories[categoryID].DisplayName
+			}
 			if _, exists := serviceReport.Categories[category]; !exists {
 				serviceReport.Categories[category] = ratesv2.CategoryInfoReport{
 					DisplayName: categoryDisplayName,

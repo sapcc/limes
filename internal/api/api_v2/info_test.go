@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"testing"
 
+	. "github.com/majewsky/gg/option"
+
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
@@ -139,7 +141,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 func TestV2RatesInfoAPI(t *testing.T) {
 	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
 	serviceInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
-		"objects:create":    {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:create":    {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 		"objects:delete":    {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:update":    {DisplayName: "Object Updates", Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:unlimited": {DisplayName: "Object Unlimited Operations", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},

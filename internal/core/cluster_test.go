@@ -93,7 +93,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 	}
 
 	s := test.NewSetup(t,
@@ -119,7 +119,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (2, 2, 'in_global_and_project', 1, 'flat', 'unshared/in_global_and_project');
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE, 'unshared/in_liquid_and_project');
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (4, 2, 'only_in_global', 1, 'flat', 'unshared/only_in_global');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid', 1);
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (6, 2, 'only_in_project', 1, 'flat', 'unshared/only_in_project');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
@@ -166,6 +166,31 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		UPDATE resources SET liquid_version = 4 WHERE id = 5 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 3;
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 4, 'Shared');
+	`)
+
+	// now we want to do an update of some categories:
+	newCategories := srvInfoUnshared.Categories
+	newCategories["bar_category"] = liquid.CategoryInfo{
+		DisplayName: "Foo Category",
+	}
+	srvInfoUnshared.Categories = newCategories
+	srvInfoUnshared.Rates["in_global_and_liquid"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))}
+	srvInfoUnshared.Rates["only_in_liquid"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("bar_category"))}
+	srvInfoUnshared.Version = 2
+	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
+	generateNewClusterWithPersistingServiceInfo(t, s, true)
+	tr.DBChanges().AssertEqual(`
+		INSERT INTO categories (id, name, display_name) VALUES (2, 'bar_category', 'Foo Category');
+		UPDATE rates SET liquid_version = 2, category_id = 1 WHERE id = 1 AND service_id = 2 AND name = 'in_global_and_liquid' AND path = 'unshared/in_global_and_liquid';
+		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'in_global_and_project' AND path = 'unshared/in_global_and_project';
+		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'in_liquid_and_project' AND path = 'unshared/in_liquid_and_project';
+		UPDATE rates SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'only_in_global' AND path = 'unshared/only_in_global';
+		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
+		UPDATE rates SET liquid_version = 2 WHERE id = 6 AND service_id = 2 AND name = 'only_in_project' AND path = 'unshared/only_in_project';
+		UPDATE resources SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
+		UPDATE resources SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'unshared/things';
+		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 2, 'Unshared');
 	`)
 }
 

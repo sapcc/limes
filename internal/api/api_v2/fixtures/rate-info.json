@@ -10,13 +10,6 @@
             "first": {
               "display_name": "First",
               "rates": {
-                "objects:create": {
-                  "display_name": "Object Creations",
-                  "topology": "flat",
-                  "has_usage": true,
-                  "project_default_limit": 5,
-                  "project_default_window": "1m"
-                },
                 "objects:delete": {
                   "display_name": "Object Deletions",
                   "unit": "MiB",
@@ -35,6 +28,18 @@
                   "has_usage": true,
                   "project_default_limit": 2,
                   "project_default_window": "1s"
+                }
+              }
+            },
+            "foo_category": {
+              "display_name": "Foo Category",
+              "rates": {
+                "objects:create": {
+                  "display_name": "Object Creations",
+                  "topology": "flat",
+                  "has_usage": true,
+                  "project_default_limit": 5,
+                  "project_default_window": "1m"
                 }
               }
             }
