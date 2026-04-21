@@ -23,7 +23,7 @@ import (
 
 // serviceNotifyChannel is the PostgreSQL NOTIFY channel name used to signal
 // that a service's data has changed and the cache should be invalidated.
-const serviceNotifyChannel = "limes_service_update"
+const serviceNotifyChannel = "limitas_service_update"
 
 // ServiceInfoCache is the interface to the database to retrieve all data,
 // which was previously populated from the liquid.ServiceInfo. The principle

@@ -46,7 +46,7 @@ var sqlMigrations = map[string]string{
 						SELECT s.type FROM services s
 							WHERE s.type = ANY(ARRAY[NEW.type, OLD.type])
 					LOOP
-						PERFORM pg_notify('limes_service_update', service_type);
+						PERFORM pg_notify('limitas_service_update', service_type);
 					END LOOP;
 
 				ELSIF TG_TABLE_NAME = 'resources' OR TG_TABLE_NAME = 'rates' THEN
@@ -54,7 +54,7 @@ var sqlMigrations = map[string]string{
 						SELECT s.type FROM services s
 							WHERE s.id = ANY(ARRAY[NEW.service_id, OLD.service_id])
 					LOOP
-						PERFORM pg_notify('limes_service_update', service_type);
+						PERFORM pg_notify('limitas_service_update', service_type);
 					END LOOP;
 
 				ELSIF TG_TABLE_NAME = 'az_resources' THEN
@@ -63,7 +63,7 @@ var sqlMigrations = map[string]string{
 							JOIN resources r ON r.service_id = s.id
 							WHERE r.id = ANY(ARRAY[NEW.resource_id, OLD.resource_id])
 					LOOP
-						PERFORM pg_notify('limes_service_update', service_type);
+						PERFORM pg_notify('limitas_service_update', service_type);
 					END LOOP;
 				END IF;
 
