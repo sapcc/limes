@@ -94,4 +94,10 @@ var sqlMigrations = map[string]string{
 		DROP TRIGGER IF EXISTS services_notify_update ON services;
 		DROP FUNCTION IF EXISTS notify_service_update;
 	`,
+	`077_rate_category.up.sql`: `
+		ALTER TABLE rates ADD COLUMN category_id BIGINT DEFAULT NULL REFERENCES categories ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
+	`,
+	`077_rate_category.down.sql`: `
+		ALTER TABLE rates DROP COLUMN category_id;
+	`,
 }

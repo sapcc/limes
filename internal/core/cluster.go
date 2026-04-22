@@ -480,6 +480,8 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				}
 			}
 			res.DisplayName = serviceInfo.Resources[res.Name].DisplayName
+			res.CategoryID = options.Map(serviceInfo.Resources[res.Name].Category,
+				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			res.Unit = serviceInfo.Resources[res.Name].Unit
 			res.Topology = serviceInfo.Resources[res.Name].Topology
 			res.HasCapacity = serviceInfo.Resources[res.Name].HasCapacity
@@ -671,10 +673,13 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			case projectLimitExists:
 				unit = projectLimitUnit
 			}
+			categoryID := options.Map(serviceInfo.Rates[rateName].Category,
+				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Rate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
 				DisplayName:   serviceInfo.Rates[rateName].DisplayName,
+				CategoryID:    categoryID,
 				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
 				LiquidVersion: serviceInfo.Version,
 				Unit:          unit,
@@ -694,6 +699,8 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			newUnit := rate.Unit
 			rate.LiquidVersion = serviceInfo.Version
 			rate.DisplayName = serviceInfo.Rates[rate.Name].DisplayName
+			rate.CategoryID = options.Map(serviceInfo.Rates[rate.Name].Category,
+				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			rate.Topology = liquid.FlatTopology
 			rate.HasUsage = false
 			switch {

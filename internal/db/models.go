@@ -76,10 +76,11 @@ type AZResource struct {
 
 // Rate contains a record from the `rates` table.
 type Rate struct {
-	ID          RateID          `db:"id"`
-	ServiceID   ServiceID       `db:"service_id"`
-	Name        liquid.RateName `db:"name"`
-	DisplayName string          `db:"display_name"`
+	ID          RateID             `db:"id"`
+	ServiceID   ServiceID          `db:"service_id"`
+	Name        liquid.RateName    `db:"name"`
+	DisplayName string             `db:"display_name"`
+	CategoryID  Option[CategoryID] `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/ratename"; mostly intended for manual lookup
 	Path RatePath `db:"path"`
 	// following fields get filled from liquid.ServiceInfo
