@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"slices"
 	"sync"
 	"time"
@@ -156,13 +155,11 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
 // usage in all available AZs, even when the project in question does not have
 // usage in every AZ.
+//
+// The `prevSerializedState` holds the `result.SerializedState` value from the previous call for the same project.
+// This state is persisted in the Limes DB between calls, and not otherwise interpreted by the core application in any way.
+// The liquid can use this field to carry state between Scrape() calls, esp. to detect and handle counter resets in the backend.
 func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, err error) {
-	// shortcut for liquids that only have rates and no resources
-	lsi := l.ServiceInfo()
-	if len(lsi.Resources) == 0 && len(lsi.UsageMetricFamilies) == 0 {
-		return liquid.ServiceUsageReport{}, nil
-	}
-
 	req := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata, prevSerializedState)
 	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
@@ -350,58 +347,6 @@ func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject
 	}
 
 	return l.LiquidClient.PutQuota(ctx, string(project.UUID), req)
-}
-
-// ScrapeRates queries the backend service for the usage data of all rates.
-//
-// The `allAZs` list comes from the Limes config and should be used when
-// building AZ-aware usage data, to ensure that each AZ-aware resource reports
-// usage in all available AZs, even when the project in question does not have
-// usage in every AZ.
-//
-// The serializedState return value is persisted in the Limes DB and returned
-// back to the next ScrapeRates() call for the same project in the
-// prevSerializedState argument. Besides that, this field is not interpreted
-// by the core application in any way. The LiquidConnection can use this
-// field to carry state between ScrapeRates() calls, esp. to detect and handle
-// counter resets in the backend.
-func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
-	// shortcut for liquids that do not have rates
-	lsi := l.ServiceInfo()
-	if len(lsi.Rates) == 0 {
-		return nil, "", nil
-	}
-
-	req := BuildServiceUsageRequest(project, allAZs, lsi.UsageReportNeedsProjectMetadata, prevSerializedState)
-	resp, err := l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
-	if err != nil {
-		return nil, "", err
-	}
-
-	_, err = l.compareServiceInfoVersions(ctx, resp.InfoVersion)
-	if err != nil {
-		return nil, "", err
-	}
-
-	result = make(map[liquid.RateName]*big.Int)
-	for rateName := range lsi.Rates {
-		rateReport := resp.Rates[rateName]
-		if rateReport == nil {
-			return nil, "", fmt.Errorf("missing report for rate %q", rateName)
-		}
-
-		// TODO: add AZ-awareness for rate usage in Limes
-		// (until this is done, we take the sum over all AZs here)
-		result[rateName] = &big.Int{}
-		for _, azReport := range rateReport.PerAZ {
-			if usage, ok := azReport.Usage.Unpack(); ok {
-				var x big.Int
-				result[rateName] = x.Add(result[rateName], usage)
-			}
-		}
-	}
-
-	return result, string(resp.SerializedState), nil
 }
 
 // CapacityScrapeBackchannel is a callback interface that is provided to
