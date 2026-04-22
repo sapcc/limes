@@ -156,35 +156,30 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	}
 	logg.Debug("scraping %s resources for %s/%s", service.Type, dbDomain.Name, dbProject.Name)
 
-	// perform resource scrape
-	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project, projectService)
-	if err != nil {
-		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
-		task.Err = gophercloudext.UnpackError(err)
-		return c.recordScrapeError(task, dbProject, dbDomain, project)
-	}
-
-	// perform rate scrape
-	rateData, serializedScrapeState, err := connection.ScrapeRates(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
+	// perform scrape
+	report, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project, projectService)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = gophercloudext.UnpackError(err)
 		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
+	rateData, serializedScrapeState := extractRateData(report)
 
 	// collect additional DB records (it is important to do this step after the
 	// scrape, because the scrape might observe a new ServiceInfo version)
 	maybeServiceInfo, err := c.Cluster.InfoForService(service.Type)
 	if err != nil {
 		task.Err = fmt.Errorf("while getting ServiceInfo for %q: %w", service.Type, err)
+		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
 	serviceInfo, ok := maybeServiceInfo.Unpack()
 	if !ok {
 		task.Err = fmt.Errorf("no such service type: %q", service.Type)
+		return c.recordScrapeError(task, dbProject, dbDomain, project)
 	}
 
 	// write resource results
-	err = c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serviceInfo)
+	err = c.writeResourceScrapeResult(dbDomain, dbProject, task, report, serviceInfo)
 	if err != nil {
 		return fmt.Errorf("while writing resource results into DB: %w", err)
 	}
@@ -232,15 +227,33 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 }
 
 func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, error) {
-	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
+	report, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
-	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().UsageMetricFamilies, resourceData.Metrics)
+	serializedMetrics, err := liquidSerializeMetrics(connection.ServiceInfo().UsageMetricFamilies, report.Metrics)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
-	return resourceData, serializedMetrics, nil
+	return report, serializedMetrics, nil
+}
+
+func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateName]*big.Int, serializedState string) {
+	result = make(map[liquid.RateName]*big.Int, len(report.Rates))
+
+	for rateName, rateReport := range report.Rates {
+		// TODO: add AZ-awareness for rate usage in Limes
+		// (until this is done, we take the sum over all AZs here)
+		result[rateName] = &big.Int{}
+		for _, azReport := range rateReport.PerAZ {
+			if usage, ok := azReport.Usage.Unpack(); ok {
+				var x big.Int
+				result[rateName] = x.Add(result[rateName], usage)
+			}
+		}
+	}
+
+	return result, string(report.SerializedState)
 }
 
 func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport, serviceInfo liquid.ServiceInfo) error {
