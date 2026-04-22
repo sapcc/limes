@@ -98,6 +98,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 
 	s := test.NewSetup(t,
 		test.WithConfig(testConfigJSON),
+		test.WithInitialDiscovery,
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
 		test.WithMockLiquidClient("shared", srvInfoShared),
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),
@@ -192,6 +193,33 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 2, 'Unshared');
 	`)
+
+	// When we remove a resource for which commitments exist, we want to fail
+	// softly so that the startup is not completely interrupted. Instead, every
+	// subsequent scrape will fail from there.
+	sharedThingsAny := s.GetAZResourceID("shared", "things", "any")
+	berlin := s.GetProjectID("berlin")
+	s.MustDBInsert(&db.ProjectCommitment{
+		UUID:                s.Collector.GenerateProjectCommitmentUUID(),
+		ProjectID:           berlin,
+		AZResourceID:        sharedThingsAny,
+		Amount:              10,
+		Duration:            must.Return(limesresources.ParseCommitmentDuration("10 days")),
+		CreatedAt:           s.Clock.Now(),
+		CreatorUUID:         "dummy",
+		CreatorName:         "dummy",
+		ConfirmedAt:         Some(s.Clock.Now()),
+		ExpiresAt:           s.Clock.Now().AddDate(1, 0, 0),
+		CreationContextJSON: must.Return(json.Marshal(db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate})),
+		Status:              liquid.CommitmentStatusConfirmed,
+	})
+	s.LiquidClients["shared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		delete(info.Resources, "things")
+		info.Version = 5
+	})
+	tr.DBChanges().Ignore()
+	generateNewClusterWithPersistingServiceInfo(t, s, true)
+	tr.DBChanges().AssertEqual("")
 }
 
 func Test_ClusterServiceInfoUnitsChange(t *testing.T) {

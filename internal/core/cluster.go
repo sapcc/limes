@@ -134,6 +134,13 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 			continue
 		}
 		err = conn.Init(ctx, client)
+		if errors.Is(err, ErrLeftoverCommitment) {
+			// we just log this error here and ignore it, so that the startup does not fail
+			// this will produce errors on every scrape subsequently (as if the collector was
+			// already running) and those will trigger alerts subsequently.
+			logg.Error(`failed to initialize service %s: %v`, serviceType, err)
+			continue
+		}
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", serviceType, gophercloudext.UnpackError(err))
 		}
@@ -344,8 +351,33 @@ func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, service
 	return serviceInfo.Rates
 }
 
+// ErrLeftoverCommitment is a custom error to define when a leftover commitment
+// prevents deletion of a service, resource or az_resource.
+var ErrLeftoverCommitment = errors.New("ErrLeftoverCommitment")
+
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions for working with ServiceInfo and DB
+
+var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+			SELECT count(*)
+			FROM project_commitments pc
+			JOIN az_resources azr
+			ON pc.az_resource_id = azr.id 
+			WHERE path LIKE $1
+			AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`))
+
+func generateDeleteFunc[T any](dbm *gorp.DbMap, getAZResourcePathPattern func(o T) string) func(T) error {
+	return func(o T) error {
+		count, err := dbm.SelectInt(deleteFuncCheckQuery, getAZResourcePathPattern(o))
+		if err != nil {
+			return fmt.Errorf("cannot get project commitments count: %w", err)
+		}
+		if count > 0 {
+			return ErrLeftoverCommitment
+		}
+		return nil
+	}
+}
 
 // SaveServiceInfoToDB ensures consistency of tables services, resources, az_resources
 // and rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
@@ -407,6 +439,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			service.QuotaUpdateNeedsProjectMetadata = serviceInfo.QuotaUpdateNeedsProjectMetadata
 			return nil
 		},
+		PreDelete: Some(generateDeleteFunc[db.Service](dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
 	}
 	dbServices, err = serviceUpdate.Execute(tx)
 	if err != nil {
@@ -495,6 +528,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			res.HandlesCommitments = serviceInfo.Resources[res.Name].HandlesCommitments
 			return nil
 		},
+		PreDelete: Some(generateDeleteFunc[db.Resource](dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
 	}
 	dbResources, err = resourceUpdate.Execute(tx)
 	if err != nil {
@@ -612,6 +646,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				// we don't know more than the existence of the AZ, so we don't update anything
 				return nil
 			},
+			PreDelete: Some(generateDeleteFunc[db.AZResource](dbm, func(azr db.AZResource) string { return azr.Path.String() })),
 		}
 		_, err = setUpdate.Execute(tx)
 		if err != nil {
