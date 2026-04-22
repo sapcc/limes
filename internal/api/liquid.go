@@ -51,9 +51,10 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 }
 
 var getServiceUsageRequestAttributesQuery = sqlext.SimplifyWhitespace(`
-	SELECT usage_report_needs_project_metadata
-	  FROM services
-	 WHERE type = $1
+	SELECT s.usage_report_needs_project_metadata, ps.serialized_scrape_state
+	  FROM project_services ps
+	  JOIN services s ON ps.service_id = s.id
+	  WHERE ps.project_id = $1 AND s.type = $2
 `)
 
 // GetServiceUsageRequest handles GET /admin/liquid/service-usage-request?service_type=:type&project_id=:id.
@@ -94,9 +95,12 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var usageReportNeedsProjectMetadata bool
-	err = p.DB.QueryRow(getServiceUsageRequestAttributesQuery, serviceType).
-		Scan(&usageReportNeedsProjectMetadata)
+	var (
+		usageReportNeedsProjectMetadata bool
+		prevSerializedState             string
+	)
+	err = p.DB.QueryRow(getServiceUsageRequestAttributesQuery, dbProject.ID, serviceType).
+		Scan(&usageReportNeedsProjectMetadata, &prevSerializedState)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "unknown service type", http.StatusBadRequest)
 		return
@@ -104,6 +108,6 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	serviceUsageRequest := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, usageReportNeedsProjectMetadata)
+	serviceUsageRequest := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, usageReportNeedsProjectMetadata, prevSerializedState)
 	respondwith.JSON(w, http.StatusOK, serviceUsageRequest)
 }

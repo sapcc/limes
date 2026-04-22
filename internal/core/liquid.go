@@ -156,14 +156,14 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // building AZ-aware usage data, to ensure that each AZ-aware resource reports
 // usage in all available AZs, even when the project in question does not have
 // usage in every AZ.
-func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result liquid.ServiceUsageReport, err error) {
+func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, err error) {
 	// shortcut for liquids that only have rates and no resources
 	lsi := l.ServiceInfo()
 	if len(lsi.Resources) == 0 && len(lsi.UsageMetricFamilies) == 0 {
 		return liquid.ServiceUsageReport{}, nil
 	}
 
-	req := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata)
+	req := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata, prevSerializedState)
 	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
@@ -330,8 +330,11 @@ func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs [
 // BuildServiceUsageRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/projects/:uuid/report-usage. In order to be reusable for exposing an API
 // which prints the request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone, usageReportNeedsProjectMetadata bool) liquid.ServiceUsageRequest {
-	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
+func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone, usageReportNeedsProjectMetadata bool, prevSerializedState string) liquid.ServiceUsageRequest {
+	req := liquid.ServiceUsageRequest{
+		AllAZs:          allAZs,
+		SerializedState: json.RawMessage(prevSerializedState),
+	}
 	if usageReportNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
@@ -369,14 +372,7 @@ func (l *LiquidConnection) ScrapeRates(ctx context.Context, project KeystoneProj
 		return nil, "", nil
 	}
 
-	req := liquid.ServiceUsageRequest{
-		AllAZs:          allAZs,
-		SerializedState: json.RawMessage(prevSerializedState),
-	}
-	if lsi.UsageReportNeedsProjectMetadata {
-		req.ProjectMetadata = Some(project.ForLiquid())
-	}
-
+	req := BuildServiceUsageRequest(project, allAZs, lsi.UsageReportNeedsProjectMetadata, prevSerializedState)
 	resp, err := l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
 		return nil, "", err

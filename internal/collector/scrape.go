@@ -157,7 +157,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	logg.Debug("scraping %s resources for %s/%s", service.Type, dbDomain.Name, dbProject.Name)
 
 	// perform resource scrape
-	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project)
+	resourceData, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project, projectService)
 	if err != nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 		task.Err = gophercloudext.UnpackError(err)
@@ -231,8 +231,8 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 	return fmt.Errorf("during scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject) (liquid.ServiceUsageReport, []byte, error) {
-	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
+func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, error) {
+	resourceData, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, nil, err
 	}
