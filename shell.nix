@@ -12,7 +12,7 @@ mkShell {
     go_1_26
     golangci-lint
     gotools # goimports
-    postgresql_17
+    postgresql_18
     renovate
     reuse
     typos
