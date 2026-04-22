@@ -67,13 +67,13 @@ const (
 				"area": "shared",
 				"rate_limits": {
 					"global": [
-						{"name": "service/shared/objects:create", "limit": 5000, "window": "1s"}
+						{"name": "objects:create", "limit": 5000, "window": "1s"}
 					],
 					"project_default": [
-						{"name": "service/shared/objects:create", "limit": 5, "window": "1m"},
-						{"name": "service/shared/objects:delete", "limit": 1, "window": "1m", "unit": "MiB"},
-						{"name": "service/shared/objects:update", "limit": 2, "window": "1s"},
-						{"name": "service/shared/objects:read/list", "limit": 3, "window": "1s"}
+						{"name": "objects:create", "limit": 5, "window": "1m"},
+						{"name": "objects:delete", "limit": 1, "window": "1m", "unit": "MiB"},
+						{"name": "objects:update", "limit": 2, "window": "1s"},
+						{"name": "objects:read", "limit": 3, "window": "1s"}
 					]
 				},
 				"commitment_behavior_per_resource": [
@@ -90,9 +90,9 @@ const (
 				"area": "unshared",
 				"rate_limits": {
 					"project_default": [
-						{"name": "service/unshared/instances:create", "limit": 5, "window": "1m"},
-						{"name": "service/unshared/instances:delete", "limit": 1, "window": "1m"},
-						{"name": "service/unshared/instances:update", "limit": 2, "window": "1s"}
+						{"name": "instances:create", "limit": 5, "window": "1m"},
+						{"name": "instances:delete", "limit": 1, "window": "1m"},
+						{"name": "instances:update", "limit": 2, "window": "1s"}
 					]
 				}
 			}
@@ -113,23 +113,23 @@ func setupTest(t *testing.T) test.Setup {
 
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"service/shared/objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
-		"service/shared/objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"service/shared/objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
-		"service/shared/objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"service/unshared/instances:create": {Topology: liquid.FlatTopology, HasUsage: true},
-		"service/unshared/instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
-		"service/unshared/instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:create": {Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	s := test.NewSetup(t,
 		test.WithConfig(testConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfoShared),
 		test.WithPersistedServiceInfo("unshared", srvInfoUnshared),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// shorthands
@@ -157,13 +157,13 @@ func setupTest(t *testing.T) test.Setup {
 	unsharedThingsAny := s.GetAZResourceID("unshared", "things", limes.AvailabilityZoneAny)
 	unsharedThingsTotal := s.GetAZResourceID("unshared", "things", liquid.AvailabilityZoneTotal)
 
-	sharedObjectsCreate := s.GetRateID("shared", "service/shared/objects:create")
-	sharedObjectsDelete := s.GetRateID("shared", "service/shared/objects:delete")
-	sharedObjectsUpdate := s.GetRateID("shared", "service/shared/objects:update")
-	sharedObjectsUnlimited := s.GetRateID("shared", "service/shared/objects:unlimited")
-	unsharedInstancesCreate := s.GetRateID("unshared", "service/unshared/instances:create")
-	unsharedInstancesDelete := s.GetRateID("unshared", "service/unshared/instances:delete")
-	unsharedInstancesUpdate := s.GetRateID("unshared", "service/unshared/instances:update")
+	sharedObjectsCreate := s.GetRateID("shared", "objects:create")
+	sharedObjectsDelete := s.GetRateID("shared", "objects:delete")
+	sharedObjectsUpdate := s.GetRateID("shared", "objects:update")
+	sharedObjectsUnlimited := s.GetRateID("shared", "objects:unlimited")
+	unsharedInstancesCreate := s.GetRateID("unshared", "instances:create")
+	unsharedInstancesDelete := s.GetRateID("unshared", "instances:delete")
+	unsharedInstancesUpdate := s.GetRateID("unshared", "instances:update")
 
 	// fill `services`
 	query := `UPDATE services SET scraped_at = $1, next_scrape_at = $2 WHERE type = $3`
@@ -334,7 +334,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.MustDBExec(`UPDATE project_services SET scraped_at = $1, checked_at = $1`, time.Unix(11, 0))
@@ -757,7 +757,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 500, // TODO: should be 403 (I don't care about fixing this in v1; v2 will be structured differently to allow for a fix)
 		ExpectBody: assert.StringData(
-			"no such rate: shared/service/shared/notexistent:bogus\n",
+			"no such rate: shared/notexistent:bogus\n",
 		),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
@@ -766,7 +766,7 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"name":   "service/shared/notexistent:bogus",
+								"name":   "notexistent:bogus",
 								"limit":  1,
 								"window": "1h",
 							},
@@ -788,14 +788,14 @@ func Test_ProjectOperations(t *testing.T) {
 		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`,
-		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
+		"berlin", "shared", "notexistent:bogus").Scan(&actualLimit, &actualWindow)
 	// There shouldn't be anything in the DB.
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected error %v but got %v", sql.ErrNoRows, err)
 	}
 
 	// Attempt setting a rate limit for which a default exists should be successful.
-	rateName := "service/shared/objects:read/list"
+	rateName := "objects:read"
 	expectedLimit := uint64(100)
 	expectedWindow := 1 * limesrates.WindowSeconds
 	makeRequest := func(name string, limit uint64, window limesrates.Window) assert.JSONObject {
@@ -922,7 +922,7 @@ func Test_EmptyProjectList(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// This warrants its own unit test since the rendering of empty project lists
@@ -946,7 +946,7 @@ func Test_EmptyProjectList(t *testing.T) {
 func Test_LargeProjectList(t *testing.T) {
 	// to test the behavior of the project list endpoint for large lists,
 	// set up a config with a large number of projects (we do it via the discovery config
-	// in order to leverage test.WithInitialDiscover and test.WithEmptyRecordsAsNeeded)
+	// in order to leverage test.WithInitialDiscover and test.WithEmptyResourceRecordsAsNeeded)
 	projectUUIDs := make([]liquid.ProjectUUID, 100)
 	projectsAsConfigured := make([]core.KeystoneProject, len(projectUUIDs))
 	for idx := range projectUUIDs {
@@ -983,10 +983,10 @@ func Test_LargeProjectList(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	// fill various fields that `test.WithEmptyRecordsAsNeeded` initializes empty with reasonably plausible dummy values
+	// fill various fields that `test.WithEmptyResourceRecordsAsNeeded` initializes empty with reasonably plausible dummy values
 	// (all those queries take an index into the project list as $1 and the project UUID as $2)
 	queries := []string{
 		`UPDATE project_services SET scraped_at = TO_TIMESTAMP($1) AT LOCAL WHERE project_id = (SELECT id FROM projects WHERE uuid = $2)`,
@@ -1108,7 +1108,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		}`),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -1242,7 +1242,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -1419,7 +1419,7 @@ func TestResourceRenaming(t *testing.T) {
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	// helper function that makes one GET query per structural level and checks
@@ -1686,7 +1686,7 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		test.WithConfig(testAZSeparatedConfigJSON),
 		test.WithPersistedServiceInfo("shared", srvInfo),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.MustDBExec(`

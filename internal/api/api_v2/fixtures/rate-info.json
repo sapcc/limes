@@ -1,0 +1,56 @@
+{
+  "service_areas": {
+    "first": {
+      "display_name": "First",
+      "services": {
+        "first": {
+          "version": 1,
+          "display_name": "First",
+          "categories": {
+            "first": {
+              "display_name": "First",
+              "rates": {
+                "objects:create": {
+                  "display_name": "Object Creations",
+                  "topology": "flat",
+                  "has_usage": true,
+                  "project_default_limit": 5,
+                  "project_default_window": "1m"
+                },
+                "objects:delete": {
+                  "display_name": "Object Deletions",
+                  "unit": "MiB",
+                  "topology": "flat",
+                  "has_usage": true
+                },
+                "objects:unlimited": {
+                  "display_name": "Object Unlimited Operations",
+                  "unit": "KiB",
+                  "topology": "flat",
+                  "has_usage": true
+                },
+                "objects:update": {
+                  "display_name": "Object Updates",
+                  "topology": "flat",
+                  "has_usage": true,
+                  "project_default_limit": 2,
+                  "project_default_window": "1s"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "second": {
+      "display_name": "Second",
+      "services": {
+        "second": {
+          "version": 1,
+          "display_name": "Second",
+          "categories": {}
+        }
+      }
+    }
+  }
+}

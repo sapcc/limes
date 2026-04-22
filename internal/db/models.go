@@ -41,7 +41,7 @@ type Resource struct {
 	DisplayName string              `db:"display_name"`
 	CategoryID  Option[CategoryID]  `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
-	Path string `db:"path"`
+	Path ResourcePath `db:"path"`
 
 	// following fields get filled from liquid.ServiceInfo
 	LiquidVersion       int64           `db:"liquid_version"`
@@ -60,7 +60,7 @@ type AZResource struct {
 	ResourceID       ResourceID             `db:"resource_id"`
 	AvailabilityZone limes.AvailabilityZone `db:"az"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
-	Path string `db:"path"`
+	Path AZResourcePath `db:"path"`
 
 	RawCapacity uint64         `db:"raw_capacity"`
 	Usage       Option[uint64] `db:"usage"`
@@ -81,7 +81,7 @@ type Rate struct {
 	Name        liquid.RateName `db:"name"`
 	DisplayName string          `db:"display_name"`
 	// a unique identifier for this record in the form "servicetype/ratename"; mostly intended for manual lookup
-	Path string `db:"path"`
+	Path RatePath `db:"path"`
 	// following fields get filled from liquid.ServiceInfo
 	LiquidVersion int64           `db:"liquid_version"`
 	Unit          liquid.Unit     `db:"unit"`

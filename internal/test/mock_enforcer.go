@@ -30,6 +30,12 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return false
 	}
 	fields := strings.Split(rule, ":")
+	// for the v2 api we are introducing a new scheme of v2:scope:endpoint
+	// so we don't check any action for this case
+	if len(fields) == 3 && fields[0] == "v2" {
+		return e.allowScope(fields[1])
+	}
+	// v1 API
 	if len(fields) != 2 {
 		return false
 	}

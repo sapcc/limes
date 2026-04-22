@@ -22,5 +22,8 @@
     "cluster:show_basic": "role:admin or role:member or role:resource_admin or role:resource_viewer",
     "cluster:show_subcapacity": "compute:%(service)s and ram:%(resource)s",
     "cluster:show_errors": "rule:cluster_admin",
-    "cluster:edit": "rule:cluster_admin"
+    "cluster:edit": "rule:cluster_admin",
+    "v2:cluster:info": "rule:cluster_admin",
+    "v2:domain:info": "rule:domain_viewer",
+    "v2:project:info": "rule:project_viewer"
 }

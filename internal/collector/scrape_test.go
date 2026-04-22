@@ -132,7 +132,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		ServiceID:     1,
 		Name:          "xAnotherRate",
 		DisplayName:   "X Another Rate",
-		Path:          "unittest/xAnotherRate",
+		Path:          db.RatePath{ServiceType: "unittest", RateName: "xAnotherRate"},
 		LiquidVersion: 1,
 	})
 	s.MustDBInsert(&db.ProjectRate{

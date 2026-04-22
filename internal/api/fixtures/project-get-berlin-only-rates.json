@@ -9,12 +9,12 @@
         "area": "shared",
         "rates": [
           {
-            "name": "service/shared/objects:create",
+            "name": "objects:create",
             "limit": 5,
             "window": "1m"
           },
           {
-            "name": "service/shared/objects:delete",
+            "name": "objects:delete",
             "unit": "MiB",
             "limit": 2,
             "window": "1m",
@@ -23,12 +23,12 @@
             "usage_as_bigint": "23456"
           },
           {
-            "name": "service/shared/objects:read/list",
+            "name": "objects:read",
             "limit": 3,
             "window": "1s"
           },
           {
-            "name": "service/shared/objects:update",
+            "name": "objects:update",
             "limit": 2,
             "window": "1m",
             "default_limit": 2,
@@ -42,12 +42,12 @@
         "area": "unshared",
         "rates": [
           {
-            "name": "service/unshared/instances:create",
+            "name": "instances:create",
             "limit": 5,
             "window": "1m"
           },
           {
-            "name": "service/unshared/instances:delete",
+            "name": "instances:delete",
             "limit": 2,
             "window": "1m",
             "default_limit": 1,
@@ -55,7 +55,7 @@
             "usage_as_bigint": "12345"
           },
           {
-            "name": "service/unshared/instances:update",
+            "name": "instances:update",
             "limit": 2,
             "window": "1m",
             "default_limit": 2,

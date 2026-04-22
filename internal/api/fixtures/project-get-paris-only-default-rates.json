@@ -9,23 +9,23 @@
         "area": "shared",
         "rates": [
           {
-            "name": "service/shared/objects:create",
+            "name": "objects:create",
             "limit": 5,
             "window": "1m"
           },
           {
-            "name": "service/shared/objects:delete",
+            "name": "objects:delete",
             "unit": "MiB",
             "limit": 1,
             "window": "1m"
           },
           {
-            "name": "service/shared/objects:read/list",
+            "name": "objects:read",
             "limit": 3,
             "window": "1s"
           },
           {
-            "name": "service/shared/objects:update",
+            "name": "objects:update",
             "limit": 2,
             "window": "1s"
           }
@@ -36,17 +36,17 @@
         "area": "unshared",
         "rates": [
           {
-            "name": "service/unshared/instances:create",
+            "name": "instances:create",
             "limit": 5,
             "window": "1m"
           },
           {
-            "name": "service/unshared/instances:delete",
+            "name": "instances:delete",
             "limit": 1,
             "window": "1m"
           },
           {
-            "name": "service/unshared/instances:update",
+            "name": "instances:update",
             "limit": 2,
             "window": "1s"
           }

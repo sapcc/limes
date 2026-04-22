@@ -122,7 +122,17 @@ type ServiceRateLimitConfiguration struct {
 	ProjectDefault []RateLimitConfiguration `json:"project_default"`
 }
 
-// GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
+// GetGlobalRateLimit returns the default global-level rate limit for a given target type URI and a boolean whether one was found.
+func (svcRlConfig ServiceRateLimitConfiguration) GetGlobalRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
+	for _, rateCfg := range svcRlConfig.Global {
+		if rateCfg.Name == name {
+			return rateCfg, true
+		}
+	}
+	return RateLimitConfiguration{}, false
+}
+
+// GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and a boolean whether one was found.
 func (svcRlConfig ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {

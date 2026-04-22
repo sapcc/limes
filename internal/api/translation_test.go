@@ -190,7 +190,7 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 		test.WithConfig(testTranslationConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfo),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
@@ -480,7 +480,7 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		test.WithConfig(testTranslationConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfo),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{

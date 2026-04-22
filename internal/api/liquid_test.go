@@ -40,7 +40,7 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 	s = test.NewSetup(t,
 		test.WithConfig(liquidCapacityTestConfigJSON),
 		test.WithInitialDiscovery,
-		test.WithEmptyRecordsAsNeeded,
+		test.WithEmptyResourceRecordsAsNeeded,
 		test.WithPersistedServiceInfo("unittest", srvInfo),
 		test.WithMockLiquidClient("unittest", srvInfo),
 	)

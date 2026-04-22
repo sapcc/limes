@@ -12,6 +12,8 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
+
+	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )
 
 // CommitmentBehavior describes how commitments work for a single resource.
@@ -109,14 +111,25 @@ func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) (errorMsg
 
 // ForAPI converts this behavior into its API representation.
 func (b ScopedCommitmentBehavior) ForAPI(now time.Time) Option[limesresources.CommitmentConfiguration] {
-	if len(b.Durations) == 0 {
-		return None[limesresources.CommitmentConfiguration]()
+	if v2Result, ok := b.ForV2API(now).Unpack(); ok {
+		return Some(limesresources.CommitmentConfiguration{
+			Durations:    v2Result.Durations,
+			MinConfirmBy: v2Result.MinConfirmBy.AsPointer(),
+		})
 	}
-	result := limesresources.CommitmentConfiguration{
+	return None[limesresources.CommitmentConfiguration]()
+}
+
+// ForV2API converts this behavior into its v2-API representation.
+func (b ScopedCommitmentBehavior) ForV2API(now time.Time) Option[resourcesv2.CommitmentConfiguration] {
+	if len(b.Durations) == 0 {
+		return None[resourcesv2.CommitmentConfiguration]()
+	}
+	result := resourcesv2.CommitmentConfiguration{
 		Durations: b.Durations,
 	}
 	if date, ok := b.MinConfirmDate.Unpack(); ok && date.After(now) {
-		result.MinConfirmBy = &limes.UnixEncodedTime{Time: date}
+		result.MinConfirmBy = Some(limes.UnixEncodedTime{Time: date})
 	}
 	return Some(result)
 }
