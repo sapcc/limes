@@ -10,6 +10,7 @@ import (
 
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -30,17 +31,18 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
+	maybeServiceInfo, err := p.Cluster.InfoForService(serviceType)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	if !core.HasService(serviceInfos, serviceType) {
-		http.Error(w, "invalid service type", http.StatusBadRequest)
+	serviceInfo, ok := maybeServiceInfo.Unpack()
+	if !ok {
+		http.Error(w, "unknown service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, serviceType, serviceInfos[serviceType].Resources)
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, serviceType, serviceInfo.Resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -48,26 +50,17 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 	respondwith.JSON(w, http.StatusOK, serviceCapacityRequest)
 }
 
+var getServiceUsageRequestAttributesQuery = sqlext.SimplifyWhitespace(`
+	SELECT usage_report_needs_project_metadata
+	  FROM services
+	 WHERE type = $1
+`)
+
 // GetServiceUsageRequest handles GET /admin/liquid/service-usage-request?service_type=:type&project_id=:id.
 func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/admin/liquid/service-usage-request")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show") {
-		return
-	}
-
-	serviceType := db.ServiceType(r.URL.Query().Get("service_type"))
-	if serviceType == "" {
-		http.Error(w, "missing required parameter: service_type", http.StatusBadRequest)
-		return
-	}
-
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	if !core.HasService(serviceInfos, serviceType) {
-		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
@@ -78,7 +71,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	var dbProject db.Project
-	err = p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
+	err := p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "project not found", http.StatusNotFound)
 		return
@@ -95,10 +88,22 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	domain := core.KeystoneDomainFromDB(dbDomain)
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
-	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, serviceInfos[serviceType].UsageReportNeedsProjectMetadata)
-	if respondwith.ObfuscatedErrorText(w, err) {
+	serviceType := db.ServiceType(r.URL.Query().Get("service_type"))
+	if serviceType == "" {
+		http.Error(w, "missing required parameter: service_type", http.StatusBadRequest)
 		return
 	}
 
+	var usageReportNeedsProjectMetadata bool
+	err = p.DB.QueryRow(getServiceUsageRequestAttributesQuery, serviceType).
+		Scan(&usageReportNeedsProjectMetadata)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "unknown service type", http.StatusBadRequest)
+		return
+	} else if respondwith.ObfuscatedErrorText(w, err) {
+		return
+	}
+
+	serviceUsageRequest := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, usageReportNeedsProjectMetadata)
 	respondwith.JSON(w, http.StatusOK, serviceUsageRequest)
 }

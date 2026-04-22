@@ -163,11 +163,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return liquid.ServiceUsageReport{}, nil
 	}
 
-	req, err := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata)
-	if err != nil {
-		return liquid.ServiceUsageReport{}, err
-	}
-
+	req := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata)
 	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
@@ -334,12 +330,12 @@ func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs [
 // BuildServiceUsageRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/projects/:uuid/report-usage. In order to be reusable for exposing an API
 // which prints the request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone, usageReportNeedsProjectMetadata bool) (liquid.ServiceUsageRequest, error) {
+func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone, usageReportNeedsProjectMetadata bool) liquid.ServiceUsageRequest {
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
 	if usageReportNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
-	return req, nil
+	return req
 }
 
 // SetQuota updates the backend service's quotas for the given project in the
