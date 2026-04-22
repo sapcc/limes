@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -35,16 +34,13 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-
-	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
-	normalizedServiceType := db.ServiceType(strings.TrimPrefix(string(serviceType), "liquid-"))
-	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
+	if !core.HasService(serviceInfos, serviceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, normalizedServiceType, serviceInfos[normalizedServiceType].Resources)
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, serviceType, serviceInfos[serviceType].Resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -70,10 +66,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-
-	// TODO prevent requests with `liquid-$SERVICE_TYPE` when limesctl was adjusted
-	normalizedServiceType := db.ServiceType(strings.TrimPrefix(string(serviceType), "liquid-"))
-	if !core.HasService(serviceInfos, serviceType) && !core.HasService(serviceInfos, normalizedServiceType) {
+	if !core.HasService(serviceInfos, serviceType) {
 		http.Error(w, "invalid service type", http.StatusBadRequest)
 		return
 	}
@@ -102,7 +95,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	domain := core.KeystoneDomainFromDB(dbDomain)
 	project := core.KeystoneProjectFromDB(dbProject, domain)
 
-	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, serviceInfos[normalizedServiceType].UsageReportNeedsProjectMetadata)
+	serviceUsageRequest, err := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, serviceInfos[serviceType].UsageReportNeedsProjectMetadata)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
