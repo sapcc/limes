@@ -100,4 +100,12 @@ var sqlMigrations = map[string]string{
 	`077_rate_category.down.sql`: `
 		ALTER TABLE rates DROP COLUMN category_id;
 	`,
+	`078_add_topology_check.up.sql`: `
+		ALTER TABLE resources ADD CONSTRAINT resources_topology_acceptable_values CHECK (topology IN ('flat', 'az-aware', 'az-separated'));
+		ALTER TABLE rates ADD CONSTRAINT rates_topology_acceptable_values CHECK (topology IN ('flat', 'az-aware', 'az-separated'));
+	`,
+	`078_add_topology_check.down.sql`: `
+		ALTER TABLE resources DROP CONSTRAINT resources_topology_acceptable_values;
+		ALTER TABLE rates DROP CONSTRAINT rates_topology_acceptable_values;
+	`,
 }
