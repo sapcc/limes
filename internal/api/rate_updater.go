@@ -99,7 +99,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 			}
 
 			// only allow setting rate limits for which a default exists
-			defaultRateLimit, exists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(dbRateName)
+			defaultRateLimit, exists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(dbRateName).Unpack()
 			if exists {
 				req.Unit = defaultRateLimit.Unit
 			} else {

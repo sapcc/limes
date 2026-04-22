@@ -154,6 +154,8 @@ type ProjectAZResource struct {
 
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
+	// NOTE: Data metrics v2 currently selects this entire table because it needs basically everything.
+	// If new fields are added later that might be expensive to fetch, consider adjusting dmv2 to select only the fields that it needs.
 	ID            ProjectRateID             `db:"id"`
 	ProjectID     ProjectID                 `db:"project_id"`
 	RateID        RateID                    `db:"rate_id"`

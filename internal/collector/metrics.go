@@ -22,6 +22,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
@@ -412,7 +413,11 @@ func printDataMetrics(w io.Writer, metricSet *dataMetricSet, familyName, familyH
 	if len(metrics) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n", familyName, familyHelp, familyName)
+	metricType := "gauge"
+	if strings.HasSuffix(familyName, "_total") {
+		metricType = "counter"
+	}
+	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s %s\n", familyName, familyHelp, familyName, metricType)
 
 	slices.SortFunc(metrics, func(lhs, rhs dataMetric) int {
 		return strings.Compare(lhs.Labels, rhs.Labels)
@@ -870,14 +875,22 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	//
 	// NOTE 2: Keep metric families ordered by name! Otherwise printDataMetrics() will panic.
 	bw := bufio.NewWriter(w)
+	printDataMetrics(bw, metricSet, "limitas_cluster_rate_global_limit", `The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`)
+	printDataMetrics(bw, metricSet, "limitas_cluster_rate_global_window_seconds", `The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`)
 	printDataMetrics(bw, metricSet, "limitas_cluster_resource_capacity", `Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`)
 	printDataMetrics(bw, metricSet, "limitas_cluster_resource_raw_capacity", `Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`)
+	printDataMetrics(bw, metricSet, "limitas_project_rate_limit", `For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`)
+	printDataMetrics(bw, metricSet, "limitas_project_rate_usage_total", `For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`)
+	printDataMetrics(bw, metricSet, "limitas_project_rate_window_seconds", `For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_allocation", `For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_amount", `For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_expires_at", `For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_physical_usage", `For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_quota", `For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
 	printDataMetrics(bw, metricSet, "limitas_project_resource_usage", `For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
+	printDataMetrics(bw, metricSet, "limitas_rate_default_limit", `The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).`)
+	printDataMetrics(bw, metricSet, "limitas_rate_default_window_seconds", `The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.`)
+	printDataMetrics(bw, metricSet, "limitas_rate_info", `Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`)
 	printDataMetrics(bw, metricSet, "limitas_resource_info", `Info metric for resources. The value is always 1, and information can be found in labels.`)
@@ -903,6 +916,12 @@ var (
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  JOIN az_resources azr ON azr.resource_id = r.id
+	`)
+	// TODO: adjust query once rates.category_id exists
+	dmv2RateInfoQuery = sqlext.SimplifyWhitespace(`
+		SELECT s.type AS service_type, NULL AS category_name, ra.*
+		  FROM services s
+		  JOIN rates ra ON ra.service_id = s.id
 	`)
 	dmv2ProjectInfoQuery = sqlext.SimplifyWhitespace(`
 		SELECT p.id AS project_id, p.name AS project_name, p.uuid AS project_uuid, d.name AS domain_name, d.uuid AS domain_uuid
@@ -1036,6 +1055,62 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		result["limitas_cluster_resource_capacity"] = append(result["limitas_cluster_resource_capacity"], metric)
 	}
 
+	// fetch rate info
+	var rateRecords []struct {
+		ServiceType  db.ServiceType              `db:"service_type"`
+		CategoryName Option[liquid.CategoryName] `db:"category_name"`
+		db.Rate
+	}
+	_, err = d.DB.Select(&rateRecords, dmv2RateInfoQuery)
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2RateInfoQuery: %w", err)
+	}
+	type rateInfo struct {
+		Path           db.RatePath
+		ProjectDefault Option[core.RateLimitConfiguration]
+	}
+	rateInfoByID := make(map[db.RateID]rateInfo, len(rateRecords))
+	for _, record := range rateRecords {
+		srvType, rate := record.ServiceType, record.Rate
+		lcfg, ok := d.Cluster.Config.GetLiquidConfigurationForType(srvType)
+		if !ok {
+			return nil, fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
+		}
+		labels := fmt.Sprintf(`rate=%q,service=%q`, rate.Name, srvType)
+
+		if cfg, ok := lcfg.RateLimits.GetGlobalRateLimit(rate.Name).Unpack(); ok {
+			// emit limitas_cluster_rate_global_limit
+			metric := dataMetric{Labels: labels, Value: float64(cfg.Limit)}
+			result["limitas_cluster_rate_global_limit"] = append(result["limitas_cluster_rate_global_limit"], metric)
+
+			// emit limitas_cluster_rate_global_window_seconds
+			metric = dataMetric{Labels: labels, Value: float64(cfg.Window) / float64(limesrates.WindowSeconds)}
+			result["limitas_cluster_rate_global_window_seconds"] = append(result["limitas_cluster_rate_global_window_seconds"], metric)
+		}
+
+		projectDefault := lcfg.RateLimits.GetProjectDefaultRateLimit(rate.Name)
+		if cfg, ok := projectDefault.Unpack(); ok {
+			// emit limitas_rate_default_limit
+			metric := dataMetric{Labels: labels, Value: float64(cfg.Limit)}
+			result["limitas_rate_default_limit"] = append(result["limitas_rate_default_limit"], metric)
+
+			// emit limitas_rate_default_window_seconds
+			metric = dataMetric{Labels: labels, Value: float64(cfg.Window) / float64(limesrates.WindowSeconds)}
+			result["limitas_rate_default_window_seconds"] = append(result["limitas_rate_default_window_seconds"], metric)
+		}
+
+		// emit limitas_rate_info
+		labels = fmt.Sprintf(`category=%q,display_name=%q,has_limit=%q,has_usage=%q,rate=%q,service=%q,topology=%q,unit=%q`,
+			record.CategoryName.UnwrapOr(liquid.CategoryName(srvType)),
+			rate.DisplayName, strconv.FormatBool(projectDefault.IsSome()), strconv.FormatBool(rate.HasUsage),
+			rate.Name, srvType, rate.Topology, rate.Unit.String(),
+		)
+		metric := dataMetric{Labels: labels, Value: 1}
+		result["limitas_rate_info"] = append(result["limitas_rate_info"], metric)
+
+		rateInfoByID[rate.ID] = rateInfo{Path: rate.Path, ProjectDefault: projectDefault}
+	}
+
 	// fetch project metadata:
 	//
 	// 1. as a cache for subsequent queries, to avoid duplicate fetches for names and UUIDs
@@ -1121,7 +1196,7 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 	}
 
-	// fetch project-scoped utilization data
+	// fetch project-scoped resource utilization data
 	var projectResourceRecords []struct {
 		ProjectID     db.ProjectID    `db:"project_id"`
 		AZResourceID  db.AZResourceID `db:"az_resource_id"`
@@ -1182,7 +1257,52 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 	}
 
-	// TODO: metrics for rates
+	// fetch project-scoped rate data
+	var projectRateRecords []db.ProjectRate
+	_, err = d.DB.Select(&projectRateRecords, `SELECT * FROM project_rates`)
+	if err != nil {
+		return nil, fmt.Errorf("in project_rates query: %w", err)
+	}
+	for _, prr := range projectRateRecords {
+		ri, ok := rateInfoByID[prr.RateID]
+		if !ok {
+			return nil, fmt.Errorf("in project_rates query: saw unexpected RateID %d", prr.RateID)
+		}
+		pir, ok := projectInfoRecordsByID[prr.ProjectID]
+		if !ok {
+			// if a project is being created while this function is going through its motions,
+			// we will just ignore it until the next scrape
+			continue
+		}
+		labels := fmt.Sprintf(
+			`domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q`,
+			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
+			ri.Path.RateName, ri.Path.ServiceType,
+		)
+
+		if cfg, ok := ri.ProjectDefault.Unpack(); ok {
+			// emit limitas_project_rate_limit
+			rateLimit := prr.Limit.UnwrapOr(cfg.Limit)
+			metric := dataMetric{Labels: labels, Value: float64(rateLimit)}
+			result["limitas_project_rate_limit"] = append(result["limitas_project_rate_limit"], metric)
+
+			// emit limitas_project_rate_window_seconds
+			window := prr.Window.UnwrapOr(cfg.Window)
+			metric = dataMetric{Labels: labels, Value: float64(window) / float64(time.Second)}
+			result["limitas_project_rate_window_seconds"] = append(result["limitas_project_rate_window_seconds"], metric)
+		}
+
+		// emit limitas_project_rate_usage_total
+		if prr.UsageAsBigint != "" {
+			usageAsBigFloat, _, err := big.NewFloat(0).Parse(prr.UsageAsBigint, 10)
+			if err != nil {
+				return nil, fmt.Errorf("in project_rates query: cannot parse usage_as_bigint for id = %d: %w", prr.ID, err)
+			}
+			usageAsFloat, _ := usageAsBigFloat.Float64()
+			metric := dataMetric{Labels: labels, Value: float64(usageAsFloat)}
+			result["limitas_project_rate_usage_total"] = append(result["limitas_project_rate_usage_total"], metric)
+		}
+	}
 
 	return &dataMetricSet{ByFamily: result}, nil
 }
