@@ -5,6 +5,8 @@ package core
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -170,7 +172,9 @@ func (c *Cluster) AllServiceInfos() (map[db.ServiceType]liquid.ServiceInfo, erro
 func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.ServiceInfo], error) {
 	if len(c.LiquidConnections) == 0 {
 		serviceInfos, err := readServiceInfoFromDB(c.DB, Some(serviceType))
-		if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return None[liquid.ServiceInfo](), nil
+		} else if err != nil {
 			return None[liquid.ServiceInfo](), err
 		}
 		return Some(serviceInfos[serviceType]), nil
@@ -776,7 +780,7 @@ func readServiceInfoFromDB(dbm *gorp.DbMap, serviceTypeOpt Option[db.ServiceType
 	}
 	// more than one is not possible due to the key/unique constraint, when filter is given
 	if len(dbServices) == 0 && applyFilter {
-		return serviceInfos, fmt.Errorf("no service found for %s", serviceType)
+		return serviceInfos, fmt.Errorf("no service found for %s: %w", serviceType, sql.ErrNoRows)
 	}
 
 	for _, dbService := range dbServices {

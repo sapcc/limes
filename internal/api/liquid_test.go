@@ -83,7 +83,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 		Method:       "GET",
 		Path:         "/admin/liquid/service-capacity-request?service_type=invalid_service_type",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("invalid service type\n"),
+		ExpectBody:   assert.StringData("unknown service type\n"),
 	}.Check(t, s.Handler)
 
 	// happy path
@@ -150,7 +150,7 @@ func TestServiceUsageRequest(t *testing.T) {
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("invalid service type\n"),
+		ExpectBody:   assert.StringData("unknown service type\n"),
 	}.Check(t, s.Handler)
 
 	// expect error for invalid project_id
