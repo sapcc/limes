@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	gorp "github.com/go-gorp/gorp/v3"
+	. "github.com/majewsky/gg/option"
 )
 
 // SetUpdate describes an operation where we have an existing set of records (type R),
@@ -35,6 +36,8 @@ type SetUpdate[R any, K comparable] struct {
 	Create func(K) (R, error)
 	// Callback for updating an existing record.
 	Update func(*R) error
+	// Callback for deleting a record (a modification of the record has no purpose).
+	PreDelete Option[func(R) error]
 }
 
 // Execute executes this SetUpdate.
@@ -82,6 +85,12 @@ func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
 	for _, r := range u.ExistingRecords {
 		k := u.KeyForRecord(r)
 		if !slices.Contains(u.WantedKeys, k) {
+			if preDeleteFunc, ok := u.PreDelete.Unpack(); ok {
+				err := preDeleteFunc(r)
+				if err != nil {
+					return nil, fmt.Errorf("pre-delete callback failed for %T record with key %v: %w", r, k, err)
+				}
+			}
 			_, err := tx.Delete(&r)
 			if err != nil {
 				return nil, fmt.Errorf("could not delete %T record with key %v: %w", r, k, err)

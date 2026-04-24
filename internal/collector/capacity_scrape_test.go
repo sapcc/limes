@@ -1302,9 +1302,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	err := jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections))
 	assert.ErrEqual(t, err, regexp.MustCompile(
-		// the error is that ON DELETE CASCADE on services -> resources is stopped by ON DELETE RESTRICT on resources -> commitments;
-		// we do not match the specific phrasing of the PostgreSQL error since it may change between versions
-		`^failed in iteration 2: while scraping service 2: could not delete db.Resource record with key capacity:.*"project_commitments_az_resource_id_fkey"`,
+		// We explicitly model the leftover commitment constraint by selecting from the
+		// db in advance of deletion to have a better handling on collector startup. So
+		// the error message matches on that and not a DELETE CASCADE error.
+		`^failed in iteration 2: while scraping service 2: pre-delete callback failed for db.Resource record with key capacity: ErrLeftoverCommitment.*`,
 	))
 }
 
