@@ -53,13 +53,13 @@ func TestRenderMailTemplate(t *testing.T) {
 	ctx := t.Context()
 
 	// endpoint requires cluster show permissions
-	s.TokenValidator.Enforcer.AllowView = false
-	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	s.TokenValidator.Enforcer.AllowCluster = false
+	resp := s.Handler.RespondTo(ctx, "GET /v1/mail/render")
 	resp.ExpectStatus(t, http.StatusForbidden)
-	s.TokenValidator.Enforcer.AllowView = true
+	s.TokenValidator.Enforcer.AllowCluster = true
 
 	// happy path - renders all templates as JSON
-	resp = s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp = s.Handler.RespondTo(ctx, "GET /v1/mail/render")
 	resp.ExpectJSON(t, http.StatusOK, jsonmatch.Object{
 		"confirmed_commitments":   "<!DOCTYPE html><html><body>Confirmed</body></html>",
 		"expiring_commitments":    "<!DOCTYPE html><html><body>Expiring</body></html>",
@@ -106,7 +106,7 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 	)
 
 	ctx := t.Context()
-	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp := s.Handler.RespondTo(ctx, "GET /v1/mail/render")
 	resp.ExpectText(t, http.StatusInternalServerError, "template \"confirmed_commitments\" returned invalid HTML: XML syntax error on line 1: unexpected EOF\n")
 }
 
@@ -149,6 +149,6 @@ func TestRenderMailTemplateOverEscaped(t *testing.T) {
 	)
 
 	ctx := t.Context()
-	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
+	resp := s.Handler.RespondTo(ctx, "GET /v1/mail/render")
 	resp.ExpectText(t, http.StatusInternalServerError, "template \"confirmed_commitments\" was escaped multiple times\n")
 }
