@@ -58,7 +58,7 @@ var everythingCommitment db.ProjectCommitment = db.ProjectCommitment{
 func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/mail/render")
 	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:show_basic") {
+	if !token.Require(w, "v2:cluster:validation") {
 		return
 	}
 
