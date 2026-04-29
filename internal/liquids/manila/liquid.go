@@ -248,8 +248,8 @@ const (
 	snapshotCapacityQuery = `sum   by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (last_over_time(openstack_manila_snapshot_size_gauge[15m])))`
 
 	// queries for netapp-exporter metrics
-	sharePhysicalUsageQuery      = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
-	snapshotPhysicalUsageQuery   = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_snapshot_used_bytes{project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
+	sharePhysicalUsageQuery      = `sum by (availability_zone, project_id, share_type) (netapp_volume_used_bytes_for_limes)`
+	snapshotPhysicalUsageQuery   = `sum by (availability_zone, project_id, share_type) (netapp_snapshot_used_bytes_for_limes)`
 	snapmirrorUsageQuery         = `sum by (availability_zone, project_id, share_type) (netapp_snapmirror_capacity_total_bytes_for_limes)`
 	snapmirrorPhysicalUsageQuery = `sum by (availability_zone, project_id, share_type) (netapp_snapmirror_capacity_used_bytes_for_limes)`
 )
