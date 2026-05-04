@@ -18,7 +18,7 @@ import (
 
 	"github.com/sapcc/limes/internal/db"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 // serviceNotifyChannel is the PostgreSQL NOTIFY channel name used to signal

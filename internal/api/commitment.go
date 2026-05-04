@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	. "github.com/majewsky/gg/option"
-	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -29,6 +27,8 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"

@@ -11,10 +11,10 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
+	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/schwift/v2"
 	"go.xyrillian.de/schwift/v2/gopherschwift"
 )

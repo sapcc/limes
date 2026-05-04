@@ -6,7 +6,7 @@ package test
 import (
 	"testing"
 
-	"github.com/majewsky/gg/jsonmatch"
+	"go.xyrillian.de/gg/jsonmatch"
 )
 
 func TestRemoveCommentsFromJSON(t *testing.T) {

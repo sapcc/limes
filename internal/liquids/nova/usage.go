@@ -8,8 +8,8 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 )
 
 func (l *Logic) pooledResourceName(hwVersion string, base liquid.ResourceName) liquid.ResourceName {

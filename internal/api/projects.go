@@ -9,7 +9,6 @@ import (
 	"slices"
 
 	"github.com/gorilla/mux"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -18,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/collector"

@@ -16,7 +16,6 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -26,6 +25,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"

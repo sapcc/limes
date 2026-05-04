@@ -16,7 +16,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 // clusterAZAllocationStats bundles all data pertaining to a specific AZ

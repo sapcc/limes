@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"slices"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -18,6 +17,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 )
 
 // MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.

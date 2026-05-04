@@ -3,12 +3,12 @@
 
 // Package options provides additional functions for type option.Option
 // that cannot be expressed as methods on the Option type itself.
-package options
+package options // import "go.xyrillian.de/gg/options"
 
 import (
 	"cmp"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 // NOTE: Keep functions sorted by name.

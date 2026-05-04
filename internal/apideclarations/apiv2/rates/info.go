@@ -7,7 +7,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 )

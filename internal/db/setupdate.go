@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	gorp "github.com/go-gorp/gorp/v3"
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 // SetUpdate describes an operation where we have an existing set of records (type R),

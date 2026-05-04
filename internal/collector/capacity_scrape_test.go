@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/cadf"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -22,6 +21,7 @@ import (
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/datamodel"

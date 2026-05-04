@@ -8,11 +8,11 @@ import (
 	"net/http"
 
 	"github.com/go-gorp/gorp/v3"
-	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -21,6 +20,7 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"

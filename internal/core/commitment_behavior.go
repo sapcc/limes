@@ -7,11 +7,11 @@ import (
 	"slices"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
+	. "go.xyrillian.de/gg/option"
 
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )

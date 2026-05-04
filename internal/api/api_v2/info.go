@@ -20,7 +20,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`

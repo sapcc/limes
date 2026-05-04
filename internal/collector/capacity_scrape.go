@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
@@ -18,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"

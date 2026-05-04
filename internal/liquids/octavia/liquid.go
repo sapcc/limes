@@ -13,10 +13,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/quotas"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/respondwith"
+	. "go.xyrillian.de/gg/option"
 )
 
 // Logic implements the liquidapi.Logic interface for Octavia.

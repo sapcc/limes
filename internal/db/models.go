@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 )
 
 // Service contains a record from the `services` table.

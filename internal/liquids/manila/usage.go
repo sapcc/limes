@@ -11,10 +11,10 @@ import (
 	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
-	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
+	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/options"
 )
 
 // ScanUsage implements the liquidapi.Logic interface.

@@ -18,7 +18,7 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/util"
 )

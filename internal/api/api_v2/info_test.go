@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"

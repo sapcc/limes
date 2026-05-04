@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -29,6 +28,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/api/api_v2"

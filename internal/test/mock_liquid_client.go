@@ -6,8 +6,8 @@ package test
 import (
 	"context"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 )
 
 // DefaultLiquidServiceInfo builds the default ServiceInfo that most mock liquids use.

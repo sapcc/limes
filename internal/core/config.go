@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -19,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/promquery"
 	"github.com/sapcc/go-bits/regexpext"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"

@@ -11,10 +11,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/liquids"
 )

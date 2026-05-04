@@ -4,9 +4,9 @@
 package resourcesv2
 
 import (
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	. "go.xyrillian.de/gg/option"
 )
 
 // CommitmentConfiguration describes how commitments are configured for a given resource.

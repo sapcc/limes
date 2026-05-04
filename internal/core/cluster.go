@@ -16,8 +16,6 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/lib/pq"
-	. "github.com/majewsky/gg/option"
-	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -26,6 +24,8 @@ import (
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"

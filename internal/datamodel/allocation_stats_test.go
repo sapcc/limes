@@ -9,8 +9,8 @@ package datamodel
 import (
 	"testing"
 
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-bits/assert"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"

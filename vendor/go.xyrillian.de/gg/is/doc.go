@@ -7,7 +7,7 @@
 // This is not useful on its own, but may significantly improve readability
 // when replacing function literals. Consider the following example:
 //
-//	import . "github.com/majewsky/gg/option"
+//	import . "go.xyrillian.de/gg/option"
 //
 //	func checkNewVolumeSize(size, usage uint64, maxSize Option[uint64]) error {
 //		switch {
@@ -25,4 +25,4 @@
 //	case maxSize.IsSomeAnd(func(value uint64) bool { return maxSize < size }):
 //	// rewritten
 //	case maxSize.IsSomeAnd(is.LessThan(size)):
-package is
+package is // import "go.xyrillian.de/gg/is"

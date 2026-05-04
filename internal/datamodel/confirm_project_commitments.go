@@ -17,7 +17,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"

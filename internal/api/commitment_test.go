@@ -23,7 +23,7 @@ import (
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/util"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 const day = 24 * time.Hour

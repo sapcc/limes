@@ -12,18 +12,18 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 
-	. "github.com/majewsky/gg/option"
+	. "go.xyrillian.de/gg/option"
 )
 
 // GenerateTransferToken generates a token that is used to transfer a commitment from a source to a target project.

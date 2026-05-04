@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
