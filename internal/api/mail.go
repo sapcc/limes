@@ -54,9 +54,9 @@ var everythingCommitment db.ProjectCommitment = db.ProjectCommitment{
 	NotifiedForExpiration: true,
 }
 
-// RenderMailTemplate handles GET /v1/mail/render
+// RenderMailTemplate handles GET /admin/mail/render
 func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/mail/render")
+	httpapi.IdentifyEndpoint(r, "/admin/mail/render")
 	token := p.CheckToken(r)
 	if !token.Require(w, "v2:cluster:validation") {
 		return
