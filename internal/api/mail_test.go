@@ -53,10 +53,10 @@ func TestRenderMailTemplate(t *testing.T) {
 	ctx := t.Context()
 
 	// endpoint requires cluster show permissions
-	s.TokenValidator.Enforcer.AllowView = false
+	s.TokenValidator.Enforcer.AllowCluster = false
 	resp := s.Handler.RespondTo(ctx, "GET /admin/mail/render")
 	resp.ExpectStatus(t, http.StatusForbidden)
-	s.TokenValidator.Enforcer.AllowView = true
+	s.TokenValidator.Enforcer.AllowCluster = true
 
 	// happy path - renders all templates as JSON
 	resp = s.Handler.RespondTo(ctx, "GET /admin/mail/render")
