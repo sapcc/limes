@@ -46,16 +46,12 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	// projects runs as large as 160 MiB for the pure JSON.)
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
+	resources := p.Cluster.SIC.GetResources()
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	p.recordReportSpecificity("project_list", filter)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, serviceInfos, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, resources, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -73,15 +69,11 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		return
 	}
+	resources := p.Cluster.SIC.GetResources()
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	p.recordReportSpecificity("project_show", filter)
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, serviceInfos)
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -208,14 +200,10 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	resources := p.Cluster.SIC.GetResources()
 
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	nm := core.BuildResourceNameMapping(p.Cluster, resources)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.MaxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
@@ -232,9 +220,8 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			if resRequest.MaxQuota == nil {
 				requested[dbServiceType][dbResourceName] = &audit.MaxQuotaChange{NewValue: None[uint64]()}
 			} else {
-				serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-				resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-				if !resInfo.HasQuota {
+				resource := resources[dbServiceType][dbResourceName]
+				if !resource.HasQuota {
 					msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return
@@ -246,7 +233,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					converted, err := limes.ValueWithUnit{
 						Unit:  unit,
 						Value: *resRequest.MaxQuota,
-					}.ConvertTo(core.InfoForResource(serviceInfo, dbResourceName).Unit)
+					}.ConvertTo(resource.Unit)
 					if err != nil {
 						msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 						http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -281,7 +268,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 
-		_, err := datamodel.ProjectResourceUpdate{
+		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
 				if requestedChange != nil {
@@ -291,7 +278,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, serviceInfos[srv.Type], p.timeNow(), *dbDomain, *dbProject, srv)
+		}.Run(tx, *dbProject, srv, resources[srv.Type])
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -362,14 +349,10 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
+	resources := p.Cluster.SIC.GetResources()
 
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	nm := core.BuildResourceNameMapping(p.Cluster, resources)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.AutogrowthChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
@@ -387,9 +370,9 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
-			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-			if !resInfo.HasQuota {
+			// we ignore when a resource can't be found in the app layer yet, it will default to return
+			resource := resources[dbServiceType][dbResourceName]
+			if !resource.HasQuota {
 				msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 				http.Error(w, msg, http.StatusUnprocessableEntity)
 				return
@@ -430,7 +413,9 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 
-		_, err := datamodel.ProjectResourceUpdate{
+		// when we got here, we can be sure the service exists
+		filteredResources := resources[srv.Type]
+		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
 				if requestedChange != nil {
@@ -439,7 +424,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, serviceInfos[srv.Type], p.timeNow(), *dbDomain, *dbProject, srv)
+		}.Run(tx, *dbProject, srv, filteredResources)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

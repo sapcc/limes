@@ -126,17 +126,14 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	if dbProject == nil {
 		return
 	}
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	resources := p.Cluster.SIC.GetResources()
 
 	// enumerate project AZ resources
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"pazr.project_id": dbProject.ID}, len(joinArgs))
 	azResourceLocationsByID := make(map[db.AZResourceID]core.AZResourceLocation)
-	err = sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			id  db.AZResourceID
 			loc core.AZResourceLocation
@@ -145,10 +142,8 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			return err
 		}
-		// this check is defense in depth (the DB should be consistent with our config)
-		if core.HasResource(serviceInfos, loc.ServiceType, loc.ResourceName) {
-			azResourceLocationsByID[id] = loc
-		}
+		azResourceLocationsByID[id] = loc
+
 		return nil
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -167,14 +162,14 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	// render response
 	result := make([]limesresources.Commitment, 0, len(dbCommitments))
 	for _, c := range dbCommitments {
-		loc, exists := azResourceLocationsByID[c.AZResourceID]
-		if !exists {
-			// defense in depth (the DB should not change that much between those two queries above)
+		loc, lExists := azResourceLocationsByID[c.AZResourceID]
+		resource, rExists := resources[loc.ServiceType][loc.ResourceName]
+		if !lExists || !rExists {
+			// defense in depth (the DB should not change that much between the 2 queries and the state of SIC)
 			continue
 		}
-		serviceInfo := core.InfoForService(serviceInfos, loc.ServiceType)
-		resInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resInfo.Unit))
+
+		result = append(result, datamodel.ConvertCommitmentToDisplayForm(c, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, c, p.timeNow), resource.Unit))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -225,19 +220,22 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	}
 	requestedResourceName := limesresources.ResourceName(query.Get("resource"))
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	resources := p.Cluster.SIC.GetResources()
+	nm := core.BuildResourceNameMapping(p.Cluster, resources)
 	dbServiceType, dbResourceName, ok := nm.MapFromV1API(requestedServiceType, requestedResourceName)
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %q", fmt.Sprintf("%s/%s", requestedServiceType, requestedResourceName))
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-	resInfo := core.InfoForResource(serviceInfo, dbResourceName)
+
+	resource, rExists := resources[dbServiceType][dbResourceName]
+	// this check is defense in depth (when a name mapping was found, the resource must be found too)
+	if !rExists {
+		msg := fmt.Sprintf("could not load underlying resource: %q", resource.Path)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
 
 	if domain, ok := dbDomain.Unpack(); ok {
 		behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name)
@@ -272,7 +270,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(nil, len(joinArgs))
 	azResourceLocationsByID := make(map[db.AZResourceID]core.AZResourceLocation)
-	err = sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			id  db.AZResourceID
 			loc core.AZResourceLocation
@@ -281,10 +279,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return err
 		}
-		// this check is defense in depth (the DB should be consistent with our config)
-		if core.HasResource(serviceInfos, loc.ServiceType, loc.ResourceName) {
-			azResourceLocationsByID[id] = loc
-		}
+		azResourceLocationsByID[id] = loc
 		return nil
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -304,7 +299,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		if !exists {
 			continue // like above, this is just defense in depth (the DB should be consistent with itself)
 		}
-		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resInfo.Unit)
+		c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resource.Unit)
 		// hide some fields that we should not be showing in this very public list
 		c.CreatorUUID = ""
 		c.CreatorName = ""
@@ -321,55 +316,52 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 // parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
 // This function in its current form should only be used if the serviceInfo is not necessary to be used outside
 // of this validation to avoid unnecessary database queries.
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (*limesresources.CommitmentRequest, *core.AZResourceLocation, *core.ScopedCommitmentBehavior, *liquid.ServiceInfo) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (_ *limesresources.CommitmentRequest, _ *core.AZResourceLocation, _ *core.ScopedCommitmentBehavior, service db.Service, resources core.ResourcesByName) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
-		return nil, nil, nil, nil
+		return nil, nil, nil, service, resources
 	}
 	req := parseTarget.Request
 
 	// validate request
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return nil, nil, nil, nil
-	}
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	services := p.Cluster.SIC.GetServices()
+	allResources := p.Cluster.SIC.GetResources()
+	nm := core.BuildResourceNameMapping(p.Cluster, allResources)
 	dbServiceType, dbResourceName, ok := nm.MapFromV1API(req.ServiceType, req.ResourceName)
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil, nil
+		return nil, nil, nil, service, resources
 	}
+
 	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
-	serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-	resInfo := core.InfoForResource(serviceInfo, dbResourceName)
 	if len(behavior.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return nil, nil, nil, nil
+		return nil, nil, nil, service, resources
 	}
-	if resInfo.Topology == liquid.FlatTopology {
+	if allResources[dbServiceType][dbResourceName].Topology == liquid.FlatTopology {
 		if req.AvailabilityZone != limes.AvailabilityZoneAny {
 			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
-			return nil, nil, nil, nil
+			return nil, nil, nil, service, resources
 		}
 	} else {
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
 			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-			return nil, nil, nil, nil
+			return nil, nil, nil, service, resources
 		}
 	}
 	if !slices.Contains(behavior.Durations, req.Duration) {
 		buf := must.Return(json.Marshal(behavior.Durations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil, nil
+		return nil, nil, nil, service, resources
 	}
 	if req.Amount == 0 {
 		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
-		return nil, nil, nil, nil
+		return nil, nil, nil, service, resources
 	}
 
 	loc := core.AZResourceLocation{
@@ -377,7 +369,8 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		ResourceName:     dbResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 	}
-	return &req, &loc, &behavior, &serviceInfo
+	// when the name mapping succeeded, service and resource must be found
+	return &req, &loc, &behavior, services[dbServiceType], allResources[dbServiceType]
 }
 
 // CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
@@ -395,7 +388,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior, serviceInfo := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
+	req, loc, behavior, service, resources := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
 	if req == nil {
 		return
 	}
@@ -449,7 +442,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// check for committable capacity via the transferableCommitmentCache
 	// it automatically does the delegation to liquid if required
-	transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(p.DB, p.Cluster, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, None[core.MailTemplate]())
+	transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(p.DB, p.Cluster, service, resources, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, None[core.MailTemplate]())
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -476,7 +469,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior, serviceInfo := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
+	req, loc, behavior, service, resources := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
 	if req == nil {
 		return
 	}
@@ -558,7 +551,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
 			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
 		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, *serviceInfo, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, service, resources, *loc, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -588,7 +581,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		// (or inform the liquid) about the capacity independently.
 		ccr := liquid.CommitmentChangeRequest{
 			AZ:          loc.AvailabilityZone,
-			InfoVersion: serviceInfo.Version,
+			InfoVersion: service.LiquidVersion,
 			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 				dbProject.UUID: {
 					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -614,7 +607,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		}
-		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, *serviceInfo, tx)
+		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, *loc, service, resources, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -658,8 +651,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// render response
-	resourceInfo := core.InfoForResource(*serviceInfo, loc.ResourceName)
-	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(*loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resources[loc.ResourceName].Unit)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": commitment})
 }
 
@@ -738,6 +730,14 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	service, _ := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists { // checking the deepest level is enough
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
 	// Start transaction for creating new commitment and marking merged commitments as superseded
 	tx, err := p.DB.Begin()
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -808,16 +808,6 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		http.Error(w, "service not found", http.StatusNotFound)
-		return
-	}
-
 	liquidCommitments := make([]liquid.Commitment, 1, len(dbCommitments)+1)
 	// new
 	liquidCommitments[0] = liquid.Commitment{
@@ -841,7 +831,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -858,7 +848,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -868,8 +858,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbMergedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbMergedCommitment, p.timeNow), resource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
@@ -957,6 +946,14 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	service, _ := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists { // checking the deepest level is enough
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonRenew,
 		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
@@ -1001,21 +998,11 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		http.Error(w, "service not found", http.StatusNotFound)
-		return
-	}
-
 	// TODO: for now, this is CommitmentChangeRequest.RequiresConfirmation() = false, because totalConfirmed stays and guaranteed is not used yet.
 	// when we change this, we need to evaluate the response of the liquid
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -1041,7 +1028,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1052,8 +1039,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create resultset and auditlogs
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
@@ -1110,6 +1096,13 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	service, sExists := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	if !sExists {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
 	// ignore expired, superseded or soft-deleted commitments
 	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusExpired, liquid.CommitmentStatusSuperseded, util.CommitmentStatusDeleted}, dbCommitment.Status) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -1122,16 +1115,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		http.Error(w, "service not found", http.StatusNotFound)
-		return
-	}
-
 	totalConfirmedAfter := totalConfirmed
 	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
 		totalConfirmedAfter -= dbCommitment.Amount
@@ -1139,7 +1122,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -1165,7 +1148,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, p.DB)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1283,12 +1266,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
+	service, _ := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
@@ -1312,7 +1293,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	// if not split, the ccr is just used for audit logging
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -1415,7 +1396,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			NewTransferStatus: req.TransferStatus,
 		}
 
-		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1444,8 +1425,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest:       ccr,
@@ -1524,17 +1504,13 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists {
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resource.Unit)
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
@@ -1589,6 +1565,14 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	service, _ := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists { // checking the deepest level is enough
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
 	// get old project additionally
 	var sourceProject db.Project
 	err = p.DB.SelectOne(&sourceProject, `SELECT * FROM projects WHERE id = $1`, dbCommitment.ProjectID)
@@ -1626,16 +1610,6 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		http.Error(w, "service not found", http.StatusNotFound)
-		return
-	}
-
 	sourceTotalConfirmedAfter := sourceTotalConfirmed
 	targetTotalConfirmedAfter := targetTotalConfirmed
 	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
@@ -1652,7 +1626,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			sourceProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain),
@@ -1700,7 +1674,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1722,8 +1696,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest:       ccr,
@@ -1762,12 +1735,9 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 
 	// validate request
 	vars := mux.Vars(r)
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
 
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	resources := p.Cluster.SIC.GetResources()
+	nm := core.BuildResourceNameMapping(p.Cluster, resources)
 	sourceServiceType, sourceResourceName, exists := nm.MapFromV1API(
 		limes.ServiceType(vars["service_type"]),
 		limesresources.ResourceName(vars["resource_name"]),
@@ -1777,20 +1747,22 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
+	sourceResource, rExists := p.Cluster.SIC.GetResourceForTypeName(sourceServiceType, sourceResourceName)
+	if !rExists {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
 	sourceBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(sourceServiceType, sourceResourceName))
-
-	serviceInfo := core.InfoForService(serviceInfos, sourceServiceType)
-	sourceResInfo := core.InfoForResource(serviceInfo, sourceResourceName)
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for _, targetServiceType := range slices.Sorted(maps.Keys(serviceInfos)) {
-			for targetResourceName, targetResInfo := range serviceInfos[targetServiceType].Resources {
+		for _, targetServiceType := range slices.Sorted(maps.Keys(resources)) {
+			for targetResourceName, targetResource := range resources[targetServiceType] {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}
-				if sourceResInfo.Unit != targetResInfo.Unit {
+				if sourceResource.Unit != targetResource.Unit {
 					continue
 				}
 
@@ -1866,6 +1838,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName).ForDomain(dbDomain.Name)
+	resources := p.Cluster.SIC.GetResources()
+	sourceService, sExists := p.Cluster.SIC.GetServiceForType(sourceLoc.ServiceType)
+	if !sExists {
+		msg := fmt.Sprintf("no such service and/or resource: %s/%s", sourceLoc.ServiceType, sourceLoc.ResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
 
 	// section: targetBehavior
 	var parseTarget struct {
@@ -1880,11 +1859,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := parseTarget.Request
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	nm := core.BuildResourceNameMapping(p.Cluster, serviceInfos)
+	nm := core.BuildResourceNameMapping(p.Cluster, resources)
 	targetServiceType, targetResourceName, exists := nm.MapFromV1API(req.TargetService, req.TargetResource)
 	if !exists {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.TargetService, req.TargetResource)
@@ -1963,7 +1938,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		ResourceName:     targetResourceName,
 		AvailabilityZone: sourceLoc.AvailabilityZone,
 	}
-	serviceInfo := core.InfoForService(serviceInfos, sourceLoc.ServiceType)
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
 	var remainingCommitment db.ProjectCommitment
 
@@ -2007,7 +1981,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          sourceLoc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: sourceService.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -2041,7 +2015,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sourceLoc, serviceInfo, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sourceLoc, sourceService, resources[sourceLoc.ServiceType], tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2055,7 +2029,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		relatedCommitmentIDs   []db.ProjectCommitmentID
 		relatedCommitmentUUIDs []liquid.CommitmentUUID
 	)
-	resourceInfo := core.InfoForResource(serviceInfo, sourceLoc.ResourceName)
 	if remainingAmount > 0 {
 		relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
 		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
@@ -2096,7 +2069,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetLoc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(targetLoc).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), resources[targetLoc.ServiceType][targetLoc.ResourceName].Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
@@ -2189,12 +2162,10 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(loc.ServiceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
+	service, _ := p.Cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := p.Cluster.SIC.GetResourcesForType(loc.ServiceType)
+	resource, rExists := p.Cluster.SIC.GetResourceForLoc(loc)
+	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
@@ -2202,7 +2173,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	// might only reject in the remote-case, locally we accept extensions as limes does not know future capacity
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          loc.AvailabilityZone,
-		InfoVersion: serviceInfo.Version,
+		InfoVersion: service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			dbProject.UUID: {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
@@ -2229,7 +2200,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, serviceInfo, p.DB)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, loc, service, resources, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2245,8 +2216,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resourceInfo := core.InfoForResource(serviceInfo, loc.ResourceName)
-	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resourceInfo.Unit)
+	c := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, loc.AvailabilityZone, p.Cluster.BehaviorForResourceLocation(loc).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), resource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,

@@ -84,9 +84,9 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	report := resourcesv2.InfoReport{
 		Areas: make(map[string]resourcesv2.AreaInfoReport),
 	}
-	services := p.Cluster.ServiceInfoCache.GetServices()
-	resources := p.Cluster.ServiceInfoCache.GetResources()
-	categories := p.Cluster.ServiceInfoCache.GetCategories()
+	services := p.Cluster.SIC.GetServices()
+	resources := p.Cluster.SIC.GetResources()
+	categories := p.Cluster.SIC.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
@@ -172,9 +172,9 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	report := ratesv2.InfoReport{
 		Areas: make(map[string]ratesv2.AreaInfoReport),
 	}
-	services := p.Cluster.ServiceInfoCache.GetServices()
-	rates := p.Cluster.ServiceInfoCache.GetRates()
-	categories := p.Cluster.ServiceInfoCache.GetCategories()
+	services := p.Cluster.SIC.GetServices()
+	rates := p.Cluster.SIC.GetRates()
+	categories := p.Cluster.SIC.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]

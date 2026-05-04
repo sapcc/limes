@@ -56,14 +56,12 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 
-	maybeServiceInfo, err := c.Cluster.InfoForService(serviceType)
-	if err != nil {
-		return db.ProjectService{}, err
-	}
-
-	_, ok := maybeServiceInfo.Unpack()
+	// Defense in depth: Verify that we have a LiquidConnection for the serviceType of this task.
+	// If there is a functioning LiquidConnection, we can also be sure that calls to Cluster.ServiceInfoCache
+	// will have the data which should be in line with the returned liquid.ServiceUsageReport.
+	_, ok := c.Cluster.LiquidConnections[serviceType]
 	if !ok {
-		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
+		return srv, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
@@ -120,14 +118,9 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		return fmt.Errorf("no quota connection registered for service type %s", serviceType)
 	}
 	startedAt := c.MeasureTime()
-
-	maybeServiceInfo, err := c.Cluster.InfoForService(serviceType)
-	if err != nil {
-		return err
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
+	resources, ok := c.Cluster.SIC.GetResourcesForType(serviceType)
 	if !ok {
-		return fmt.Errorf("no such service type: %s", serviceType)
+		return fmt.Errorf("no data found in ServiceInfoCache for %s", serviceType)
 	}
 
 	// collect az quotas and "total" quota from the DB to check what needs to be applied
@@ -135,7 +128,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	var projectAZResourceIDs []db.ProjectAZResourceID
-	err = sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ServiceID, project.ID}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ServiceID, project.ID}, func(rows *sql.Rows) error {
 		var (
 			projectAZResourceID db.ProjectAZResourceID
 			resourceName        liquid.ResourceName
@@ -149,8 +142,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 
-		resInfo := core.InfoForResource(serviceInfo, resourceName)
-		if !resInfo.HasQuota {
+		resource := resources[resourceName]
+		if !resource.HasQuota {
 			return nil
 		}
 
@@ -159,7 +152,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		}
 
 		// skip AZ-specific quotas if the backend does not support them
-		if !datamodel.AZHasBackendQuotaForTopology(resInfo.Topology, availabilityZone) {
+		if !datamodel.AZHasBackendQuotaForTopology(resource.Topology, availabilityZone) {
 			return nil
 		}
 		targetQuota, targetQuotaExists := targetQuotaPtr.Unpack()
@@ -168,8 +161,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		}
 		currentQuota, currentQuotaExists := currentQuotaPtr.Unpack()
 		// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
-		if resInfo.Topology == liquid.AZSeparatedTopology && (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && !currentQuotaExists {
-			return fmt.Errorf("detected invalid AZ %q for resource %s/%s with topology %s (backend quota was nil)", availabilityZone, serviceType, resourceName, resInfo.Topology)
+		if resource.Topology == liquid.AZSeparatedTopology && (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && !currentQuotaExists {
+			return fmt.Errorf("detected invalid AZ %q for resource %s/%s with topology %s (backend quota was nil)", availabilityZone, serviceType, resourceName, resource.Topology)
 		}
 		projectAZResourceIDs = append(projectAZResourceIDs, projectAZResourceID)
 		if targetAZQuotasInDB[resourceName] == nil {
@@ -193,8 +186,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	if needsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
 		targetQuotasForBackend := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
-		for resName, resInfo := range connection.ServiceInfo().Resources {
-			if !resInfo.HasQuota {
+		for resName, resource := range resources {
+			if !resource.HasQuota {
 				continue
 			}
 			// NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.

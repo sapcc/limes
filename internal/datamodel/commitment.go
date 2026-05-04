@@ -129,7 +129,7 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, az limes.Availabilit
 // preloaded - but does not have to. In case the LiquidConnection is not filled,
 // a LiquidClient is instantiated on the fly to perform the operation remotely. It utilizes a given
 // ServiceInfo so that no double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, loc core.AZResourceLocation, serviceInfo liquid.ServiceInfo, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
+func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, loc core.AZResourceLocation, service db.Service, resources core.ResourcesByName, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
 	localCommitmentChanges := liquid.CommitmentChangeRequest{
 		DryRun:      req.DryRun,
 		AZ:          req.AZ,
@@ -151,7 +151,7 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
 
-			if serviceInfo.Resources[resourceName].HandlesCommitments {
+			if resources[resourceName].HandlesCommitments {
 				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
 				if !exists {
 					remoteCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{
@@ -171,14 +171,14 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 		}
 	}
 	for projectUUID, projectCommitmentChangeset := range localCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
+		if service.CommitmentHandlingNeedsProjectMetadata {
 			pcs := projectCommitmentChangeset
 			pcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
 			localCommitmentChanges.ByProject[projectUUID] = pcs
 		}
 	}
 	for projectUUID, remoteCommitmentChangeset := range remoteCommitmentChanges.ByProject {
-		if serviceInfo.CommitmentHandlingNeedsProjectMetadata {
+		if service.CommitmentHandlingNeedsProjectMetadata {
 			rcs := remoteCommitmentChangeset
 			rcs.ProjectMetadata = req.ByProject[projectUUID].ProjectMetadata
 			remoteCommitmentChanges.ByProject[projectUUID] = rcs

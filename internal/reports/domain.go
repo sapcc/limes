@@ -76,7 +76,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) ([]*limesresources.DomainReport, error) {
 	var fields map[string]any
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
@@ -151,41 +151,40 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if !filter.Includes[dbServiceType][dbResourceName] {
 			return nil
 		}
-		service, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
+		serviceReport, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, resources)
 
 		if az == liquid.AvailabilityZoneTotal {
-			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-
-			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
-			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+			// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
+			resource := resources[dbServiceType][dbResourceName]
+			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
+			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
 
 			if usage != nil {
-				resource.Usage = *usage
+				resourceReport.Usage = *usage
 			}
-			if !resource.NoQuota {
-				if quota != nil && resInfo.Topology != liquid.AZSeparatedTopology {
-					resource.ProjectsQuota = quota
-					resource.DomainQuota = quota
+			if !resourceReport.NoQuota {
+				if quota != nil && resource.Topology != liquid.AZSeparatedTopology {
+					resourceReport.ProjectsQuota = quota
+					resourceReport.DomainQuota = quota
 					if backendQuota != nil && *quota != *backendQuota {
-						resource.BackendQuota = backendQuota
+						resourceReport.BackendQuota = backendQuota
 					}
 				}
 				if infiniteBackendQuota != nil && *infiniteBackendQuota {
-					resource.InfiniteBackendQuota = infiniteBackendQuota
+					resourceReport.InfiniteBackendQuota = infiniteBackendQuota
 				}
 			}
 			if showPhysicalUsage != nil && *showPhysicalUsage {
-				resource.PhysicalUsage = physicalUsage
+				resourceReport.PhysicalUsage = physicalUsage
 			}
 		}
 
 		if filter.WithAZBreakdown && az != liquid.AvailabilityZoneTotal {
-			if resource.PerAZ == nil {
-				resource.PerAZ = make(limesresources.DomainAZResourceReports)
+			if resourceReport.PerAZ == nil {
+				resourceReport.PerAZ = make(limesresources.DomainAZResourceReports)
 			}
 			sanitizedQuota := options.FromPointer(quota).UnwrapOr(0)
-			resource.PerAZ[az] = &limesresources.DomainAZResourceReport{
+			resourceReport.PerAZ[az] = &limesresources.DomainAZResourceReport{
 				Quota:             &sanitizedQuota,
 				Usage:             *usage,
 				UnusedCommitments: *unusedCommitments,
@@ -226,12 +225,12 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if !filter.Includes[dbServiceType][dbResourceName] {
 				return nil
 			}
-			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, serviceInfos)
+			_, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, resources)
 
-			if resource.PerAZ[az] == nil {
+			if resourceReport.PerAZ[az] == nil {
 				return nil
 			}
-			azReport := resource.PerAZ[az]
+			azReport := resourceReport.PerAZ[az]
 
 			if confirmedAmount > 0 {
 				if azReport.Committed == nil {
@@ -293,37 +292,37 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	return result, nil
 }
 
-func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, resources core.ResourcesByNameType) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
-	service, exists := domain.Services[apiIdentity.ServiceType]
+	serviceReport, exists := domain.Services[apiIdentity.ServiceType]
 	if !exists {
 		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
-		service = &limesresources.DomainServiceReport{
+		serviceReport = &limesresources.DomainServiceReport{
 			ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 			Resources:   make(limesresources.DomainResourceReports),
 		}
-		domain.Services[apiIdentity.ServiceType] = service
+		domain.Services[apiIdentity.ServiceType] = serviceReport
 	}
 
-	resource, exists := service.Resources[apiIdentity.Name]
+	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
-		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-		resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-		resource = &limesresources.DomainResourceReport{
-			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
+		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
+		resource := resources[dbServiceType][dbResourceName]
+		resourceReport = &limesresources.DomainResourceReport{
+			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),
 		}
-		if !resource.NoQuota {
+		if !resourceReport.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
-			resource.QuotaDistributionModel = qdConfig.Model
-			// this default is used when no `domain_resources` entry exists for this resource
+			resourceReport.QuotaDistributionModel = qdConfig.Model
+			// this default is used when no `domain_resources` entry exists for this resourceReport
 			defaultQuota := uint64(0)
-			resource.DomainQuota = &defaultQuota
+			resourceReport.DomainQuota = &defaultQuota
 		}
-		service.Resources[apiIdentity.Name] = resource
+		serviceReport.Resources[apiIdentity.Name] = resourceReport
 	}
 
-	return service, resource
+	return serviceReport, resourceReport
 }

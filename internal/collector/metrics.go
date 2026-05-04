@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,12 +98,8 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		connection := c.Cluster.LiquidConnections[serviceType]
-		if connection == nil {
-			return nil
-		}
-
-		if len(connection.ServiceInfo().Resources) > 0 {
+		resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType) // we can ignore "ok" because the len matters
+		if len(resources) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
@@ -158,8 +155,13 @@ type CapacityCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityCollectionMetricsOkGauge.Describe(ch)
-	for _, connection := range c.Cluster.LiquidConnections {
-		liquidDescribeMetrics(ch, connection.ServiceInfo().CapacityMetricFamilies, nil)
+	for _, service := range c.Cluster.SIC.GetServices() {
+		capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
+		if err != nil {
+			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing capacity_metric_families for %s: %w", service.Type, err))
+			continue
+		}
+		liquidDescribeMetrics(ch, capacityMetricFamilies, nil)
 	}
 }
 
@@ -196,12 +198,16 @@ func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric
 }
 
 func (c *CapacityCollectionMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance CapacityCollectionMetricsInstance) {
-	connection := c.Cluster.LiquidConnections[instance.ServiceType]
-	if connection == nil {
-		return
-	}
-	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().CapacityMetricFamilies, nil, nil)
+	// we ignore when a resource can't be found in the app layer yet, it will appear with default value
+	service, _ := c.Cluster.SIC.GetServiceForType(instance.ServiceType)
 	successAsFloat := 1.0
+	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
+	if err != nil {
+		successAsFloat = 0.0
+		logg.Error("while collecting capacityMetricFamilies for capacity metrics for service_type %s: %s",
+			instance.ServiceType, err.Error())
+	}
+	err = liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), capacityMetricFamilies, nil, nil)
 	if err != nil {
 		successAsFloat = 0.0
 		// errors in connection.LiquidCollectMetrics() are not fatal: we record a failure in
@@ -247,8 +253,13 @@ type QuotaCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	usageCollectionMetricsOkGauge.Describe(ch)
-	for _, connection := range c.Cluster.LiquidConnections {
-		liquidDescribeMetrics(ch, connection.ServiceInfo().UsageMetricFamilies, []string{"domain_id", "project_id"})
+	for _, service := range c.Cluster.SIC.GetServices() {
+		usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
+		if err != nil {
+			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing usage_metric_families for %s: %w", service.Type, err))
+			continue
+		}
+		liquidDescribeMetrics(ch, usageMetricFamilies, []string{"domain_id", "project_id"})
 	}
 }
 
@@ -291,16 +302,19 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
-	connection := c.Cluster.LiquidConnections[instance.ServiceType]
-	if connection == nil {
-		return
+	// we ignore when a resource can't be found in the app layer yet, it will appear with default value
+	service, _ := c.Cluster.SIC.GetServiceForType(instance.ServiceType)
+	successAsFloat := 1.0
+	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
+	if err != nil {
+		successAsFloat = 0.0
+		logg.Error("while collecting usageMetricFamilies for usage metrics for service_type %s: %s",
+			instance.ServiceType, err.Error())
 	}
-
-	err := liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), connection.ServiceInfo().UsageMetricFamilies,
+	err = liquidCollectMetrics(ch, []byte(instance.SerializedMetrics), usageMetricFamilies,
 		[]string{"domain_id", "project_id"},
 		[]string{instance.Project.Domain.UUID, string(instance.Project.UUID)},
 	)
-	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
 		// errors in connection.LiquidCollectMetrics() are not fatal: we record a failure in
@@ -499,15 +513,12 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
-	serviceInfos, err := d.Cluster.AllServiceInfos()
-	if err != nil {
-		return nil, err
-	}
+	resources := d.Cluster.SIC.GetResources()
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
-	err = sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			dbServiceType     db.ServiceType
 			dbResourceName    liquid.ResourceName
@@ -578,8 +589,8 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
-		for resName := range serviceInfos[serviceType].Resources {
+	for _, serviceType := range slices.Sorted(maps.Keys(resources)) {
+		for resName := range resources[serviceType] {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -748,8 +759,8 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 	}
 
 	// fetch metadata for services/resources
-	for _, serviceType := range slices.Sorted(maps.Keys(serviceInfos)) {
-		for dbResourceName, resourceInfo := range serviceInfos[serviceType].Resources {
+	for _, serviceType := range slices.Sorted(maps.Keys(resources)) {
+		for dbResourceName, resourceInfo := range resources[serviceType] {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,

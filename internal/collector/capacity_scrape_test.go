@@ -172,8 +172,10 @@ func Test_ScanCapacity(t *testing.T) {
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
 
 	// insert some crap records
+	serviceShared := s.GetServiceID("shared")
+	serviceUnshared := s.GetServiceID("unshared")
 	unknownRes := &db.Resource{
-		ServiceID:     2,
+		ServiceID:     serviceUnshared,
 		Name:          "unknown",
 		Path:          db.ResourcePath{ServiceType: "unshared", ResourceName: "unknown"},
 		Topology:      liquid.FlatTopology,
@@ -189,26 +191,28 @@ func Test_ScanCapacity(t *testing.T) {
 	})
 	s.MustDBExec(
 		`DELETE FROM resources WHERE service_id = $1 AND name = $2`,
-		1, "things",
+		serviceShared, "things",
 	)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
 	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
 		report.Resources["things"].PerAZ["any"].Capacity = 23
 		report.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
 	})
 	tr.DBChanges().Ignore()
 
-	// if we don't bump the version, we will observe that for "things" nothing happens (as it is unknown
-	// to the database) and for "unknown" there is no value
+	// if we don't bump the version, we will observe that this breaks the scrape, as it
+	// should not be possible to update the databases' services/ resources etc. manually
 	setClusterCapacitorsStale(t, s)
-	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
+	err := job.ProcessOne(s.Ctx)
+	assert.ErrEqual(t, err, `while scraping service shared: received ServiceCapacityReport is invalid: unexpected value for .Resources["things"] (resource was not declared)`)
+	must.Succeed(job.ProcessOne(s.Ctx))
 
-	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET next_scrape_at = %d, scrape_error_message = 'received ServiceCapacityReport is invalid: unexpected value for .Resources["things"] (resource was not declared)' WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
+		s.Clock.Now().Add(-5*time.Second).Add(3*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
@@ -220,7 +224,7 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM az_resources WHERE id = 5 AND resource_id = 3 AND az = 'any' AND path = 'unshared/unknown/any';
@@ -903,6 +907,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.MustDBExec(query, 46, 8, "second/capacity/total")
 	s.MustDBExec(query, 23, 4, "second/things/any")
 	s.MustDBExec(query, 23, 4, "second/things/total")
+	// we fiddled with the cluster values manually, update the cache.
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
 
 	// fill `project_az_resources` with some usage data
 	// (we want to see how commitment confirmation reacts to existing usage)
@@ -1285,7 +1291,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		DELETE FROM resources WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'first/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'first/things';
 		DELETE FROM services WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'first', 1216885, 5, '{}', 1217785, 2, 'First');
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, commitment_handling_needs_project_metadata) VALUES (1, 'first', 1216885, 5, '{}', 1217785, 2, 'First', TRUE);
 		UPDATE services SET scraped_at = 1216890, next_scrape_at = 1217790 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 	`)
 
@@ -1306,7 +1312,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		// We explicitly model the leftover commitment constraint by selecting from the
 		// db in advance of deletion to have a better handling on collector startup. So
 		// the error message matches on that and not a DELETE CASCADE error.
-		`^failed in iteration 2: while scraping service 2: pre-delete callback failed for db.Resource record with key capacity: ErrLeftoverCommitment.*`,
+		`^failed in iteration 2: while scraping service second: saving ServiceInfo: pre-delete callback failed for db.Resource record with key capacity: ErrLeftoverCommitment.*`,
 	))
 }
 

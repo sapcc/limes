@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -38,10 +37,9 @@ type LiquidConnection struct {
 	RateLimits                      ServiceRateLimitConfiguration
 
 	// state
-	liquidServiceInfo      liquid.ServiceInfo
-	liquidServiceInfoMutex sync.RWMutex
-	LiquidClient           LiquidClient
-	DB                     *gorp.DbMap
+	sic          *ServiceInfoCache
+	LiquidClient LiquidClient
+	DB           *gorp.DbMap
 
 	// slots for test doubles
 	timeNow func() time.Time
@@ -55,97 +53,84 @@ func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, av
 		PrometheusCapacityConfiguration: lc.PrometheusCapacityConfiguration,
 		AvailabilityZones:               availabilityZones,
 		RateLimits:                      rateLimits,
-		timeNow:                         timeNow,
 		DB:                              dbm,
+		timeNow:                         timeNow,
 	}
 }
 
 // Init is called before any other interface methods, and allows the LiquidConnection to
 // perform first-time initialization.
-func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient) (err error) {
+func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient, serviceInfoCache *ServiceInfoCache) (err error) {
+	l.sic = serviceInfoCache
 	l.LiquidClient = client
-	serviceInfo, apiSuccess, err := l.retrieveServiceInfo(ctx, true)
+	serviceInfo, err := l.retrieveServiceInfo(ctx)
 	if err != nil {
-		return fmt.Errorf("getting ServiceInfo: %w", err)
-	}
-
-	if !apiSuccess {
-		l.liquidServiceInfoMutex.Lock()
-		defer l.liquidServiceInfoMutex.Unlock()
-		l.liquidServiceInfo = serviceInfo
+		logg.Info("request to Liquid failed for %s, ignoring on startup: %s", l.ServiceType, err)
 		return nil
 	}
 
-	_, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
+	err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
 	}
 
-	l.liquidServiceInfoMutex.Lock()
-	defer l.liquidServiceInfoMutex.Unlock()
-	l.liquidServiceInfo = serviceInfo
+	// do reload of the SIC after successful database update
+	err = l.sic.InvalidateService(Some(l.ServiceType))
+	if err != nil {
+		return fmt.Errorf("invalidating ServiceInfoCache: %w", err)
+	}
 	return nil
 }
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (srv db.Service, err error) {
-	currentVersion := l.ServiceInfo().Version
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
+	service, ok := l.sic.GetServiceForType(l.ServiceType)
+	if !ok {
+		service = db.Service{LiquidVersion: -1}
+	}
+	currentVersion := service.LiquidVersion
 	if infoVersion == currentVersion {
-		return srv, nil
+		return nil
 	}
 
 	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.ServiceType, currentVersion, infoVersion)
-	serviceInfo, _, err := l.retrieveServiceInfo(ctx, false)
+	serviceInfo, err := l.retrieveServiceInfo(ctx)
 	if err != nil {
-		return srv, err
+		return err
 	}
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
 	newVersion := serviceInfo.Version
 	if infoVersion != newVersion {
-		return srv, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
+		return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
 	}
-	srv, err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
+	err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
-		return srv, err
+		return fmt.Errorf("saving ServiceInfo: %w", err)
 	}
 
-	l.liquidServiceInfoMutex.Lock()
-	defer l.liquidServiceInfoMutex.Unlock()
-	l.liquidServiceInfo = serviceInfo
-	return srv, nil
+	// do reload of the SIC after successful database update
+	err = l.sic.InvalidateService(Some(l.ServiceType))
+	if err != nil {
+		return fmt.Errorf("invalidating ServiceInfoCache: %w", err)
+	}
+	return nil
 }
 
 // retrieveServiceInfo queries the backend service for the latest ServiceInfo and validates it.
 // If the liquid is not reachable it can fall back to reading the ServiceInfo from the database
 // - if the dbFallback parameter is set. It is only called on init and when the InfoVersion changes.
-func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context, dbFallback bool) (result liquid.ServiceInfo, apiSuccess bool, err error) {
-	apiSuccess = true
+func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
 	result, err = l.LiquidClient.GetInfo(ctx)
 	// result, err := liquid.ServiceInfo{}, errors.New("some error")
-	if err != nil && dbFallback {
-		apiSuccess = false
-		logg.Info("request to Liquid failed for %s, falling back to DB: %w", l.ServiceType, err)
-		var serviceInfos map[db.ServiceType]liquid.ServiceInfo
-		serviceInfos, err = readServiceInfoFromDB(l.DB, Some(l.ServiceType))
-		result = serviceInfos[l.ServiceType]
-	}
 	if err != nil {
-		return result, false, err
+		return result, err
 	}
 	err = liquid.ValidateServiceInfo(result)
 	if err != nil {
-		return result, false, err
+		return result, err
 	}
-	return result, apiSuccess, nil
-}
-
-// ServiceInfo returns metadata for this liquid.
-// This includes metadata for all the resources and rates that this liquid scrapes.
-func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
-	l.liquidServiceInfoMutex.RLock()
-	defer l.liquidServiceInfoMutex.RUnlock()
-	return l.liquidServiceInfo
+	return result, nil
 }
 
 // Scrape queries the backend service for the quota and usage data of all
@@ -160,20 +145,26 @@ func (l *LiquidConnection) ServiceInfo() liquid.ServiceInfo {
 // This state is persisted in the Limes DB between calls, and not otherwise interpreted by the core application in any way.
 // The liquid can use this field to carry state between Scrape() calls, esp. to detect and handle counter resets in the backend.
 func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, err error) {
-	req := BuildServiceUsageRequest(project, allAZs, l.ServiceInfo().UsageReportNeedsProjectMetadata, prevSerializedState)
+	service, _ := l.sic.GetServiceForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
+	req := BuildServiceUsageRequest(project, allAZs, service.UsageReportNeedsProjectMetadata, prevSerializedState)
 	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, err
+		return result, err
 	}
 
-	_, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, err
+		return result, err
 	}
 
-	err = liquid.ValidateUsageReport(result, req, l.ServiceInfo())
+	serviceInfo, err := l.sic.GetServiceInfo(l.ServiceType)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, err
+		return result, err
+	}
+
+	err = liquid.ValidateUsageReport(result, req, serviceInfo)
+	if err != nil {
+		return result, err
 	}
 
 	return result, nil
@@ -183,25 +174,31 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, srv db.Service, err error) {
-	req, err := BuildServiceCapacityRequest(backchannel, allAZs, l.ServiceType, l.ServiceInfo().Resources)
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
+	resources, _ := l.sic.GetResourcesForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
+	req, err := BuildServiceCapacityRequest(backchannel, allAZs, l.ServiceType, resources)
 	if err != nil {
-		return result, srv, err
+		return result, err
 	}
 
 	result, err = l.LiquidClient.GetCapacityReport(ctx, req)
 	if err != nil {
-		return result, srv, err
+		return result, err
 	}
 
-	srv, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
-		return result, srv, err
+		return result, err
 	}
 
-	err = liquid.ValidateCapacityReport(result, req, l.ServiceInfo())
+	serviceInfo, err := l.sic.GetServiceInfo(l.ServiceType)
 	if err != nil {
-		return result, srv, err
+		return result, err
+	}
+
+	err = liquid.ValidateCapacityReport(result, req, serviceInfo)
+	if err != nil {
+		return result, err
 	}
 
 	// manual capacity collection
@@ -225,12 +222,12 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 		client, err := prometheusCapaConfig.APIConfig.Connect()
 		if err != nil {
-			return result, srv, err
+			return result, err
 		}
 		for resName, query := range prometheusCapaConfig.Queries {
 			azReports, err := prometheusScrapeOneResource(prometheusCapaConfig, ctx, client, query, allAZs)
 			if err != nil {
-				return result, srv, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
+				return result, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
 			}
 			result.Resources[resName] = &liquid.ResourceCapacityReport{
 				PerAZ: azReports,
@@ -238,7 +235,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 	}
 
-	return result, srv, nil
+	return result, nil
 }
 
 // prometheusScrapeOneResource retrieves capacity for one resource via a prometheus client.
@@ -302,18 +299,18 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // BuildServiceCapacityRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/report-capacity. In order to be reusable for exposing an API which prints the
 // request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, serviceType db.ServiceType, resources map[liquid.ResourceName]liquid.ResourceInfo) (liquid.ServiceCapacityRequest, error) {
+func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, serviceType db.ServiceType, resources ResourcesByName) (liquid.ServiceCapacityRequest, error) {
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
 		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(resources)),
 	}
 
 	var err error
-	for resName, resInfo := range resources {
-		if !resInfo.HasCapacity {
+	for resName, resource := range resources {
+		if !resource.HasCapacity {
 			continue
 		}
-		if !resInfo.NeedsResourceDemand {
+		if !resource.NeedsResourceDemand {
 			continue
 		}
 		req.DemandByResource[resName], err = backchannel.GetResourceDemand(serviceType, resName)
@@ -342,7 +339,11 @@ func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.Availabili
 // given domain to the values specified here.
 func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
-	if l.ServiceInfo().QuotaUpdateNeedsProjectMetadata {
+	service, ok := l.sic.GetServiceForType(l.ServiceType)
+	if !ok {
+		return fmt.Errorf(`service for type "%s" not found`, l.ServiceType)
+	}
+	if service.QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
@@ -362,10 +363,10 @@ type CapacityScrapeBackchannel interface {
 }
 
 // BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.
-func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) limesrates.RateInfo {
+func BuildAPIRateInfo(rateName limesrates.RateName, unit liquid.Unit) limesrates.RateInfo {
 	return limesrates.RateInfo{
 		Name: rateName,
-		Unit: rateInfo.Unit,
+		Unit: unit,
 	}
 }
 

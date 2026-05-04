@@ -84,7 +84,7 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.ClusterReport, error) {
+func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -117,33 +117,32 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
-		service, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
+		serviceReport, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
 
-		service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
-		service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+		serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
+		serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
 
 		if availabilityZone == nil {
 			return nil
 		}
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
-			serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-			resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-
-			resource.Usage = *usage
-			if quota != nil && !resource.NoQuota && resInfo.Topology != liquid.AZSeparatedTopology {
+			// we ignore when a resource can't be found in the app layer yet, we will set the quota here
+			resource := resources[dbServiceType][dbResourceName]
+			resourceReport.Usage = *usage
+			if quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
 				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
 				// the sum of all project quotas, since quotas only exist on project level by now.
-				resource.DomainsQuota = quota
+				resourceReport.DomainsQuota = quota
 			}
 			if *showPhysicalUsage {
-				resource.PhysicalUsage = physicalUsage
+				resourceReport.PhysicalUsage = physicalUsage
 			}
 		}
 
 		if *availabilityZone != liquid.AvailabilityZoneTotal && filter.WithAZBreakdown {
-			if resource.PerAZ == nil {
-				resource.PerAZ = make(limesresources.ClusterAZResourceReports)
+			if resourceReport.PerAZ == nil {
+				resourceReport.PerAZ = make(limesresources.ClusterAZResourceReports)
 			}
 			azReport := limesresources.ClusterAZResourceReport{
 				ProjectsUsage:     *usage,
@@ -153,7 +152,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if *showPhysicalUsage {
 				azReport.PhysicalUsage = physicalUsage
 			}
-			resource.PerAZ[*availabilityZone] = &azReport
+			resourceReport.PerAZ[*availabilityZone] = &azReport
 		}
 
 		return nil
@@ -185,7 +184,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
-		_, resource, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
+		_, resourceReport, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
 		overcommitFactor := behavior.OvercommitFactor
 
 		if availabilityZone == nil {
@@ -193,9 +192,9 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		}
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
-			resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity)) //nolint:modernize // pointerTo takes a value, new() creates a zero value
-			if *resource.Capacity != *rawCapacity {
-				resource.RawCapacity = pointerTo(*rawCapacity) //nolint:modernize // pointerTo takes a value, new() creates a zero value
+			resourceReport.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity)) //nolint:modernize // pointerTo takes a value, new() creates a zero value
+			if *resourceReport.Capacity != *rawCapacity {
+				resourceReport.RawCapacity = pointerTo(*rawCapacity) //nolint:modernize // pointerTo takes a value, new() creates a zero value
 			}
 		}
 
@@ -209,34 +208,34 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				azReport.RawCapacity = *rawCapacity
 			}
 
-			if resource.CapacityPerAZ == nil {
-				resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
+			if resourceReport.CapacityPerAZ == nil {
+				resourceReport.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
 			}
-			resource.CapacityPerAZ[*availabilityZone] = &azReport
+			resourceReport.CapacityPerAZ[*availabilityZone] = &azReport
 
 			// only the az-entries have subcapacities!=''
 			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
 				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
+				// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
+				resource := resources[dbServiceType][dbResourceName]
 				if translate != nil {
-					serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-					resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-					*subcapacities, err = translate(*subcapacities, *availabilityZone, dbResourceName, resInfo)
+					*subcapacities, err = translate(*subcapacities, *availabilityZone, resource)
 					if err != nil {
 						return fmt.Errorf("could not apply TranslationRule to subcapacities in %s/%s/%s: %w",
 							dbServiceType, dbResourceName, *availabilityZone, err)
 					}
 				}
-				mergeJSONListInto(&resource.Subcapacities, *subcapacities)
+				mergeJSONListInto(&resourceReport.Subcapacities, *subcapacities)
 			}
 
 			if filter.WithAZBreakdown {
-				if resource.PerAZ == nil {
-					resource.PerAZ = make(limesresources.ClusterAZResourceReports)
+				if resourceReport.PerAZ == nil {
+					resourceReport.PerAZ = make(limesresources.ClusterAZResourceReports)
 				}
-				azReportV2 := resource.PerAZ[*availabilityZone]
+				azReportV2 := resourceReport.PerAZ[*availabilityZone]
 				if azReportV2 == nil {
 					azReportV2 = &limesresources.ClusterAZResourceReport{}
-					resource.PerAZ[*availabilityZone] = azReportV2
+					resourceReport.PerAZ[*availabilityZone] = azReportV2
 				}
 				azReportV2.Capacity = azReport.Capacity
 				azReportV2.RawCapacity = azReport.RawCapacity
@@ -277,9 +276,9 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 				return nil
 			}
-			_, resource, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, serviceInfos)
+			_, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
 
-			azReport := resource.PerAZ[az]
+			azReport := resourceReport.PerAZ[az]
 			if azReport == nil {
 				return nil
 			}
@@ -352,8 +351,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 }
 
 // GetClusterRates returns the rate data report for the whole cluster.
-func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesrates.ClusterReport, error) {
-	nm := core.BuildRateNameMapping(cluster, serviceInfos)
+func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, rates core.RatesByNameType) (*limesrates.ClusterReport, error) {
+	nm := core.BuildRateNameMapping(cluster, rates)
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -375,7 +374,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, ser
 			return err
 		}
 
-		if !core.HasService(serviceInfos, dbServiceType) {
+		if _, ok := rates[dbServiceType][dbRateName]; !ok {
 			return nil
 		}
 		apiServiceType, _, exists := nm.MapToV1API(dbServiceType, dbRateName)
@@ -421,7 +420,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, ser
 				report.Services[apiServiceType] = srvReport
 			}
 			srvReport.Rates[apiRateName] = &limesrates.ClusterRateReport{
-				RateInfo: core.BuildAPIRateInfo(apiRateName, liquid.RateInfo{Unit: rateConfig.Unit}),
+				RateInfo: core.BuildAPIRateInfo(apiRateName, rateConfig.Unit),
 				Limit:    rateConfig.Limit,
 				Window:   rateConfig.Window,
 			}
@@ -431,41 +430,41 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, ser
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, resources core.ResourcesByNameType) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
-	service, exists := report.Services[apiIdentity.ServiceType]
+	serviceReport, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
 		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
-		service = &limesresources.ClusterServiceReport{
+		serviceReport = &limesresources.ClusterServiceReport{
 			ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
 			Resources:   make(limesresources.ClusterResourceReports),
 		}
-		report.Services[apiIdentity.ServiceType] = service
+		report.Services[apiIdentity.ServiceType] = serviceReport
 	}
 
-	resource, exists := service.Resources[apiIdentity.Name]
+	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
-		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-		resInfo := core.InfoForResource(serviceInfo, dbResourceName)
-		resource = &limesresources.ClusterResourceReport{
-			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
+		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
+		resource := resources[dbServiceType][dbResourceName]
+		resourceReport = &limesresources.ClusterResourceReport{
+			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForCluster().ForAPI(now).AsPointer(),
 		}
-		if !resource.NoQuota {
+		if !resourceReport.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
-			resource.QuotaDistributionModel = qdConfig.Model
+			resourceReport.QuotaDistributionModel = qdConfig.Model
 			// We need to set a default value here. Otherwise zero values will never
 			// be reported when there are no `domain_resources` entries to aggregate
 			// over.
 			defaultDomainsQuota := uint64(0)
-			resource.DomainsQuota = &defaultDomainsQuota
+			resourceReport.DomainsQuota = &defaultDomainsQuota
 		}
-		service.Resources[apiIdentity.Name] = resource
+		serviceReport.Resources[apiIdentity.Name] = resourceReport
 	}
 
-	return service, resource, behavior
+	return serviceReport, resourceReport, behavior
 }
 
 func skipAZBreakdown(azReports limesresources.ClusterAvailabilityZoneReports) bool {

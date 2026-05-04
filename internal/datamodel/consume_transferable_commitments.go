@@ -71,7 +71,8 @@ type TransferableCommitmentCache struct {
 	// utilities
 	dbi                           db.Interface
 	cluster                       *core.Cluster
-	serviceInfo                   liquid.ServiceInfo
+	service                       db.Service
+	resources                     core.ResourcesByName
 	loc                           core.AZResourceLocation
 	now                           time.Time
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
@@ -84,7 +85,7 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, serviceInfo liquid.ServiceInfo, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, service db.Service, resources core.ResourcesByName, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, queryArgs...)
 	if err != nil {
@@ -118,15 +119,21 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	// fill utilities
 	t.dbi = dbi
 	t.cluster = cluster
-	t.serviceInfo = serviceInfo
+	t.service = service
+	t.resources = resources
 	t.loc = loc
 	t.now = now
 	t.generateProjectCommitmentUUID = generateProjectCommitmentUUID
 	t.generateTransferToken = generateTransferToken
 	t.mailTemplate = mailTemplate
 
+	resource, ok := resources[loc.ResourceName]
+	if !ok {
+		return t, fmt.Errorf("resource %s not found in provided resources", loc.ResourceName)
+	}
+
 	// determine whether liquid handles commitments for this resource
-	t.liquidHandlesCommitments = t.serviceInfo.Resources[t.loc.ResourceName].HandlesCommitments
+	t.liquidHandlesCommitments = resource.HandlesCommitments
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, Some(loc.AvailabilityZone), cluster, dbi)
 	if err != nil {
 		return t, fmt.Errorf("while collecting AZ stats for %s: %w", loc.ScopeString(), err)
@@ -168,7 +175,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	ccr := liquid.CommitmentChangeRequest{
 		DryRun:      dryRun,
 		AZ:          t.loc.AvailabilityZone,
-		InfoVersion: t.serviceInfo.Version,
+		InfoVersion: t.service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			project.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain),
@@ -524,7 +531,7 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 			}
 		}
 	default:
-		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.loc, t.serviceInfo, t.dbi)
+		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.loc, t.service, t.resources, t.dbi)
 		if err != nil {
 			return result, err
 		}
