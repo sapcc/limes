@@ -129,21 +129,22 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	// the scraper does not mess with those values
 	// cluster_rate xOtherRate comes from the rate_limits config
 	s.MustDBInsert(&db.Rate{
-		ServiceID:     1,
+		ServiceID:     s.GetServiceID("unittest"),
 		Name:          "xAnotherRate",
 		DisplayName:   "X Another Rate",
 		Path:          db.RatePath{ServiceType: "unittest", RateName: "xAnotherRate"},
+		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
 	})
 	s.MustDBInsert(&db.ProjectRate{
-		ProjectID: 2,
-		RateID:    3,
+		ProjectID: s.GetProjectID("dresden"),
+		RateID:    s.GetRateID("unittest", "xOtherRate"),
 		Limit:     Some[uint64](10),
 		Window:    Some(1 * limesrates.WindowSeconds),
 	})
 	s.MustDBInsert(&db.ProjectRate{
-		ProjectID: 1,
-		RateID:    4,
+		ProjectID: s.GetProjectID("berlin"),
+		RateID:    s.GetRateID("unittest", "xAnotherRate"),
 		Limit:     Some[uint64](42),
 		Window:    Some(2 * limesrates.WindowMinutes),
 	})

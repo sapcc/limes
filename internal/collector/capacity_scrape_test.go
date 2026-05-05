@@ -176,6 +176,7 @@ func Test_ScanCapacity(t *testing.T) {
 		ServiceID:     2,
 		Name:          "unknown",
 		Path:          db.ResourcePath{ServiceType: "unshared", ResourceName: "unknown"},
+		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
 	}
 	s.MustDBInsert(unknownRes)
