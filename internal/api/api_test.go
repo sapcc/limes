@@ -116,6 +116,7 @@ func setupTest(t *testing.T) test.Setup {
 		"objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:read":      {Topology: liquid.FlatTopology, HasUsage: false},
 		"objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")

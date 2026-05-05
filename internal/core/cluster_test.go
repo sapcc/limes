@@ -84,6 +84,12 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 }
 
 func TestMain(m *testing.M) {
+	// When running as a subprocess (e.g. to test crash behavior), skip the DB
+	// lifecycle management to avoid stopping the parent process's Postgres server.
+	// TODO: Can we replace the $TO_CRASH thing below by something that does not require spawning a subprocess?
+	if os.Getenv("TO_CRASH") == "1" {
+		os.Exit(m.Run())
+	}
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
@@ -94,6 +100,10 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		// The names of these units are from a time when LIQUID only declared rates that have usage.
+		"only_in_global":        {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"in_global_and_project": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"only_in_project":       {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -116,11 +126,11 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (14, 4, 'total', 0, 'unshared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, from_liquid) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/in_global_and_liquid', TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/in_global_and_liquid');
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (2, 2, 'in_global_and_project', 1, 'flat', 'unshared/in_global_and_project');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, from_liquid) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE, 'unshared/in_liquid_and_project', TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE, 'unshared/in_liquid_and_project');
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (4, 2, 'only_in_global', 1, 'flat', 'unshared/only_in_global');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id, from_liquid) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid', 1, TRUE);
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid', 1);
 		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (6, 2, 'only_in_project', 1, 'flat', 'unshared/only_in_project');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
@@ -229,6 +239,10 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		// The names of these units are from a time when LIQUID only declared rates that have usage.
+		"only_in_global":        {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"in_global_and_project": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"only_in_project":       {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,

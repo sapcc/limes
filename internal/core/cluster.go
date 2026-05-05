@@ -547,25 +547,28 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
 	}
-	liquidRateUnitsByName := make(map[liquid.RateName]liquid.Unit, len(serviceInfo.Rates))
-	globalLimitUnitsByName := make(map[liquid.RateName]liquid.Unit, len(rateLimits.Global))
-	projectLimitUnitsByName := make(map[liquid.RateName]liquid.Unit, len(rateLimits.ProjectDefault))
-	for rateName, rate := range serviceInfo.Rates {
-		liquidRateUnitsByName[rateName] = rate.Unit
-	}
 	for _, rateLimit := range rateLimits.Global {
-		globalLimitUnitsByName[rateLimit.Name] = rateLimit.Unit
+		rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
+		if !ok {
+			return fmt.Errorf("configuration declares a global rate limit for %s/%s which is not declared by the liquid",
+				serviceType, rateLimit.Name)
+		}
+		if rateLimit.Unit != rateInfo.Unit {
+			return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
+				rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
+		}
 	}
 	for _, rateLimit := range rateLimits.ProjectDefault {
-		projectLimitUnitsByName[rateLimit.Name] = rateLimit.Unit
+		rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
+		if !ok {
+			return fmt.Errorf("configuration declares a project-default rate limit for %s/%s which is not declared by the liquid",
+				serviceType, rateLimit.Name)
+		}
+		if rateLimit.Unit != rateInfo.Unit {
+			return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
+				rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
+		}
 	}
-	// extend the list of wanted rates with the rates from limits which are configured (they may not be in the serviceInfo.Rates)
-	// TODO: the special handling of this is a little ugly - we should switch to all rates + limits coming from liquid at some point
-	wantedRates := slices.Collect(maps.Keys(liquidRateUnitsByName))
-	wantedRates = append(wantedRates, slices.Collect(maps.Keys(globalLimitUnitsByName))...)
-	wantedRates = append(wantedRates, slices.Collect(maps.Keys(projectLimitUnitsByName))...)
-	slices.Sort(wantedRates)
-	wantedRates = slices.Compact(wantedRates)
 
 	// for unit changes, we need to have some special handling, else we will interpret
 	// the old values from the database with the new unit!
@@ -574,85 +577,44 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	// do update for rates
 	rateUpdate := db.SetUpdate[db.Rate, liquid.RateName]{
 		ExistingRecords: dbRates,
-		WantedKeys:      wantedRates,
+		WantedKeys:      slices.Sorted(maps.Keys(serviceInfo.Rates)),
 		KeyForRecord: func(rate db.Rate) liquid.RateName {
 			return rate.Name
 		},
 		Create: func(rateName liquid.RateName) (db.Rate, error) {
-			liquidUnit, liquidRateExists := liquidRateUnitsByName[rateName]
-			globalLimitUnit, globalLimitExists := globalLimitUnitsByName[rateName]
-			projectLimitUnit, projectLimitExists := projectLimitUnitsByName[rateName]
-			if (globalLimitExists && liquidRateExists && liquidUnit != globalLimitUnit) ||
-				(projectLimitExists && liquidRateExists && liquidUnit != projectLimitUnit) ||
-				(globalLimitExists && projectLimitExists && globalLimitUnit != projectLimitUnit) {
-				logg.Fatal(`cannot create rate %s/%s, because the units from the liquid and/ or the rate limit configuration don't match!`, serviceType, rateName)
-			}
-			unit := limes.UnitNone
-			topology := liquid.FlatTopology
-			hasUsage := false
-			fromLiquid := false
-			switch {
-			case liquidRateExists:
-				unit = liquidUnit
-				topology = serviceInfo.Rates[rateName].Topology
-				hasUsage = serviceInfo.Rates[rateName].HasUsage
-				fromLiquid = true
-			case globalLimitExists:
-				unit = globalLimitUnit
-			case projectLimitExists:
-				unit = projectLimitUnit
-			}
-			categoryID := options.Map(serviceInfo.Rates[rateName].Category,
+			rateInfo := serviceInfo.Rates[rateName]
+			categoryID := options.Map(rateInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Rate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
-				DisplayName:   serviceInfo.Rates[rateName].DisplayName,
+				DisplayName:   rateInfo.DisplayName,
 				CategoryID:    categoryID,
 				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
-				FromLiquid:    fromLiquid,
 				LiquidVersion: serviceInfo.Version,
-				Unit:          unit,
-				Topology:      topology,
-				HasUsage:      hasUsage,
+				Unit:          rateInfo.Unit,
+				Topology:      rateInfo.Topology,
+				HasUsage:      rateInfo.HasUsage,
 			}, nil
 		},
 		Update: func(rate *db.Rate) (err error) {
-			liquidUnit, liquidRateExists := liquidRateUnitsByName[rate.Name]
-			globalLimitUnit, globalLimitExists := globalLimitUnitsByName[rate.Name]
-			projectLimitUnit, projectLimitExists := projectLimitUnitsByName[rate.Name]
-			if (globalLimitExists && liquidRateExists && liquidUnit != globalLimitUnit) ||
-				(projectLimitExists && liquidRateExists && liquidUnit != projectLimitUnit) ||
-				(globalLimitExists && projectLimitExists && globalLimitUnit != projectLimitUnit) {
-				logg.Fatal(`cannot update rate %s/%s, because the units from the liquid and/ or the rate limit configuration don't match!`, serviceType, rate.Name)
-			}
-			newUnit := rate.Unit
+			rateInfo := serviceInfo.Rates[rate.Name]
+
 			rate.LiquidVersion = serviceInfo.Version
-			rate.DisplayName = serviceInfo.Rates[rate.Name].DisplayName
-			rate.CategoryID = options.Map(serviceInfo.Rates[rate.Name].Category,
+			rate.DisplayName = rateInfo.DisplayName
+			rate.CategoryID = options.Map(rateInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
-			rate.Topology = liquid.FlatTopology
-			rate.HasUsage = false
-			switch {
-			case liquidRateExists:
-				rate.FromLiquid = true
-				newUnit = liquidUnit
-				rate.Topology = serviceInfo.Rates[rate.Name].Topology
-				rate.HasUsage = serviceInfo.Rates[rate.Name].HasUsage
-			case globalLimitExists:
-				rate.FromLiquid = false
-				newUnit = globalLimitUnit
-			case projectLimitExists:
-				rate.FromLiquid = false
-				newUnit = projectLimitUnit
-			}
-			if newUnit != rate.Unit {
+			rate.Topology = rateInfo.Topology
+			rate.HasUsage = rateInfo.HasUsage
+
+			if rate.Unit != rateInfo.Unit {
 				unitChangesByRateID[rate.ID] = unitChange{
 					oldUnit: rate.Unit,
-					newUnit: newUnit,
+					newUnit: rateInfo.Unit,
 				}
+				rate.Unit = rateInfo.Unit
 			}
-			rate.Unit = newUnit
+
 			return nil
 		},
 	}

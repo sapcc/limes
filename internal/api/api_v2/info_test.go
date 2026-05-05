@@ -8,11 +8,10 @@ import (
 	"net/http"
 	"testing"
 
-	. "go.xyrillian.de/gg/option"
-
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/test"
 )
@@ -70,9 +69,15 @@ const configJSON = `{
 }`
 
 func TestV2ResourcesInfoAPI(t *testing.T) {
+	srvInfoFirst := test.DefaultLiquidServiceInfo("First")
+	srvInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
+		"objects:create": {Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:update": {Topology: liquid.FlatTopology, HasUsage: false},
+	}
+
 	s := test.NewSetup(t,
 		test.WithConfig(configJSON),
-		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithPersistedServiceInfo("first", srvInfoFirst),
 		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
