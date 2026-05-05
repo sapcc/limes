@@ -905,6 +905,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
 
@@ -1028,6 +1029,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := assert.JSONObject{
 		"commitment": assert.JSONObject{

@@ -5,7 +5,6 @@ package core
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"maps"
@@ -42,8 +41,11 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	// LiquidConnections are only filled for the collector-task.
 	LiquidConnections map[db.ServiceType]*LiquidConnection
-	// When LiquidConnections are not filled, the ServiceInfoCache is populated and used to retrieve ServiceInfo
-	ServiceInfoCache *ServiceInfoCache
+	// The ServiceInfoCache should be used to access all database entities which are
+	// filled from the ServiceInfo. The LiquidConnections get a handle to this in the
+	// collector so that they can trigger an immediate update to the data without waiting
+	// for the notification mechanism.
+	SIC *ServiceInfoCache
 	// reference of the DB is necessary to delete leftover LiquidConnections
 	DB *gorp.DbMap
 	// used to generate LiquidClients without LiquidConnections
@@ -112,15 +114,14 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 		errs.Addf("failed to initialize discovery method: %w", gophercloudext.UnpackError(err))
 	}
 
-	if len(c.LiquidConnections) == 0 {
-		// load service info, if there are no liquid connections
-		sic, err := NewServiceInfoCache(c.DB, dbURL)
-		if err != nil {
-			errs.Addf("could not create service info cache: %w", err)
-			return errs
-		}
-		c.ServiceInfoCache = sic
+	// initialize SIC
+	c.SIC, err = NewServiceInfoCache(c.DB, dbURL)
+	if err != nil {
+		errs.Addf("could not create service info cache: %w", err)
+		return errs
+	}
 
+	if len(c.LiquidConnections) == 0 {
 		return errs
 	}
 
@@ -133,7 +134,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 			errs.Addf("failed to initialize service %s: %w", serviceType, gophercloudext.UnpackError(err))
 			continue
 		}
-		err = conn.Init(ctx, client)
+		err = conn.Init(ctx, client, c.SIC)
 		if errors.Is(err, ErrLeftoverCommitment) {
 			// we just log this error here and ignore it, so that the startup does not fail
 			// this will produce errors on every scrape subsequently (as if the collector was
@@ -154,43 +155,6 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	return errs
-}
-
-// AllServiceInfos returns a map of all ServiceInfos for all services in this cluster.
-// Its output is the basis to use the convenience methods below to get certain properties of the services
-// configuration. In order to be usable efficiently, it is recommended to call this method only once per API,
-// so that the database fallback is only done once.
-func (c *Cluster) AllServiceInfos() (map[db.ServiceType]liquid.ServiceInfo, error) {
-	if len(c.LiquidConnections) == 0 {
-		return readServiceInfoFromDB(c.DB, None[db.ServiceType]())
-	}
-	result := make(map[db.ServiceType]liquid.ServiceInfo, len(c.LiquidConnections))
-	for serviceType, connection := range c.LiquidConnections {
-		if connection != nil { // defense in depth (nil values should never be stored in the map anyway)
-			result[serviceType] = connection.ServiceInfo()
-		}
-	}
-	return result, nil
-}
-
-// InfoForService returns the ServiceInfo for a given service. If the service does not
-// exist, None[liquid.ServiceInfo] is returned. It should be used instead of Cluster.AllServiceInfos
-// when only one service is needed, to avoid the overhead of loading all services.
-func (c *Cluster) InfoForService(serviceType db.ServiceType) (Option[liquid.ServiceInfo], error) {
-	if len(c.LiquidConnections) == 0 {
-		serviceInfos, err := readServiceInfoFromDB(c.DB, Some(serviceType))
-		if errors.Is(err, sql.ErrNoRows) {
-			return None[liquid.ServiceInfo](), nil
-		} else if err != nil {
-			return None[liquid.ServiceInfo](), err
-		}
-		return Some(serviceInfos[serviceType]), nil
-	}
-	connection := c.LiquidConnections[serviceType]
-	if connection == nil {
-		return None[liquid.ServiceInfo](), nil
-	}
-	return Some(connection.ServiceInfo()), nil
 }
 
 // CommitmentBehaviorForResource returns the CommitmentBehavior for the given resource in the given service.
@@ -273,90 +237,11 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Utility functions for working with ServiceInfos and Resources
-
-// HasService checks whether the given service is enabled in this cluster.
-func HasService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) bool {
-	_, exists := serviceInfos[serviceType]
-	return exists
-}
-
-// InfoForService returns the ServiceInfo for the given service type.
-// If the service does not exist, an empty ServiceInfo is returned.
-func InfoForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) liquid.ServiceInfo {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return liquid.ServiceInfo{}
-	}
-	return serviceInfo
-}
-
-// HasResource checks whether the given service is enabled in this cluster and
-// whether it advertises the given resource.
-func HasResource(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return false
-	}
-	_, exists = serviceInfo.Resources[resourceName]
-	return exists
-}
-
-// InfoForResource returns the ResourceInfo for a given service and resource. If the service
-// does not exist, an empty ResourceInfo (with .Unit == UnitNone and .Category == "") is returned.
-func InfoForResource(serviceInfo liquid.ServiceInfo, resourceName liquid.ResourceName) liquid.ResourceInfo {
-	resInfo, exists := serviceInfo.Resources[resourceName]
-	if !exists {
-		return liquid.ResourceInfo{Unit: limes.UnitNone}
-	}
-	return resInfo
-}
-
-// HasUsageForRate checks whether the given service is enabled in this cluster and
-// whether it scrapes usage for the given rate.
-func HasUsageForRate(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType, rateName liquid.RateName) bool {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return false
-	}
-	rateInfo, exists := serviceInfo.Rates[rateName]
-	return exists && rateInfo.HasUsage
-}
-
-// InfoForRate finds the connection for the given serviceType and finds within that
-// connection the RateInfo for the given rateName. If the service or rate does not
-// exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
-// only returns non-empty RateInfos for rates where a usage is reported. There
-// may be rates that only have a limit, as defined in the ClusterConfiguration.
-func InfoForRate(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType, rateName liquid.RateName) liquid.RateInfo {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return liquid.RateInfo{Unit: limes.UnitNone}
-	}
-	rateInfo, exists := serviceInfo.Rates[rateName]
-	if !exists {
-		return liquid.RateInfo{Unit: limes.UnitNone}
-	}
-	return rateInfo
-}
-
-// RatesForService returns a list of all rates for the given service type.
-// If the service does not exist, an empty list is returned.
-// If an error occurs during db lookup, the error is returned.
-func RatesForService(serviceInfos map[db.ServiceType]liquid.ServiceInfo, serviceType db.ServiceType) map[liquid.RateName]liquid.RateInfo {
-	serviceInfo, exists := serviceInfos[serviceType]
-	if !exists {
-		return make(map[liquid.RateName]liquid.RateInfo)
-	}
-	return serviceInfo.Rates
-}
+// Utility functions for working with ServiceInfo and DB
 
 // ErrLeftoverCommitment is a custom error to define when a leftover commitment
 // prevents deletion of a service, resource or az_resource.
 var ErrLeftoverCommitment = errors.New("ErrLeftoverCommitment")
-
-////////////////////////////////////////////////////////////////////////////////
-// Utility functions for working with ServiceInfo and DB
 
 var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 			SELECT count(*)
@@ -383,11 +268,11 @@ func generateDeleteFunc[T any](dbm *gorp.DbMap, getAZResourcePathPattern func(o 
 // and rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gorp.DbMap) (srv db.Service, err error) {
+func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gorp.DbMap) (err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
-		return srv, err
+		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
@@ -395,18 +280,18 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbServices []db.Service
 	_, err = tx.Select(&dbServices, `SELECT * FROM services WHERE type = $1`, serviceType)
 	if err != nil {
-		return srv, fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
+		return fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
 	}
 	var wantedServices = []db.ServiceType{serviceType}
 
 	// do update for service (as set update, for convenience)
 	cmf, err := util.RenderMapToJSON("capacity_metric_families", serviceInfo.CapacityMetricFamilies)
 	if err != nil {
-		return srv, fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
 	}
 	umf, err := util.RenderMapToJSON("usage_metric_families", serviceInfo.UsageMetricFamilies)
 	if err != nil {
-		return srv, fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
 	}
 	serviceUpdate := db.SetUpdate[db.Service, db.ServiceType]{
 		ExistingRecords: dbServices,
@@ -417,14 +302,15 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		Create: func(serviceType db.ServiceType) (db.Service, error) {
 			logg.Info("SaveServiceInfoToDB: creating Service %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
 			return db.Service{
-				NextScrapeAt:                    timeNow,
-				Type:                            serviceType,
-				LiquidVersion:                   serviceInfo.Version,
-				DisplayName:                     serviceInfo.DisplayName,
-				CapacityMetricFamiliesJSON:      cmf,
-				UsageMetricFamiliesJSON:         umf,
-				UsageReportNeedsProjectMetadata: serviceInfo.UsageReportNeedsProjectMetadata,
-				QuotaUpdateNeedsProjectMetadata: serviceInfo.QuotaUpdateNeedsProjectMetadata,
+				NextScrapeAt:                           timeNow,
+				Type:                                   serviceType,
+				LiquidVersion:                          serviceInfo.Version,
+				DisplayName:                            serviceInfo.DisplayName,
+				CapacityMetricFamiliesJSON:             cmf,
+				UsageMetricFamiliesJSON:                umf,
+				UsageReportNeedsProjectMetadata:        serviceInfo.UsageReportNeedsProjectMetadata,
+				QuotaUpdateNeedsProjectMetadata:        serviceInfo.QuotaUpdateNeedsProjectMetadata,
+				CommitmentHandlingNeedsProjectMetadata: serviceInfo.CommitmentHandlingNeedsProjectMetadata,
 			}, nil
 		},
 		Update: func(service *db.Service) (err error) {
@@ -437,15 +323,16 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			service.UsageMetricFamiliesJSON = umf
 			service.UsageReportNeedsProjectMetadata = serviceInfo.UsageReportNeedsProjectMetadata
 			service.QuotaUpdateNeedsProjectMetadata = serviceInfo.QuotaUpdateNeedsProjectMetadata
+			service.CommitmentHandlingNeedsProjectMetadata = serviceInfo.CommitmentHandlingNeedsProjectMetadata
 			return nil
 		},
 		PreDelete: Some(generateDeleteFunc[db.Service](dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
 	}
 	dbServices, err = serviceUpdate.Execute(tx)
 	if err != nil {
-		return srv, fmt.Errorf("update services failed for %s: %w", serviceType, err)
+		return fmt.Errorf("update services failed for %s: %w", serviceType, err)
 	}
-	srv = dbServices[0]
+	srv := dbServices[0]
 
 	// The categories don't have a reference to the service, so we just add all categories which are new
 	// and delete the one's which are unused after the resources for this service were reconciled.
@@ -455,7 +342,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			newCategory := db.Category{Name: name, DisplayName: categoryInfo.DisplayName}
 			err = tx.Insert(&newCategory)
 			if err != nil {
-				return srv, fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
+				return fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
 			}
 			categoryByName[name] = newCategory
 		}
@@ -465,7 +352,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbResources []db.Resource
 	_, err = tx.Select(&dbResources, `SELECT * FROM resources WHERE service_id = $1`, srv.ID)
 	if err != nil {
-		return srv, fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
 	}
 	wantedResources := slices.Sorted(maps.Keys(serviceInfo.Resources))
 
@@ -532,13 +419,13 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	dbResources, err = resourceUpdate.Execute(tx)
 	if err != nil {
-		return srv, err
+		return err
 	}
 
 	// remove unused categories (categories which are not referenced by any resource anymore)
 	_, err = tx.Exec(`DELETE FROM categories WHERE id NOT IN (SELECT DISTINCT category_id FROM resources)`)
 	if err != nil {
-		return srv, fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
 	}
 
 	// do resource unit updates if applicable
@@ -547,7 +434,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		newBaseUnit, newFactor := units.newUnit.Base()
 		if oldBaseUnit != newBaseUnit {
 			// the mitigation for this failing is probably to delete the resources from the database and read them fresh?
-			return srv, fmt.Errorf("cannot change unit of resource with id %d from %q to %q, because the base units differ", resID, units.oldUnit, units.newUnit)
+			return fmt.Errorf("cannot change unit of resource with id %d from %q to %q, because the base units differ", resID, units.oldUnit, units.newUnit)
 		}
 
 		// For all values which change with the next scrape or from config, we assume rounding is okay.
@@ -559,17 +446,17 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			JOIN az_resources azr ON pc.az_resource_id = azr.id
 			WHERE (pc.amount::NUMERIC * $1) % $2 != 0 AND azr.resource_id = $3`), oldFactor, newFactor, resID)
 		if err != nil {
-			return srv, fmt.Errorf("error while retrieving non-convertible project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while retrieving non-convertible project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}
 		if nonConvertibleEntries > 0 {
-			return srv, fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
+			return fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
 		}
 		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
 			SET amount = pc.amount * $1 / $2
 			FROM az_resources azr
 			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
 		if err != nil {
-			return srv, fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}
 
 		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE az_resources
@@ -578,14 +465,14 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			last_nonzero_raw_capacity = ROUND(last_nonzero_raw_capacity * $1 / $2)
 			WHERE resource_id = $3`), oldFactor, newFactor, resID)
 		if err != nil {
-			return srv, fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}
 		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_resources
 			SET max_quota_from_outside_admin = ROUND(max_quota_from_outside_admin * $1 / $2),
 			override_quota_from_config = ROUND(override_quota_from_config * $1 / $2)
 			WHERE resource_id = $3`), oldFactor, newFactor, resID)
 		if err != nil {
-			return srv, fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}
 		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
 			SET quota = ROUND(pazr.quota * $1 / $2),
@@ -595,7 +482,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			FROM az_resources azr
 			WHERE pazr.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
 		if err != nil {
-			return srv, fmt.Errorf("error while updating project_az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while updating project_az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}
 	}
 
@@ -603,7 +490,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbAZResources []db.AZResource
 	_, err = tx.Select(&dbAZResources, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID)
 	if err != nil {
-		return srv, fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
 	}
 	dbAZResourcesByResourceID := make(map[db.ResourceID][]db.AZResource)
 	for _, azRes := range dbAZResources {
@@ -650,7 +537,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		}
 		_, err = setUpdate.Execute(tx)
 		if err != nil {
-			return srv, err
+			return err
 		}
 	}
 
@@ -658,7 +545,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	var dbRates []db.Rate
 	_, err = tx.Select(&dbRates, `SELECT * FROM rates WHERE service_id = $1`, srv.ID)
 	if err != nil {
-		return srv, fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
+		return fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
 	}
 	liquidRateUnitsByName := make(map[liquid.RateName]liquid.Unit, len(serviceInfo.Rates))
 	globalLimitUnitsByName := make(map[liquid.RateName]liquid.Unit, len(rateLimits.Global))
@@ -673,6 +560,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		projectLimitUnitsByName[rateLimit.Name] = rateLimit.Unit
 	}
 	// extend the list of wanted rates with the rates from limits which are configured (they may not be in the serviceInfo.Rates)
+	// TODO: the special handling of this is a little ugly - we should switch to all rates + limits coming from liquid at some point
 	wantedRates := slices.Collect(maps.Keys(liquidRateUnitsByName))
 	wantedRates = append(wantedRates, slices.Collect(maps.Keys(globalLimitUnitsByName))...)
 	wantedRates = append(wantedRates, slices.Collect(maps.Keys(projectLimitUnitsByName))...)
@@ -702,11 +590,13 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			unit := limes.UnitNone
 			topology := liquid.FlatTopology
 			hasUsage := false
+			fromLiquid := false
 			switch {
 			case liquidRateExists:
 				unit = liquidUnit
 				topology = serviceInfo.Rates[rateName].Topology
 				hasUsage = serviceInfo.Rates[rateName].HasUsage
+				fromLiquid = true
 			case globalLimitExists:
 				unit = globalLimitUnit
 			case projectLimitExists:
@@ -720,6 +610,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				DisplayName:   serviceInfo.Rates[rateName].DisplayName,
 				CategoryID:    categoryID,
 				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
+				FromLiquid:    fromLiquid,
 				LiquidVersion: serviceInfo.Version,
 				Unit:          unit,
 				Topology:      topology,
@@ -744,12 +635,15 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			rate.HasUsage = false
 			switch {
 			case liquidRateExists:
+				rate.FromLiquid = true
 				newUnit = liquidUnit
 				rate.Topology = serviceInfo.Rates[rate.Name].Topology
 				rate.HasUsage = serviceInfo.Rates[rate.Name].HasUsage
 			case globalLimitExists:
+				rate.FromLiquid = false
 				newUnit = globalLimitUnit
 			case projectLimitExists:
+				rate.FromLiquid = false
 				newUnit = projectLimitUnit
 			}
 			if newUnit != rate.Unit {
@@ -764,7 +658,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 	_, err = rateUpdate.Execute(tx)
 	if err != nil {
-		return srv, err
+		return err
 	}
 
 	// do rate unit updates if applicable
@@ -773,7 +667,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		newBaseUnit, newFactor := units.newUnit.Base()
 		if oldBaseUnit != newBaseUnit {
 			// the mitigation for this failing is probably to delete the rates from the database and read them fresh?
-			return srv, fmt.Errorf("cannot change unit of rate with id %d from %q to %q, because the base units differ", rateID, units.oldUnit, units.newUnit)
+			return fmt.Errorf("cannot change unit of rate with id %d from %q to %q, because the base units differ", rateID, units.oldUnit, units.newUnit)
 		}
 
 		// For all values which change with the next scrape or from config, we assume rounding is okay.
@@ -782,111 +676,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			usage_as_bigint = ROUND(usage_as_bigint::BIGINT * $1 / $2)::TEXT
 			WHERE rate_id = $3`), oldFactor, newFactor, rateID)
 		if err != nil {
-			return srv, fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
 		}
 	}
 
-	return srv, tx.Commit()
-}
-
-// readServiceInfoFromDB reads the complete ServiceInfo from the database a) as fallback in case the Liquid
-// is not reachable on startup or b) as single source for tasks outside of collect to obtain a complete
-// ServiceInfo. For b) the call to readServiceInfoFromDB is done from the Cluster, all access which does not
-// have a handle to a LiquidConnection (all non-collect-tasks) should utilize the Cluster methods. The
-// properties of the ServiceInfo are read individually per entity instead of an SQL-join, so that possible
-// inconsistencies of the database can be reported more precisely.
-func readServiceInfoFromDB(dbm *gorp.DbMap, serviceTypeOpt Option[db.ServiceType]) (map[db.ServiceType]liquid.ServiceInfo, error) {
-	serviceType, applyFilter := serviceTypeOpt.Unpack()
-	// TODO: make use of the serviceInfoCache
-	var (
-		dbServices      []db.Service
-		err             error
-		serviceInfos    = make(map[db.ServiceType]liquid.ServiceInfo)
-		serviceTypeByID = make(map[db.ServiceID]db.ServiceType)
-	)
-
-	if applyFilter {
-		_, err = dbm.Select(&dbServices, `SELECT * FROM services WHERE type = $1`, serviceType)
-	} else {
-		_, err = dbm.Select(&dbServices, `SELECT * FROM services`)
-	}
-	if err != nil {
-		return serviceInfos, fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
-	}
-	// more than one is not possible due to the key/unique constraint, when filter is given
-	if len(dbServices) == 0 && applyFilter {
-		return serviceInfos, fmt.Errorf("no service found for %s: %w", serviceType, sql.ErrNoRows)
-	}
-
-	for _, dbService := range dbServices {
-		capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](dbService.CapacityMetricFamiliesJSON, "capacity_metric_families")
-		if err != nil {
-			return serviceInfos, fmt.Errorf("cannot deserialize capacityMetricFamiliesJSON for %s: %w", serviceType, err)
-		}
-		usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](dbService.UsageMetricFamiliesJSON, "usage_metric_families")
-		if err != nil {
-			return serviceInfos, fmt.Errorf("cannot deserialize usageMetricsFamiliesJSON for %s: %w", serviceType, err)
-		}
-		serviceInfos[dbService.Type] = liquid.ServiceInfo{
-			Version:                         dbService.LiquidVersion,
-			Resources:                       make(map[liquid.ResourceName]liquid.ResourceInfo),
-			Rates:                           make(map[liquid.RateName]liquid.RateInfo),
-			CapacityMetricFamilies:          capacityMetricFamilies,
-			UsageMetricFamilies:             usageMetricFamilies,
-			UsageReportNeedsProjectMetadata: dbService.UsageReportNeedsProjectMetadata,
-			QuotaUpdateNeedsProjectMetadata: dbService.QuotaUpdateNeedsProjectMetadata,
-		}
-		serviceTypeByID[dbService.ID] = dbService.Type
-	}
-
-	var dbResources []db.Resource
-	if applyFilter {
-		_, err = dbm.Select(&dbResources, `SELECT * FROM resources WHERE service_id = $1`, dbServices[0].ID)
-	} else {
-		_, err = dbm.Select(&dbResources, `SELECT * FROM resources`)
-	}
-	if err != nil {
-		return serviceInfos, fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
-	}
-
-	var dbRates []db.Rate
-	if applyFilter {
-		_, err = dbm.Select(&dbRates, `SELECT * FROM rates WHERE service_id = $1`, dbServices[0].ID)
-	} else {
-		_, err = dbm.Select(&dbRates, `SELECT * FROM rates`)
-	}
-	if err != nil {
-		return serviceInfos, fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
-	}
-
-	for _, dbResource := range dbResources {
-		dbServiceType := serviceTypeByID[dbResource.ServiceID]
-		dbServiceVersion := serviceInfos[dbServiceType].Version
-		if dbResource.LiquidVersion != dbServiceVersion {
-			return serviceInfos, fmt.Errorf("resource %s has a different LiquidVersion %d than the service %s with LiquidVersion %d", dbResource.Name, dbResource.LiquidVersion, dbServiceType, dbServiceVersion)
-		}
-		serviceInfos[dbServiceType].Resources[dbResource.Name] = liquid.ResourceInfo{
-			Unit:                dbResource.Unit,
-			Topology:            dbResource.Topology,
-			HasCapacity:         dbResource.HasCapacity,
-			NeedsResourceDemand: dbResource.NeedsResourceDemand,
-			HasQuota:            dbResource.HasQuota,
-			Attributes:          []byte(dbResource.AttributesJSON),
-			HandlesCommitments:  dbResource.HandlesCommitments,
-		}
-	}
-	for _, dbRate := range dbRates {
-		dbServiceType := serviceTypeByID[dbRate.ServiceID]
-		dbServiceVersion := serviceInfos[dbServiceType].Version
-		if dbRate.LiquidVersion != dbServiceVersion {
-			return serviceInfos, fmt.Errorf("resource %s has a different LiquidVersion %d than the service %s with LiquidVersion %d", dbRate.Name, dbRate.LiquidVersion, dbServiceType, dbServiceVersion)
-		}
-		serviceInfos[dbServiceType].Rates[dbRate.Name] = liquid.RateInfo{
-			Unit:     dbRate.Unit,
-			Topology: dbRate.Topology,
-			HasUsage: dbRate.HasUsage,
-		}
-	}
-
-	return serviceInfos, nil
+	return tx.Commit()
 }

@@ -22,14 +22,11 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	// missing services/ resources will lead to empty filter --> empty report
+	resources := p.Cluster.SIC.GetResources()
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	p.recordReportSpecificity("domain_list", filter)
-	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, serviceInfos)
+	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -49,14 +46,11 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	resources := p.Cluster.SIC.GetResources()
 
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	p.recordReportSpecificity("domain_show", filter)
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, serviceInfos)
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

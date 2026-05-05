@@ -4,9 +4,6 @@
 package core
 
 import (
-	"maps"
-	"slices"
-
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -40,13 +37,13 @@ type dbRateRef struct {
 }
 
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
-func BuildResourceNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liquid.ServiceInfo) ResourceNameMapping {
+func BuildResourceNameMapping(cluster *Cluster, resources ResourcesByNameType) ResourceNameMapping {
 	nm := ResourceNameMapping{
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
-	for dbServiceType, serviceInfo := range serviceInfos {
-		for dbResourceName := range serviceInfo.Resources {
+	for dbServiceType, resByName := range resources {
+		for dbResourceName := range resByName {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.fromAPIToDB[apiRef] = dbRef
@@ -57,16 +54,15 @@ func BuildResourceNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]
 }
 
 // BuildRateNameMapping constructs a new RateNameMapping instance.
-func BuildRateNameMapping(cluster *Cluster, serviceInfos map[db.ServiceType]liquid.ServiceInfo) RateNameMapping {
+func BuildRateNameMapping(cluster *Cluster, rates RatesByNameType) RateNameMapping {
 	nm := RateNameMapping{
 		cluster:     cluster,
 		fromAPIToDB: make(map[RateRef]dbRateRef),
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
-	serviceTypes := slices.Sorted(maps.Keys(serviceInfos))
-	for _, dbServiceType := range serviceTypes {
+	for dbServiceType, rateByName := range rates {
 		dbRateNames := make(map[liquid.RateName]struct{})
-		for dbRateName := range RatesForService(serviceInfos, dbServiceType) {
+		for dbRateName := range rateByName {
 			dbRateNames[dbRateName] = struct{}{}
 		}
 		cfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)

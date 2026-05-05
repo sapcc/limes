@@ -24,13 +24,9 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	showBasic := !token.Check("cluster:show")
+	resources := p.Cluster.SIC.GetResources()
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	p.recordReportSpecificity("cluster_show", filter)
 	if showBasic {
 		filter.IsSubcapacityAllowed = func(serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
@@ -41,8 +37,8 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cluster *limesresources.ClusterReport
-	err = db.RunOLAPQueries(p.DB, func(tx *gorp.Transaction) (err error) {
-		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter, serviceInfos)
+	err := db.RunOLAPQueries(p.DB, func(tx *gorp.Transaction) (err error) {
+		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter, resources)
 		return err
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {

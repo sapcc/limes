@@ -72,7 +72,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, serviceInfos map[db.ServiceType]liquid.ServiceInfo) (*Inconsistencies, error) {
+func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) (*Inconsistencies, error) {
 	// Initialize inconsistencies as Inconsistencies type.
 	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
@@ -82,7 +82,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
 
-	nm := core.BuildResourceNameMapping(cluster, serviceInfos)
+	nm := core.BuildResourceNameMapping(cluster, resources)
 
 	// ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
@@ -108,8 +108,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 			return nil
 		}
 
-		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-		ospq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
+		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
+		ospq.Unit = resources[dbServiceType][dbResourceName].Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -142,8 +142,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 			return nil
 		}
 
-		serviceInfo := core.InfoForService(serviceInfos, dbServiceType)
-		mmpq.Unit = core.InfoForResource(serviceInfo, dbResourceName).Unit
+		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
+		mmpq.Unit = resources[dbServiceType][dbResourceName].Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

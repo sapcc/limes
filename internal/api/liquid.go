@@ -31,18 +31,14 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	maybeServiceInfo, err := p.Cluster.InfoForService(serviceType)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
+	resources, ok := p.Cluster.SIC.GetResourcesForType(serviceType)
 	if !ok {
 		http.Error(w, "unknown service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, serviceType, serviceInfo.Resources)
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, serviceType, resources)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

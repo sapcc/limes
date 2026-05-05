@@ -134,13 +134,10 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// load service info (used to generate liquid.ProjectMetadata)
-	maybeServiceInfo, err := cluster.InfoForService(loc.ServiceType)
-	if err != nil {
-		return nil, err
-	}
-	serviceInfo, ok := maybeServiceInfo.Unpack()
-	if !ok {
-		return nil, fmt.Errorf("serviceInfo not found when trying to confirm commitments for %s", loc.ServiceType)
+	service, sExists := cluster.SIC.GetServiceForLoc(loc)
+	resources, _ := cluster.SIC.GetResourcesForType(loc.ServiceType)
+	if !sExists {
+		return nil, fmt.Errorf("service/resource not found when trying to confirm commitments for %s", loc.ServiceType)
 	}
 
 	// load affected projects and domains
@@ -166,7 +163,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// initiate cache of transferable commitments
-	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, serviceInfo, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
+	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, service, resources, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
 	if err != nil {
 		return nil, err
 	}

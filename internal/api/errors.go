@@ -20,12 +20,9 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	resources := p.Cluster.SIC.GetResources()
 
-	scrapeErrors, err := reports.GetScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos))
+	scrapeErrors, err := reports.GetScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster, resources))
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

@@ -31,12 +31,12 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	// TODO: We only use the serviceType-part of the filter here, otherwise this would
+	// not work for rates. Would be better to use a dedicated filter for that which is fed with "rates".
+	resources := p.Cluster.SIC.GetResources()
+	rates := p.Cluster.SIC.GetRates()
 
-	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
+	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, resources), rates)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -60,14 +60,14 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	// TODO: We only use the serviceType-part of the filter here, otherwise this would
+	// not work for rates. Would be better to use a dedicated filter for that which is fed with "rates".
+	resources := p.Cluster.SIC.GetResources()
+	rates := p.Cluster.SIC.GetRates()
 
-	filter := reports.ReadFilter(r, p.Cluster, serviceInfos)
+	filter := reports.ReadFilter(r, p.Cluster, resources)
 	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, serviceInfos, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, rates, stream.WriteItem))
 }
 
 // GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
@@ -91,12 +91,12 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceInfos, err := p.Cluster.AllServiceInfos()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	// TODO: We only use the serviceType-part of the filter here, otherwise this would
+	// not work for rates. Would be better to use a dedicated filter for that which is fed with "rates".
+	resources := p.Cluster.SIC.GetResources()
+	rates := p.Cluster.SIC.GetRates()
 
-	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, serviceInfos), serviceInfos)
+	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, resources), rates)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

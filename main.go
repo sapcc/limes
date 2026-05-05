@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -154,10 +155,15 @@ func main() {
 	dbm := db.InitORM(dbConn)
 	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect") // #nosec G703 -- configPath is from command-line argument, controlled by operator
 	errs.LogFatalIfError()
-	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo), Some(dbURL))
+	maybeDBURL := None[url.URL]()
+	if taskName != "collect" {
+		// background: the collector task explicitly updates the SIC after writing
+		maybeDBURL = Some(dbURL)
+	}
+	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo), maybeDBURL)
 	errs.LogFatalIfError()
-	if cluster.ServiceInfoCache != nil {
-		defer cluster.ServiceInfoCache.Close()
+	if cluster.SIC != nil {
+		defer cluster.SIC.Close()
 	}
 
 	// select task

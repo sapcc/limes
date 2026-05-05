@@ -26,11 +26,12 @@ type Service struct {
 	NextScrapeAt       time.Time         `db:"next_scrape_at"`
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
 	// following fields get filled from liquid.ServiceInfo
-	LiquidVersion                   int64  `db:"liquid_version"`
-	CapacityMetricFamiliesJSON      string `db:"capacity_metric_families_json"`
-	UsageMetricFamiliesJSON         string `db:"usage_metric_families_json"`
-	UsageReportNeedsProjectMetadata bool   `db:"usage_report_needs_project_metadata"`
-	QuotaUpdateNeedsProjectMetadata bool   `db:"quota_update_needs_project_metadata"`
+	LiquidVersion                          int64  `db:"liquid_version"`
+	CapacityMetricFamiliesJSON             string `db:"capacity_metric_families_json"`
+	UsageMetricFamiliesJSON                string `db:"usage_metric_families_json"`
+	UsageReportNeedsProjectMetadata        bool   `db:"usage_report_needs_project_metadata"`
+	QuotaUpdateNeedsProjectMetadata        bool   `db:"quota_update_needs_project_metadata"`
+	CommitmentHandlingNeedsProjectMetadata bool   `db:"commitment_handling_needs_project_metadata"`
 }
 
 // Resource contains a record from the `resources` table.
@@ -83,7 +84,9 @@ type Rate struct {
 	CategoryID  Option[CategoryID] `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/ratename"; mostly intended for manual lookup
 	Path RatePath `db:"path"`
-	// following fields get filled from liquid.ServiceInfo
+	// Rates are special, as some only exist in config to manage limits
+	FromLiquid bool `db:"from_liquid"`
+	// following fields get filled from liquid.ServiceInfo (if FromLiquid=true)
 	LiquidVersion int64           `db:"liquid_version"`
 	Unit          liquid.Unit     `db:"unit"`
 	Topology      liquid.Topology `db:"topology"`

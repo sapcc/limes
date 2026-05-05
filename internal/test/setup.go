@@ -247,7 +247,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		if exists {
 			rateLimits = liquidConfig.RateLimits
 		}
-		_ = must.ReturnT(core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))(t)
+		must.SucceedT(t, core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))
 	}
 	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
 	failIfErrs(t, errs)

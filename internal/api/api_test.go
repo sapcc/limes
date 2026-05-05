@@ -1192,6 +1192,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
@@ -1346,7 +1347,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
-
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",

@@ -28,17 +28,8 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		return
 	}
 
-	serviceInfos, err := c.AllServiceInfos()
-	if err != nil {
-		errs.Add(err)
-		return
-	}
-
-	nameMapping := core.BuildResourceNameMapping(c, serviceInfos)
-	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.LiquidConnections))
-	for dbServiceType, connection := range c.LiquidConnections {
-		allResInfos[dbServiceType] = connection.ServiceInfo().Resources
-	}
+	resources := c.SIC.GetResources()
+	nameMapping := core.BuildResourceNameMapping(c, resources)
 
 	// the quota-overrides.json file refers to services and resources using IdentityInV1API, so we:
 	// a) need to lookup by API identity
@@ -48,14 +39,14 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		if !exists {
 			return limes.UnitNone, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
-		resInfo, exists := allResInfos[dbServiceType][dbResourceName]
+		resource, exists := resources[dbServiceType][dbResourceName]
 		if !exists {
-			return limes.UnitNone, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
+			return limes.UnitNone, fmt.Errorf("no data found in ServiceInfoCache for %s/%s", serviceType, resourceName)
 		}
-		if !resInfo.HasQuota {
+		if !resource.HasQuota {
 			return limes.UnitNone, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
 		}
-		return resInfo.Unit, nil
+		return resource.Unit, nil
 	}
 	parsed, suberrs := limesresources.ParseQuotaOverrides(buf, getUnit)
 	for _, suberr := range suberrs {

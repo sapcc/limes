@@ -108,4 +108,12 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE resources DROP CONSTRAINT resources_topology_acceptable_values;
 		ALTER TABLE rates DROP CONSTRAINT rates_topology_acceptable_values;
 	`,
+	`079_add_commitment_handling_needs_project_metadata.up.sql`: `
+		ALTER TABLE services ADD COLUMN commitment_handling_needs_project_metadata BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE rates ADD COLUMN from_liquid BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
+	`079_add_commitment_handling_needs_project_metadata.down.sql`: `
+		ALTER TABLE services DROP COLUMN commitment_handling_needs_project_metadata;
+		ALTER TABLE rates DROP COLUMN from_liquid;
+	`,
 }

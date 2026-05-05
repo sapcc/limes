@@ -94,12 +94,12 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, resourceInfo liquid.ResourceInfo, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
-	if !resourceInfo.HasQuota {
+	if !resource.HasQuota {
 		return nil
 	}
-	cfg, ok := cluster.QuotaDistributionConfigForResource(serviceType, resourceName).Autogrow.Unpack()
+	cfg, ok := cluster.QuotaDistributionConfigForResource(serviceType, resource.Name).Autogrow.Unpack()
 	if !ok {
 		return nil
 	}
@@ -119,7 +119,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		resourceID       db.ResourceID
 		azResourceIDByAZ = make(map[liquid.AvailabilityZone]db.AZResourceID)
 	)
-	err = sqlext.ForeachRow(tx, acpqGetClusterwideIDsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(tx, acpqGetClusterwideIDsQuery, []any{serviceType, resource.Name}, func(rows *sql.Rows) error {
 		var (
 			azResourceID db.AZResourceID
 			az           liquid.AvailabilityZone
@@ -135,7 +135,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	// collect required data (TODO: pass `resourceID` into here to simplify queries over there too?)
-	stats, err := collectAZAllocationStats(serviceType, resourceName, None[liquid.AvailabilityZone](), cluster, tx)
+	stats, err := collectAZAllocationStats(serviceType, resource.Name, None[liquid.AvailabilityZone](), cluster, tx)
 	if err != nil {
 		return err
 	}
@@ -173,16 +173,16 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	// AZ separated basequota will be assigned to all available AZs
 	if logg.ShowDebug {
 		// NOTE: The structs that contain pointers must be printed as JSON to actually show all values.
-		logg.Debug("ACPQ for %s/%s: statsByAZ = %#v", serviceType, resourceName, stats)
-		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
+		logg.Debug("ACPQ for %s/%s: statsByAZ = %#v", serviceType, resource.Name, stats)
+		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resource.Name, cfg)
 		buf, _ := json.Marshal(constraints) //nolint:errcheck
-		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resourceName, string(buf))
+		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resource.Name, string(buf))
 	}
-	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resourceInfo)
+	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
 	if logg.ShowDebug {
-		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resourceName, allowsQuotaOvercommit)
+		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resource.Name, allowsQuotaOvercommit)
 		buf, _ := json.Marshal(target) //nolint:errcheck
-		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
+		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resource.Name, string(buf))
 	}
 
 	// write new AZ quotas to database (this includes az=total)
@@ -191,7 +191,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		for az, azTarget := range target {
 			azResourceID, exists := azResourceIDByAZ[az]
 			if !exists {
-				return fmt.Errorf("no az_resources entry for %s/%s/%s", serviceType, resourceName, az)
+				return fmt.Errorf("no az_resources entry for %s/%s/%s", serviceType, resource.Name, az)
 			}
 			for projectID, projectTarget := range azTarget {
 				result, err := stmt.Exec(projectTarget.Allocated, projectID, azResourceID)
@@ -203,7 +203,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
 
-				if rowsAffected > 0 && AZHasBackendQuotaForTopology(resourceInfo.Topology, az) {
+				if rowsAffected > 0 && AZHasBackendQuotaForTopology(resource.Topology, az) {
 					projectsWithUpdatedQuota[projectID] = struct{}{}
 				}
 			}
@@ -211,7 +211,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while writing updated %s/%s AZ quotas to DB: %w", serviceType, resourceName, err)
+		return fmt.Errorf("while writing updated %s/%s AZ quotas to DB: %w", serviceType, resource.Name, err)
 	}
 
 	// mark project services with changed quota for SyncQuotaToBackendJob
@@ -225,7 +225,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resourceName, err)
+		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resource.Name, err)
 	}
 	return tx.Commit()
 }
@@ -282,7 +282,7 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, resInfo liquid.ResourceInfo) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, topology liquid.Topology) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
 	// in order to be able to handle usage in az=unknown via constraint (see below), we always initialize the map
 	if constraints == nil {
 		constraints = make(map[db.ProjectID]projectLocalQuotaConstraints)
@@ -322,7 +322,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	}
 
 	slices.Sort(allAZsInOrder)
-	if cfg.ProjectBaseQuota > 0 && resInfo.Topology != liquid.AZSeparatedTopology {
+	if cfg.ProjectBaseQuota > 0 && topology != liquid.AZSeparatedTopology {
 		// base quota is given out in the pseudo-AZ "any", so we need to calculate quota for "any", too
 		isRelevantAZ[limes.AvailabilityZoneAny] = struct{}{}
 	}
@@ -344,7 +344,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
 	// in all the real AZs, so it can only allow quota overcommit if all AZs do
-	if isAZAware && resInfo.Topology != liquid.AZSeparatedTopology {
+	if isAZAware && topology != liquid.AZSeparatedTopology {
 		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allowsQuotaOvercommitInAny
 	}
 
@@ -402,7 +402,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			realisticBaseQuota := min(cfg.ProjectBaseQuota, sumOfCapacities)
 			if sumOfLocalizedQuotas < realisticBaseQuota {
 				// AZ separated topology receives the basequota to all available AZs
-				if resInfo.Topology == liquid.AZSeparatedTopology {
+				if topology == liquid.AZSeparatedTopology {
 					for az := range isRelevantAZ {
 						target[az][projectID].Desired = min(cfg.ProjectBaseQuota, stats[az].Capacity)
 					}
@@ -411,7 +411,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				}
 			}
 		}
-		if resInfo.Topology != liquid.AZSeparatedTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
+		if topology != liquid.AZSeparatedTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
 		target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)

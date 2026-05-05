@@ -13,6 +13,8 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 // ResourceBehavior contains the configuration options for specialized
@@ -39,12 +41,12 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 
 // BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
 // format, using the category mapping in this behavior object.
-func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceName, resInfo liquid.ResourceInfo) limesresources.ResourceInfo {
+func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceName, resource db.Resource) limesresources.ResourceInfo {
 	return limesresources.ResourceInfo{
 		Name:     resName,
-		Unit:     resInfo.Unit,
+		Unit:     resource.Unit,
 		Category: b.Category,
-		NoQuota:  !resInfo.HasQuota,
+		NoQuota:  !resource.HasQuota,
 	}
 }
 

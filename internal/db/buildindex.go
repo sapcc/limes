@@ -15,7 +15,17 @@ func BuildIndexOfDBResult[R any, K comparable](dbi Interface, keyFunc func(R) K,
 	for _, item := range resultArray {
 		result[keyFunc(item)] = item
 	}
-	return result, nil
+	return BuildIndexOfArray(resultArray, keyFunc), nil
+}
+
+// BuildIndexOfArray returns a map (index) of the given array.
+// The key should be unique among the whole array.
+func BuildIndexOfArray[R any, K comparable](array []R, keyFunc func(R) K) (result map[K]R) {
+	result = make(map[K]R, len(array))
+	for _, item := range array {
+		result[keyFunc(item)] = item
+	}
+	return result
 }
 
 // BuildArrayIndexOfDBResult executes an SQL query and returns a map (index) of the result.
@@ -26,10 +36,16 @@ func BuildArrayIndexOfDBResult[R any, K comparable](dbi Interface, keyFunc func(
 	if err != nil {
 		return nil, err
 	}
-	result = make(map[K][]R, len(resultArray))
-	for _, item := range resultArray {
+	return BuildArrayIndexOfArray(resultArray, keyFunc), nil
+}
+
+// BuildArrayIndexOfArray returns a map (index) of the given array.
+// The key should not be unique among the whole result set.
+func BuildArrayIndexOfArray[R any, K comparable](array []R, keyFunc func(R) K) (result map[K][]R) {
+	result = make(map[K][]R, len(array))
+	for _, item := range array {
 		key := keyFunc(item)
 		result[key] = append(result[key], item)
 	}
-	return result, nil
+	return result
 }

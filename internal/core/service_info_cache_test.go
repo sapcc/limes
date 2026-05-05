@@ -10,6 +10,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/logg"
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
@@ -28,6 +29,39 @@ const configJSON = `{
 		"unshared": {"area": "unshared"}
 	}
 }`
+
+// TODO: upstream this into go-bits/must, then remove here.
+func BeOK[V any](val V, ok bool) V {
+	if !ok {
+		logg.Error("Expected to succeed but it did not")
+	}
+	return val
+}
+
+func NotBeOK[V any](val V, ok bool) {
+	if ok {
+		logg.Error("Expected to fail but it did not")
+	}
+}
+
+func BeOKT[V any](val V, ok bool) func(testing.TB) V {
+	return func(t testing.TB) V {
+		t.Helper()
+		if !ok {
+			t.Fatal("Expected to succeed but it did not")
+		}
+		return val
+	}
+}
+
+func NotBeOKT[V any](val V, ok bool) func(testing.TB) {
+	return func(t testing.TB) {
+		t.Helper()
+		if ok {
+			t.Fatal("Expected to fail but it did not")
+		}
+	}
+}
 
 func TestServiceInfoCache(t *testing.T) {
 	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
@@ -49,34 +83,34 @@ func TestServiceInfoCache(t *testing.T) {
 	firstObjectsCreate := s.GetRateID("first", "objects:create")
 	// by calling connect with a DB-URL, we register the service info listeners
 	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
-	t.Cleanup(func() { s.Cluster.ServiceInfoCache.Close() })
+	t.Cleanup(func() { s.Cluster.SIC.Close() })
 
-	sic := s.Cluster.ServiceInfoCache
+	sic := s.Cluster.SIC
 	assert.Equal(t, len(sic.GetServices()), 2)
-	assert.Equal(t, len(sic.GetResourcesForType("first")), 0)
-	assert.Equal(t, len(sic.GetResourcesForType("second")), 2)
-	assert.Equal(t, sic.GetResourceForTypeName("second", "capacity").Name, "capacity")
-	assert.Equal(t, len(sic.GetRatesForType("second")), 0)
+	NotBeOKT(sic.GetResourcesForType("first"))(t)
+	assert.Equal(t, len(BeOKT(sic.GetResourcesForType("second"))(t)), 2)
+	assert.Equal(t, BeOKT(sic.GetResourceForTypeName("second", "capacity"))(t).Name, "capacity")
+	NotBeOKT(sic.GetRatesForType("second"))(t)
 	assert.Equal(t, len(sic.GetCategories()), 1)
 
 	// check service update
-	assert.Equal(t, sic.GetServiceForType("first").DisplayName, "First")
-	assert.Equal(t, sic.GetServiceForType("second").DisplayName, "Second")
+	assert.Equal(t, BeOKT(sic.GetServiceForType("first"))(t).DisplayName, "First")
+	assert.Equal(t, BeOKT(sic.GetServiceForType("second"))(t).DisplayName, "Second")
 	s.MustDBExec("UPDATE services SET display_name = 'Changed' WHERE id = $1", first)
 	<-sic.OnInvalidate
-	assert.Equal(t, sic.GetServiceForType("first").DisplayName, "Changed")
-	assert.Equal(t, sic.GetServiceForType("second").DisplayName, "Second")
+	assert.Equal(t, BeOKT(sic.GetServiceForType("first"))(t).DisplayName, "Changed")
+	assert.Equal(t, BeOKT(sic.GetServiceForType("second"))(t).DisplayName, "Second")
 
 	// resource update
-	assert.Equal(t, sic.GetResourceForTypeName("second", "capacity").DisplayName, "Capacity")
-	assert.Equal(t, sic.GetResourceForTypeName("second", "things").DisplayName, "Things")
+	assert.Equal(t, BeOKT(sic.GetResourceForTypeName("second", "capacity"))(t).DisplayName, "Capacity")
+	assert.Equal(t, BeOKT(sic.GetResourceForTypeName("second", "things"))(t).DisplayName, "Things")
 	s.MustDBExec("UPDATE resources r SET display_name = 'Changed' where id = $1", secondCapacity)
 	<-sic.OnInvalidate
-	assert.Equal(t, sic.GetResourceForTypeName("second", "capacity").DisplayName, "Changed")
-	assert.Equal(t, sic.GetResourceForTypeName("second", "things").DisplayName, "Things")
+	assert.Equal(t, BeOKT(sic.GetResourceForTypeName("second", "capacity"))(t).DisplayName, "Changed")
+	assert.Equal(t, BeOKT(sic.GetResourceForTypeName("second", "things"))(t).DisplayName, "Things")
 
 	// check az_resource insert
-	assert.Equal(t, len(sic.GetAZResourcesForTypeName("second", "capacity")), 5) // gives out total, any and unknown, too
+	assert.Equal(t, len(BeOKT(sic.GetAZResourcesForTypeName("second", "capacity"))(t)), 5) // gives out total, any and unknown, too
 	s.MustDBInsert(&db.AZResource{
 		ResourceID:       secondCapacity,
 		AvailabilityZone: "test",
@@ -84,11 +118,11 @@ func TestServiceInfoCache(t *testing.T) {
 		RawCapacity:      123,
 	})
 	<-sic.OnInvalidate
-	assert.Equal(t, len(sic.GetAZResourcesForTypeName("second", "capacity")), 6)
+	assert.Equal(t, len(BeOKT(sic.GetAZResourcesForTypeName("second", "capacity"))(t)), 6)
 
 	// check rate deletion
-	assert.Equal(t, len(sic.GetRatesForType("first")), 4)
+	assert.Equal(t, len(BeOKT(sic.GetRatesForType("first"))(t)), 4)
 	s.MustDBExec("DELETE FROM rates WHERE id = $1", firstObjectsCreate)
 	<-sic.OnInvalidate
-	assert.Equal(t, len(sic.GetRatesForType("first")), 3)
+	assert.Equal(t, len(BeOKT(sic.GetRatesForType("first"))(t)), 3)
 }
