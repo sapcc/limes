@@ -100,8 +100,6 @@ func (c *Collector) ScrapeJob(registerer prometheus.Registerer) jobloop.Job {
 type projectScrapeTask struct {
 	// data loaded during discoverScrapeTask
 	ProjectService db.ProjectService
-	// do not use the db.Service directly, as it might get updated during the scrape operation
-	ServiceType db.ServiceType
 	// timing information
 	Timing TaskTiming
 	// error reporting
@@ -109,22 +107,22 @@ type projectScrapeTask struct {
 }
 
 func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labels) (task projectScrapeTask, err error) {
-	task.ServiceType = db.ServiceType(labels["service_type"])
+	serviceType := db.ServiceType(labels["service_type"])
 	task.Timing.StartedAt = c.MeasureTime()
 
 	// Defense in depth: Verify that we have a LiquidConnection for the serviceType of this task.
-	_, ok := c.Cluster.LiquidConnections[task.ServiceType]
+	_, ok := c.Cluster.LiquidConnections[serviceType]
 	if !ok {
-		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", task.ServiceType)
+		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
 	// if the above check succeeded, this should never fail because the SIC is updated after the
 	// LiquidConnection is initialized.
-	_, ok = c.Cluster.SIC.GetServiceForType(task.ServiceType)
+	_, ok = c.Cluster.SIC.GetServiceForType(serviceType)
 	if !ok {
-		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", task.ServiceType)
+		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
-	err = c.DB.SelectOne(&task.ProjectService, findProjectForScrapeQuery, task.ServiceType, task.Timing.StartedAt)
+	err = c.DB.SelectOne(&task.ProjectService, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
 	if err != nil {
 		return projectScrapeTask{}, err
 	}
@@ -148,35 +146,36 @@ func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProjec
 }
 
 func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
+	serviceType := db.ServiceType(labels["service_type"])
 	projectService := task.ProjectService
-	connection := c.Cluster.LiquidConnections[task.ServiceType] // NOTE: discoverScrapeTask already verified that this exists
+	connection := c.Cluster.LiquidConnections[serviceType] // NOTE: discoverScrapeTask already verified that this exists
 
 	// collect additional DB records
 	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(projectService)
 	if err != nil {
 		return err
 	}
-	logg.Debug("scraping %s resources for %s/%s", task.ServiceType, dbDomain.Name, dbProject.Name)
+	logg.Debug("scraping %s resources for %s/%s", serviceType, dbDomain.Name, dbProject.Name)
 
 	// perform scrape
 	report, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project, projectService)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = gophercloudext.UnpackError(err)
-		return c.recordScrapeError(task, dbProject, dbDomain, project)
+		return c.recordScrapeError(task, serviceType, dbProject, dbDomain, project)
 	}
 	rateData, serializedScrapeState := extractRateData(report)
 
 	// collect additional DB records (it is important to do this step after the
 	// scrape, because the scrape might observe a new ServiceInfo version)
 	// write resource results
-	err = c.writeResourceScrapeResult(dbProject, task, report)
+	err = c.writeResourceScrapeResult(task, serviceType, dbProject, report)
 	if err != nil {
 		return fmt.Errorf("while writing resource results into DB: %w", err)
 	}
 
 	// write rate results
-	err = c.writeRateScrapeResult(task, rateData)
+	err = c.writeRateScrapeResult(task, serviceType, rateData)
 	if err != nil {
 		return fmt.Errorf("while writing rate results into DB: %w", err)
 	}
@@ -193,7 +192,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	return nil
 }
 
-func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
+func (c *Collector) recordScrapeError(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
 	_, err := c.DB.Exec(
 		writeScrapeErrorQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(RecheckInterval)),
@@ -201,16 +200,16 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, dbProject db.Proje
 	)
 	if err != nil {
 		c.LogError("additional DB error while writing resource scrape error for service %s in project %s: %s",
-			task.ServiceType, project.UUID, err.Error(),
+			serviceType, project.UUID, err.Error(),
 		)
 	}
 
 	if task.ProjectService.ScrapedAt.IsNone() {
 		// see explanation inside the called function's body
-		err := c.writeDummyResources(dbProject, task.ServiceType)
+		err := c.writeDummyResources(dbProject, serviceType)
 		if err != nil {
 			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
-				task.ServiceType, project.UUID, err.Error(),
+				serviceType, project.UUID, err.Error(),
 			)
 		}
 	}
@@ -255,12 +254,12 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 	return result, string(report.SerializedState)
 }
 
-func (c *Collector) writeResourceScrapeResult(dbProject db.Project, task projectScrapeTask, resourceData liquid.ServiceUsageReport) error {
-	service, sExists := c.Cluster.SIC.GetServiceForType(task.ServiceType)
-	resources, _ := c.Cluster.SIC.GetResourcesForType(task.ServiceType)
-	azResources, _ := c.Cluster.SIC.GetAZResourcesForType(task.ServiceType)
+func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport) error {
+	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
+	resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType)
+	azResources, _ := c.Cluster.SIC.GetAZResourcesForType(serviceType)
 	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
-		return fmt.Errorf("no data found in ServiceInfoCache for type %s", task.ServiceType)
+		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 	for resName, resData := range resourceData.Resources {
 		resource := resources[resName]
@@ -442,7 +441,7 @@ func (c *Collector) writeResourceScrapeResult(dbProject db.Project, task project
 		query := `UPDATE project_services ps SET quota_desynced_at = $1 WHERE ps.id = $2 AND quota_desynced_at IS NULL`
 		_, err := tx.Exec(query, c.MeasureTime(), task.ProjectService.ID)
 		if err != nil {
-			return fmt.Errorf("while scheduling backend sync for %s quotas: %w", task.ServiceType, err)
+			return fmt.Errorf("while scheduling backend sync for %s quotas: %w", serviceType, err)
 		}
 	}
 
@@ -458,12 +457,12 @@ func (c *Collector) writeResourceScrapeResult(dbProject db.Project, task project
 	return nil
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[liquid.RateName]*big.Int) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int) error {
 	projectService := task.ProjectService
-	service, sExists := c.Cluster.SIC.GetServiceForType(task.ServiceType)
-	rates, _ := c.Cluster.SIC.GetRatesForType(task.ServiceType)
+	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
+	rates, _ := c.Cluster.SIC.GetRatesForType(serviceType)
 	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
-		return fmt.Errorf("no data found in ServiceInfoCache for type %s", task.ServiceType)
+		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
 	tx, err := c.DB.Begin()
@@ -499,7 +498,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 				if projectRate.UsageAsBigint != "" {
 					c.LogError(
 						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper connection for %s?)",
-						rateName, projectRate.ID, task.ServiceType,
+						rateName, projectRate.ID, serviceType,
 					)
 				}
 				continue
