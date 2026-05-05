@@ -30,6 +30,7 @@ const configJSON = `{
 	}
 }`
 
+// TODO: upstream this into go-bits/must, then remove here.
 func BeOK[V any](val V, ok bool) V {
 	if !ok {
 		logg.Error("Expected to succeed but it did not")

@@ -122,7 +122,6 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 // - if the dbFallback parameter is set. It is only called on init and when the InfoVersion changes.
 func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
 	result, err = l.LiquidClient.GetInfo(ctx)
-	// result, err := liquid.ServiceInfo{}, errors.New("some error")
 	if err != nil {
 		return result, err
 	}

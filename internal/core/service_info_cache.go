@@ -290,7 +290,7 @@ func (s *ServiceInfoCache) GetServiceForType(serviceType db.ServiceType) (db.Ser
 	return val, ok
 }
 
-// GetServiceForLoc returns the cached resource for the serviceType and resourceName of loc.
+// GetServiceForLoc returns the cached service for the serviceType of loc.
 func (s *ServiceInfoCache) GetServiceForLoc(loc AZResourceLocation) (db.Service, bool) {
 	return s.GetServiceForType(loc.ServiceType)
 }
@@ -364,7 +364,7 @@ func (s *ServiceInfoCache) GetAZResourceForTypeNameAZ(serviceType db.ServiceType
 	return val, ok
 }
 
-// GetAZResourceForLoc returns the cached resource for the serviceType and resourceName of loc.
+// GetAZResourceForLoc returns the cached AZ resource for this location.
 func (s *ServiceInfoCache) GetAZResourceForLoc(loc AZResourceLocation) (db.AZResource, bool) {
 	return s.GetAZResourceForTypeNameAZ(loc.ServiceType, loc.ResourceName, loc.AvailabilityZone)
 }
