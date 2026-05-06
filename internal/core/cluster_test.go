@@ -5,10 +5,7 @@ package core_test
 
 import (
 	"encoding/json"
-	"errors"
 	"net/url"
-	"os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -80,12 +77,6 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 }
 
 func TestMain(m *testing.M) {
-	// When running as a subprocess (e.g. to test crash behavior), skip the DB
-	// lifecycle management to avoid stopping the parent process's Postgres server.
-	// TODO: Can we replace the $TO_CRASH thing below by something that does not require spawning a subprocess?
-	if os.Getenv("TO_CRASH") == "1" {
-		os.Exit(m.Run())
-	}
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
@@ -404,19 +395,6 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 }
 
 func Test_ClusterServiceInfoRateLimitsUnitIncompatible(t *testing.T) {
-	// we want to test that this crashes, so we spawn a subprocess which can crash
-	if os.Getenv("TO_CRASH") != "1" {
-		cmd := exec.Command(os.Args[0], "-test.run=Test_ClusterServiceInfoRateLimitsUnitIncompatible") //nolint:gosec // G204: this is intentional in tests
-		cmd.Env = append(os.Environ(), "TO_CRASH=1")
-		err := cmd.Run()
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return
-		}
-		t.Fatalf("process ran with err %v, want exit status 1", err)
-	}
-
-	// actual test
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
@@ -434,11 +412,13 @@ func Test_ClusterServiceInfoRateLimitsUnitIncompatible(t *testing.T) {
 		test.WithInitialDiscovery,
 	)
 
-	// rate updates should fail, when units are unequal between config and liquid
+	// rate updates should fail when units are unequal between config and liquid
 	rateWithGlobalLimit := srvInfoUnshared.Rates["with_global_limit"]
 	rateWithGlobalLimit.Unit = liquid.UnitGibibytes // config has MiB
 	srvInfoUnshared.Rates["with_global_limit"] = rateWithGlobalLimit
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 
-	generateNewClusterWithPersistingServiceInfo(t, s, false)
+	errs := generateNewClusterWithPersistingServiceInfo(t, s, false)
+	assert.Equal(t, len(errs), 1)
+	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: configuration uses unit "MiB" for rate unshared/with_global_limit, but liquid declared unit "GiB"`)
 }
