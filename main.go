@@ -111,7 +111,7 @@ func main() {
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
 		case "swift":
-			opts.ServiceInfoRefreshInterval = 0
+			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, opts))
 		default:
 			logg.Fatal("no liquid implementation available for %q", liquidName)

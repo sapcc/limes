@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -50,7 +51,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 
 	return liquid.ServiceInfo{
-		Version:     2,
+		Version:     time.Now().Unix(),
 		DisplayName: "Object Storage",
 		Rates:       rates,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
