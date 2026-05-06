@@ -493,17 +493,10 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db
 			rateName := ratesByID[projectRate.RateID].Name
 			rateExists[rateName] = true
 
-			usageData, exists := rateData[rateName]
-			if !exists {
-				if projectRate.UsageAsBigint != "" {
-					c.LogError(
-						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper connection for %s?)",
-						rateName, projectRate.ID, serviceType,
-					)
-				}
-				continue
+			usageAsBigint := ""
+			if usage, exists := rateData[rateName]; exists {
+				usageAsBigint = usage.String()
 			}
-			usageAsBigint := usageData.String()
 			if usageAsBigint != projectRate.UsageAsBigint {
 				_, err := stmt.Exec(usageAsBigint, projectRate.ID)
 				if err != nil {
@@ -516,27 +509,20 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db
 	// insert missing project_rates entries
 	for _, rateName := range slices.Sorted(maps.Keys(rates)) {
 		rate := rates[rateName]
-		if !rate.FromLiquid {
-			// special case for rates: the rates in the database/ SIC are mixed between
-			// configuration-only rates (=rate limits) and one's which are also defined
-			// in the liquid. Without this early return, we would write missing values
-			// for the config-only rates.
-			continue
-		}
 		if _, exists := rateExists[rateName]; exists {
 			continue
 		}
-		usageData := rateData[rateName]
 
-		projectRate := &db.ProjectRate{
-			ProjectID: projectService.ProjectID,
-			RateID:    rates[rateName].ID,
-		}
-		if usageData != nil {
-			projectRate.UsageAsBigint = usageData.String()
+		usageAsBigint := ""
+		if usage, exists := rateData[rateName]; exists {
+			usageAsBigint = usage.String()
 		}
 
-		err = tx.Insert(projectRate)
+		err = tx.Insert(&db.ProjectRate{
+			ProjectID:     projectService.ProjectID,
+			RateID:        rate.ID,
+			UsageAsBigint: usageAsBigint,
+		})
 		if err != nil {
 			return err
 		}

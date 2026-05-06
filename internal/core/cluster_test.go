@@ -5,10 +5,7 @@ package core_test
 
 import (
 	"encoding/json"
-	"errors"
 	"net/url"
-	"os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -52,14 +49,10 @@ const (
 				"area": "unshared",
 				"rate_limits": {
 					"global": [
-						{"name": "in_global_and_liquid", "limit": 10, "window": "1m", "unit": "MiB"},
-						{"name": "in_global_and_project", "limit": 20, "window": "1m"},
-						{"name": "only_in_global", "limit": 30, "window": "1m"}
+						{"name": "with_global_limit", "limit": 10, "window": "1m", "unit": "MiB"}
 					],
 					"project_default": [
-						{"name": "in_global_and_project", "limit": 2, "window": "1m"},
-						{"name": "in_liquid_and_project", "limit": 4, "window": "1m", "unit": "MiB"},
-						{"name": "only_in_project", "limit": 5, "window": "1m"}
+						{"name": "with_project_limit", "limit": 5, "window": "1m"}
 					]
 				}
 			}
@@ -91,9 +84,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -116,12 +109,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (14, 4, 'total', 0, 'unshared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, from_liquid) VALUES (1, 2, 'in_global_and_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/in_global_and_liquid', TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (2, 2, 'in_global_and_project', 1, 'flat', 'unshared/in_global_and_project');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, from_liquid) VALUES (3, 2, 'in_liquid_and_project', 1, 'MiB', 'flat', TRUE, 'unshared/in_liquid_and_project', TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (4, 2, 'only_in_global', 1, 'flat', 'unshared/only_in_global');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id, from_liquid) VALUES (5, 2, 'only_in_liquid', 1, 'MiB', 'flat', TRUE, 'unshared/only_in_liquid', 1, TRUE);
-		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (6, 2, 'only_in_project', 1, 'flat', 'unshared/only_in_project');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (1, 2, 'only_usage', 1, 'MiB', 'flat', TRUE, 'unshared/only_usage', 1);
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path) VALUES (2, 2, 'with_global_limit', 1, 'MiB', 'flat', 'unshared/with_global_limit');
+		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (3, 2, 'with_project_limit', 1, 'flat', 'unshared/with_project_limit');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 1, 'Unshared');
@@ -175,19 +165,16 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		DisplayName: "Foo Category",
 	}
 	srvInfoUnshared.Categories = newCategories
-	srvInfoUnshared.Rates["in_global_and_liquid"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))}
-	srvInfoUnshared.Rates["only_in_liquid"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("bar_category"))}
+	srvInfoUnshared.Rates["only_usage"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("bar_category"))}
+	srvInfoUnshared.Rates["with_global_limit"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false, Category: Some(liquid.CategoryName("foo_category"))}
 	srvInfoUnshared.Version = 2
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 	generateNewClusterWithPersistingServiceInfo(t, s, true)
 	tr.DBChanges().AssertEqual(`
 		INSERT INTO categories (id, name, display_name) VALUES (2, 'bar_category', 'Foo Category');
-		UPDATE rates SET liquid_version = 2, category_id = 1 WHERE id = 1 AND service_id = 2 AND name = 'in_global_and_liquid' AND path = 'unshared/in_global_and_liquid';
-		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'in_global_and_project' AND path = 'unshared/in_global_and_project';
-		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'in_liquid_and_project' AND path = 'unshared/in_liquid_and_project';
-		UPDATE rates SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'only_in_global' AND path = 'unshared/only_in_global';
-		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
-		UPDATE rates SET liquid_version = 2 WHERE id = 6 AND service_id = 2 AND name = 'only_in_project' AND path = 'unshared/only_in_project';
+		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 1 AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
+		UPDATE rates SET liquid_version = 2, category_id = 1 WHERE id = 2 AND service_id = 2 AND name = 'with_global_limit' AND path = 'unshared/with_global_limit';
+		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'with_project_limit' AND path = 'unshared/with_project_limit';
 		UPDATE resources SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'unshared/things';
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
@@ -226,9 +213,9 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -362,24 +349,24 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	s.LiquidClients["shared"].ServiceInfo.Set(srvInfoShared)
 
 	// we try to do an impossible change for rates: unitMebibytes to unitNone
-	rateOnlyInLiquid := srvInfoUnshared.Rates["only_in_liquid"]
-	rateOnlyInLiquid.Unit = liquid.UnitNone
-	srvInfoUnshared.Rates["only_in_liquid"] = rateOnlyInLiquid
+	rateOnlyUsage := srvInfoUnshared.Rates["only_usage"]
+	rateOnlyUsage.Unit = liquid.UnitNone
+	srvInfoUnshared.Rates["only_usage"] = rateOnlyUsage
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 
 	errs = generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 1)
-	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: cannot change unit of rate with id 5 from "MiB" to "", because the base units differ`)
+	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: cannot change unit of rate with id 1 from "MiB" to "", because the base units differ`)
 	tr.DBChanges().AssertEmpty()
 
 	// now, we enter some values and do a conversion
-	rateOnlyInLiquid.Unit = liquid.UnitGibibytes
-	srvInfoUnshared.Rates["only_in_liquid"] = rateOnlyInLiquid
+	rateOnlyUsage.Unit = liquid.UnitGibibytes
+	srvInfoUnshared.Rates["only_usage"] = rateOnlyUsage
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
-	unsharedRateOnlyInLiquidID := s.GetRateID("unshared", "only_in_liquid")
+	unsharedRateOnlyUsageID := s.GetRateID("unshared", "only_usage")
 	s.MustDBInsert(&db.ProjectRate{
 		ProjectID:     1,
-		RateID:        unsharedRateOnlyInLiquidID,
+		RateID:        unsharedRateOnlyUsageID,
 		Limit:         Some(uint64(10 * 1024)),
 		Window:        Some(must.Return(limesrates.ParseWindow("1m"))),
 		UsageAsBigint: "5120",
@@ -388,45 +375,32 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 
 	errs = generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 0)
-	tr.DBChanges().AssertEqual(`
-		UPDATE project_rates SET rate_limit = 10, usage_as_bigint = '5' WHERE id = 1 AND project_id = 1 AND rate_id = 5;
-		UPDATE rates SET unit = 'GiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
-	`)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_rates SET rate_limit = 10, usage_as_bigint = '5' WHERE id = 1 AND project_id = 1 AND rate_id = %[1]d;
+		UPDATE rates SET unit = 'GiB' WHERE id = %[1]d AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
+	`, unsharedRateOnlyUsageID)
 
 	// check that rounding is ignored for rates also
 	s.MustDBExec(`UPDATE project_rates SET rate_limit = 1234, usage_as_bigint = '1234'`)
-	rateOnlyInLiquid.Unit = liquid.UnitTebibytes
-	srvInfoUnshared.Rates["only_in_liquid"] = rateOnlyInLiquid
+	rateOnlyUsage.Unit = liquid.UnitTebibytes
+	srvInfoUnshared.Rates["only_usage"] = rateOnlyUsage
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 
 	errs = generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 0)
-	tr.DBChanges().AssertEqual(`
-		UPDATE project_rates SET rate_limit = 1, usage_as_bigint = '1' WHERE id = 1 AND project_id = 1 AND rate_id = 5;
-		UPDATE rates SET unit = 'TiB' WHERE id = 5 AND service_id = 2 AND name = 'only_in_liquid' AND path = 'unshared/only_in_liquid';
-	`)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_rates SET rate_limit = 1, usage_as_bigint = '1' WHERE id = 1 AND project_id = 1 AND rate_id = %[1]d;
+		UPDATE rates SET unit = 'TiB' WHERE id = %[1]d AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
+	`, unsharedRateOnlyUsageID)
 }
 
 func Test_ClusterServiceInfoRateLimitsUnitIncompatible(t *testing.T) {
-	// we want to test that this crashes, so we spawn a subprocess which can crash
-	if os.Getenv("TO_CRASH") != "1" {
-		cmd := exec.Command(os.Args[0], "-test.run=Test_ClusterServiceInfoRateLimitsUnitIncompatible") //nolint:gosec // G204: this is intentional in tests
-		cmd.Env = append(os.Environ(), "TO_CRASH=1")
-		err := cmd.Run()
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return
-		}
-		t.Fatalf("process ran with err %v, want exit status 1", err)
-	}
-
-	// actual test
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"in_global_and_liquid":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"in_liquid_and_project": {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"only_in_liquid":        {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -438,11 +412,13 @@ func Test_ClusterServiceInfoRateLimitsUnitIncompatible(t *testing.T) {
 		test.WithInitialDiscovery,
 	)
 
-	// rate updates should fail, when units are unequal between config and liquid
-	rateInGlobalAndLiquid := srvInfoUnshared.Rates["in_global_and_liquid"]
-	rateInGlobalAndLiquid.Unit = liquid.UnitGibibytes // config has MiB
-	srvInfoUnshared.Rates["in_global_and_liquid"] = rateInGlobalAndLiquid
+	// rate updates should fail when units are unequal between config and liquid
+	rateWithGlobalLimit := srvInfoUnshared.Rates["with_global_limit"]
+	rateWithGlobalLimit.Unit = liquid.UnitGibibytes // config has MiB
+	srvInfoUnshared.Rates["with_global_limit"] = rateWithGlobalLimit
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 
-	generateNewClusterWithPersistingServiceInfo(t, s, false)
+	errs := generateNewClusterWithPersistingServiceInfo(t, s, false)
+	assert.Equal(t, len(errs), 1)
+	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: configuration uses unit "MiB" for rate unshared/with_global_limit, but liquid declared unit "GiB"`)
 }

@@ -116,4 +116,10 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE services DROP COLUMN commitment_handling_needs_project_metadata;
 		ALTER TABLE rates DROP COLUMN from_liquid;
 	`,
+	`080_drop_rates_from_liquid.up.sql`: `
+		ALTER TABLE rates DROP COLUMN from_liquid;
+	`,
+	`080_drop_rates_from_liquid.down.sql`: `
+		ALTER TABLE rates ADD COLUMN from_liquid BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

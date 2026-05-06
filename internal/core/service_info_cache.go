@@ -466,10 +466,6 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 	}
 	// reconstruct rate infos
 	for name, rate := range rates {
-		if !rate.FromLiquid {
-			// important, so that we don't report missing rates when validating reports coming from liquid
-			continue
-		}
 		rateInfo := liquid.RateInfo{
 			DisplayName: rate.DisplayName,
 			Unit:        rate.Unit,

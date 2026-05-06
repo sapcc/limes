@@ -21,6 +21,9 @@ import (
 
 // Logic implements the liquidapi.Logic interface for Swift.
 type Logic struct {
+	// configuration
+	RateDisplayNames map[liquid.RateName]string `json:"rate_display_names"`
+
 	// connections
 	ResellerAccount *schwift.Account `json:"-"`
 }
@@ -37,9 +40,19 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
+	rates := make(map[liquid.RateName]liquid.RateInfo, len(l.RateDisplayNames))
+	for rateName, rateDisplayName := range l.RateDisplayNames {
+		rates[rateName] = liquid.RateInfo{
+			DisplayName: rateDisplayName,
+			Topology:    liquid.FlatTopology,
+			HasUsage:    false,
+		}
+	}
+
 	return liquid.ServiceInfo{
 		Version:     2,
 		DisplayName: "Object Storage",
+		Rates:       rates,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
 				DisplayName: "Capacity",

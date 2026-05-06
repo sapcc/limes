@@ -108,6 +108,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		Rates: map[liquid.RateName]liquid.RateInfo{
 			"firstrate":  {Topology: liquid.FlatTopology, HasUsage: true},
 			"secondrate": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
+			"xOtherRate": {Topology: liquid.FlatTopology, HasUsage: false},
 		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},
@@ -238,8 +239,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (9, 2, 1, 0, 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 4, '');
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 1, 2);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 2, 1);
@@ -493,8 +496,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_rates SET usage_as_bigint = '2048' WHERE id = 3 AND project_id = 1 AND rate_id = 1;
 		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 4 AND project_id = 1 AND rate_id = 2;
-		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 5 AND project_id = 2 AND rate_id = 1;
-		UPDATE project_rates SET usage_as_bigint = '8192' WHERE id = 6 AND project_id = 2 AND rate_id = 2;
+		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 6 AND project_id = 2 AND rate_id = 1;
+		UPDATE project_rates SET usage_as_bigint = '8192' WHERE id = 7 AND project_id = 2 AND rate_id = 2;
 		UPDATE project_services SET scraped_at = %[1]d, serialized_scrape_state = '{"firstrate":2048,"secondrate":4096}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, serialized_scrape_state = '{"firstrate":4096,"secondrate":8192}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
@@ -652,8 +655,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_az_resources SET historical_usage = '{"t":[5430],"v":[0]}' WHERE id = 9 AND project_id = 2 AND az_resource_id = 1;
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 4, '');
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 3 AND project_id = 2 AND resource_id = 1;
@@ -852,8 +857,9 @@ func Test_TopologyScrapes(t *testing.T) {
 		DELETE FROM project_rates WHERE id = 2 AND project_id = 1 AND rate_id = 4;
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 1, 2);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 2, 1);

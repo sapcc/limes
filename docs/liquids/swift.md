@@ -13,7 +13,9 @@ This liquid provides support for the object storage service Swift.
 
 ## Service-specific configuration
 
-None.
+| Field | Type | Description |
+| --- | --- | --- |
+| `rate_display_names` | object of strings | If provided, causes the liquid to declare one limit-only rate per entry in this object, with the key as the rate name and the value as the display name. This is a facility to afford testing of limit-only rates in QA scenarios and may be removed at any time. |
 
 ## Resources
 
