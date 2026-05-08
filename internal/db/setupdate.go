@@ -4,12 +4,14 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"slices"
 
-	gorp "github.com/go-gorp/gorp/v3"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 )
 
 // SetUpdate describes an operation where we have an existing set of records (type R),
@@ -42,7 +44,7 @@ type SetUpdate[R any, K comparable] struct {
 
 // Execute executes this SetUpdate.
 // Returns the set of records that exist in the DB after this update.
-func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
+func (u SetUpdate[R, K]) Execute(ctx context.Context, tx *sql.Tx, store oblast.Store[R]) ([]R, error) {
 	// create or update wanted records
 	var result []R
 	for _, k := range u.WantedKeys {
@@ -57,7 +59,7 @@ func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
 				return nil, fmt.Errorf("could not build new %T record with key %v: %w", r, k, err)
 			}
 
-			err = tx.Insert(&r)
+			err = store.Insert(ctx, tx, &r)
 			if err != nil {
 				return nil, fmt.Errorf("could not insert %T record with key %v: %w", r, k, err)
 			}
@@ -72,7 +74,7 @@ func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
 
 			// only update in the DB if necessary
 			if !reflect.DeepEqual(r, u.ExistingRecords[idx]) {
-				_, err = tx.Update(&r)
+				err = store.Update(ctx, tx, r)
 				if err != nil {
 					return nil, fmt.Errorf("could not update %T record with key %v: %w", r, k, err)
 				}
@@ -91,7 +93,7 @@ func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
 					return nil, fmt.Errorf("pre-delete callback failed for %T record with key %v: %w", r, k, err)
 				}
 			}
-			_, err := tx.Delete(&r)
+			err := store.Delete(ctx, tx, r)
 			if err != nil {
 				return nil, fmt.Errorf("could not delete %T record with key %v: %w", r, k, err)
 			}

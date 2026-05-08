@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"maps"
@@ -12,7 +13,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/lib/pq"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -47,14 +47,14 @@ type Cluster struct {
 	// for the notification mechanism.
 	SIC *ServiceInfoCache
 	// reference of the DB is necessary to delete leftover LiquidConnections
-	DB *gorp.DbMap
+	DB *sql.DB
 	// used to generate LiquidClients without LiquidConnections
 	LiquidClientFactory func(db.ServiceType) (LiquidClient, error)
 }
 
 // NewCluster creates a new Cluster instance also initializes the LiquidConnections - if configured.
 // Errors will be logged when the requested DiscoveryPlugin cannot be found.
-func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (c *Cluster, errs errext.ErrorSet) {
+func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *sql.DB, fillLiquidConnections bool) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:            config,
 		LiquidConnections: make(map[db.ServiceType]*LiquidConnection),
@@ -115,7 +115,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// initialize SIC
-	c.SIC, err = NewServiceInfoCache(c.DB, dbURL)
+	c.SIC, err = NewServiceInfoCache(ctx, c.DB, dbURL)
 	if err != nil {
 		errs.Addf("could not create service info cache: %w", err)
 		return errs
@@ -251,9 +251,9 @@ var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 			WHERE path LIKE $1
 			AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`))
 
-func generateDeleteFunc[T any](dbm *gorp.DbMap, getAZResourcePathPattern func(o T) string) func(T) error {
+func generateDeleteFunc[T any](ctx context.Context, dbm *sql.DB, getAZResourcePathPattern func(o T) string) func(T) error {
 	return func(o T) error {
-		count, err := dbm.SelectInt(deleteFuncCheckQuery, getAZResourcePathPattern(o))
+		count, err := db.SelectValue[int](ctx, dbm, deleteFuncCheckQuery, getAZResourcePathPattern(o))
 		if err != nil {
 			return fmt.Errorf("cannot get project commitments count: %w", err)
 		}
@@ -268,7 +268,7 @@ func generateDeleteFunc[T any](dbm *gorp.DbMap, getAZResourcePathPattern func(o 
 // and rates with the given serviceInfo. It is called whenever the LiquidVersion changes during Scrape
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
-func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gorp.DbMap) (err error) {
+func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *sql.DB) (err error) {
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -277,8 +277,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// collect existing service and the wanted service
-	var dbServices []db.Service
-	_, err = tx.Select(&dbServices, `SELECT * FROM services WHERE type = $1`, serviceType)
+	dbServices, err := db.ServiceStore.SelectWhere(ctx, tx, `type = $1`, serviceType)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
 	}
@@ -326,9 +325,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			service.CommitmentHandlingNeedsProjectMetadata = serviceInfo.CommitmentHandlingNeedsProjectMetadata
 			return nil
 		},
-		PreDelete: Some(generateDeleteFunc[db.Service](dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
+		PreDelete: Some(generateDeleteFunc(ctx, dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
 	}
-	dbServices, err = serviceUpdate.Execute(tx)
+	dbServices, err = serviceUpdate.Execute(ctx, tx, db.ServiceStore)
 	if err != nil {
 		return fmt.Errorf("update services failed for %s: %w", serviceType, err)
 	}
@@ -336,11 +335,11 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 
 	// The categories don't have a reference to the service, so we just add all categories which are new
 	// and delete the one's which are unused after the resources for this service were reconciled.
-	categoryByName, err := db.BuildIndexOfDBResult(tx, func(category db.Category) liquid.CategoryName { return category.Name }, `SELECT * from categories`)
+	categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `TRUE`))
 	for name, categoryInfo := range serviceInfo.Categories {
 		if _, exists := categoryByName[name]; !exists {
 			newCategory := db.Category{Name: name, DisplayName: categoryInfo.DisplayName}
-			err = tx.Insert(&newCategory)
+			err = db.CategoryStore.Insert(ctx, tx, &newCategory)
 			if err != nil {
 				return fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
 			}
@@ -349,8 +348,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 	}
 
 	// collect existing resources and the wanted resources
-	var dbResources []db.Resource
-	_, err = tx.Select(&dbResources, `SELECT * FROM resources WHERE service_id = $1`, srv.ID)
+	dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
 	}
@@ -415,9 +413,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			res.HandlesCommitments = serviceInfo.Resources[res.Name].HandlesCommitments
 			return nil
 		},
-		PreDelete: Some(generateDeleteFunc[db.Resource](dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
+		PreDelete: Some(generateDeleteFunc(ctx, dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
 	}
-	dbResources, err = resourceUpdate.Execute(tx)
+	dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
 	if err != nil {
 		return err
 	}
@@ -441,7 +439,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		// For commitments, our strategy cannot be rounding, because this has billing impact.
 		// Therefore, we block it - any operation where we would have to round prevents the unit change.
 		// We use integer modulo arithmetic to avoid floating-point precision issues.
-		nonConvertibleEntries, err := tx.SelectInt(sqlext.SimplifyWhitespace(`SELECT COUNT(*)
+		nonConvertibleEntries, err := db.SelectValue[int](ctx, tx, sqlext.SimplifyWhitespace(`SELECT COUNT(*)
 			FROM project_commitments pc
 			JOIN az_resources azr ON pc.az_resource_id = azr.id
 			WHERE (pc.amount::NUMERIC * $1) % $2 != 0 AND azr.resource_id = $3`), oldFactor, newFactor, resID)
@@ -486,17 +484,13 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 		}
 	}
 
-	// collect existing az_resources
-	var dbAZResources []db.AZResource
-	_, err = tx.Select(&dbAZResources, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID)
+	// for az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
+	dbAZResourcesByResourceID, err := db.AZResourceByResourceIDIndex.PartitionFrom(
+		db.AZResourceStore.Select(ctx, tx, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID),
+	)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
 	}
-	dbAZResourcesByResourceID := make(map[db.ResourceID][]db.AZResource)
-	for _, azRes := range dbAZResources {
-		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
-	}
-	// for az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
 	for _, res := range dbResources {
 		// depending on the topology, we can construct the various necessary AZs
 		var wantedKeys []limes.AvailabilityZone
@@ -533,17 +527,16 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				// we don't know more than the existence of the AZ, so we don't update anything
 				return nil
 			},
-			PreDelete: Some(generateDeleteFunc[db.AZResource](dbm, func(azr db.AZResource) string { return azr.Path.String() })),
+			PreDelete: Some(generateDeleteFunc(ctx, dbm, func(azr db.AZResource) string { return azr.Path.String() })),
 		}
-		_, err = setUpdate.Execute(tx)
+		_, err = setUpdate.Execute(ctx, tx, db.AZResourceStore)
 		if err != nil {
 			return err
 		}
 	}
 
 	// collect existing rates and the wanted rates
-	var dbRates []db.Rate
-	_, err = tx.Select(&dbRates, `SELECT * FROM rates WHERE service_id = $1`, srv.ID)
+	dbRates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
 	}
@@ -618,7 +611,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return nil
 		},
 	}
-	_, err = rateUpdate.Execute(tx)
+	_, err = rateUpdate.Execute(ctx, tx, db.RateStore)
 	if err != nil {
 		return err
 	}

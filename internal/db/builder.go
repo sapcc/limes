@@ -4,12 +4,14 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/util"
 )
@@ -112,4 +114,11 @@ func ExpandEnumPlaceholders(query string) string {
 
 func enumValueToSQLLiteral[S ~string](value S) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(string(value), "'", "''"))
+}
+
+// SelectValue is a convenience wrapper around db.QueryRowContext() in situations where only a single value is returned.
+func SelectValue[T any](ctx context.Context, db oblast.Handle, query string, args ...any) (T, error) {
+	var result T
+	err := db.QueryRowContext(ctx, query, args...).Scan(&result)
+	return result, err
 }

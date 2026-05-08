@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/dlmiddlecote/sqlstats"
-	gorp "github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sapcc/go-api-declarations/bininfo"
@@ -53,30 +52,11 @@ func Init() (dbConn *sql.DB, dbURL url.URL, err error) {
 		return nil, dbURL, err
 	}
 	prometheus.MustRegister(sqlstats.NewStatsCollector(dbName, dbConn))
-	return dbConn, dbURL, nil
-}
 
-// InitORM wraps a database connection into a gorp.DbMap instance.
-func InitORM(dbConn *sql.DB) *gorp.DbMap {
 	// ensure that this process does not starve other Limes processes for DB connections
 	dbConn.SetMaxOpenConns(16)
 
-	dbMap := &gorp.DbMap{Db: dbConn, Dialect: gorp.PostgresDialect{}}
-	initGorp(dbMap)
-	return dbMap
-}
-
-// Interface provides the common methods that both SQL connections and
-// transactions implement.
-type Interface interface {
-	// from database/sql
-	sqlext.Executor
-
-	// from github.com/go-gorp/gorp
-	Insert(args ...any) error
-	Update(args ...any) (int64, error)
-	Delete(args ...any) (int64, error)
-	Select(i any, query string, args ...any) ([]any, error)
+	return dbConn, dbURL, nil
 }
 
 var olapSemaphore = syncext.NewSemaphore(2)
@@ -88,13 +68,13 @@ var olapSemaphore = syncext.NewSemaphore(2)
 //
 // This should only be used sparingly; each process is only allowed to run two
 // such queries at the same time to limit the total memory usage on the DB server.
-func RunOLAPQueries(dbm *gorp.DbMap, action func(tx *gorp.Transaction) error) error {
+func RunOLAPQueries(db *sql.DB, action func(tx *sql.Tx) error) error {
 	return olapSemaphore.RunFallible(func() error {
 		// since we don't have direct control over the connections which live in
 		// database/sql.Conn's connection pool, we can only limit the effect of the
 		// `SET work_mem TO ...` statement to the intended action by wrapping it in a
 		// transaction
-		tx, err := dbm.Begin()
+		tx, err := db.Begin()
 		if err != nil {
 			return err
 		}

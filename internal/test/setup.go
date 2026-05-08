@@ -5,6 +5,7 @@ package test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"maps"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -147,7 +147,7 @@ func WithInitialDiscovery(params *setupParams) {
 type Setup struct {
 	// fields that are always set
 	Ctx                        context.Context //nolint:containedctx // only used in tests
-	DB                         *gorp.DbMap
+	DB                         *sql.DB
 	Cluster                    *core.Cluster
 	Clock                      *mock.Clock
 	Registry                   *prometheus.Registry
@@ -213,7 +213,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	s.t = t
 
-	s.DB = db.InitORM(easypg.ConnectForTest(t, db.Configuration(),
+	s.DB = easypg.ConnectForTest(t, db.Configuration(),
 		easypg.ClearTables("project_commitments", "services", "domains", "categories"),
 		easypg.ResetPrimaryKeys(
 			"services", "resources", "rates", "az_resources",
@@ -221,7 +221,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 			"project_services", "project_resources", "project_az_resources", "project_rates",
 			"categories",
 		),
-	))
+	)
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
 	s.LiquidClients = params.LiquidClients

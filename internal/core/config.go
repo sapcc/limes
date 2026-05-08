@@ -4,13 +4,13 @@
 package core
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -185,7 +185,7 @@ type MailTemplateConfiguration struct {
 
 // NewClusterFromJSON reads and validates the configuration in the given JSON document.
 // Errors are logged and will result in program termination, causing the function to not return.
-func NewClusterFromJSON(configBytes []byte, timeNow func() time.Time, dbm *gorp.DbMap, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
+func NewClusterFromJSON(configBytes []byte, timeNow func() time.Time, dbm *sql.DB, fillLiquidConnections bool) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
 	err := json.Unmarshal(configBytes, &config)
 	if err != nil {
