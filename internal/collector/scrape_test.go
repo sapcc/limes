@@ -71,7 +71,10 @@ const (
 				// to check how they are merged with the ServiceInfo of the liquids
 				"rate_limits": {
 					"global": [
-						{"name": "xOtherRate", "limit": 5000, "window": "1s"}
+						{"name": "rateWithClusterLimit", "limit": 5000, "window": "1s"}
+					],
+					"project_default": [
+						{"name": "rateWithProjectLimit", "limit": 50, "window": "1s"}
 					]
 				}
 			}
@@ -106,9 +109,10 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			},
 		},
 		Rates: map[liquid.RateName]liquid.RateInfo{
-			"firstrate":  {Topology: liquid.FlatTopology, HasUsage: true},
-			"secondrate": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
-			"xOtherRate": {Topology: liquid.FlatTopology, HasUsage: false},
+			"firstrate":            {DisplayName: "First Rate", Topology: liquid.FlatTopology, HasUsage: true},
+			"secondrate":           {DisplayName: "Second Rate", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
+			"rateWithClusterLimit": {DisplayName: "Cluster-Limited Rate", Topology: liquid.FlatTopology, HasUsage: false},
+			"rateWithProjectLimit": {DisplayName: "Project-Limited Rate", Topology: liquid.FlatTopology, HasUsage: false},
 		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},
@@ -128,7 +132,6 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 
 	// for one of the projects, put some records in for rate limits, to check that
 	// the scraper does not mess with those values
-	// cluster_rate xOtherRate comes from the rate_limits config
 	s.MustDBInsert(&db.Rate{
 		ServiceID:     s.GetServiceID("unittest"),
 		Name:          "xAnotherRate",
@@ -140,7 +143,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("unittest"))))
 	s.MustDBInsert(&db.ProjectRate{
 		ProjectID: s.GetProjectID("dresden"),
-		RateID:    s.GetRateID("unittest", "xOtherRate"),
+		RateID:    s.GetRateID("unittest", "rateWithClusterLimit"),
 		Limit:     Some[uint64](10),
 		Window:    Some(1 * limesrates.WindowSeconds),
 	})
@@ -237,12 +240,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (7, 1, 8, 0, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (8, 1, 9, 0, 4, '{"t":[%[1]d],"v":[4]}', 42);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (9, 2, 1, 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (10, 2, 5, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 4, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 1, 4, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (9, 2, 4, '2048');
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 1, 2);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 2, 1);
@@ -495,9 +500,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_rates SET usage_as_bigint = '2048' WHERE id = 3 AND project_id = 1 AND rate_id = 1;
-		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 4 AND project_id = 1 AND rate_id = 2;
-		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 6 AND project_id = 2 AND rate_id = 1;
-		UPDATE project_rates SET usage_as_bigint = '8192' WHERE id = 7 AND project_id = 2 AND rate_id = 2;
+		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 6 AND project_id = 1 AND rate_id = 4;
+		UPDATE project_rates SET usage_as_bigint = '4096' WHERE id = 7 AND project_id = 2 AND rate_id = 1;
+		UPDATE project_rates SET usage_as_bigint = '8192' WHERE id = 9 AND project_id = 2 AND rate_id = 4;
 		UPDATE project_services SET scraped_at = %[1]d, serialized_scrape_state = '{"firstrate":2048,"secondrate":4096}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, serialized_scrape_state = '{"firstrate":4096,"secondrate":8192}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 	`,
@@ -653,12 +658,14 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_az_resources SET usage = 2, subresources = '[{"name":"index","usage":2},{"name":"index","usage":3}]', historical_usage = '{"t":[5425],"v":[2]}' WHERE id = 7 AND project_id = 1 AND az_resource_id = 8;
 		UPDATE project_az_resources SET usage = 4, historical_usage = '{"t":[5425],"v":[4]}', backend_quota = 42 WHERE id = 8 AND project_id = 1 AND az_resource_id = 9;
 		UPDATE project_az_resources SET historical_usage = '{"t":[5430],"v":[0]}' WHERE id = 9 AND project_id = 2 AND az_resource_id = 1;
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (10, 2, 5, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 4, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 1, 4, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (9, 2, 4, '2048');
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 2 AND project_id = 1 AND resource_id = 2;
 		UPDATE project_resources SET forbidden = FALSE WHERE id = 3 AND project_id = 2 AND resource_id = 1;
@@ -854,12 +861,14 @@ func Test_TopologyScrapes(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (7, 2, 2, 0, 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (8, 2, 3, 0, 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, historical_usage) VALUES (9, 2, 4, 0, '{"t":[%[3]d],"v":[0]}');
-		DELETE FROM project_rates WHERE id = 2 AND project_id = 1 AND rate_id = 4;
+		DELETE FROM project_rates WHERE id = 2 AND project_id = 1 AND rate_id = 5;
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (4, 1, 2, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (5, 1, 3, '');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 2, 1, '1024');
-		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 2, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (6, 1, 4, '2048');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (7, 2, 1, '1024');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (8, 2, 3, '');
+		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (9, 2, 4, '2048');
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 1, 2);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 2, 1);
@@ -867,9 +876,10 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_scrape_state = '{"firstrate":1024,"secondrate":2048}', serialized_metrics = '{"limes_unittest_capacity_usage":{"lk":null,"m":[{"v":0,"l":null}]},"limes_unittest_things_usage":{"lk":null,"m":[{"v":4,"l":null}]}}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 		UPDATE rates SET liquid_version = 2 WHERE id = 1 AND service_id = 1 AND name = 'firstrate' AND path = 'unittest/firstrate';
-		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
-		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate' AND path = 'unittest/xOtherRate';
-		DELETE FROM rates WHERE id = 4 AND service_id = 1 AND name = 'xAnotherRate' AND path = 'unittest/xAnotherRate';
+		UPDATE rates SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'rateWithClusterLimit' AND path = 'unittest/rateWithClusterLimit';
+		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 1 AND name = 'rateWithProjectLimit' AND path = 'unittest/rateWithProjectLimit';
+		UPDATE rates SET liquid_version = 2 WHERE id = 4 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
+		DELETE FROM rates WHERE id = 5 AND service_id = 1 AND name = 'xAnotherRate' AND path = 'unittest/xAnotherRate';
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 2, topology = 'az-separated' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 1;
@@ -956,8 +966,9 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
 		UPDATE rates SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'firstrate' AND path = 'unittest/firstrate';
-		UPDATE rates SET liquid_version = 3 WHERE id = 2 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
-		UPDATE rates SET liquid_version = 3 WHERE id = 3 AND service_id = 1 AND name = 'xOtherRate' AND path = 'unittest/xOtherRate';
+		UPDATE rates SET liquid_version = 3 WHERE id = 2 AND service_id = 1 AND name = 'rateWithClusterLimit' AND path = 'unittest/rateWithClusterLimit';
+		UPDATE rates SET liquid_version = 3 WHERE id = 3 AND service_id = 1 AND name = 'rateWithProjectLimit' AND path = 'unittest/rateWithProjectLimit';
+		UPDATE rates SET liquid_version = 3 WHERE id = 4 AND service_id = 1 AND name = 'secondrate' AND path = 'unittest/secondrate';
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'unittest/capacity';
 		UPDATE resources SET liquid_version = 3, topology = 'az-aware' WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'unittest/things';
 		DELETE FROM services WHERE id = 1 AND type = 'unittest' AND liquid_version = 2;

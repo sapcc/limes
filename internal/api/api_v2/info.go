@@ -211,7 +211,7 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 				HasUsage:    rate.HasUsage,
 				Unit:        rate.Unit,
 			}
-			if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName); ok {
+			if rateConfig, ok := config.RateLimits.GetProjectDefaultRateLimit(rateName).Unpack(); ok {
 				rir.ProjectDefaultLimit = rateConfig.Limit
 				rir.ProjectDefaultWindow = Some(rateConfig.Window)
 			}

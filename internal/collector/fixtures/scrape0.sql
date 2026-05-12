@@ -11,8 +11,8 @@ INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 2,
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
-INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (1, 2, 3, 10, 1000000000, '');
-INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (2, 1, 4, 42, 120000000000, '');
+INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (1, 2, 2, 10, 1000000000, '');
+INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (2, 1, 5, 42, 120000000000, '');
 
 INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (1, 1, 1, TRUE, 0);
 INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (2, 2, 1, TRUE, 0);
@@ -20,10 +20,11 @@ INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at)
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
 
-INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage, path) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE, 'unittest/firstrate');
-INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path) VALUES (2, 1, 'secondrate', 1, 'KiB', 'flat', TRUE, 'unittest/secondrate');
-INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (3, 1, 'xOtherRate', 1, 'flat', 'unittest/xOtherRate');
-INSERT INTO rates (id, service_id, name, liquid_version, topology, path, display_name) VALUES (4, 1, 'xAnotherRate', 1, 'flat', 'unittest/xAnotherRate', 'X Another Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, has_usage, path, display_name) VALUES (1, 1, 'firstrate', 1, 'flat', TRUE, 'unittest/firstrate', 'First Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, path, display_name) VALUES (2, 1, 'rateWithClusterLimit', 1, 'flat', 'unittest/rateWithClusterLimit', 'Cluster-Limited Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, path, display_name) VALUES (3, 1, 'rateWithProjectLimit', 1, 'flat', 'unittest/rateWithProjectLimit', 'Project-Limited Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, display_name) VALUES (4, 1, 'secondrate', 1, 'KiB', 'flat', TRUE, 'unittest/secondrate', 'Second Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, topology, path, display_name) VALUES (5, 1, 'xAnotherRate', 1, 'flat', 'unittest/xAnotherRate', 'X Another Rate');
 
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity', 'Capacity');
 INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'az-aware', TRUE, 'unittest/things', 'Things');

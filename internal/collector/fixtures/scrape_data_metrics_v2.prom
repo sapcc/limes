@@ -1,3 +1,9 @@
+# HELP limitas_cluster_rate_global_limit The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).
+# TYPE limitas_cluster_rate_global_limit gauge
+limitas_cluster_rate_global_limit{rate="rateWithClusterLimit",service="unittest"} 5000
+# HELP limitas_cluster_rate_global_window_seconds The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).
+# TYPE limitas_cluster_rate_global_window_seconds gauge
+limitas_cluster_rate_global_window_seconds{rate="rateWithClusterLimit",service="unittest"} 1
 # HELP limitas_cluster_resource_capacity Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.
 # TYPE limitas_cluster_resource_capacity gauge
 limitas_cluster_resource_capacity{az="az-one",resource="capacity",service="unittest"} 0
@@ -12,6 +18,20 @@ limitas_cluster_resource_raw_capacity{az="az-one",resource="things",service="uni
 limitas_cluster_resource_raw_capacity{az="az-two",resource="capacity",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="az-two",resource="things",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="unknown",resource="capacity",service="unittest"} 617
+# HELP limitas_project_rate_limit For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).
+# TYPE limitas_project_rate_limit gauge
+limitas_project_rate_limit{az="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="rateWithProjectLimit",service="unittest"} 50
+limitas_project_rate_limit{az="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="rateWithProjectLimit",service="unittest"} 50
+# HELP limitas_project_rate_usage_total For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.
+# TYPE limitas_project_rate_usage_total counter
+limitas_project_rate_usage_total{az="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest"} 2048
+limitas_project_rate_usage_total{az="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="secondrate",service="unittest"} 4096
+limitas_project_rate_usage_total{az="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="firstrate",service="unittest"} 4096
+limitas_project_rate_usage_total{az="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="secondrate",service="unittest"} 8192
+# HELP limitas_project_rate_window_seconds For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).
+# TYPE limitas_project_rate_window_seconds gauge
+limitas_project_rate_window_seconds{az="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="rateWithProjectLimit",service="unittest"} 1
+limitas_project_rate_window_seconds{az="any",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",rate="rateWithProjectLimit",service="unittest"} 1
 # HELP limitas_project_resource_allocation For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.
 # TYPE limitas_project_resource_allocation gauge
 limitas_project_resource_allocation{az="az-one",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 2
@@ -52,6 +72,19 @@ limitas_project_resource_usage{az="az-one",committable="true",domain="germany",d
 limitas_project_resource_usage{az="az-one",committable="true",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 20
 limitas_project_resource_usage{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 3
 limitas_project_resource_usage{az="az-two",committable="false",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 3
+# HELP limitas_rate_default_limit The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).
+# TYPE limitas_rate_default_limit gauge
+limitas_rate_default_limit{rate="rateWithProjectLimit",service="unittest"} 50
+# HELP limitas_rate_default_window_seconds The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.
+# TYPE limitas_rate_default_window_seconds gauge
+limitas_rate_default_window_seconds{rate="rateWithProjectLimit",service="unittest"} 1
+# HELP limitas_rate_info Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).
+# TYPE limitas_rate_info gauge
+limitas_rate_info{category="unittest",display_name="Cluster-Limited Rate",has_limit="false",has_usage="false",rate="rateWithClusterLimit",service="unittest",topology="flat",unit=""} 1
+limitas_rate_info{category="unittest",display_name="First Rate",has_limit="false",has_usage="true",rate="firstrate",service="unittest",topology="flat",unit=""} 1
+limitas_rate_info{category="unittest",display_name="Project-Limited Rate",has_limit="true",has_usage="false",rate="rateWithProjectLimit",service="unittest",topology="flat",unit=""} 1
+limitas_rate_info{category="unittest",display_name="Second Rate",has_limit="false",has_usage="true",rate="secondrate",service="unittest",topology="flat",unit="KiB"} 1
+limitas_rate_info{category="unittest",display_name="X Another Rate",has_limit="false",has_usage="false",rate="xAnotherRate",service="unittest",topology="flat",unit=""} 1
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unittest"} 1
