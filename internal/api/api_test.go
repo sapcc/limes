@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 func TestMain(m *testing.M) {
@@ -341,11 +342,11 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	s.MustDBExec(`UPDATE project_services SET scraped_at = $1, checked_at = $1`, time.Unix(11, 0))
 
 	// by default, there are no scrape errors to report
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"scrape_errors": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"scrape_errors": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
 	// add a scrape error to one specific service with type 'unshared'.
@@ -364,11 +365,11 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	)
 
 	// check ListScrapeErrors
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-list.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/scrape-error-list.json"),
 	}.Check(t, s.Handler)
 }
 
@@ -376,52 +377,52 @@ func Test_ClusterOperations(t *testing.T) {
 	s := setupTest(t)
 
 	// check GetCluster
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
 	}.Check(t, s.Handler)
 
 	// check GetCluster with new API features enabled
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-get-west-with-v2-api.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/cluster-get-west-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
 	// check GetClusterRates
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/clusters/current",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/clusters/current?rates",
 		ExpectStatus: 400,
-		ExpectBody:   assert.StringData("the `rates` query parameter is not allowed here\n"),
+		ExpectBody:   oldassert.StringData("the `rates` query parameter is not allowed here\n"),
 	}.Check(t, s.Handler)
 
 	// check rendering of overcommit factors
@@ -435,26 +436,26 @@ func Test_ClusterOperations(t *testing.T) {
 			OvercommitFactor:   1.5,
 		},
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit-and-v2-api.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit-and-v2-api.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/cluster_operations_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/cluster_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -463,55 +464,55 @@ func Test_DomainOperations(t *testing.T) {
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// check GetDomain
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-germany.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-get-germany.json"),
 	}.Check(t, s.Handler)
 	// domain "france" covers some special cases: an infinite backend quota and
 	// missing domain quota entries for one service
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-france.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-get-france.json"),
 	}.Check(t, s.Handler)
 
 	// check ListDomains
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-filtered.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-filtered.json"),
 	}.Check(t, s.Handler)
 
 	// check ListDomains with new API features enabled
 	// TODO: Why did some of the "per_az" not have the quota? This query was not touched, so I don't understand why.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-with-v2-api.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
 	// check DiscoverDomains
@@ -521,26 +522,26 @@ func Test_DomainOperations(t *testing.T) {
 	discovery.Config.Projects["uuid-for-spain"] = append(discovery.Config.Projects["uuid-for-spain"],
 		core.KeystoneProject{UUID: "uuid-for-madrid", Name: "madrid", ParentUUID: "uuid-for-spain"},
 	)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/discover",
 		ExpectStatus: 202,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-discover.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-discover.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/discover",
 		ExpectStatus: 204, // no content because no new domains discovered
-		ExpectBody:   assert.StringData(""),
+		ExpectBody:   oldassert.StringData(""),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/domain_operations_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/domain_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -549,32 +550,32 @@ func Test_ProjectOperations(t *testing.T) {
 	discovery := s.Cluster.DiscoveryPlugin.(*core.StaticDiscoveryPlugin)
 
 	// check GetProject
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-berlin.json"),
 	}.Check(t, s.Handler)
 	// check rendering of subresources
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?detail",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-details-berlin.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-details-berlin.json"),
 	}.Check(t, s.Handler)
 	// dresden has a case of backend quota != quota
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
 	}.Check(t, s.Handler)
 	// paris has a case of infinite backend quota
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
 	// paris has forbid_autogrowth setting
@@ -583,138 +584,138 @@ func Test_ProjectOperations(t *testing.T) {
 		s.GetProjectID("paris"),
 		s.GetResourceID("shared", "capacity"),
 	)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-forbid-autogrowth.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-paris-forbid-autogrowth.json"),
 	}.Check(t, s.Handler)
 
 	// check GetProjectRates
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
 	}.Check(t, s.Handler)
 	// dresden has some rates that only report usage
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-only-rates.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-dresden-only-rates.json"),
 	}.Check(t, s.Handler)
 	// paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, s.Handler)
 
 	// check non-existent domains/projects
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-switzerland/projects/uuid-for-bern",
 		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
+		ExpectBody:   oldassert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-hamburg",
 		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such project (if it was just created, try to POST /domains/uuid-for-germany/projects/discover)\n"),
+		ExpectBody:   oldassert.StringData("no such project (if it was just created, try to POST /domains/uuid-for-germany/projects/discover)\n"),
 	}.Check(t, s.Handler)
 
 	// check ListProjects
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
 	}.Check(t, s.Handler)
 
 	// check ListProjects with new API features enabled
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-with-v2-api.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
 	// check ListProjects does not report commitment duration if the forbidden flag is set
 	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE`)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-forbidden.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-forbidden.json"),
 	}.Check(t, s.Handler)
 	s.MustDBExec(`UPDATE project_resources SET forbidden = FALSE`)
 
 	// check ListProjectRates
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-only-rates.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-only-rates.json"),
 	}.Check(t, s.Handler)
 
 	// check ?area= filter (esp. interaction with ?service= filter)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?area=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&service=unshared",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
 	}.Check(t, s.Handler)
 
 	// check DiscoverProjects
 	discovery.Config.Projects["uuid-for-germany"] = append(discovery.Config.Projects["uuid-for-germany"],
 		core.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt", ParentUUID: "uuid-for-germany"},
 	)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatus: 202,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-discover.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-discover.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatus: 204, // no content because no new projects discovered
-		ExpectBody:   assert.StringData(""),
+		ExpectBody:   oldassert.StringData(""),
 	}.Check(t, s.Handler)
 
 	// DiscoverProjects sets `stale` on new project_services;
@@ -723,11 +724,11 @@ func Test_ProjectOperations(t *testing.T) {
 
 	// check SyncProject
 	expectStaleProjectServices(t, s.DB /*, nothing */)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
-		ExpectBody:   assert.StringData(""),
+		ExpectBody:   oldassert.StringData(""),
 	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "dresden:shared", "dresden:unshared")
 
@@ -735,37 +736,37 @@ func Test_ProjectOperations(t *testing.T) {
 	discovery.Config.Projects["uuid-for-germany"] = append(discovery.Config.Projects["uuid-for-germany"],
 		core.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf/sync",
 		ExpectStatus: 202,
-		ExpectBody:   assert.StringData(""),
+		ExpectBody:   oldassert.StringData(""),
 	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 
 	// check GetProject for a project that has been discovered, but not yet synced
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-walldorf-not-scraped-yet.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-walldorf-not-scraped-yet.json"),
 	}.Check(t, s.Handler)
 
 	// Check PUT ../project with rate limits.
 	// Attempt setting a rate limit for which no default exists should fail.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 500, // TODO: should be 403 (I don't care about fixing this in v1; v2 will be structured differently to allow for a fix)
-		ExpectBody: assert.StringData(
+		ExpectBody: oldassert.StringData(
 			"no such rate: shared/notexistent:bogus\n",
 		),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"project": oldassert.JSONObject{
+				"services": []oldassert.JSONObject{
 					{
 						"type": "shared",
-						"rates": []assert.JSONObject{
+						"rates": []oldassert.JSONObject{
 							{
 								"name":   "notexistent:bogus",
 								"limit":  1,
@@ -799,13 +800,13 @@ func Test_ProjectOperations(t *testing.T) {
 	rateName := "objects:read"
 	expectedLimit := uint64(100)
 	expectedWindow := 1 * limesrates.WindowSeconds
-	makeRequest := func(name string, limit uint64, window limesrates.Window) assert.JSONObject {
-		return assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
+	makeRequest := func(name string, limit uint64, window limesrates.Window) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"project": oldassert.JSONObject{
+				"services": []oldassert.JSONObject{
 					{
 						"type": "shared",
-						"rates": []assert.JSONObject{
+						"rates": []oldassert.JSONObject{
 							{
 								"name":   name,
 								"limit":  limit,
@@ -818,7 +819,7 @@ func Test_ProjectOperations(t *testing.T) {
 		}
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
@@ -849,7 +850,7 @@ func Test_ProjectOperations(t *testing.T) {
 	// now we check that an update of the rate limit does not create a new row
 	oldProjectRateId := projectRateId
 	expectedLimit = uint64(200)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
@@ -869,12 +870,12 @@ func Test_ProjectOperations(t *testing.T) {
 		)
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/project_operations_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/project_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -928,19 +929,19 @@ func Test_EmptyProjectList(t *testing.T) {
 
 	// This warrants its own unit test since the rendering of empty project lists
 	// uses a different code path than the rendering of non-empty project lists.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONObject{"projects": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"projects": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/empty_project_list_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/empty_project_list_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -1013,18 +1014,18 @@ func Test_LargeProjectList(t *testing.T) {
 	}
 
 	// build expectation for what the project list will look like
-	expectedProjectsJSON := make([]assert.JSONObject, len(projectUUIDs))
+	expectedProjectsJSON := make([]oldassert.JSONObject, len(projectUUIDs))
 	for idx, projectUUID := range projectUUIDs {
-		expectedProjectsJSON[idx] = assert.JSONObject{
+		expectedProjectsJSON[idx] = oldassert.JSONObject{
 			"id":        projectUUID,
 			"name":      fmt.Sprintf("test-project%04d", idx),
 			"parent_id": "uuid-for-germany",
-			"services": []assert.JSONObject{
+			"services": []oldassert.JSONObject{
 				{
 					"type":       "shared",
 					"area":       "shared",
 					"scraped_at": idx,
-					"resources": []assert.JSONObject{
+					"resources": []oldassert.JSONObject{
 						{
 							"name":                     "capacity",
 							"unit":                     "B",
@@ -1046,7 +1047,7 @@ func Test_LargeProjectList(t *testing.T) {
 					"type":       "unshared",
 					"area":       "unshared",
 					"scraped_at": idx,
-					"resources": []assert.JSONObject{
+					"resources": []oldassert.JSONObject{
 						{
 							"name":                     "capacity",
 							"unit":                     "B",
@@ -1073,19 +1074,19 @@ func Test_LargeProjectList(t *testing.T) {
 		return left["id"].(liquid.ProjectUUID) < right["id"].(liquid.ProjectUUID)
 	})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONObject{"projects": expectedProjectsJSON},
+		ExpectBody:   oldassert.JSONObject{"projects": expectedProjectsJSON},
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/large_project_list_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/large_project_list_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -1115,10 +1116,10 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	makeRequest := func(serviceType limes.ServiceType, resources ...any) assert.JSONObject {
-		return assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{{
+	makeRequest := func(serviceType limes.ServiceType, resources ...any) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"project": oldassert.JSONObject{
+				"services": []oldassert.JSONObject{{
 					"type":      serviceType,
 					"resources": resources,
 				}},
@@ -1128,10 +1129,10 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 	// happy case: set a non-null value for the first time, then update it
 	for _, value := range []uint64{500, 1000} {
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "PUT",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": value}),
+			Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "max_quota": value}),
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
@@ -1140,12 +1141,12 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	}
 
 	// happy case: write a NULL value over both an existing NULL value and a non-NULL value
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: "PUT",
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
 		Body: makeRequest("shared",
-			assert.JSONObject{"name": "things", "max_quota": nil},
-			assert.JSONObject{"name": "capacity", "max_quota": nil},
+			oldassert.JSONObject{"name": "things", "max_quota": nil},
+			oldassert.JSONObject{"name": "capacity", "max_quota": nil},
 		),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -1154,10 +1155,10 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	`)
 
 	// happy case: set value with unit conversion
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "max_quota": 10, "unit": "KiB"}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "capacity", "max_quota": 10, "unit": "KiB"}),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
@@ -1165,50 +1166,50 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 	`)
 
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 500}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "max_quota": 500}),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
 
 	// error case: invalid service
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("unknown", assert.JSONObject{"name": "things", "max_quota": 1000}),
+		Body:         makeRequest("unknown", oldassert.JSONObject{"name": "things", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: unknown/things\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: unknown/things\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid resource
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "max_quota": 1000}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "items", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: shared/items\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: shared/items\n"),
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "max_quota": 1000}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "capacity", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource shared/capacity does not track quota\n"),
+		ExpectBody:   oldassert.StringData("resource shared/capacity does not track quota\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid unit
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000, "unit": "MiB"}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "max_quota": 1000, "unit": "MiB"}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value \"1000 MiB\" to <count> because units are incompatible\n"),
+		ExpectBody:   oldassert.StringData("invalid input for shared/things: cannot convert value \"1000 MiB\" to <count> because units are incompatible\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1250,10 +1251,10 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	makeRequest := func(serviceType limes.ServiceType, resources ...any) assert.JSONObject {
-		return assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{{
+	makeRequest := func(serviceType limes.ServiceType, resources ...any) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"project": oldassert.JSONObject{
+				"services": []oldassert.JSONObject{{
 					"type":      serviceType,
 					"resources": resources,
 				}},
@@ -1263,31 +1264,31 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 
 	// happy case: enable autogrowth twice, only update the database once.
 	for range 2 {
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "PUT",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+			Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "forbid_autogrowth": true}),
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 	}
 	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 2 AND project_id = 1 AND resource_id = 2;`)
 
 	// happy case: disable autogrowth
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": false}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "forbid_autogrowth": false}),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`UPDATE project_resources SET forbid_autogrowth = FALSE WHERE id = 2 AND project_id = 1 AND resource_id = 2;`)
 
 	// happy case: multiple resources.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: "PUT",
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
 		Body: makeRequest("shared",
-			assert.JSONObject{"name": "things", "forbid_autogrowth": true},
-			assert.JSONObject{"name": "capacity", "forbid_autogrowth": true},
+			oldassert.JSONObject{"name": "things", "forbid_autogrowth": true},
+			oldassert.JSONObject{"name": "capacity", "forbid_autogrowth": true},
 		),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -1298,63 +1299,63 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 
 	// error case: missing the appropriate edit permission
 	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusForbidden,
-		ExpectBody:   assert.StringData("Forbidden\n"),
+		ExpectBody:   oldassert.StringData("Forbidden\n"),
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// error case: malformed request
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "forbid_auto": true}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "things", "forbid_auto": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("malformed request body for resource: shared/things\n"),
+		ExpectBody:   oldassert.StringData("malformed request body for resource: shared/things\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid service
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("unknown", assert.JSONObject{"name": "things", "forbid_autogrowth": true}),
+		Body:         makeRequest("unknown", oldassert.JSONObject{"name": "things", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: unknown/things\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: unknown/things\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid resource
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "forbid_autogrowth": true}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "items", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: shared/items\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: shared/items\n"),
 	}.Check(t, s.Handler)
 
 	// error case: resource does not allow commitments (we only allow setting
 	// forbid_autogrowth on resources that track commitments because, on other
 	// resources, this will usually lead to the user locking themselves out of
 	// using the resource entirely)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("unshared", assert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
+		Body:         makeRequest("unshared", oldassert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource unshared/capacity does not allow commitments\n"),
+		ExpectBody:   oldassert.StringData("resource unshared/capacity does not allow commitments\n"),
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",
-		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
+		Body:         makeRequest("shared", oldassert.JSONObject{"name": "capacity", "forbid_autogrowth": true}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource shared/capacity does not track quota\n"),
+		ExpectBody:   oldassert.StringData("resource shared/capacity does not track quota\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1365,20 +1366,20 @@ func Test_Historical_Usage(t *testing.T) {
 	s.MustDBExec(query, 2, `{"t":[1719399600, 1719486000],"v":[1, 5]}`, s.GetProjectID("berlin"), s.GetAZResourceID("shared", "capacity", "az-one"))
 	s.MustDBExec(query, 3, `{"t":[1719399600, 1719486000],"v":[2, 6]}`, s.GetProjectID("berlin"), s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal))
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-v2-api.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-get-berlin-v2-api.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/historical_usage_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/historical_usage_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
@@ -1439,7 +1440,7 @@ func TestResourceRenaming(t *testing.T) {
 		var projectData struct {
 			Report limesresources.ProjectReport `json:"project"`
 		}
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "GET",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin" + query,
 			ExpectStatus: 200,
@@ -1465,7 +1466,7 @@ func TestResourceRenaming(t *testing.T) {
 		var domainData struct {
 			Report limesresources.DomainReport `json:"domain"`
 		}
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "GET",
 			Path:         "/v1/domains/uuid-for-germany" + query,
 			ExpectStatus: 200,
@@ -1491,7 +1492,7 @@ func TestResourceRenaming(t *testing.T) {
 		var clusterData struct {
 			Report limesresources.ClusterReport `json:"cluster"`
 		}
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "GET",
 			Path:         "/v1/clusters/current" + query,
 			ExpectStatus: 200,
@@ -1604,20 +1605,20 @@ func TestResourceRenaming(t *testing.T) {
 		"4 seconds: unshared/capacity",
 	)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/resource_renaming_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/resource_renaming_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
-// JSONThatUnmarshalsInto is an implementor of the assert.HTTPResponseBody interface that
+// JSONThatUnmarshalsInto is an implementor of the oldassert.HTTPResponseBody interface that
 // checks that the response body unmarshals cleanly into the given value. The wrapped
 // value must be of a pointer type.
 //
-// This can be used instead of assert.JSONObject if the test wants to capture
+// This can be used instead of oldassert.JSONObject if the test wants to capture
 // the response in a structured form to perform further computations and/or
 // assertions afterwards.
 //
@@ -1706,35 +1707,35 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 	`, liquid.AvailabilityZoneTotal)
 
 	// This test ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-az-separated.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-az-separated.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-az-separated.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-az-separated.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-az-separated.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-az-separated.json"),
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/separated_topology_operations_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/separated_topology_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }

@@ -8,10 +8,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sapcc/go-bits/assert"
-
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 func TestForbidClusterIDHeader(t *testing.T) {
@@ -49,27 +48,27 @@ func TestForbidClusterIDHeader(t *testing.T) {
 	)
 
 	// requests without X-Limes-Cluster-Id are accepted
-	_, respBody := assert.HTTPRequest{
+	_, respBody := oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 
 	// cluster ID "current" is still allowed for backwards compatibility, produces identical output
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "current"},
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.ByteData(bytes.TrimSpace(respBody)),
+		ExpectBody:   oldassert.ByteData(bytes.TrimSpace(respBody)),
 	}.Check(t, s.Handler)
 
 	// same request with X-Limes-Cluster-Id is rejected
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
+		ExpectBody:   oldassert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
 	}.Check(t, s.Handler)
 }

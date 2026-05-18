@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 const (
@@ -248,12 +249,12 @@ func Test_ScanCapacity(t *testing.T) {
 	)
 
 	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/capacity_data_metrics.prom"),
 	}.Check(t, dmrV1)
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
@@ -359,21 +360,21 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	// check data metrics generated for these capacity data
 	pmc := &collector.CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	s.Registry.MustRegister(pmc)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/capacity_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 
 	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_single.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/capacity_data_metrics_single.prom"),
 	}.Check(t, dmrV1)
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
@@ -463,12 +464,12 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	)
 
 	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
+		ExpectBody:   oldassert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
 	}.Check(t, dmrV1)
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})

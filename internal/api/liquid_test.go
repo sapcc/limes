@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 const (
@@ -63,7 +63,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-capacity-request?service_type=unittest",
 		ExpectStatus: http.StatusForbidden,
@@ -71,38 +71,38 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowView = true
 
 	// expect error when service type is missing
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-capacity-request",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required parameter: service_type\n"),
+		ExpectBody:   oldassert.StringData("missing required parameter: service_type\n"),
 	}.Check(t, s.Handler)
 
 	// expect error for invalid service type
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-capacity-request?service_type=invalid_service_type",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("unknown service type\n"),
+		ExpectBody:   oldassert.StringData("unknown service type\n"),
 	}.Check(t, s.Handler)
 
 	// happy path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-capacity-request?service_type=unittest",
 		ExpectStatus: 200,
-		ExpectBody: assert.JSONObject{
+		ExpectBody: oldassert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},
-			"demandByResource": assert.JSONObject{
-				"capacity": assert.JSONObject{
+			"demandByResource": oldassert.JSONObject{
+				"capacity": oldassert.JSONObject{
 					"overcommitFactor": 1.5,
-					"perAZ": assert.JSONObject{
-						"az-one": assert.JSONObject{
+					"perAZ": oldassert.JSONObject{
+						"az-one": oldassert.JSONObject{
 							"usage":              10,
 							"unusedCommitments":  0,
 							"pendingCommitments": 0,
 						},
-						"az-two": assert.JSONObject{
+						"az-two": oldassert.JSONObject{
 							"usage":              0,
 							"unusedCommitments":  0,
 							"pendingCommitments": 0,
@@ -122,7 +122,7 @@ func TestServiceUsageRequest(t *testing.T) {
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusForbidden,
@@ -130,48 +130,48 @@ func TestServiceUsageRequest(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowView = true
 
 	// expect error when service type is missing
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required parameter: service_type\n"),
+		ExpectBody:   oldassert.StringData("missing required parameter: service_type\n"),
 	}.Check(t, s.Handler)
 
 	// expect error when project_id is missing
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=unittest",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required parameter: project_id\n"),
+		ExpectBody:   oldassert.StringData("missing required parameter: project_id\n"),
 	}.Check(t, s.Handler)
 
 	// expect error for invalid service type
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-project-1",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("unknown service type\n"),
+		ExpectBody:   oldassert.StringData("unknown service type\n"),
 	}.Check(t, s.Handler)
 
 	// expect error for invalid project_id
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=-1",
 		ExpectStatus: http.StatusNotFound,
-		ExpectBody:   assert.StringData("project not found\n"),
+		ExpectBody:   oldassert.StringData("project not found\n"),
 	}.Check(t, s.Handler)
 
 	// happy path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
 		ExpectStatus: 200,
-		ExpectBody: assert.JSONObject{
+		ExpectBody: oldassert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},
-			"projectMetadata": assert.JSONObject{
+			"projectMetadata": oldassert.JSONObject{
 				"uuid": "uuid-for-project-1",
 				"name": "project-1",
-				"domain": assert.JSONObject{
+				"domain": oldassert.JSONObject{
 					"uuid": "uuid-for-domain-1",
 					"name": "domain-1",
 				},

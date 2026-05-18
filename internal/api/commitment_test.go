@@ -21,6 +21,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 	"github.com/sapcc/limes/internal/util"
 
 	. "go.xyrillian.de/gg/option"
@@ -321,16 +322,16 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
 	// GET returns an empty list if there are no commitments
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
 	// create a commitment
 	s.Clock.StepBy(1 * time.Hour)
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -339,7 +340,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 		"notify_on_confirm": true,
 	}
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "first",
@@ -357,12 +358,12 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"notify_on_confirm": true,
 		"status":            "planned",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-one",
@@ -388,7 +389,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	// create another commitment
 	s.Clock.StepBy(1 * time.Hour)
-	req2 := assert.JSONObject{
+	req2 := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "things",
 		"availability_zone": "any",
@@ -396,7 +397,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"duration":          "2 hours",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
-	resp2 := assert.JSONObject{
+	resp2 := oldassert.JSONObject{
 		"id":                2,
 		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "first",
@@ -412,12 +413,12 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
 		"status":            "planned",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req2},
+		Body:         oldassert.JSONObject{"commitment": req2},
 		ExpectStatus: http.StatusCreated,
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
@@ -442,62 +443,62 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	})
 
 	// GET now returns something
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
 
 	// after 24 hours have passed, `can_be_deleted` is still true if the user has the "uncommit" permission...
 	s.Clock.StepBy(48 * time.Hour)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
 	// ...but otherwise flips to false
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	delete(resp1, "can_be_deleted")
 	delete(resp2, "can_be_deleted")
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
 
 	// check filters on GET
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=first",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=third",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=capacity",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=blobs",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
 	// commitments can be soft-deleted with sufficient privilege
 	s.TokenValidator.Enforcer.AllowUncommit = true
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNoContent,
@@ -529,7 +530,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	assert.Equal(t, deletedCommitment.Status, util.CommitmentStatusDeleted)
 	assert.Equal(t, deletedCommitment.DeletedAt.IsSome(), true)
 	// a delete on the soft-deleted commitment returns 404
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNotFound,
@@ -537,16 +538,16 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	must.ReturnT(s.DB.Delete(&deletedCommitment))
 
 	s.TokenValidator.Enforcer.AllowUncommit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 
 	// fresh commitments can also be deleted without privilege
 	s.Clock.StepBy(1 * time.Hour)
-	req3 := assert.JSONObject{
+	req3 := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "things",
 		"availability_zone": "any",
@@ -554,7 +555,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"duration":          "2 hours",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
-	resp3 := assert.JSONObject{
+	resp3 := oldassert.JSONObject{
 		"id":                3,
 		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "first",
@@ -570,12 +571,12 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
 		"status":            "planned",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req3},
+		Body:         oldassert.JSONObject{"commitment": req3},
 		ExpectStatus: http.StatusCreated,
-		ExpectBody:   assert.JSONObject{"commitment": resp3},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp3},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "any",
@@ -598,7 +599,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 			},
 		},
 	})
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3",
 		ExpectStatus: http.StatusNoContent,
@@ -637,16 +638,16 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	resp1["confirmed_at"] = s.Clock.Now().Unix()
 	resp1["expires_at"] = s.Clock.Now().Add(2 * time.Hour).Unix()
 	resp1["status"] = "confirmed"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 
 	// confirmed deletions can be deleted by cluster admins
 	s.TokenValidator.Enforcer.AllowUncommit = true
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusNoContent,
@@ -674,11 +675,11 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 			},
 		},
 	})
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 }
 
@@ -686,9 +687,9 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
-	request := func(amount uint64) assert.JSONObject {
-		return assert.JSONObject{
-			"commitment": assert.JSONObject{
+	request := func(amount uint64) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "first",
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
@@ -705,43 +706,43 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 
 	// requests with confirm_by are not accepted
 	requestInFuture := request(1)
-	requestInFuture["commitment"].(assert.JSONObject)["confirm_by"] = s.Clock.Now().Add(7 * day).Unix()
-	assert.HTTPRequest{
+	requestInFuture["commitment"].(oldassert.JSONObject)["confirm_by"] = s.Clock.Now().Add(7 * day).Unix()
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         requestInFuture,
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("this API can only check whether a commitment can be confirmed immediately\n"),
+		ExpectBody:   oldassert.StringData("this API can only check whether a commitment can be confirmed immediately\n"),
 	}.Check(t, s.Handler)
 
 	// the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(1),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": false},
+		ExpectBody:   oldassert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 	// no request was done
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         request(1),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n"),
+		ExpectBody:   oldassert.StringData("this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n"),
 	}.Check(t, s.Handler)
 
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
 
 	// immediate confirmation for this small commitment request is now possible
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(1),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 
 	// check that we cannot immediately commit to more capacity than available
@@ -776,12 +777,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(maxCommittableCapacity),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
@@ -794,12 +795,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(maxCommittableCapacity + 1),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": false},
+		ExpectBody:   oldassert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
@@ -813,7 +814,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         request(committedCapacity),
@@ -832,12 +833,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(remainingCommittableCapacity),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
@@ -849,12 +850,12 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(remainingCommittableCapacity + 1),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": false},
+		ExpectBody:   oldassert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
@@ -871,17 +872,17 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         request(maxCommittableCapacity),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["first"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
 	// try to create a commitment with a mail notification flag (only possible to set for planned commitments)
-	notificationReq := assert.JSONObject{
+	notificationReq := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -890,10 +891,10 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		"notify_on_confirm": true,
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": notificationReq},
+		Body:         oldassert.JSONObject{"commitment": notificationReq},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 }
@@ -943,9 +944,9 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
-	request := func(amount uint64) assert.JSONObject {
-		return assert.JSONObject{
-			"commitment": assert.JSONObject{
+	request := func(amount uint64) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "first",
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
@@ -955,7 +956,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 		}
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         request(6),
@@ -989,38 +990,38 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	// all projects have a usage of 2
 	// if we check whether we can confirm 2 in dresden (which is the usage), this would work
 	// if we check whether we can confirm 1 more, we get rejected
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
 		Body:         request(2),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
 		Body:         request(3),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": false},
+		ExpectBody:   oldassert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 
 	// now we set the only confirmed commitment of 6 to be transferable
 	s.MustDBExec(`UPDATE project_commitments SET transfer_token = $1, transfer_status = 'public', transfer_started_at = $2, creator_uuid = 'someone-else' WHERE id = 3`, s.Collector.GenerateTransferToken(), s.Clock.Now())
 
 	// now, we can confirm up to 4 more than before, because a usage of 2 remains for berlin, but not 5 more
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
 		Body:         request(6),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/can-confirm",
 		Body:         request(7),
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": false},
+		ExpectBody:   oldassert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 }
 
@@ -1031,8 +1032,8 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
 	s.Clock.StepBy(10 * 24 * time.Hour)
-	req := assert.JSONObject{
-		"commitment": assert.JSONObject{
+	req := oldassert.JSONObject{
+		"commitment": oldassert.JSONObject{
 			"service_type":      "first",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -1040,12 +1041,12 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 			"duration":          "1 hour",
 		},
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
 		Body:         req,
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"result": true},
+		ExpectBody:   oldassert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 	if s.LiquidClients["first"].LastCommitmentChangeRequest.InfoVersion != 0 {
 		t.Fatal("expected no commitment change request to be sent to Liquid")
@@ -1057,7 +1058,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowView = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusForbidden,
@@ -1065,12 +1066,12 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowView = true
 
 	// unknown objects along the path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/unknown/commitments",
 		ExpectStatus: http.StatusNotFound,
@@ -1081,23 +1082,23 @@ func TestGetPublicCommitments(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
 	// GET returns an empty list when there are no commitments at all
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments?service=second&resource=capacity",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{}},
 	}.Check(t, s.Handler)
 
 	// create a commitment
 	s.Clock.StepBy(1 * time.Hour)
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
 		"amount":            10,
 		"duration":          "2 hours",
 	}
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -1114,12 +1115,12 @@ func TestGetPublicCommitments(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		"status":            "confirmed",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
 	}.Check(t, s.Handler)
 
 	// foreach transfer status...
@@ -1137,27 +1138,27 @@ func TestGetPublicCommitments(t *testing.T) {
 			resp1["transfer_status"] = status
 			resp1["transfer_token"] = test.GenerateDummyTransferToken(*s.CurrentTransferTokenNumber + 1)
 		}
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       "POST",
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 			ExpectStatus: http.StatusAccepted,
-			ExpectBody:   assert.JSONObject{"commitment": resp1},
-			Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": status}},
+			ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+			Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": status}},
 		}.Check(t, s.Handler)
 
 		// check that it only shows up in the public commitments list for CommitmentTransferStatusPublic
-		resp := assert.JSONObject{}
+		resp := oldassert.JSONObject{}
 		if status == limesresources.CommitmentTransferStatusPublic {
 			// when shown as a public commitment, some attributes are missing
 			cloned := maps.Clone(resp1)
 			delete(cloned, "can_be_deleted")
 			delete(cloned, "creator_uuid")
 			delete(cloned, "creator_name")
-			resp["commitments"] = []assert.JSONObject{cloned}
+			resp["commitments"] = []oldassert.JSONObject{cloned}
 		} else {
-			resp["commitments"] = []assert.JSONObject{}
+			resp["commitments"] = []oldassert.JSONObject{}
 		}
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       http.MethodGet,
 			Path:         "/v1/public-commitments?service=second&resource=capacity",
 			ExpectStatus: http.StatusOK,
@@ -1170,42 +1171,42 @@ func TestGetPublicCommitmentsErrorCases(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
 	// invalid service/resource selection
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required query parameter: service\n"),
+		ExpectBody:   oldassert.StringData("missing required query parameter: service\n"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments?service=first",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("missing required query parameter: resource\n"),
+		ExpectBody:   oldassert.StringData("missing required query parameter: resource\n"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments?service=unknown&resource=capacity",
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: \"unknown/capacity\"\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: \"unknown/capacity\"\n"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments?service=first&resource=unknown",
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: \"first/unknown\"\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: \"first/unknown\"\n"),
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/public-commitments?service=first&resource=capacity",
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
+		ExpectBody:   oldassert.StringData("commitments are not enabled for this resource\n"),
 	}.Check(t, s.Handler)
 }
 
 func TestPutCommitmentErrorCases(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
-	request := assert.JSONObject{
+	request := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -1216,138 +1217,138 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": request},
+		Body:         oldassert.JSONObject{"commitment": request},
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// unknown objects along the path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": request},
+		Body:         oldassert.JSONObject{"commitment": request},
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/unknown/commitments/new",
-		Body:         assert.JSONObject{"commitment": request},
+		Body:         oldassert.JSONObject{"commitment": request},
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type does not exist
 	cloned := maps.Clone(request)
 	cloned["service_type"] = "unknown"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: unknown/capacity\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: unknown/capacity\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: resource_name does not exist
 	cloned = maps.Clone(request)
 	cloned["resource_name"] = "unknown"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service and/or resource: first/unknown\n"),
+		ExpectBody:   oldassert.StringData("no such service and/or resource: first/unknown\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name does not accept commitments
 	cloned = maps.Clone(request)
 	cloned["service_type"] = "second"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
+		ExpectBody:   oldassert.StringData("commitments are not enabled for this resource\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
 	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE`)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": request},
+		Body:         oldassert.JSONObject{"commitment": request},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
+		ExpectBody:   oldassert.StringData("resource first/capacity is not enabled in this project\n"),
 	}.Check(t, s.Handler)
 	s.MustDBExec(`UPDATE project_resources SET forbidden = FALSE`)
 
 	// invalid request field: AZ given, but resource does not accept AZ-aware commitments
 	cloned = maps.Clone(request)
 	cloned["resource_name"] = "things"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource does not accept AZ-aware commitments, so the AZ must be set to \"any\"\n"),
+		ExpectBody:   oldassert.StringData("resource does not accept AZ-aware commitments, so the AZ must be set to \"any\"\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: resource wants an AZ-aware commitment, but a malformed AZ or pseudo-AZ is given
 	for _, az := range []string{"any", "unknown", "something-else", ""} {
 		cloned = maps.Clone(request)
 		cloned["availability_zone"] = az
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       http.MethodPost,
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-			Body:         assert.JSONObject{"commitment": cloned},
+			Body:         oldassert.JSONObject{"commitment": cloned},
 			ExpectStatus: http.StatusUnprocessableEntity,
-			ExpectBody:   assert.StringData("no such availability zone\n"),
+			ExpectBody:   oldassert.StringData("no such availability zone\n"),
 		}.Check(t, s.Handler)
 	}
 
 	// invalid request field: duration is not one of the configured values
 	cloned = maps.Clone(request)
 	cloned["duration"] = "3 hours"
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("unacceptable commitment duration for this resource, acceptable values: [\"1 hour\",\"2 hours\"]\n"),
+		ExpectBody:   oldassert.StringData("unacceptable commitment duration for this resource, acceptable values: [\"1 hour\",\"2 hours\"]\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: amount may not be negative (this is caught by the JSON parser)
 	cloned = maps.Clone(request)
 	cloned["amount"] = -42
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("request body is not valid JSON: json: cannot unmarshal number -42 into Go struct field CommitmentRequest.commitment.amount of type uint64\n"),
+		ExpectBody:   oldassert.StringData("request body is not valid JSON: json: cannot unmarshal number -42 into Go struct field CommitmentRequest.commitment.amount of type uint64\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: amount may not be zero (this is caught by our logic)
 	cloned = maps.Clone(request)
 	cloned["amount"] = 0
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("amount of committed resource must be greater than zero\n"),
+		ExpectBody:   oldassert.StringData("amount of committed resource must be greater than zero\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: confirm_by may not be in the past
 	cloned = maps.Clone(request)
 	cloned["confirm_by"] = s.Clock.Now().Add(-1 * time.Hour).Unix()
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
+		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("confirm_by must not be set in the past\n"),
+		ExpectBody:   oldassert.StringData("confirm_by must not be set in the past\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1355,7 +1356,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSON)
 
 	// we need a commitment in the DB to test deletion
-	request := assert.JSONObject{
+	request := oldassert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
@@ -1363,17 +1364,17 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		"duration":          "1 hour",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": request},
+		Body:         oldassert.JSONObject{"commitment": request},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	s.Clock.StepBy(48 * time.Hour) // skip over the phase where fresh commitments can be deleted by their creators
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusForbidden,
@@ -1381,21 +1382,21 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowUncommit = true
 
 	// unknown objects along the path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/unknown/commitments/1",
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNotFound,
-		ExpectBody:   assert.StringData("no such commitment\n"),
+		ExpectBody:   oldassert.StringData("no such commitment\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1404,7 +1405,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	var transferToken = test.GenerateDummyTransferToken(1)
 
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -1415,7 +1416,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"transfer_token":    "",
 	}
 
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -1435,64 +1436,64 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"status":            "confirmed",
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	// unknown transfer status
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "asdf"}},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "asdf"}},
 	}.Check(t, s.Handler)
 
 	// Test on confirmed commitment should succeed.
 	// TransferAmount >= CommitmentAmount
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "public"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	// try to set the same status again, should complain
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("transfer_status is already set to desired value\n"),
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "public"}},
+		ExpectBody:   oldassert.StringData("transfer_status is already set to desired value\n"),
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 
 	// withdraw
 	delete(resp1, "transfer_status")
 	delete(resp1, "transfer_token")
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": ""}},
 	}.Check(t, s.Handler)
 
 	// try to transfer an expired commitment
 	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 1", liquid.CommitmentStatusExpired)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": ""}},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": ""}},
 	}.Check(t, s.Handler)
 
 	// an expired commitment cannot be deleted
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusNotFound,
@@ -1501,7 +1502,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	s.MustDBExec(`DELETE FROM project_commitments WHERE id = 1`)
 
 	// TransferAmount < CommitmentAmount
-	resp2 := assert.JSONObject{
+	resp2 := oldassert.JSONObject{
 		"id":                3,
 		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "second",
@@ -1521,20 +1522,20 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"status":            "confirmed",
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp2},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 9, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
 		AZ:          "az-two",
@@ -1576,32 +1577,32 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// test resetting a commitment to CommitmentTransferStatusNone (this will also clear out its transfer token)
 	delete(resp2, "transfer_status")
 	delete(resp2, "transfer_token")
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/start-transfer",
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": ""}},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 9, "transfer_status": ""}},
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
 
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	// Negative Test, amount = 0.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("delivered amount needs to be a positive value.\n"),
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
+		ExpectBody:   oldassert.StringData("delivered amount needs to be a positive value.\n"),
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 0, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 
 	// Negative Test, delivered amount > commitment amount
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("delivered amount exceeds the commitment amount.\n"),
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 11, "transfer_status": "public"}},
+		ExpectBody:   oldassert.StringData("delivered amount exceeds the commitment amount.\n"),
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 11, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 }
 
@@ -1610,7 +1611,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 
 	var transferToken = test.GenerateDummyTransferToken(1)
 	// Prepare a commitment to test against in transfer mode.
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -1618,7 +1619,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		"amount":            10,
 		"duration":          "1 hour",
 	}
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -1638,34 +1639,34 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		"status":            "confirmed",
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 
 	// Get commitment by token.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitments/" + transferToken,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
 	// Now check a token that does not exist.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitments/" + "notExistingToken",
 		ExpectStatus: http.StatusNotFound,
-		ExpectBody:   assert.StringData("no matching commitment found.\n"),
+		ExpectBody:   oldassert.StringData("no matching commitment found.\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1673,7 +1674,7 @@ func Test_TransferCommitment(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
 	var transferToken = test.GenerateDummyTransferToken(1)
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -1683,7 +1684,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"transfer_status":   "",
 	}
 
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -1703,7 +1704,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"status":            "confirmed",
 	}
 
-	resp2 := assert.JSONObject{
+	resp2 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -1723,7 +1724,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	// Split commitment
 	transferToken2 := test.GenerateDummyTransferToken(2)
-	resp3 := assert.JSONObject{
+	resp3 := oldassert.JSONObject{
 		"id":                2,
 		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "second",
@@ -1742,7 +1743,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"transfer_token":    transferToken2,
 		"status":            "confirmed",
 	}
-	resp4 := assert.JSONObject{
+	resp4 := oldassert.JSONObject{
 		"id":                2,
 		"uuid":              "00000000-0000-0000-0000-000000000002",
 		"service_type":      "second",
@@ -1761,29 +1762,29 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 
 	// Transfer Commitment to target AZ_RESOURCE_ID (SOURCE_ID=3 TARGET_ID=17)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	// Transfer full amount
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	s.Auditor.IgnoreEventsUntilNow()
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
 		Header:       map[string]string{"Transfer-Token": transferToken},
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
@@ -1844,20 +1845,20 @@ func Test_TransferCommitment(t *testing.T) {
 	assert.Equal(t, payload.ByProject["uuid-for-berlin"].ProjectMetadata.IsNone(), true)
 
 	// Split and transfer commitment.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp3},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp3},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2",
 		Header:       map[string]string{"Transfer-Token": transferToken2},
-		ExpectBody:   assert.JSONObject{"commitment": resp4},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
@@ -1909,20 +1910,20 @@ func Test_TransferCommitment(t *testing.T) {
 	assert.Equal(t, splitCommitment.Status, liquid.CommitmentStatusConfirmed)
 
 	// wrong token
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
 		Header:       map[string]string{"Transfer-Token": "wrongToken"},
 		ExpectStatus: http.StatusNotFound,
-		ExpectBody:   assert.StringData("no matching commitment found\n"),
+		ExpectBody:   oldassert.StringData("no matching commitment found\n"),
 	}.Check(t, s.Handler)
 
 	// No token provided
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("no transfer token provided\n"),
+		ExpectBody:   oldassert.StringData("no transfer token provided\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -1932,8 +1933,8 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	// create commitments for resource "second/capacity" in AZ "az-one"
 	// for all projects, so that all existing capacity is covered
 	// (capacity = 30, and each project has usage = 1)
-	req := assert.JSONObject{
-		"commitment": assert.JSONObject{
+	req := oldassert.JSONObject{
+		"commitment": oldassert.JSONObject{
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
@@ -1941,19 +1942,19 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 			"duration":          "1 hour",
 		},
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         req,
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/new",
 		Body:         req,
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris/commitments/new",
 		Body:         req,
@@ -1967,11 +1968,11 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	// `sum_over_projects(committed) == capacity`, i.e. all capacity is committed somewhere, usage must stay
 	// within these commitments in each project. Otherwise, the total amount of capacity allocated to usage
 	// and/or commitments would exceed the available capacity.
-	_, respBodyBytes := assert.HTTPRequest{
+	_, respBodyBytes := oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"amount":          10,
 				"transfer_status": "unlisted",
 			},
@@ -2032,11 +2033,11 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
 		Header:       map[string]string{"Transfer-Token": resp.Commitment.TransferToken},
-		ExpectBody:   assert.StringData("not enough committable capacity on the receiving side\n"),
+		ExpectBody:   oldassert.StringData("not enough committable capacity on the receiving side\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, commitmentChangeRequest)
@@ -2045,28 +2046,28 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 func TestTransferCommitmentForbiddenResource(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"service_type": "second", "resource_name": "capacity", "availability_zone": "az-one", "amount": 5, "duration": "1 hour"}},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"service_type": "second", "resource_name": "capacity", "availability_zone": "az-one", "amount": 5, "duration": "1 hour"}},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 5, "transfer_status": "unlisted"}},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 5, "transfer_status": "unlisted"}},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
 	s.MustDBExec(`UPDATE project_resources SET forbidden = TRUE WHERE project_id = $1 AND resource_id = $2`, s.GetProjectID("dresden"), s.GetResourceID("second", "capacity"))
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
 		Header:       map[string]string{"Transfer-Token": test.GenerateDummyTransferToken(1)},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("resource second/capacity is not enabled in the target project\n"),
+		ExpectBody:   oldassert.StringData("resource second/capacity is not enabled in the target project\n"),
 	}.Check(t, s.Handler)
 }
 
@@ -2074,7 +2075,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	s := setupCommitmentTest(t, testConvertCommitmentsJSON)
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
-	resp1 := []assert.JSONObject{
+	resp1 := []oldassert.JSONObject{
 		{
 			"from":            2,
 			"to":              3,
@@ -2087,9 +2088,9 @@ func Test_GetCommitmentConversion(t *testing.T) {
 			"target_resource": "capacity_c96",
 		}}
 
-	resp2 := []assert.JSONObject{}
+	resp2 := []oldassert.JSONObject{}
 
-	resp3 := []assert.JSONObject{
+	resp3 := []oldassert.JSONObject{
 		{
 			"from":            2,
 			"to":              3,
@@ -2098,34 +2099,34 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		},
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitment-conversion/third/capacity_c48",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"conversions": resp1},
+		ExpectBody:   oldassert.JSONObject{"conversions": resp1},
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitment-conversion/third/capacity2_c144",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"conversions": resp2},
+		ExpectBody:   oldassert.JSONObject{"conversions": resp2},
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitment-conversion/fourth/capacity_a",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"conversions": resp3},
+		ExpectBody:   oldassert.JSONObject{"conversions": resp3},
 	}.Check(t, s.Handler)
 }
 
 func Test_ConvertCommitments(t *testing.T) {
 	s := setupCommitmentTest(t, testConvertCommitmentsJSON)
 
-	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
-		return assert.JSONObject{
-			"commitment": assert.JSONObject{
+	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) oldassert.JSONObject {
+		return oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"target_service":  targetService,
 				"target_resource": targetResource,
 				"source_amount":   sourceAmount,
@@ -2134,8 +2135,8 @@ func Test_ConvertCommitments(t *testing.T) {
 		}
 	}
 
-	resp := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
-		return assert.JSONObject{
+	resp := func(id, amount uint64, targetService, targetResource string) oldassert.JSONObject {
+		return oldassert.JSONObject{
 			"id":                id,
 			"uuid":              test.GenerateDummyCommitmentUUID(id),
 			"service_type":      targetService,
@@ -2153,8 +2154,8 @@ func Test_ConvertCommitments(t *testing.T) {
 			"status":            "confirmed",
 		}
 	}
-	respWithConfirmBy := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
-		return assert.JSONObject{
+	respWithConfirmBy := func(id, amount uint64, targetService, targetResource string) oldassert.JSONObject {
+		return oldassert.JSONObject{
 			"id":                id,
 			"uuid":              test.GenerateDummyCommitmentUUID(id),
 			"service_type":      targetService,
@@ -2174,11 +2175,11 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 
 	// conversion rate is (capacity_b: 3 to capacity_a: 2)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "fourth",
 				"resource_name":     "capacity_b",
 				"availability_zone": "az-one",
@@ -2235,22 +2236,22 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "liquid says: not enough capacity!"})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("fourth", "capacity_a", 21, 14),
-		ExpectBody:   assert.StringData("liquid says: not enough capacity!\n"),
+		ExpectBody:   oldassert.StringData("liquid says: not enough capacity!\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 	*s.CurrentProjectCommitmentID-- // request was unsuccessful
 
 	// Conversion with remainder should be rejected.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("fourth", "capacity_a", 10, 6),
-		ExpectBody:   assert.StringData("amount: 10 does not fit into conversion rate of: 3\n"),
+		ExpectBody:   oldassert.StringData("amount: 10 does not fit into conversion rate of: 3\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
@@ -2272,11 +2273,11 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("fourth", "capacity_a", 3, 2),
-		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "fourth", "capacity_a")},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp(3, 2, "fourth", "capacity_a")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
@@ -2290,47 +2291,47 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.Equal(t, commitmentToCheck.Amount, 18)
 
 	// Reject conversion attempt to a different project.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/2/convert",
 		Body:         req("fourth", "capacity_a", 6, 4),
-		ExpectBody:   assert.StringData("no such commitment\n"),
+		ExpectBody:   oldassert.StringData("no such commitment\n"),
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
 
 	// Reject conversion at the same project to the same resource.
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("fourth", "capacity_b", 6, 6),
-		ExpectBody:   assert.StringData("conversion attempt to the same resource.\n"),
+		ExpectBody:   oldassert.StringData("conversion attempt to the same resource.\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// Mismatching target amount
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("fourth", "capacity_a", 6, 3),
-		ExpectBody:   assert.StringData("conversion mismatch. provided: 3, calculated: 4\n"),
+		ExpectBody:   oldassert.StringData("conversion mismatch. provided: 3, calculated: 4\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// Reject an amount that doesn't fit into the conversion rate (remainder > 0).
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("fourth", "capacity_a", 1, 3),
-		ExpectBody:   assert.StringData("amount: 1 does not fit into conversion rate of: 3\n"),
+		ExpectBody:   oldassert.StringData("amount: 1 does not fit into conversion rate of: 3\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// Check conversion to a different identifier which should be rejected
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("third", "capacity2_c144", 1, 3),
-		ExpectBody:   assert.StringData("commitment is not convertible into resource third/capacity2_c144\n"),
+		ExpectBody:   oldassert.StringData("commitment is not convertible into resource third/capacity2_c144\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 
@@ -2360,11 +2361,11 @@ func Test_ConvertCommitments(t *testing.T) {
 	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, loc, s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "fourth",
 				"resource_name":     "capacity_b",
 				"availability_zone": "az-one",
@@ -2376,11 +2377,11 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
 		Body:         req("fourth", "capacity_a", 3, 2),
-		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(5, 2, "fourth", "capacity_a")},
+		ExpectBody:   oldassert.JSONObject{"commitment": respWithConfirmBy(5, 2, "fourth", "capacity_a")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
@@ -2390,11 +2391,11 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
 	// Positive: confirmed commitment
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "second",
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
@@ -2408,11 +2409,11 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	// Fast forward by 1 hour. Creation_time = 0; Now = 1; (Expire = Creation_time + 2 hours)
 	s.Clock.StepBy(1 * time.Hour)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
-		Body:   assert.JSONObject{"duration": "3 hours"},
-		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
+		Body:   oldassert.JSONObject{"duration": "3 hours"},
+		ExpectBody: oldassert.JSONObject{"commitment": oldassert.JSONObject{
 			"id":                1,
 			"uuid":              "00000000-0000-0000-0000-000000000001",
 			"service_type":      "second",
@@ -2457,11 +2458,11 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	})
 
 	// Positive: Pending commitment
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "second",
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
@@ -2473,11 +2474,11 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
-		Body:   assert.JSONObject{"duration": "3 hours"},
-		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
+		Body:   oldassert.JSONObject{"duration": "3 hours"},
+		ExpectBody: oldassert.JSONObject{"commitment": oldassert.JSONObject{
 			"id":                2,
 			"uuid":              "00000000-0000-0000-0000-000000000002",
 			"service_type":      "second",
@@ -2524,39 +2525,39 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 
 	// check that rejections from the liquid are honored
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
-		Body:         assert.JSONObject{"duration": "3 hours"},
+		Body:         oldassert.JSONObject{"duration": "3 hours"},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
 	// Negative: Provided duration is invalid
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
-		Body:         assert.JSONObject{"duration": "99 hours"},
-		ExpectBody:   assert.StringData("provided duration: 99 hours does not match the config [1 hour 2 hours 3 hours]\n"),
+		Body:         oldassert.JSONObject{"duration": "99 hours"},
+		ExpectBody:   oldassert.StringData("provided duration: 99 hours does not match the config [1 hour 2 hours 3 hours]\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 
 	// Negative: Provided duration < Commitment Duration
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
-		Body:         assert.JSONObject{"duration": "1 hour"},
-		ExpectBody:   assert.StringData("duration change from 3 hours to 1 hour forbidden\n"),
+		Body:         oldassert.JSONObject{"duration": "1 hour"},
+		ExpectBody:   oldassert.StringData("duration change from 3 hours to 1 hour forbidden\n"),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 
 	// Negative: Expired commitment.
 	s.Clock.StepBy(-1 * time.Hour)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body: assert.JSONObject{
-			"commitment": assert.JSONObject{
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
 				"service_type":      "second",
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
@@ -2568,22 +2569,22 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	s.Clock.StepBy(1 * time.Hour)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
-		Body:         assert.JSONObject{"duration": "2 hours"},
-		ExpectBody:   assert.StringData("unable to process expired commitment\n"),
+		Body:         oldassert.JSONObject{"duration": "2 hours"},
+		ExpectBody:   oldassert.StringData("unable to process expired commitment\n"),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 
 	// Negative: Superseded commitment
 	s.Clock.StepBy(-1 * time.Hour)
 	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 3", liquid.CommitmentStatusSuperseded)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
-		Body:         assert.JSONObject{"duration": "2 hours"},
-		ExpectBody:   assert.StringData("unable to operate on commitment with a status of superseded\n"),
+		Body:         oldassert.JSONObject{"duration": "2 hours"},
+		ExpectBody:   oldassert.StringData("unable to operate on commitment with a status of superseded\n"),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 }
@@ -2592,7 +2593,7 @@ func Test_MergeCommitments(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
 	// Create two confirmed commitments on the same resource
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2600,7 +2601,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"amount":            10,
 		"duration":          "1 hour",
 	}
-	req2 := assert.JSONObject{
+	req2 := oldassert.JSONObject{
 		"id":                2,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2609,7 +2610,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"duration":          "2 hours",
 	}
 	// Create confirmed commitment in different AZ
-	req3 := assert.JSONObject{
+	req3 := oldassert.JSONObject{
 		"id":                3,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2618,7 +2619,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"duration":          "2 hours",
 	}
 	// Create confirmed commitment on different resource
-	req4 := assert.JSONObject{
+	req4 := oldassert.JSONObject{
 		"id":                4,
 		"service_type":      "second",
 		"resource_name":     "other",
@@ -2626,7 +2627,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"amount":            1,
 		"duration":          "2 hours",
 	}
-	resp3 := assert.JSONObject{
+	resp3 := oldassert.JSONObject{
 		"id":                3,
 		"uuid":              test.GenerateDummyCommitmentUUID(3),
 		"service_type":      "second",
@@ -2643,7 +2644,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		"status":            "confirmed",
 	}
-	resp4 := assert.JSONObject{
+	resp4 := oldassert.JSONObject{
 		"id":                4,
 		"uuid":              "00000000-0000-0000-0000-000000000004",
 		"service_type":      "second",
@@ -2661,7 +2662,7 @@ func Test_MergeCommitments(t *testing.T) {
 		"status":            "confirmed",
 	}
 	// Merged commitment
-	resp5 := assert.JSONObject{
+	resp5 := oldassert.JSONObject{
 		"id":                5,
 		"uuid":              "00000000-0000-0000-0000-000000000005",
 		"service_type":      "second",
@@ -2678,91 +2679,91 @@ func Test_MergeCommitments(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		"status":            "confirmed",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req2},
+		Body:         oldassert.JSONObject{"commitment": req2},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req3},
+		Body:         oldassert.JSONObject{"commitment": req3},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req4},
+		Body:         oldassert.JSONObject{"commitment": req4},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	// No authentication
 	// Missing edit permissions
 	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// Unknown domain, project and commitment
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/unknown/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2000}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2000}},
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
 
 	// Check that there are at least 2 commits to merge
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1}},
 		ExpectStatus: http.StatusBadRequest,
 	}.Check(t, s.Handler)
 
 	// Do not merge commitments in different AZs
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 3}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 3}},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 	// Do not merge commitments on different resources
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 4}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 4}},
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// Do not merge commitments in transfer
 	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusPublic)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusNone)
@@ -2771,10 +2772,10 @@ func Test_MergeCommitments(t *testing.T) {
 	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired, util.CommitmentStatusDeleted}
 	for _, status := range unmergeableStatuses {
 		s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 2", status)
-		assert.HTTPRequest{
+		oldassert.HTTPRequest{
 			Method:       http.MethodPost,
 			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-			Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
+			Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 			ExpectStatus: http.StatusConflict,
 		}.Check(t, s.Handler)
 	}
@@ -2782,11 +2783,11 @@ func Test_MergeCommitments(t *testing.T) {
 
 	// Happy path
 	// New merged commitment should be returned with latest expiration date of all commitments
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
-		Body:         assert.JSONObject{"commitment_ids": []int{1, 2}},
-		ExpectBody:   assert.JSONObject{"commitment": resp5},
+		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp5},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
@@ -2828,10 +2829,10 @@ func Test_MergeCommitments(t *testing.T) {
 
 	// Check that commitments not involved in the merge remained the same
 	// Check that new merged commitment is present and that superseded commitments are not reported anymore
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp3, resp4, resp5}},
+		ExpectBody:   oldassert.JSONObject{"commitments": []oldassert.JSONObject{resp3, resp4, resp5}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
@@ -2855,7 +2856,7 @@ func Test_MergeCommitments(t *testing.T) {
 func Test_RenewCommitments(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2863,7 +2864,7 @@ func Test_RenewCommitments(t *testing.T) {
 		"amount":            2,
 		"duration":          "1 hour",
 	}
-	req2 := assert.JSONObject{
+	req2 := oldassert.JSONObject{
 		"id":                2,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2872,20 +2873,20 @@ func Test_RenewCommitments(t *testing.T) {
 		"duration":          "2 hours",
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req2},
+		Body:         oldassert.JSONObject{"commitment": req2},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                3,
 		"uuid":              "00000000-0000-0000-0000-000000000003",
 		"service_type":      "second",
@@ -2902,7 +2903,7 @@ func Test_RenewCommitments(t *testing.T) {
 		"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		"status":            "planned",
 	}
-	resp2 := assert.JSONObject{
+	resp2 := oldassert.JSONObject{
 		"id":                4,
 		"uuid":              "00000000-0000-0000-0000-000000000004",
 		"service_type":      "second",
@@ -2921,10 +2922,10 @@ func Test_RenewCommitments(t *testing.T) {
 	}
 
 	// Renew applicable commitments successfully
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/renew",
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
@@ -2950,10 +2951,10 @@ func Test_RenewCommitments(t *testing.T) {
 			},
 		},
 	})
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/renew",
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{
@@ -2981,14 +2982,14 @@ func Test_RenewCommitments(t *testing.T) {
 	})
 
 	// Ensure that already renewed commitments can't be renewed again
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/renew",
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// Do not allow to renew already expired commitments (that are not tagged as ones yet)
-	req3 := assert.JSONObject{
+	req3 := oldassert.JSONObject{
 		"id":                5,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -2996,16 +2997,16 @@ func Test_RenewCommitments(t *testing.T) {
 		"amount":            1,
 		"duration":          "1 hour",
 	}
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req3},
+		Body:         oldassert.JSONObject{"commitment": req3},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	s.Clock.StepBy(2 * time.Hour)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
@@ -3014,7 +3015,7 @@ func Test_RenewCommitments(t *testing.T) {
 	s.Clock.StepBy(-2 * time.Hour)
 	// Do not allow to renew explicit expired commitments
 	s.MustDBExec("UPDATE project_commitments SET status = $1 WHERE id = 5", liquid.CommitmentStatusExpired)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
@@ -3024,7 +3025,7 @@ func Test_RenewCommitments(t *testing.T) {
 	s.MustDBExec("UPDATE project_commitments SET duration = $1, expires_at = $2, status = $3 WHERE id = 5",
 		"4 months", s.Clock.Now().Add(4*30*24*time.Hour), liquid.CommitmentStatusConfirmed,
 	)
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/5/renew",
 		ExpectStatus: http.StatusConflict,
@@ -3035,7 +3036,7 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
 	var transferToken = test.GenerateDummyTransferToken(1)
 
-	req1 := assert.JSONObject{
+	req1 := oldassert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
@@ -3046,7 +3047,7 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 		"transfer_token":    "",
 	}
 
-	resp1 := assert.JSONObject{
+	resp1 := oldassert.JSONObject{
 		"id":                1,
 		"uuid":              "00000000-0000-0000-0000-000000000001",
 		"service_type":      "second",
@@ -3066,27 +3067,27 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 		"status":            "confirmed",
 	}
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1},
+		Body:         oldassert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 	s.LiquidClients["second"].LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 
 	// Happy path
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+		ExpectBody:   oldassert.JSONObject{"commitment": resp1},
+		Body:         oldassert.JSONObject{"commitment": oldassert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 	assert.DeepEqual(t, "CommitmentChangeRequest", s.LiquidClients["second"].LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{})
 
 	// Access forbidden
 	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/commitments/1/start-transfer",
 		ExpectStatus: http.StatusForbidden,
@@ -3094,24 +3095,24 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// Commitment does not exist
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/commitments/99/start-transfer",
-		ExpectBody:   assert.StringData("unable to resolve the requested commitment\n"),
+		ExpectBody:   oldassert.StringData("unable to resolve the requested commitment\n"),
 		ExpectStatus: http.StatusBadRequest,
 	}.Check(t, s.Handler)
 
 	// Delete a non existing commitment
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "DELETE",
 		Path:         "/v1/commitments/99",
-		ExpectBody:   assert.StringData("unable to resolve the requested commitment\n"),
+		ExpectBody:   oldassert.StringData("unable to resolve the requested commitment\n"),
 		ExpectStatus: http.StatusBadRequest,
 	}.Check(t, s.Handler)
 
 	// access forbidden
 	s.TokenValidator.Enforcer.AllowEdit = false
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/commitments/1/start-transfer",
 		ExpectStatus: http.StatusForbidden,
@@ -3119,10 +3120,10 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// Successfully delete the commitment
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "DELETE",
 		Path:         "/v1/commitments/1",
-		ExpectBody:   assert.StringData(""),
+		ExpectBody:   oldassert.StringData(""),
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
 }
