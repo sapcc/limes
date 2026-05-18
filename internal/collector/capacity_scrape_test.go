@@ -4,6 +4,7 @@
 package collector_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -171,6 +172,10 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 910 WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(10*time.Second).Unix())
 
+	// we don't set anything stale, so we want to expect sql.ErrNoRows
+	err := jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections))
+	assert.ErrEqual(t, err, sql.ErrNoRows)
+
 	// insert some crap records
 	serviceShared := s.GetServiceID("shared")
 	serviceUnshared := s.GetServiceID("unshared")
@@ -203,7 +208,7 @@ func Test_ScanCapacity(t *testing.T) {
 	// if we don't bump the version, we will observe that this breaks the scrape, as it
 	// should not be possible to update the databases' services/ resources etc. manually
 	setClusterCapacitorsStale(t, s)
-	err := job.ProcessOne(s.Ctx)
+	err = job.ProcessOne(s.Ctx)
 	assert.ErrEqual(t, err, `while scraping service shared: received ServiceCapacityReport is invalid: unexpected value for .Resources["things"] (resource was not declared)`)
 	must.Succeed(job.ProcessOne(s.Ctx))
 

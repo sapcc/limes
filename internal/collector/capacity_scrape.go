@@ -5,6 +5,7 @@ package collector
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"slices"
 	"time"
@@ -108,6 +109,9 @@ func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.L
 	str, err := c.DB.SelectStr(findServiceForScrapeQuery, task.Timing.StartedAt)
 	if err != nil {
 		return task, err
+	}
+	if str == "" {
+		return task, sql.ErrNoRows
 	}
 	task.ServiceType = db.ServiceType(str)
 
