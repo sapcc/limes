@@ -5,21 +5,20 @@ package resourcesv2
 
 import (
 	"github.com/sapcc/go-api-declarations/liquid"
-
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 )
 
 // InfoReport is the response type for GET /resources/v2/info.
-// It contains all metadata information about the clusters services and resources.
+// It contains all metadata information about the cluster's services and resources.
 type InfoReport struct {
-	// The Area is a grouping of multiple services, which serve the same purpose.
+	// The Area is a grouping of multiple services which serve similar purposes.
 	// E.g. compute, storage, network, etc.
 	Areas map[string]AreaInfoReport `json:"service_areas"`
 }
 
-// AreaInfoReport groups services into areas, which are defined in the config.
+// AreaInfoReport groups services into areas, which are defined in the Limes config.
 // It appears in [InfoReport].
 type AreaInfoReport struct {
 	DisplayName string                               `json:"display_name"`
@@ -34,7 +33,7 @@ type ServiceInfoReport struct {
 	Categories  map[liquid.CategoryName]CategoryInfoReport `json:"categories"`
 }
 
-// CategoryInfoReport groups resources into categories, which are defined in the config.
+// CategoryInfoReport groups resources into categories, which are defined in the Limes config.
 // It appears in [ServiceInfoReport].
 type CategoryInfoReport struct {
 	DisplayName string                                     `json:"display_name"`
