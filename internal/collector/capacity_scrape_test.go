@@ -247,17 +247,13 @@ func Test_ScanCapacity(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
-	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/metrics",
-		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
-	}.Check(t, dmrV1)
+	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
+	resp := dmrV1.RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
-	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
+	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
 }
@@ -357,27 +353,19 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	)
 
 	// check data metrics generated for these capacity data
-	pmc := &collector.CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	s.Registry.MustRegister(pmc)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/metrics",
-		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
-	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
+	s.Registry.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB})
+	handler := httptest.NewHandler(promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
+	resp := handler.RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_metrics.prom")
 
-	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/metrics",
-		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_single.prom"),
-	}.Check(t, dmrV1)
+	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
+	resp = dmrV1.RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single.prom")
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
-	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
+	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single_v2.prom")
 }
@@ -462,17 +450,13 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
-	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/metrics",
-		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
-		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics_azaware.prom"),
-	}.Check(t, dmrV1)
+	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
+	resp := dmrV1.RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
 	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
-	resp := dmr.RespondTo(s.Ctx, "GET /metrics")
+	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")
 

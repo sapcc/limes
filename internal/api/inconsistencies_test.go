@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 func TestInconsistencyReport(t *testing.T) {
@@ -55,15 +55,15 @@ func TestInconsistencyReport(t *testing.T) {
 		s.GetAZResourceID("shared", "things", liquid.AvailabilityZoneTotal),
 	)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/inconsistencies",
 		ExpectStatus: 200,
-		ExpectBody: assert.JSONObject{
-			"inconsistencies": assert.JSONObject{
-				"domain_quota_overcommitted": []assert.JSONObject{},
-				"project_quota_overspent":    []assert.JSONObject{},
-				"project_quota_mismatch":     []assert.JSONObject{},
+		ExpectBody: oldassert.JSONObject{
+			"inconsistencies": oldassert.JSONObject{
+				"domain_quota_overcommitted": []oldassert.JSONObject{},
+				"project_quota_overspent":    []oldassert.JSONObject{},
+				"project_quota_mismatch":     []oldassert.JSONObject{},
 			},
 		},
 	}.Check(t, s.Handler)
@@ -78,10 +78,10 @@ func TestInconsistencyReport(t *testing.T) {
 		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
 	)
 
-	assert.HTTPRequest{
+	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/inconsistencies",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/inconsistency-list.json"),
+		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/inconsistency-list.json"),
 	}.Check(t, s.Handler)
 }
