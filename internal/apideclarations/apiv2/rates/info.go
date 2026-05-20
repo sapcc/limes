@@ -6,16 +6,15 @@ package ratesv2
 import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
-
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 )
 
 // InfoReport is the response type for GET /rates/v2/info.
-// It contains all metadata information about the clusters services and rates.
+// It contains all metadata information about the cluster's services and rates.
 type InfoReport struct {
-	// The Area is a grouping of multiple services, which serve the same purpose.
+	// The Area is a grouping of multiple services which serve similar purposes.
 	// E.g. compute, storage, network, etc.
 	Areas map[string]AreaInfoReport `json:"service_areas"`
 }
@@ -40,7 +39,7 @@ type ServiceInfoReport struct {
 //
 // Currently, there is no way to configure rates into categories, so all rates
 // reside within a category with the same name as the service.
-// This structure currently only exists for symmetry with resources.InfoReport,
+// This structure currently only exists for symmetry with [resourcesv2.InfoReport],
 // and for being able to add full support for categories later if required.
 type CategoryInfoReport struct {
 	DisplayName string                             `json:"display_name"`
