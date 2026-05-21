@@ -20,34 +20,55 @@
 // # Endpoints
 // ## GET /resources/v2/info
 // Returns information about the clusters resources.
-// **On success**: Returns an object of type resourcesv2.InfoReport.
+// Authorization: Requires a token that matches the "v2:cluster:info" rule.
+// **On success**: Returns an object of type [resourcesv2.InfoReport].
 // **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /resources/v2/cluster
-// TODO: fill when implemented
+// Returns the resource data for the whole cluster.
+// Authorization: Requires a token that matches the "v2:cluster:report" rule.
+// Supported params: [paramsv2.WithSubcapacities]
+// **On success**: Returns an object of type [resourcesv2.ClusterReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /resources/v2/domains(/:domain_id)?
-// TODO: fill when implemented
+// Returns the resource data for one or multiple domains.
+// Authorization: Requires a token that matches the "v2:domain:report" rule.
+// **On success**: Returns an object of type [resourcesv2.DomainReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /resources/v2/projects(/:project_id)?
-// TODO: fill when implemented
+// Returns the resource data for one or multiple projects.
+// Authorization: Requires a token that matches the "v2:project:report" rule.
+// **On success**: Returns an object of type [resourcesv2.ProjectReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /resources/v2/availability
 // TODO: fill when implemented
 //
 // ## GET /rates/v2/info
 // Returns information about the clusters rates.
-// **On success**: Returns an object of type ratesv2.InfoReport.
+// Authorization: Requires a token that matches the "v2:cluster:info" rule.
+// **On success**: Returns an object of type [ratesv2.InfoReport].
 // **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /rates/v2/cluster
-// TODO: fill when implemented
+// Returns the rate data for the whole cluster.
+// Authorization: Requires a token that matches the "v2:cluster:report" rule.
+// **On success**: Returns an object of type [ratesv2.ClusterReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /rates/v2/domains(/:domain_id)?
-// TODO: fill when implemented
+// Returns the rate data for one or multiple domains.
+// Authorization: Requires a token that matches the "v2:domain:report" rule.
+// **On success**: Returns an object of type [ratesv2.DomainReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // ## GET /rates/v2/projects(/:project_id)?
-// TODO: fill when implemented
+// Returns the rate data for one or multiple projects.
+// Authorization: Requires a token that matches the "v2:project:report" rule.
+// **On success**: Returns an object of type [ratesv2.ProjectReport].
+// **On failure**: Returns an error string with an appropriate HTTP status code.
 //
 // [Limes]: https://github.com/sapcc/limes
 package apiv2

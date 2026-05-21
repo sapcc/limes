@@ -23,8 +23,11 @@
     "cluster:show_subcapacity": "compute:%(service)s and ram:%(resource)s",
     "cluster:show_errors": "rule:cluster_admin",
     "cluster:edit": "rule:cluster_admin",
-    "v2:cluster:info": "rule:cluster_admin",
-    "v2:domain:info": "rule:domain_viewer",
-    "v2:project:info": "rule:project_viewer",
+    "v2:cluster:info": "rule:cluster_viewer",
+    "v2:domain:info": "rule:v2:cluster:info or role:resource_admin or role:resource_viewer",
+    "v2:project:info": "rule:v2:domain:info or role:admin or role:member",
+    "v2:cluster:report": "rule:cluster_viewer",
+    "v2:domain:report": "rule:domain_viewer",
+    "v2:project:report": "rule:project_viewer",
     "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default"
 }

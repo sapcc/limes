@@ -36,7 +36,18 @@ func NewV2API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 // AddTo implements the httpapi.API interface.
 func (p *v2Provider) AddTo(r *mux.Router) {
 	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(p.GetResourcesInfo)
+	r.Methods("GET").Path("/resources/v2/cluster").HandlerFunc(p.GetResourcesCluster)
+	r.Methods("GET").Path("/resources/v2/domains").HandlerFunc(p.GetResourcesDomains)
+	r.Methods("GET").Path("/resources/v2/domains/{domain_id}").HandlerFunc(p.GetResourcesDomain)
+	r.Methods("GET").Path("/resources/v2/projects").HandlerFunc(p.GetResourcesProjects)
+	r.Methods("GET").Path("/resources/v2/projects/{project_id}").HandlerFunc(p.GetResourcesProject)
+
 	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(p.GetRatesInfo)
+	r.Methods("GET").Path("/rates/v2/cluster").HandlerFunc(p.GetRatesCluster)
+	r.Methods("GET").Path("/rates/v2/domains").HandlerFunc(p.GetRatesDomains)
+	r.Methods("GET").Path("/rates/v2/domains/{domain_id}").HandlerFunc(p.GetRatesDomain)
+	r.Methods("GET").Path("/rates/v2/projects").HandlerFunc(p.GetRatesProjects)
+	r.Methods("GET").Path("/rates/v2/projects/{project_id}").HandlerFunc(p.GetRatesProject)
 }
 
 // CheckToken is a local helper to service the CheckToken functions of the different providers.
