@@ -124,7 +124,7 @@ var sqlMigrations = map[string]string{
 	`,
 	`081_add_project_commitments_updated_at.up.sql`: `
 		ALTER TABLE project_commitments ADD COLUMN updated_at TIMESTAMPTZ;
-		UPDATE project_commitments SET updated_at = created_at;
+		UPDATE project_commitments SET updated_at = COALESCE(deleted_at, superseded_at, transfer_started_at, confirmed_at, created_at);
 		ALTER TABLE project_commitments ALTER COLUMN updated_at SET NOT NULL;
 	`,
 	`081_add_project_commitments_updated_at.down.sql`: `
