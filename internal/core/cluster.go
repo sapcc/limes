@@ -452,9 +452,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
 		}
 		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
-			SET amount = pc.amount * $1 / $2
+			SET amount = pc.amount * $1 / $2, updated_at = $4
 			FROM az_resources azr
-			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
+			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID, timeNow)
 		if err != nil {
 			return fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 		}

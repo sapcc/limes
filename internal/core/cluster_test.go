@@ -283,14 +283,14 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	s.LiquidClients["shared"].ServiceInfo.Set(srvInfoShared)
 	errs = generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 0)
-	tr.DBChanges().AssertEqual(`
+	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 7, usage = 5, last_nonzero_raw_capacity = 7 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 7, usage = 5, last_nonzero_raw_capacity = 7 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE project_az_resources SET quota = 7, usage = 5, physical_usage = 2, backend_quota = 7 WHERE id = 1 AND project_id = 1 AND az_resource_id = 2;
-		UPDATE project_commitments SET amount = 3 WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
+		UPDATE project_commitments SET amount = 3, updated_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;
 		UPDATE project_resources SET max_quota_from_outside_admin = 10, override_quota_from_config = 5 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
 		UPDATE resources SET unit = 'GiB' WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
-	`)
+	`, s.Clock.Now().Unix())
 
 	// when we convert from GiB to MiB, this also works
 	resCapacity.Unit = liquid.UnitMebibytes

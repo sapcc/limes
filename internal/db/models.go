@@ -177,6 +177,7 @@ type ProjectCommitment struct {
 	Amount       uint64                            `db:"amount"`
 	Duration     limesresources.CommitmentDuration `db:"duration"`
 	CreatedAt    time.Time                         `db:"created_at"`
+	UpdatedAt    time.Time                         `db:"updated_at"`
 	CreatorUUID  string                            `db:"creator_uuid"` // format: "username@userdomainname"
 	CreatorName  string                            `db:"creator_name"`
 	ConfirmBy    Option[time.Time]                 `db:"confirm_by"`

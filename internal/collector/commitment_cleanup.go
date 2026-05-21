@@ -38,10 +38,11 @@ var (
 	expiredCommitmentsUpdateStatusQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		UPDATE project_commitments
 		   SET status = {{liquid.CommitmentStatusExpired}},
+		       updated_at = $1,
 		       transfer_status = {{limesresources.CommitmentTransferStatusNone}},
 		       transfer_token = NULL,
 		       transfer_started_at = NULL
-		 WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{util.CommitmentStatusDeleted}}) AND expires_at <= $1
+		 WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}}) AND expires_at <= $1
 	`))
 	hardDeleteCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		DELETE FROM project_commitments

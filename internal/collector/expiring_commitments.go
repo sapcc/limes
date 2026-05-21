@@ -55,7 +55,7 @@ var (
 		WHERE pc.id = ANY($1)
 		ORDER BY s.type, r.name, azr.az ASC, pc.amount DESC
 	`)
-	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = true WHERE id = ANY($1)`
+	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = TRUE, updated_at = $1 WHERE id = ANY($2)`
 )
 
 func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (result []db.ProjectCommitment, err error) {
@@ -93,7 +93,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 	}
 
 	// mark short-term commitments as notified without queueing them
-	_, err = tx.Exec(updateCommitmentAsNotifiedQuery, pq.Array(shortTermCommitmentIDs))
+	_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		for idx, c := range commitments {
 			commitmentIDs[idx] = c.Commitment.ID
 		}
-		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, pq.Array(commitmentIDs))
+		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
 		if err != nil {
 			return err
 		}

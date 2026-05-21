@@ -195,6 +195,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 		// capacity is sufficient --> confirm the commitment
 		cc.ConfirmedAt = Some(now)
 		cc.Status = liquid.CommitmentStatusConfirmed
+		cc.UpdatedAt = now
 		_, err = dbi.Update(&cc)
 		if err != nil {
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, loc.ScopeString(), err)

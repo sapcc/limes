@@ -434,6 +434,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		Amount:              req.Amount,
 		Duration:            req.Duration,
 		CreatedAt:           now,
+		UpdatedAt:           now,
 		CreatorUUID:         token.UserUUID(),
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ExpiresAt:           req.Duration.AddTo(now),
@@ -523,6 +524,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		Amount:              req.Amount,
 		Duration:            req.Duration,
 		CreatedAt:           now,
+		UpdatedAt:           now,
 		CreatorUUID:         token.UserUUID(),
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:           confirmBy,
@@ -629,6 +631,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// create commitment
+	dbCommitment.UpdatedAt = now
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
@@ -754,6 +757,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		Amount:       0,                                   // overwritten below
 		Duration:     limesresources.CommitmentDuration{}, // overwritten below
 		CreatedAt:    now,
+		UpdatedAt:    now,
 		CreatorUUID:  token.UserUUID(),
 		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmedAt:  Some(now),
@@ -799,6 +803,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	for _, dbCommitment := range dbCommitments {
+		dbCommitment.UpdatedAt = now
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.Status = liquid.CommitmentStatusSuperseded
@@ -970,6 +975,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		Amount:              dbCommitment.Amount,
 		Duration:            dbCommitment.Duration,
 		CreatedAt:           now,
+		UpdatedAt:           now,
 		CreatorUUID:         token.UserUUID(),
 		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:           Some(dbCommitment.ExpiresAt),
@@ -992,6 +998,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	dbCommitment.UpdatedAt = now
 	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -1156,6 +1163,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// perform deletion
 	dbCommitment.Status = util.CommitmentStatusDeleted
 	dbCommitment.DeletedAt = Some(p.timeNow())
+	dbCommitment.UpdatedAt = p.timeNow()
 	dbCommitment.TransferStatus = limesresources.CommitmentTransferStatusNone
 	dbCommitment.TransferToken = None[string]()
 	dbCommitment.TransferStartedAt = None[time.Time]()
@@ -1333,6 +1341,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment.TransferStatus = req.TransferStatus
 		dbCommitment.TransferToken = transferToken
 		dbCommitment.TransferStartedAt = transferStartedAt
+		dbCommitment.UpdatedAt = p.timeNow()
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1413,6 +1422,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment.Status = liquid.CommitmentStatusSuperseded
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
+		dbCommitment.UpdatedAt = now
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
@@ -1461,6 +1471,7 @@ func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment,
 		Amount:              amount,
 		Duration:            dbCommitment.Duration,
 		CreatedAt:           now,
+		UpdatedAt:           now,
 		CreatorUUID:         dbCommitment.CreatorUUID,
 		CreatorName:         dbCommitment.CreatorName,
 		ConfirmBy:           dbCommitment.ConfirmBy,
@@ -1687,6 +1698,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = None[string]()
 	dbCommitment.ProjectID = targetProject.ID
+	dbCommitment.UpdatedAt = p.timeNow()
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
@@ -2059,6 +2071,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	dbCommitment.Status = liquid.CommitmentStatusSuperseded
 	dbCommitment.SupersededAt = Some(now)
 	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
+	dbCommitment.UpdatedAt = now
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
@@ -2207,6 +2220,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	dbCommitment.Duration = req.Duration
 	dbCommitment.ExpiresAt = newExpiresAt
+	dbCommitment.UpdatedAt = now
 	if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
 		return
 	}
