@@ -65,6 +65,7 @@ func BuildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64, now 
 		Amount:              amount,
 		Duration:            dbCommitment.Duration,
 		CreatedAt:           now,
+		UpdatedAt:           now,
 		CreatorUUID:         dbCommitment.CreatorUUID,
 		CreatorName:         dbCommitment.CreatorName,
 		ConfirmBy:           dbCommitment.ConfirmBy,

@@ -268,6 +268,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 			leftoverCommitment.TransferStatus = limesresources.CommitmentTransferStatusPublic
 			leftoverCommitment.TransferToken = Some(t.generateTransferToken())
 			leftoverCommitment.TransferStartedAt = tc.TransferStartedAt
+			leftoverCommitment.UpdatedAt = t.now
 			rcc.Commitments = append(rcc.Commitments, liquid.Commitment{
 				UUID:      leftoverCommitment.UUID,
 				OldStatus: None[liquid.CommitmentStatus](),
@@ -352,6 +353,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		tc.TransferToken = None[string]()
 		tc.Status = liquid.CommitmentStatusSuperseded
 		tc.SupersededAt = Some(t.now)
+		tc.UpdatedAt = t.now
 		supersedeContext := db.CommitmentWorkflowContext{
 			Reason:                 db.CommitmentReasonConsume,
 			RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
@@ -377,6 +379,7 @@ func (t *TransferableCommitmentCache) ConfirmTransferableCommitmentIfExists(id d
 	if t, exists := t.transferableCommitmentsByID[id]; exists {
 		t.Status = liquid.CommitmentStatusConfirmed
 		t.ConfirmedAt = Some(confirmedAt)
+		t.UpdatedAt = confirmedAt
 	}
 }
 

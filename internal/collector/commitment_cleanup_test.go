@@ -149,8 +149,8 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(1 * time.Minute)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments SET status = 'expired' WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
-	`)
+		UPDATE project_commitments SET status = 'expired', updated_at = %d WHERE id = 2 AND uuid = '00000000-0000-0000-0000-000000000002' AND transfer_token = NULL;
+	`, s.Clock.Now().Unix())
 
 	// one month later, the commitment should be deleted
 	s.Clock.StepBy(10 * oneDay)
@@ -215,8 +215,8 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	s.Clock.StepBy(1 * time.Minute)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_commitments SET status = 'expired' WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
-	`)
+		UPDATE project_commitments SET status = 'expired', updated_at = %d WHERE id = 4 AND uuid = '00000000-0000-0000-0000-000000000004' AND transfer_token = NULL;
+	`, s.Clock.Now().Unix())
 
 	// when cleaning up, both commitments should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)
@@ -290,7 +290,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// the superseded commitments should not be touched
 	s.Clock.StepBy(5 * time.Minute)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET status = 'expired' WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;`)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_commitments SET status = 'expired', updated_at = %d WHERE id = 7 AND uuid = '00000000-0000-0000-0000-000000000007' AND transfer_token = NULL;
+	`, s.Clock.Now().Unix())
 
 	// when cleaning up, all commitments related to the merge should be deleted simultaneously
 	s.Clock.StepBy(40 * oneDay)

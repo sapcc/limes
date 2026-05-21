@@ -78,26 +78,30 @@ var (
 	// simple checks on the enum value in `status`.
 	//
 	// When moving to expired or superseded state, the transfer status, token and time are cleared.
+	//
+	// The structure of this query is slightly convoluted to ensure
+	// that we only write `updated_at` when really changing something.
 	updateProjectCommitmentStatusForResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		UPDATE project_commitments
-		   SET status = CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
-		                     WHEN expires_at <= $3          THEN {{liquid.CommitmentStatusExpired}}
-		                     WHEN confirm_by > $3           THEN {{liquid.CommitmentStatusPlanned}}
-		                     WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
-		                     ELSE {{liquid.CommitmentStatusConfirmed}} END,
-		       transfer_status = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN {{limesresources.CommitmentTransferStatusNone}}
-		                              ELSE transfer_status END,
-		       transfer_token = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN NULL
-		                             ELSE transfer_token END,
-		       transfer_started_at = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $3 THEN NULL
-		                                  ELSE transfer_started_at END
-		WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}}) AND az_resource_id IN (
-			SELECT azr.id
-			  FROM services s
-			  JOIN resources r ON r.service_id = s.id
-			  JOIN az_resources azr ON azr.resource_id = r.id
-			 WHERE s.type = $1 AND r.name = $2
+		WITH possible_updates AS (
+			SELECT id, status, CASE WHEN superseded_at IS NOT NULL THEN {{liquid.CommitmentStatusSuperseded}}
+			                        WHEN expires_at <= $2          THEN {{liquid.CommitmentStatusExpired}}
+			                        WHEN confirm_by > $2           THEN {{liquid.CommitmentStatusPlanned}}
+			                        WHEN confirmed_at IS NULL      THEN {{liquid.CommitmentStatusPending}}
+			                                                       ELSE {{liquid.CommitmentStatusConfirmed}} END AS new_status
+			  FROM project_commitments
+			 WHERE status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
+			   AND az_resource_id IN (SELECT azr.id FROM resources r JOIN az_resources azr ON azr.resource_id = r.id WHERE r.path = $1)
+		),
+		necessary_updates AS (
+			SELECT id, new_status AS status FROM possible_updates WHERE status != new_status
 		)
+		MERGE INTO project_commitments pc USING necessary_updates u ON u.id = pc.id
+		WHEN MATCHED THEN UPDATE SET
+			status = u.status,
+			updated_at = $2,
+			transfer_status     = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $2 THEN {{limesresources.CommitmentTransferStatusNone}} ELSE transfer_status END,
+			transfer_token      = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $2 THEN NULL                                            ELSE transfer_token END,
+			transfer_started_at = CASE WHEN superseded_at IS NOT NULL OR expires_at <= $2 THEN NULL                                            ELSE transfer_started_at END
 	`))
 )
 
@@ -254,7 +258,8 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all resources thus updated, sync commitment status with reality
 	for _, res := range resources {
 		now := c.MeasureTime()
-		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, service.Type, res.Name, now)
+		path := db.ResourcePath{ServiceType: service.Type, ResourceName: res.Name}
+		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, path.String(), now)
 		if err != nil {
 			return fmt.Errorf("while updating project_commitments.status for %s/%s: %w", service.Type, res.Name, err)
 		}
