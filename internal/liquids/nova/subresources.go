@@ -7,10 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -91,21 +92,64 @@ func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID strin
 	}
 
 	var result []liquid.SubresourceBuilder[subresourceAttributes]
-	err := servers.List(l.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
-		var instances []servers.Server
-		err := servers.ExtractServersInto(page, &instances)
+	err := foreachServerCustom(ctx, l.NovaV2, opts, func(instance servers.Server) error {
+		res, err := l.buildInstanceSubresource(ctx, instance, allAZs)
 		if err != nil {
-			return false, err
+			return fmt.Errorf("while building subresource for instance %s: %w", instance.ID, err)
 		}
-
-		for _, instance := range instances {
-			res, err := l.buildInstanceSubresource(ctx, instance, allAZs)
-			if err != nil {
-				return false, fmt.Errorf("while building subresource for instance %s: %w", instance.ID, err)
-			}
-			result = append(result, res)
-		}
-		return true, nil
+		result = append(result, res)
+		return nil
 	})
 	return result, err
+}
+
+// The performance of liquid-nova is bottlenecked by how quickly it can page through server lists.
+// The default implementation of servers.List() in Gophercloud is horrendously inefficient.
+// It unmarshals the response body no less than FOUR times:
+//
+//  1. once into map[string]any during pagination.PageResultFrom() for use in generic NextPageURL/IsEmpty implementations
+//     (which do not end up being used)
+//  2. once in ServersPage's custom NextPageURL implementation
+//  3. once in ServersPage's custom IsEmpty implementation
+//  4. once in ServersPage.Extract() to get the actual []servers.Server
+//
+// The implementation below does the same as servers.List(), but only unmarshals once.
+func foreachServerCustom(ctx context.Context, client *gophercloud.ServiceClient, opts servers.ListOpts, action func(servers.Server) error) error {
+	query, err := opts.ToServerListQuery()
+	if err != nil {
+		return err
+	}
+	url := client.ServiceURL("servers", "detail") + query
+
+	for {
+		var result struct {
+			Servers []servers.Server   `json:"servers"`
+			Links   []gophercloud.Link `json:"servers_links"`
+		}
+		currentPage, err := client.Get(ctx, url, nil, &gophercloud.RequestOpts{ //nolint:bodyclose // Gophercloud consumes the response body because JSONResponse is given
+			OkCodes:      []int{http.StatusOK, http.StatusNoContent},
+			JSONResponse: &result,
+		})
+		if err != nil {
+			return err
+		}
+		if currentPage.StatusCode == http.StatusNoContent || len(result.Servers) == 0 {
+			return nil
+		}
+
+		for _, server := range result.Servers {
+			err = action(server)
+			if err != nil {
+				return err
+			}
+		}
+
+		url, err = gophercloud.ExtractNextURL(result.Links)
+		if err != nil {
+			return err
+		}
+		if url == "" {
+			return nil
+		}
+	}
 }
