@@ -162,6 +162,11 @@ func (c *Cluster) CommitmentBehaviorForResource(serviceType db.ServiceType, reso
 	return c.Config.Liquids[serviceType].CommitmentBehaviorPerResource.Pick(resourceName).UnwrapOr(CommitmentBehavior{})
 }
 
+// CommitmentBehaviorForResourcePath is a shorthand for CommitmentBehaviorForResource using a [db.ResourcePath].
+func (c *Cluster) CommitmentBehaviorForResourcePath(path db.ResourcePath) CommitmentBehavior {
+	return c.CommitmentBehaviorForResource(path.ServiceType, path.ResourceName)
+}
+
 // BehaviorForResource returns the ResourceBehavior for the given resource in the given service.
 func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) ResourceBehavior {
 	// default behavior
@@ -184,9 +189,9 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	return result
 }
 
-// BehaviorForResourceLocation is a shorthand for BehaviorForResource using an AZResourceLocation.
-func (c *Cluster) BehaviorForResourceLocation(loc AZResourceLocation) ResourceBehavior {
-	return c.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+// BehaviorForResourcePath is a shorthand for BehaviorForResource using a [db.ResourcePath].
+func (c *Cluster) BehaviorForResourcePath(path db.ResourcePath) ResourceBehavior {
+	return c.BehaviorForResource(path.ServiceType, path.ResourceName)
 }
 
 // BehaviorForRate returns the RateBehavior for the given rate in

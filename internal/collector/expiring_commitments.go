@@ -12,7 +12,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -47,13 +46,11 @@ var (
 		 WHERE expires_at <= $1 AND status = {{liquid.CommitmentStatusConfirmed}} AND renew_context_json IS NULL AND NOT notified_for_expiration
 	`))
 	locateExpiringCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pc.project_id, s.type, r.name, azr.az, pc.id
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
+		SELECT pc.project_id, azr.path, pc.id
+		  FROM az_resources azr
 		  JOIN project_commitments pc ON pc.az_resource_id = azr.id
 		WHERE pc.id = ANY($1)
-		ORDER BY s.type, r.name, azr.az ASC, pc.amount DESC
+		ORDER BY azr.path ASC, pc.amount DESC
 	`)
 	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = TRUE, updated_at = $1 WHERE id = ANY($2)`
 )
@@ -104,19 +101,24 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		var (
 			pid  db.ProjectID
 			cid  db.ProjectCommitmentID
-			info core.CommitmentNotification
+			path db.AZResourcePath
 		)
-		err := rows.Scan(&pid, &info.Resource.ServiceType, &info.Resource.ResourceName, &info.Resource.AvailabilityZone, &cid)
+		err := rows.Scan(&pid, &path, &cid)
 		if err != nil {
 			return err
 		}
 
-		apiIdentity := c.Cluster.BehaviorForResource(info.Resource.ServiceType, info.Resource.ResourceName).IdentityInV1API
-		info.Resource.ServiceType = db.ServiceType(apiIdentity.ServiceType)
-		info.Resource.ResourceName = liquid.ResourceName(apiIdentity.Name)
-		info.Commitment = longTermCommitmentsByID[cid]
-		info.DateString = info.Commitment.ExpiresAt.Format(time.DateOnly)
-		notifications[pid] = append(notifications[pid], info)
+		apiIdentity := c.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API
+		commitment := longTermCommitmentsByID[cid]
+		notifications[pid] = append(notifications[pid], core.CommitmentNotification{
+			Resource: core.AZResourceLocationV1{
+				ServiceType:      apiIdentity.ServiceType,
+				ResourceName:     apiIdentity.Name,
+				AvailabilityZone: path.AvailabilityZone,
+			},
+			Commitment: commitment,
+			DateString: commitment.ExpiresAt.Format(time.DateOnly),
+		})
 		return nil
 	})
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-api-declarations/liquid"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 
 	"github.com/sapcc/limes/internal/db"
 )
@@ -23,30 +23,18 @@ type CommitmentGroupNotification struct {
 	Commitments []CommitmentNotification
 }
 
-// AZResourceLocation is a tuple identifying an AZ resource within a project.
-type AZResourceLocation struct {
-	ServiceType      db.ServiceType
-	ResourceName     liquid.ResourceName
+// AZResourceLocationV1 is a tuple identifying an AZ resource within a project, using v1 names for services and resources.
+type AZResourceLocationV1 struct {
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
 	AvailabilityZone limes.AvailabilityZone
-}
-
-// ScopeString returns a human-readable string representation of this AZ resource location.
-// Format: "<service_type>/<resource_name> in <availability_zone>"
-func (a AZResourceLocation) ScopeString() string {
-	return fmt.Sprintf("%s/%s in %s", a.ServiceType, a.ResourceName, a.AvailabilityZone)
-}
-
-// ShortScopeString returns a compact string representation of this AZ resource location.
-// Format: "<service_type>/<resource_name>/<availability_zone>"
-func (a AZResourceLocation) ShortScopeString() string {
-	return fmt.Sprintf("%s/%s/%s", a.ServiceType, a.ResourceName, a.AvailabilityZone)
 }
 
 // CommitmentNotification appears in type CommitmentGroupNotification.
 type CommitmentNotification struct {
 	Commitment     db.ProjectCommitment
 	DateString     string
-	Resource       AZResourceLocation
+	Resource       AZResourceLocationV1
 	LeftoverAmount uint64
 }
 
