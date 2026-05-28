@@ -36,6 +36,11 @@ type ResourcePath struct {
 	ResourceName liquid.ResourceName
 }
 
+// InAZ builds an [AZResourcePath] below this ResourcePath.
+func (r ResourcePath) InAZ(az liquid.AvailabilityZone) AZResourcePath {
+	return AZResourcePath{r.ServiceType, r.ResourceName, az}
+}
+
 // String implements the [fmt.Stringer] interface.
 func (r ResourcePath) String() string {
 	return string(r.ServiceType) + "/" + string(r.ResourceName)
@@ -72,6 +77,11 @@ type AZResourcePath struct {
 	ServiceType      ServiceType
 	ResourceName     liquid.ResourceName
 	AvailabilityZone liquid.AvailabilityZone
+}
+
+// Resource extracts the [ResourcePath] portion of this AZResourcePath.
+func (r AZResourcePath) Resource() ResourcePath {
+	return ResourcePath{r.ServiceType, r.ResourceName}
 }
 
 // String implements the [fmt.Stringer] interface.

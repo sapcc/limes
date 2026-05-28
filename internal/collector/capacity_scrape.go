@@ -258,8 +258,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all resources thus updated, sync commitment status with reality
 	for _, res := range resources {
 		now := c.MeasureTime()
-		path := db.ResourcePath{ServiceType: service.Type, ResourceName: res.Name}
-		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, path.String(), now)
+		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, res.Path, now)
 		if err != nil {
 			return fmt.Errorf("while updating project_commitments.status for %s/%s: %w", service.Type, res.Name, err)
 		}
@@ -267,7 +266,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// for all resources thus updated, try to confirm pending commitments
 	for _, resource := range resources {
-		err := c.confirmPendingCommitmentsIfNecessary(ctx, service, resource)
+		err := c.confirmPendingCommitmentsIfNecessary(ctx, resource)
 		if err != nil {
 			return err
 		}
@@ -305,8 +304,8 @@ func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.L
 	return capacityData, serializedMetrics, nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, service db.Service, resource db.Resource) error {
-	behavior := c.Cluster.CommitmentBehaviorForResource(service.Type, resource.Name).ForCluster()
+func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, resource db.Resource) error {
+	behavior := c.Cluster.CommitmentBehaviorForResourcePath(resource.Path).ForCluster()
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
@@ -327,18 +326,14 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, se
 	}
 	var auditevents []audittools.Event
 	for _, az := range committableAZs {
-		loc := core.AZResourceLocation{
-			ServiceType:      service.Type,
-			ResourceName:     resource.Name,
-			AvailabilityZone: az,
-		}
+		path := resource.Path.InAZ(az)
 		auditContext := audit.Context{
 			UserIdentity: audit.CollectorUserInfo{
 				TaskName: "capacity-scrape",
 			},
 			Request: audit.CollectorDummyRequest,
 		}
-		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, loc, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
+		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, path, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
 		if err != nil {
 			return err
 		}

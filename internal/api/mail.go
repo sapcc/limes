@@ -74,7 +74,7 @@ func (p *v1Provider) RenderMailTemplate(w http.ResponseWriter, r *http.Request) 
 		"transferred_commitments": mailConfig.Templates.TransferredCommitments,
 	}
 
-	dummyResource := core.AZResourceLocation{
+	dummyResource := core.AZResourceLocationV1{
 		ServiceType:      "foo-service",
 		ResourceName:     "bar-resource",
 		AvailabilityZone: "eu-de-1a",

@@ -130,7 +130,7 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, az limes.Availabilit
 // preloaded - but does not have to. In case the LiquidConnection is not filled,
 // a LiquidClient is instantiated on the fly to perform the operation remotely. It utilizes a given
 // ServiceInfo so that no double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, loc core.AZResourceLocation, service db.Service, resources core.ResourcesByName, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
+func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, service db.Service, resources core.ResourcesByName, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
 	localCommitmentChanges := liquid.CommitmentChangeRequest{
 		DryRun:      req.DryRun,
 		AZ:          req.AZ,
@@ -191,16 +191,16 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 		var liquidClient core.LiquidClient
 		if len(cluster.LiquidConnections) == 0 {
 			// find the right ServiceType
-			liquidClient, err = cluster.LiquidClientFactory(loc.ServiceType)
+			liquidClient, err = cluster.LiquidClientFactory(service.Type)
 			if err != nil {
 				return result, err
 			}
 		} else {
-			liquidClient = cluster.LiquidConnections[loc.ServiceType].LiquidClient
+			liquidClient = cluster.LiquidConnections[service.Type].LiquidClient
 		}
 		commitmentChangeResponse, err := liquidClient.ChangeCommitments(ctx, remoteCommitmentChanges)
 		if err != nil {
-			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", loc.ServiceType, err)
+			return result, fmt.Errorf("failed to retrieve liquid ChangeCommitment response for service %s: %w", service.Type, err)
 		}
 		if commitmentChangeResponse.RejectionReason != "" {
 			return commitmentChangeResponse, nil
@@ -209,7 +209,7 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 
 	// check local
 	if len(localCommitmentChanges.ByProject) != 0 {
-		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, loc, cluster, dbi)
+		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, service.Type, cluster, dbi)
 		if err != nil {
 			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
 		}
