@@ -35,7 +35,7 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 `)
 
 func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, domainUUID, domainName string, err error) {
-	token := p.CheckToken(r)
+	token := p.checkToken(r)
 	projectUUID = token.ProjectScopeUUID()
 	projectDomainUUID := token.ProjectScopeDomainUUID()
 	projectDomainName := token.ProjectScopeDomainName()
@@ -54,12 +54,12 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, doma
 	}
 }
 
-// GetResourcesInfo handles GET /resources/v2/info.
-func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetResourcesInfo handles GET /resources/v2/info.
+func (p *v2Provider) handleGetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
 
 	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -159,12 +159,12 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, report)
 }
 
-// GetRatesInfo handles GET /rates/v2/info.
-func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetRatesInfo handles GET /rates/v2/info.
+func (p *v2Provider) handleGetRatesInfo(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
 
 	_, _, _, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 

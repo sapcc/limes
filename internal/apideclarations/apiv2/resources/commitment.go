@@ -33,16 +33,16 @@ type CommitmentList struct {
 
 // Commitment is the response payload format for GET /v2/commitments/:uuid and several endpoints that create or modify commitments.
 type Commitment struct {
-	UUID     string                            `json:"uuid"`
+	UUID     liquid.CommitmentUUID             `json:"uuid"`
 	Amount   uint64                            `json:"amount"`
 	Duration limesresources.CommitmentDuration `json:"duration"`
 
-	ProjectUUID      string                 `json:"project_id"`
+	ProjectUUID      liquid.ProjectUUID     `json:"project_id"`
 	ServiceType      db.ServiceType         `json:"service_type"`
 	ResourceName     liquid.ResourceName    `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 
-	Status liquid.CommitmentStatus `json:"status"` // TODO: question to be checked, why is this omitempty in v1?
+	Status liquid.CommitmentStatus `json:"status"`
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  Option[string]                          `json:"transfer_token,omitzero"`
@@ -82,7 +82,7 @@ type CommitmentRequest struct {
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 
 	Status          liquid.CommitmentStatus       `json:"status"`                      // must be one of "planned", "pending", "confirmed", "guaranteed"
-	ConfirmBy       Option[limes.UnixEncodedTime] `json:"confirm_by,omitzero"`         // must be set for "planned"; "pending" implies ConfirmBy = Some(Now())
+	ConfirmBy       Option[limes.UnixEncodedTime] `json:"confirm_by,omitzero"`         // must be set for "planned" and "guaranteed", but not "pending" or "confirmed"; "pending" implies ConfirmBy = Some(Now())
 	NotifyOnConfirm bool                          `json:"notify_on_confirm,omitempty"` // may not be set for "confirmed"
 }
 

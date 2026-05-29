@@ -13,6 +13,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 )
 
 // Service contains a record from the `services` table.
@@ -93,19 +94,33 @@ type Rate struct {
 
 // Domain contains a record from the `domains` table.
 type Domain struct {
-	ID   DomainID `db:"id"`
-	Name string   `db:"name"`
-	UUID string   `db:"uuid"`
+	ID   DomainID `db:"id"   oblast:"id,auto"`
+	Name string   `db:"name" oblast:"name"`
+	UUID string   `db:"uuid" oblast:"uuid"`
 }
+
+// DomainStore provides structured access to the `domains` table.
+var DomainStore = oblast.MustNewStore[Domain](oblast.PostgresDialect(),
+	oblast.TableNameIs("domains"),
+	oblast.PrimaryKeyIs("id"),
+	oblast.StructTagKeyIs("oblast"), // TODO: remove when gorp is removed
+)
 
 // Project contains a record from the `projects` table.
 type Project struct {
-	ID         ProjectID          `db:"id"`
-	DomainID   DomainID           `db:"domain_id"`
-	Name       string             `db:"name"`
-	UUID       liquid.ProjectUUID `db:"uuid"`
-	ParentUUID string             `db:"parent_uuid"`
+	ID         ProjectID          `db:"id"          oblast:"id,auto"`
+	DomainID   DomainID           `db:"domain_id"   oblast:"domain_id"`
+	Name       string             `db:"name"        oblast:"name"`
+	UUID       liquid.ProjectUUID `db:"uuid"        oblast:"uuid"`
+	ParentUUID string             `db:"parent_uuid" oblast:"parent_uuid"`
 }
+
+// ProjectStore provides structured access to the `projects` table.
+var ProjectStore = oblast.MustNewStore[Project](oblast.PostgresDialect(),
+	oblast.TableNameIs("projects"),
+	oblast.PrimaryKeyIs("id"),
+	oblast.StructTagKeyIs("oblast"), // TODO: remove when gorp is removed
+)
 
 // ProjectService contains a record from the `project_services` table.
 type ProjectService struct {

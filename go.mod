@@ -1,6 +1,6 @@
 module github.com/sapcc/limes
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/databus23/goslo.policy v0.0.0-20250326134918-4afc2c56a903
@@ -14,9 +14,10 @@ require (
 	github.com/prometheus/common v0.67.5
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.22.0
-	github.com/sapcc/go-bits v0.0.0-20260519090007-308851876285
+	github.com/sapcc/go-bits v0.0.0-20260527114813-6f867d03059b
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.7.0
+	go.xyrillian.de/oblast v0.10.0
 	go.xyrillian.de/schwift/v2 v2.1.0
 )
 

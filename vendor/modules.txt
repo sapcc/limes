@@ -153,7 +153,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20260519090007-308851876285
+# github.com/sapcc/go-bits v0.0.0-20260527114813-6f867d03059b
 ## explicit; go 1.26
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -187,6 +187,10 @@ go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
 go.xyrillian.de/gg/option
 go.xyrillian.de/gg/options
+# go.xyrillian.de/oblast v0.10.0
+## explicit; go 1.26.0
+go.xyrillian.de/oblast
+go.xyrillian.de/oblast/handle
 # go.xyrillian.de/schwift/v2 v2.1.0
 ## explicit; go 1.25.0
 go.xyrillian.de/schwift/v2

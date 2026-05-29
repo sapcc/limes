@@ -28,7 +28,6 @@ import (
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
 
-	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
@@ -156,7 +155,9 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
 // returns a Token instance for checking authorization. Any errors that occur
 // during this function are deferred until Require() is called.
 func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
-	return api_v2.CheckToken(r, p.tokenValidator)
+	t := p.tokenValidator.CheckToken(r)
+	t.Context.Request = mux.Vars(r)
+	return t
 }
 
 // FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
