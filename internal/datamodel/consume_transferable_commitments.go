@@ -35,11 +35,9 @@ import (
 // very small due to the atomicity of the API operation.
 var getTransferableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
-		FROM services s
-		JOIN resources r ON r.service_id = s.id
-		JOIN az_resources azr ON azr.resource_id = r.id
+		FROM az_resources azr
 		JOIN project_commitments pc ON pc.az_resource_id = azr.id
-		WHERE s.type = $1 AND r.name = $2 AND azr.az = $3
+		WHERE azr.path = $1
 			AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}
 			AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 		ORDER BY pc.transfer_started_at ASC, pc.created_at ASC, pc.id ASC
@@ -73,7 +71,7 @@ type TransferableCommitmentCache struct {
 	cluster                       *core.Cluster
 	service                       db.Service
 	resources                     core.ResourcesByName
-	loc                           core.AZResourceLocation
+	path                          db.AZResourcePath
 	now                           time.Time
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
 	generateTransferToken         func() string
@@ -85,11 +83,10 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, service db.Service, resources core.ResourcesByName, loc core.AZResourceLocation, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
-	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, queryArgs...)
+func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, service db.Service, resources core.ResourcesByName, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, path)
 	if err != nil {
-		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", loc.ScopeString(), err)
+		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path, err)
 	}
 	t.transferableCommitmentsByID = make(map[db.ProjectCommitmentID]*db.ProjectCommitment, len(t.transferableCommitments))
 	affectedProjectIDs := make(map[db.ProjectID]struct{})
@@ -102,7 +99,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	// project and domain structures
 	t.affectedProjectsByID, err = db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * from projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", loc.ScopeString(), err)
+		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", path, err)
 	}
 	t.affectedProjectsByUUID = make(map[liquid.ProjectUUID]db.Project)
 	for _, project := range t.affectedProjectsByID {
@@ -110,7 +107,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	}
 	t.affectedDomainsByID, err = db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * from domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", loc.ScopeString(), err)
+		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", path, err)
 	}
 
 	// prep audit event storage
@@ -121,24 +118,24 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	t.cluster = cluster
 	t.service = service
 	t.resources = resources
-	t.loc = loc
+	t.path = path
 	t.now = now
 	t.generateProjectCommitmentUUID = generateProjectCommitmentUUID
 	t.generateTransferToken = generateTransferToken
 	t.mailTemplate = mailTemplate
 
-	resource, ok := resources[loc.ResourceName]
+	resource, ok := resources[path.ResourceName]
 	if !ok {
-		return t, fmt.Errorf("resource %s not found in provided resources", loc.ResourceName)
+		return t, fmt.Errorf("resource %s not found in provided resources", path.ResourceName)
 	}
 
 	// determine whether liquid handles commitments for this resource
 	t.liquidHandlesCommitments = resource.HandlesCommitments
-	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, Some(loc.AvailabilityZone), cluster, dbi)
+	statsByAZ, err := collectAZAllocationStats(path.ServiceType, path.ResourceName, Some(path.AvailabilityZone), cluster, dbi)
 	if err != nil {
-		return t, fmt.Errorf("while collecting AZ stats for %s: %w", loc.ScopeString(), err)
+		return t, fmt.Errorf("while collecting AZ stats for %s: %w", path, err)
 	}
-	t.stats = statsByAZ[loc.AvailabilityZone]
+	t.stats = statsByAZ[path.AvailabilityZone]
 
 	return t, nil
 }
@@ -174,13 +171,13 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	}
 	ccr := liquid.CommitmentChangeRequest{
 		DryRun:      dryRun,
-		AZ:          t.loc.AvailabilityZone,
+		AZ:          t.path.AvailabilityZone,
 		InfoVersion: t.service.LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			project.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					t.loc.ResourceName: {
+					t.path.ResourceName: {
 						TotalConfirmedBefore: t.stats.ProjectStats[c.ProjectID].Committed,
 						TotalConfirmedAfter:  t.stats.ProjectStats[c.ProjectID].Committed + c.Amount,
 						// TODO: change when introducing "guaranteed" commitments
@@ -244,7 +241,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 			ccr.ByProject[tcProject.UUID] = liquid.ProjectCommitmentChangeset{
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(tcProject, tcDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					t.loc.ResourceName: {
+					t.path.ResourceName: {
 						TotalConfirmedBefore: t.stats.ProjectStats[tc.ProjectID].Committed,
 						TotalConfirmedAfter:  t.stats.ProjectStats[tc.ProjectID].Committed, // will be adjusted below based on how much is consumed
 						// TODO: change when introducing "guaranteed" commitments
@@ -254,7 +251,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 				},
 			}
 		}
-		rcc := ccr.ByProject[tcProject.UUID].ByResource[t.loc.ResourceName]
+		rcc := ccr.ByProject[tcProject.UUID].ByResource[t.path.ResourceName]
 
 		// modify CCR/ CAC structures
 		amountToConsume := c.Amount - overallTransferredAmount
@@ -296,7 +293,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		if tc.Status == liquid.CommitmentStatusConfirmed {
 			rcc.TotalConfirmedAfter -= lastConsumedAmount
 		}
-		ccr.ByProject[tcProject.UUID].ByResource[t.loc.ResourceName] = rcc
+		ccr.ByProject[tcProject.UUID].ByResource[t.path.ResourceName] = rcc
 		cacs[tc.UUID] = audit.CommitmentAttributeChangeset{
 			OldTransferStatus: tc.TransferStatus,
 			NewTransferStatus: limesresources.CommitmentTransferStatusNone,
@@ -305,7 +302,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 
 	// check that the ccr is accepted
 	logg.Debug("checking CanConfirmWithTransfers in %s: commitmentID = %d, projectID = %d, overall amount = %d, missing amount = %d",
-		t.loc.ShortScopeString(), c.ID, c.ProjectID, c.Amount, c.Amount-overallTransferredAmount)
+		t.path, c.ID, c.ProjectID, c.Amount, c.Amount-overallTransferredAmount)
 	result, err = t.delegateChangeCommitmentsWithShortcut(ctx, ccr)
 	if err != nil {
 		return result, err
@@ -450,10 +447,10 @@ func (t *TransferableCommitmentCache) GenerateTransferMails(apiIdentity core.Res
 			n.Commitments = append(n.Commitments, core.CommitmentNotification{
 				Commitment: *c,
 				DateString: supersededAt.Format(time.DateOnly),
-				Resource: core.AZResourceLocation{
-					ServiceType:      db.ServiceType(apiIdentity.ServiceType),
-					ResourceName:     liquid.ResourceName(apiIdentity.Name),
-					AvailabilityZone: t.loc.AvailabilityZone,
+				Resource: core.AZResourceLocationV1{
+					ServiceType:      apiIdentity.ServiceType,
+					ResourceName:     apiIdentity.Name,
+					AvailabilityZone: t.path.AvailabilityZone,
 				},
 				LeftoverAmount: leftover.Amount,
 			})
@@ -513,11 +510,11 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 	case !ccr.RequiresConfirmation():
 		result = liquid.CommitmentChangeResponse{}
 	case !t.liquidHandlesCommitments:
-		behavior := t.cluster.CommitmentBehaviorForResource(t.loc.ServiceType, t.loc.ResourceName)
+		behavior := t.cluster.CommitmentBehaviorForResourcePath(t.path.Resource())
 		additions := make(map[db.ProjectID]uint64)
 		subtractions := make(map[db.ProjectID]uint64)
 		for projectUUID, pcc := range ccr.ByProject {
-			rcc := pcc.ByResource[t.loc.ResourceName]
+			rcc := pcc.ByResource[t.path.ResourceName]
 			affectedProject := t.affectedProjectsByUUID[projectUUID]
 			if rcc.TotalConfirmedAfter > rcc.TotalConfirmedBefore {
 				additions[affectedProject.ID] = rcc.TotalConfirmedAfter - rcc.TotalConfirmedBefore
@@ -534,14 +531,14 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 			}
 		}
 	default:
-		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.loc, t.service, t.resources, t.dbi)
+		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.service, t.resources, t.dbi)
 		if err != nil {
 			return result, err
 		}
 		result = commitmentChangeResponse
 	}
 	if result.RejectionReason != "" {
-		logg.Info("commitment not accepted for %s: %s", t.loc.ShortScopeString(), result.RejectionReason)
+		logg.Info("commitment not accepted for %s: %s", t.path, result.RejectionReason)
 	}
 	return result, nil
 }
@@ -549,7 +546,7 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 // updateStats modifies the local stats according to the given CCR.
 func (t *TransferableCommitmentCache) updateStats(ccr liquid.CommitmentChangeRequest) {
 	for projectUUID, pcc := range ccr.ByProject {
-		rcc := pcc.ByResource[t.loc.ResourceName]
+		rcc := pcc.ByResource[t.path.ResourceName]
 		affectedProject := t.affectedProjectsByUUID[projectUUID]
 		projectStats := t.stats.ProjectStats[affectedProject.ID]
 		if rcc.TotalConfirmedAfter != rcc.TotalConfirmedBefore {

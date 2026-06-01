@@ -39,11 +39,9 @@ type commitmentTransferLeftover struct {
 // The final `BY pc.id` ordering ensures deterministic behavior in tests.
 var getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
+		  FROM az_resources azr
 		  JOIN project_commitments pc ON pc.az_resource_id = azr.id
-		 WHERE s.type = $1 AND r.name = $2 AND azr.az = $3 AND pc.status = {{liquid.CommitmentStatusPending}}
+		 WHERE azr.path = $1 AND pc.status = {{liquid.CommitmentStatusPending}}
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`))
 
@@ -52,7 +50,7 @@ const ConsumeAction cadf.Action = "consume"
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
-func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	var distinctResources = make(map[liquid.ResourceName]struct{})
 	for _, projectCommitmentChangeset := range req.ByProject {
 		for resourceName := range projectCommitmentChangeset.ByResource {
@@ -70,6 +68,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc co
 	}
 
 	for resourceName := range distinctResources {
+		path := db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName}
 		additions := map[db.ProjectID]uint64{}
 		subtractions := map[db.ProjectID]uint64{}
 		additionSum := uint64(0)
@@ -96,17 +95,15 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc co
 		if len(additions) == 0 {
 			continue
 		}
-		statsByAZ, err := collectAZAllocationStats(loc.ServiceType, resourceName, Some(req.AZ), cluster, dbi)
+		statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, Some(req.AZ), cluster, dbi)
 		if err != nil {
 			return false, err
 		}
 		stats := statsByAZ[req.AZ]
 
-		behavior := cluster.CommitmentBehaviorForResource(loc.ServiceType, resourceName)
-		logg.Debug("checking additions in %s: overall amount %d",
-			loc.ShortScopeString(), resourceName, additionSum)
-		logg.Debug("checking subtractions in %s: overall amount %d",
-			loc.ShortScopeString(), resourceName, subtractionSum)
+		behavior := cluster.CommitmentBehaviorForResource(serviceType, resourceName)
+		logg.Debug("checking additions in %s: overall amount %d", path, additionSum)
+		logg.Debug("checking subtractions in %s: overall amount %d", path, subtractionSum)
 		result := stats.CanAcceptCommitmentChanges(additions, subtractions, behavior)
 		if !result {
 			return false, nil
@@ -119,13 +116,12 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, loc co
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity. Simultaneously, it
 // releases transferable commitments that can be used to satisfy the pending ones.
-func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
+func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	// load confirmable commitments
 	var confirmableCommitments []db.ProjectCommitment
-	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
-	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, queryArgs...)
+	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, path)
 	if err != nil {
-		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", loc.ScopeString(), err)
+		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", path, err)
 	}
 
 	// optimization: do not do more loading, if we do not have anything to confirm
@@ -134,10 +130,10 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// load service info (used to generate liquid.ProjectMetadata)
-	service, sExists := cluster.SIC.GetServiceForLoc(loc)
-	resources, _ := cluster.SIC.GetResourcesForType(loc.ServiceType)
+	service, sExists := cluster.SIC.GetServiceForType(path.ServiceType)
+	resources, _ := cluster.SIC.GetResourcesForType(path.ServiceType)
 	if !sExists {
-		return nil, fmt.Errorf("service/resource not found when trying to confirm commitments for %s", loc.ServiceType)
+		return nil, fmt.Errorf("service/resource not found when trying to confirm commitments for %s", path.ServiceType)
 	}
 
 	// load affected projects and domains
@@ -147,11 +143,11 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 	affectedProjectsByID, err := db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * FROM projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return nil, fmt.Errorf("while loading affected projects for %s: %w", loc.ScopeString(), err)
+		return nil, fmt.Errorf("while loading affected projects for %s: %w", path, err)
 	}
 	affectedDomainsByID, err := db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * FROM domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return nil, fmt.Errorf("while loading affected domains for %s: %w", loc.ScopeString(), err)
+		return nil, fmt.Errorf("while loading affected domains for %s: %w", path, err)
 	}
 
 	// load mail templates
@@ -163,7 +159,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	}
 
 	// initiate cache of transferable commitments
-	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, service, resources, loc, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
+	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, service, resources, path, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -198,14 +194,14 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 		cc.UpdatedAt = now
 		_, err = dbi.Update(&cc)
 		if err != nil {
-			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, loc.ScopeString(), err)
+			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, path, err)
 		}
 		transferableCommitmentCache.ConfirmTransferableCommitmentIfExists(cc.ID, now)
 		confirmedCommitmentsByProjectID[cc.ProjectID] = append(confirmedCommitmentsByProjectID[cc.ProjectID], &cc)
 	}
 
 	// generate mail notifications for commitment transfers
-	apiIdentity := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
+	apiIdentity := cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API
 	err = transferableCommitmentCache.GenerateTransferMails(apiIdentity)
 	if err != nil {
 		return nil, err
@@ -226,7 +222,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 
 		affectedProject := affectedProjectsByID[projectID]
 		affectedDomain := affectedDomainsByID[affectedProject.DomainID]
-		err = generateConfirmationMails(confirmationTemplate, dbi, loc, apiIdentity, affectedProject, affectedDomain, confirmedCommitments, now)
+		err = generateConfirmationMails(confirmationTemplate, dbi, path, apiIdentity, affectedProject, affectedDomain, confirmedCommitments, now)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +231,7 @@ func ConfirmPendingCommitments(ctx context.Context, loc core.AZResourceLocation,
 	return auditEvents, nil
 }
 
-func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.Interface, loc core.AZResourceLocation, apiIdentity core.ResourceRef, project db.Project, domain db.Domain, confirmedCommitments []*db.ProjectCommitment, now time.Time) error {
+func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.Interface, path db.AZResourcePath, apiIdentity core.ResourceRef, project db.Project, domain db.Domain, confirmedCommitments []*db.ProjectCommitment, now time.Time) error {
 	// The system can be configured to not send mails (e.g. for test systems).
 	tpl, tplExists := mailTemplate.Unpack()
 	if !tplExists {
@@ -259,11 +255,10 @@ func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.In
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
 			Commitment: *c,
 			DateString: confirmedAt.Format(time.DateOnly),
-			// TODO: we actually don't want to have api-named props in AZResourceLocation. Replace the template and the code simultaneously.
-			Resource: core.AZResourceLocation{
-				ServiceType:      db.ServiceType(apiIdentity.ServiceType),
-				ResourceName:     liquid.ResourceName(apiIdentity.Name),
-				AvailabilityZone: loc.AvailabilityZone,
+			Resource: core.AZResourceLocationV1{
+				ServiceType:      apiIdentity.ServiceType,
+				ResourceName:     apiIdentity.Name,
+				AvailabilityZone: path.AvailabilityZone,
 			},
 		})
 	}
