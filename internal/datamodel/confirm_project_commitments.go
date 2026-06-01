@@ -68,6 +68,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 	}
 
 	for resourceName := range distinctResources {
+		path := db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName}
 		additions := map[db.ProjectID]uint64{}
 		subtractions := map[db.ProjectID]uint64{}
 		additionSum := uint64(0)
@@ -101,10 +102,8 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 		stats := statsByAZ[req.AZ]
 
 		behavior := cluster.CommitmentBehaviorForResource(serviceType, resourceName)
-		logg.Debug("checking additions in %s/%s: overall amount %d",
-			serviceType, resourceName, additionSum)
-		logg.Debug("checking subtractions in %s/%s: overall amount %d",
-			serviceType, resourceName, subtractionSum)
+		logg.Debug("checking additions in %s: overall amount %d", path, additionSum)
+		logg.Debug("checking subtractions in %s: overall amount %d", path, subtractionSum)
 		result := stats.CanAcceptCommitmentChanges(additions, subtractions, behavior)
 		if !result {
 			return false, nil
@@ -256,7 +255,6 @@ func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.In
 		n.Commitments = append(n.Commitments, core.CommitmentNotification{
 			Commitment: *c,
 			DateString: confirmedAt.Format(time.DateOnly),
-			// TODO: we actually don't want to have api-named props in AZResourceLocation. Replace the template and the code simultaneously.
 			Resource: core.AZResourceLocationV1{
 				ServiceType:      apiIdentity.ServiceType,
 				ResourceName:     apiIdentity.Name,

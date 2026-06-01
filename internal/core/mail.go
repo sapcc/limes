@@ -25,6 +25,7 @@ type CommitmentGroupNotification struct {
 
 // AZResourceLocationV1 is a tuple identifying an AZ resource within a project, using v1 names for services and resources.
 type AZResourceLocationV1 struct {
+	// TODO: replace this struct with db.AZResourcePath when the v2 API enters GA
 	ServiceType      limes.ServiceType
 	ResourceName     limesresources.ResourceName
 	AvailabilityZone limes.AvailabilityZone
