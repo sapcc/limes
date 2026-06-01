@@ -86,7 +86,7 @@ type TransferableCommitmentCache struct {
 func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, service db.Service, resources core.ResourcesByName, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, path)
 	if err != nil {
-		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path.String(), err)
+		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path, err)
 	}
 	t.transferableCommitmentsByID = make(map[db.ProjectCommitmentID]*db.ProjectCommitment, len(t.transferableCommitments))
 	affectedProjectIDs := make(map[db.ProjectID]struct{})
@@ -99,7 +99,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	// project and domain structures
 	t.affectedProjectsByID, err = db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * from projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", path.String(), err)
+		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", path, err)
 	}
 	t.affectedProjectsByUUID = make(map[liquid.ProjectUUID]db.Project)
 	for _, project := range t.affectedProjectsByID {
@@ -107,7 +107,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	}
 	t.affectedDomainsByID, err = db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * from domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", path.String(), err)
+		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", path, err)
 	}
 
 	// prep audit event storage
@@ -133,7 +133,7 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, ser
 	t.liquidHandlesCommitments = resource.HandlesCommitments
 	statsByAZ, err := collectAZAllocationStats(path.ServiceType, path.ResourceName, Some(path.AvailabilityZone), cluster, dbi)
 	if err != nil {
-		return t, fmt.Errorf("while collecting AZ stats for %s: %w", path.String(), err)
+		return t, fmt.Errorf("while collecting AZ stats for %s: %w", path, err)
 	}
 	t.stats = statsByAZ[path.AvailabilityZone]
 
@@ -302,7 +302,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 
 	// check that the ccr is accepted
 	logg.Debug("checking CanConfirmWithTransfers in %s: commitmentID = %d, projectID = %d, overall amount = %d, missing amount = %d",
-		t.path.String(), c.ID, c.ProjectID, c.Amount, c.Amount-overallTransferredAmount)
+		t.path, c.ID, c.ProjectID, c.Amount, c.Amount-overallTransferredAmount)
 	result, err = t.delegateChangeCommitmentsWithShortcut(ctx, ccr)
 	if err != nil {
 		return result, err
@@ -538,7 +538,7 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 		result = commitmentChangeResponse
 	}
 	if result.RejectionReason != "" {
-		logg.Info("commitment not accepted for %s: %s", t.path.String(), result.RejectionReason)
+		logg.Info("commitment not accepted for %s: %s", t.path, result.RejectionReason)
 	}
 	return result, nil
 }

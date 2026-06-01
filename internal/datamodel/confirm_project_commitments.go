@@ -122,7 +122,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	var confirmableCommitments []db.ProjectCommitment
 	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, path)
 	if err != nil {
-		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", path.String(), err)
+		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", path, err)
 	}
 
 	// optimization: do not do more loading, if we do not have anything to confirm
@@ -144,11 +144,11 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	}
 	affectedProjectsByID, err := db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * FROM projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return nil, fmt.Errorf("while loading affected projects for %s: %w", path.String(), err)
+		return nil, fmt.Errorf("while loading affected projects for %s: %w", path, err)
 	}
 	affectedDomainsByID, err := db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * FROM domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
 	if err != nil {
-		return nil, fmt.Errorf("while loading affected domains for %s: %w", path.String(), err)
+		return nil, fmt.Errorf("while loading affected domains for %s: %w", path, err)
 	}
 
 	// load mail templates
@@ -195,7 +195,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 		cc.UpdatedAt = now
 		_, err = dbi.Update(&cc)
 		if err != nil {
-			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, path.String(), err)
+			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, path, err)
 		}
 		transferableCommitmentCache.ConfirmTransferableCommitmentIfExists(cc.ID, now)
 		confirmedCommitmentsByProjectID[cc.ProjectID] = append(confirmedCommitmentsByProjectID[cc.ProjectID], &cc)
