@@ -201,7 +201,8 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	var (
 		potentiallyTransferredCommitmentIdxs []int
 		lastConsumedAmount                   uint64
-		leftoverCommitment                   db.ProjectCommitment
+		leftoverCommitment                   Option[db.ProjectCommitment]
+		parentOfLeftoverCommitment           db.ProjectCommitmentID
 		overallTransferredAmount             uint64
 	)
 
@@ -258,23 +259,25 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		if tc.Amount > amountToConsume {
 			// The leftover amount to be transferred is not enough to consume the whole commitment.
 			// We have to create a leftover for the transferable commitment.
-			leftoverCommitment, err = BuildSplitCommitment(*tc, tc.Amount-amountToConsume, t.now, t.generateProjectCommitmentUUID)
+			lc, err := BuildSplitCommitment(*tc, tc.Amount-amountToConsume, t.now, t.generateProjectCommitmentUUID)
 			if err != nil {
 				return result, err
 			}
-			leftoverCommitment.TransferStatus = limesresources.CommitmentTransferStatusPublic
-			leftoverCommitment.TransferToken = Some(t.generateTransferToken())
-			leftoverCommitment.TransferStartedAt = tc.TransferStartedAt
-			leftoverCommitment.UpdatedAt = t.now
+			lc.TransferStatus = limesresources.CommitmentTransferStatusPublic
+			lc.TransferToken = Some(t.generateTransferToken())
+			lc.TransferStartedAt = tc.TransferStartedAt
+			lc.UpdatedAt = t.now
 			rcc.Commitments = append(rcc.Commitments, liquid.Commitment{
-				UUID:      leftoverCommitment.UUID,
+				UUID:      lc.UUID,
 				OldStatus: None[liquid.CommitmentStatus](),
-				NewStatus: Some(leftoverCommitment.Status),
-				Amount:    leftoverCommitment.Amount,
-				ConfirmBy: leftoverCommitment.ConfirmBy,
-				ExpiresAt: leftoverCommitment.ExpiresAt,
+				NewStatus: Some(lc.Status),
+				Amount:    lc.Amount,
+				ConfirmBy: lc.ConfirmBy,
+				ExpiresAt: lc.ExpiresAt,
 			})
 
+			leftoverCommitment = Some(lc)
+			parentOfLeftoverCommitment = tc.ID
 			lastConsumedAmount = amountToConsume
 		} else {
 			// the transferable commitment is fully consumed
@@ -318,7 +321,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	t.auditEventsByConfirmedCommitmentUUID[c.UUID] = t.assembleAuditEvents(ccr, cacs, project.UUID, auditAction, auditContext)
 
 	// add commitment changes to database
-	for i, idx := range slices.Backward(potentiallyTransferredCommitmentIdxs) {
+	for _, idx := range slices.Backward(potentiallyTransferredCommitmentIdxs) {
 		tc := t.transferableCommitments[idx]
 		if _, exists := t.transferredCommitmentIDs[tc.ProjectID]; !exists {
 			t.transferredCommitmentIDs[tc.ProjectID] = make(map[db.ProjectCommitmentID]commitmentTransferLeftover)
@@ -328,17 +331,17 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		delete(t.auditEventsByConfirmedCommitmentUUID, tc.UUID)
 
 		// Insert the leftover commitment, if exists.
-		if i == 0 && tc.Amount > lastConsumedAmount {
-			err = t.dbi.Insert(&leftoverCommitment)
+		if lc, ok := leftoverCommitment.Unpack(); ok && parentOfLeftoverCommitment == tc.ID {
+			err = t.dbi.Insert(&lc)
 			if err != nil {
 				return result, err
 			}
 
-			t.transferableCommitments[idx] = &leftoverCommitment
-			t.transferableCommitmentsByID[leftoverCommitment.ID] = &leftoverCommitment
+			t.transferableCommitments[idx] = &lc
+			t.transferableCommitmentsByID[lc.ID] = &lc
 			t.transferredCommitmentIDs[tc.ProjectID][tc.ID] = commitmentTransferLeftover{
-				Amount: tc.Amount - lastConsumedAmount,
-				ID:     leftoverCommitment.ID,
+				Amount: lc.Amount,
+				ID:     lc.ID,
 			}
 		} else {
 			t.transferredCommitmentIDs[tc.ProjectID][tc.ID] = commitmentTransferLeftover{}
