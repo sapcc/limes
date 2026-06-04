@@ -328,7 +328,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 		delete(t.auditEventsByConfirmedCommitmentUUID, tc.UUID)
 
 		// Insert the leftover commitment, if exists.
-		if i == 0 && tc.Amount > lastConsumedAmount {
+		if i == len(potentiallyTransferredCommitmentIdxs)-1 && tc.Amount > lastConsumedAmount {
 			err = t.dbi.Insert(&leftoverCommitment)
 			if err != nil {
 				return result, err
