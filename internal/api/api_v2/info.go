@@ -5,7 +5,6 @@ package api_v2
 
 import (
 	"database/sql"
-	"errors"
 	"maps"
 	"net/http"
 	"slices"
@@ -14,13 +13,12 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-
-	. "go.xyrillian.de/gg/option"
 )
 
 var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
@@ -47,10 +45,14 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, doma
 		return "", "", "", nil
 	case token.Check("v2:domain:info"):
 		return "", domainUUID, domainName, nil
-	case token.Check("v2:project:info"):
-		return projectUUID, projectDomainUUID, projectDomainName, nil
 	default:
-		return "", "", "", respondwith.CustomStatus(http.StatusUnauthorized, errors.New("unauthorized"))
+		// the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors
+		err := token.Enforce("v2:project:info")
+		if err == nil {
+			return projectUUID, projectDomainUUID, projectDomainName, nil
+		} else {
+			return "", "", "", err
+		}
 	}
 }
 

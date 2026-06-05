@@ -256,13 +256,17 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	// load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
-		AllowCluster:      true,
-		AllowDomain:       true,
-		AllowProject:      true,
+		// scopes
+		AllowCluster: true,
+		AllowDomain:  true,
+		AllowProject: true,
+		// v1 actions
 		AllowView:         true,
 		AllowEdit:         true,
 		AllowEditMaxQuota: true,
 		AllowUncommit:     true,
+		// v2 actions
+		AllowInfo: true,
 	}
 	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",
