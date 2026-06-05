@@ -14,7 +14,7 @@ require (
 	github.com/prometheus/common v0.68.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.22.0
-	github.com/sapcc/go-bits v0.0.0-20260604151206-e698d422ff96
+	github.com/sapcc/go-bits v0.0.0-20260605140732-260f8544709d
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.9.0
 	go.xyrillian.de/schwift/v2 v2.1.0
