@@ -147,8 +147,9 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 		for resourceName, resourceCommitmentChangeset := range projectCommitmentChangeset.ByResource {
 			// this is just to make the tests deterministic because time.Local != local IANA time (after parsing)
 			for i, commitment := range resourceCommitmentChangeset.Commitments {
-				commitment.ExpiresAt = commitment.ExpiresAt.Local()
-				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.Local)
+				commitment.ExpiresAt = commitment.ExpiresAt.UTC()
+				commitment.ConfirmBy = options.Map(commitment.ConfirmBy, time.Time.UTC)
+				commitment.OldExpiresAt = options.Map(commitment.OldExpiresAt, time.Time.UTC)
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
 
