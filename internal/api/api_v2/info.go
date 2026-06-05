@@ -11,7 +11,6 @@ import (
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
-	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 
@@ -56,13 +55,14 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, doma
 	}
 }
 
-// GetResourcesInfo handles GET /resources/v2/info.
-func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetResourcesInfo handles GET /resources/v2/info.
+func (p *v2Provider) handleGetResourcesInfo(r *http.Request) (resourcesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
+	var none resourcesv2.InfoReport // used on error return paths only
 
 	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
-		return
+	if err != nil {
+		return none, err
 	}
 
 	// collect allowed items for this user
@@ -78,8 +78,8 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		return err
 	})
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
+	if err != nil {
+		return none, err
 	}
 
 	// assemble the report
@@ -158,16 +158,17 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	respondwith.JSON(w, http.StatusOK, report)
+	return report, nil
 }
 
-// GetRatesInfo handles GET /rates/v2/info.
-func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetRatesInfo handles GET /rates/v2/info.
+func (p *v2Provider) handleGetRatesInfo(r *http.Request) (ratesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
+	var none ratesv2.InfoReport // used on error return paths only
 
 	_, _, _, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
-		return
+	if err != nil {
+		return none, err
 	}
 
 	// assemble the report
@@ -232,5 +233,5 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 			serviceReport.Categories[category].Rates[rateName] = rir
 		}
 	}
-	respondwith.JSON(w, http.StatusOK, report)
+	return report, nil
 }

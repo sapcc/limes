@@ -12,6 +12,7 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -35,8 +36,25 @@ func NewV2API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 
 // AddTo implements the httpapi.API interface.
 func (p *v2Provider) AddTo(r *mux.Router) {
-	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(p.GetResourcesInfo)
-	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(p.GetRatesInfo)
+	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, p.handleGetResourcesInfo))
+	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, p.handleGetRatesInfo))
+}
+
+// Wrapper for request handlers that enforces a structure,
+// where the request handler function has an error return
+// instead of being able to randomly use `w` at any point.
+func handlerFunc[T any](successCode int, action func(r *http.Request) (T, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := action(r)
+		if respondwith.ObfuscatedErrorText(w, err) {
+			return
+		}
+		if successCode == http.StatusNoContent {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			respondwith.JSON(w, successCode, resp)
+		}
+	}
 }
 
 // CheckToken is a local helper to service the CheckToken functions of the different providers.
