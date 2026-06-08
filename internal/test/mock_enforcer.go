@@ -15,11 +15,13 @@ type PolicyEnforcer struct {
 	AllowCluster bool
 	AllowDomain  bool
 	AllowProject bool
-	// flags by action
+	// flags by v1 action
 	AllowView         bool
 	AllowEdit         bool
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
+	// flags by v2 action
+	AllowInfo bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -33,7 +35,7 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 	// for the v2 api we are introducing a new scheme of v2:scope:endpoint
 	// so we don't check any action for this case
 	if len(fields) == 3 && fields[0] == "v2" {
-		return e.allowScope(fields[1])
+		return e.allowScope(fields[1]) && e.allowAction(fields[2])
 	}
 	// v1 API
 	if len(fields) != 2 {
@@ -65,6 +67,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowEditMaxQuota
 	case "uncommit":
 		return e.AllowUncommit
+	case "info":
+		return e.AllowInfo
 	default:
 		return true
 	}

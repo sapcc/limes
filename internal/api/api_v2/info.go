@@ -5,22 +5,20 @@ package api_v2
 
 import (
 	"database/sql"
-	"errors"
 	"maps"
 	"net/http"
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
-	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	. "go.xyrillian.de/gg/option"
 
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-
-	. "go.xyrillian.de/gg/option"
 )
 
 var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
@@ -34,8 +32,7 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	AND pr.forbidden = false
 `)
 
-func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, domainUUID, domainName string, err error) {
-	token := p.CheckToken(r)
+func (p *v2Provider) authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID, domainName string, err error) {
 	projectUUID = token.ProjectScopeUUID()
 	projectDomainUUID := token.ProjectScopeDomainUUID()
 	projectDomainName := token.ProjectScopeDomainName()
@@ -47,20 +44,25 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, doma
 		return "", "", "", nil
 	case token.Check("v2:domain:info"):
 		return "", domainUUID, domainName, nil
-	case token.Check("v2:project:info"):
-		return projectUUID, projectDomainUUID, projectDomainName, nil
 	default:
-		return "", "", "", respondwith.CustomStatus(http.StatusUnauthorized, errors.New("unauthorized"))
+		// the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors
+		err := token.Enforce("v2:project:info")
+		if err == nil {
+			return projectUUID, projectDomainUUID, projectDomainName, nil
+		} else {
+			return "", "", "", err
+		}
 	}
 }
 
-// GetResourcesInfo handles GET /resources/v2/info.
-func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetResourcesInfo handles GET /resources/v2/info.
+func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy.Token) (resourcesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
+	var none resourcesv2.InfoReport // used on error return paths only
 
-	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
-		return
+	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(token)
+	if err != nil {
+		return none, err
 	}
 
 	// collect allowed items for this user
@@ -76,8 +78,8 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		return err
 	})
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
+	if err != nil {
+		return none, err
 	}
 
 	// assemble the report
@@ -156,16 +158,17 @@ func (p *v2Provider) GetResourcesInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	respondwith.JSON(w, http.StatusOK, report)
+	return report, nil
 }
 
-// GetRatesInfo handles GET /rates/v2/info.
-func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
+// handleGetRatesInfo handles GET /rates/v2/info.
+func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Token) (ratesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
+	var none ratesv2.InfoReport // used on error return paths only
 
-	_, _, _, err := p.authenticateInfoRequest(r)
-	if respondwith.ErrorText(w, err) {
-		return
+	_, _, _, err := p.authenticateInfoRequest(token)
+	if err != nil {
+		return none, err
 	}
 
 	// assemble the report
@@ -230,5 +233,5 @@ func (p *v2Provider) GetRatesInfo(w http.ResponseWriter, r *http.Request) {
 			serviceReport.Categories[category].Rates[rateName] = rir
 		}
 	}
-	respondwith.JSON(w, http.StatusOK, report)
+	return report, nil
 }

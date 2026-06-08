@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-const configJSON = `{
+const infoConfigJSON = `{
 	"availability_zones": ["az-one", "az-two"],
 	"discovery": {
 		"method": "static",
@@ -76,7 +76,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	}
 
 	s := test.NewSetup(t,
-		test.WithConfig(configJSON),
+		test.WithConfig(infoConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfoFirst),
 		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
 		test.WithInitialDiscovery,
@@ -88,6 +88,12 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	paris := s.GetProjectID("paris")
 	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, berlin, firstCapacity)
 	fixturePath := "./fixtures/resource-info.json"
+
+	// we need to have some sort of permission for the info endpoint
+	s.TokenValidator.Enforcer.AllowInfo = false
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowInfo = true
 
 	// we start with cloud_admin permissions, the scope does not matter for this case
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
@@ -153,7 +159,7 @@ func TestV2RatesInfoAPI(t *testing.T) {
 	}
 	serviceInfoSecond := test.DefaultLiquidServiceInfo("Second")
 	s := test.NewSetup(t,
-		test.WithConfig(configJSON),
+		test.WithConfig(infoConfigJSON),
 		test.WithPersistedServiceInfo("first", serviceInfoFirst),
 		test.WithPersistedServiceInfo("second", serviceInfoSecond),
 		test.WithInitialDiscovery,
@@ -161,6 +167,12 @@ func TestV2RatesInfoAPI(t *testing.T) {
 		test.WithEmptyRateRecordsAsNeeded,
 	)
 	fixturePath := "./fixtures/rate-info.json"
+
+	// we need to have some sort of permission for the info endpoint
+	s.TokenValidator.Enforcer.AllowInfo = false
+	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowInfo = true
 
 	// we start with cloud_admin permissions, the scope does not matter for rates
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
