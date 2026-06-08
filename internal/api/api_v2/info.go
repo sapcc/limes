@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
@@ -31,8 +32,7 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	AND pr.forbidden = false
 `)
 
-func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, domainUUID, domainName string, err error) {
-	token := p.CheckToken(r)
+func (p *v2Provider) authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID, domainName string, err error) {
 	projectUUID = token.ProjectScopeUUID()
 	projectDomainUUID := token.ProjectScopeDomainUUID()
 	projectDomainName := token.ProjectScopeDomainName()
@@ -56,11 +56,11 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request) (projectUUID, doma
 }
 
 // handleGetResourcesInfo handles GET /resources/v2/info.
-func (p *v2Provider) handleGetResourcesInfo(r *http.Request) (resourcesv2.InfoReport, error) {
+func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy.Token) (resourcesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
 	var none resourcesv2.InfoReport // used on error return paths only
 
-	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(r)
+	projectUUID, domainUUID, domainName, err := p.authenticateInfoRequest(token)
 	if err != nil {
 		return none, err
 	}
@@ -162,11 +162,11 @@ func (p *v2Provider) handleGetResourcesInfo(r *http.Request) (resourcesv2.InfoRe
 }
 
 // handleGetRatesInfo handles GET /rates/v2/info.
-func (p *v2Provider) handleGetRatesInfo(r *http.Request) (ratesv2.InfoReport, error) {
+func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Token) (ratesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
 	var none ratesv2.InfoReport // used on error return paths only
 
-	_, _, _, err := p.authenticateInfoRequest(r)
+	_, _, _, err := p.authenticateInfoRequest(token)
 	if err != nil {
 		return none, err
 	}
