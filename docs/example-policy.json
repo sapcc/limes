@@ -30,6 +30,7 @@
     "v2:meta:no_error_obfuscation": "rule:cluster_admin",
 
     "v2:project:info": "rule:project_viewer",
+    "v2:project:commitment_create": "rule:project_editor",
 
     "v2:domain:info": "rule:domain_viewer",
 
