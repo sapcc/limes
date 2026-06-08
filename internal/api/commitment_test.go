@@ -978,7 +978,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json, updated_at) VALUES (2, '00000000-0000-0000-0000-000000000002', 2, 2, 'superseded', 3, '1 hour', %[1]d, 'dummy', 'dummy', %[1]d, %[2]d, %[1]d, '{}', '{"reason": "consume", "related_ids": [3], "related_uuids": ["00000000-0000-0000-0000-000000000003"]}', %[1]d);
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json, updated_at) VALUES (3, '00000000-0000-0000-0000-000000000003', 1, 2, 'confirmed', 6, '2 hours', %[1]d, 'uuid-for-alice', 'alice@Default', %[1]d, %[3]d, '{"reason": "create"}', %[1]d);
 		UPDATE services SET next_scrape_at = %[1]d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-    `, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
+	`, s.Clock.Now().Unix(), s.Clock.Now().Add(time.Hour).Unix(), s.Clock.Now().Add(2*time.Hour).Unix())
 
 	// we are now at sum(max(committed, usage)) = 10 and capacity for this resource is 10
 	// all projects have a usage of 2
