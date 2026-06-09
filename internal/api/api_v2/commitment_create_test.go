@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
@@ -80,6 +82,12 @@ const commitmentCreateConfigJSON = `{
 func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, ccrAcceptedByLiquid bool, request map[string]any, expected jsonmatch.Object, getTarget func() cadf.Resource) {
 	t.Helper()
 	ctx := t.Context()
+	mockLiquid := s.LiquidClients[db.ServiceType(request["service_type"].(string))]
+
+	if ccrAcceptedByLiquid {
+		// explicitly clear LastCommitmentChangeRequest, so we can detect if the dry-run incorrectly writes into it
+		mockLiquid.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
+	}
 
 	// check that the dry-run request succeeds, without causing any side effects in the DB or audit trail
 	dryrunRequest := maps.Clone(request)
@@ -88,8 +96,15 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 	dryrunExpected["uuid"] = jsonmatch.Irrelevant()
 	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(dryrunRequest)).
 		ExpectJSON(t, http.StatusCreated, dryrunExpected)
+
 	s.Auditor.ExpectEvents(t, nil...)
 	tr.DBChanges().AssertEmpty()
+	if ccrAcceptedByLiquid {
+		// if there was a CCR, then it must have been a dry-run
+		if !reflect.DeepEqual(mockLiquid.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{}) {
+			assert.Equal(t, mockLiquid.LastCommitmentChangeRequest.DryRun, true)
+		}
+	}
 
 	// after creating the commitment, we expect to see an audit event
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
@@ -107,7 +122,6 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 	if ccrAcceptedByLiquid {
 		// check that the mock liquid saw the correct CommitmentChangeRequest
 		// (the same as inside the audit event payload)
-		mockLiquid := s.LiquidClients[db.ServiceType(request["service_type"].(string))]
 		actualCCR := must.Return(json.Marshal(mockLiquid.LastCommitmentChangeRequest))
 		var expectedCCR jsonmatch.Object
 		must.SucceedT(t, json.Unmarshal([]byte(target.Attachments[0].Content.(string)), &expectedCCR))
