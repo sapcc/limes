@@ -4,8 +4,6 @@
 package core
 
 import (
-	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -14,6 +12,7 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 
+	"github.com/sapcc/limes/internal/apideclarations/apiv2"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -85,32 +84,5 @@ func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, val
 	return S(rx.ExpandString(nil, string(value), fullName, match))
 }
 
-// RefInService contains a pair of service type and resource or rate name.
-// When read from the configuration JSON, this deserializes from a string in the "service/resource" or "service/rate" format.
-type RefInService[S, R ~string] struct {
-	ServiceType S
-	Name        R
-}
-
 // ResourceRef is an instance of RefInService. It appears in type ResourceBehavior.
-type ResourceRef = RefInService[limes.ServiceType, limesresources.ResourceName]
-
-// UnmarshalJSON implements the json.Unmarshaler interface.
-func (r *RefInService[S, R]) UnmarshalJSON(data []byte) error {
-	var in string
-	err := json.Unmarshal(data, &in)
-	if err != nil {
-		return err
-	}
-
-	fields := strings.Split(in, "/")
-	if len(fields) != 2 || fields[0] == "" || fields[1] == "" {
-		return fmt.Errorf(`expected identity_in_v1_api to follow the "service_type/rate_or_resource_name" format, but got %q`, in)
-	}
-
-	*r = RefInService[S, R]{
-		ServiceType: S(fields[0]),
-		Name:        R(fields[1]),
-	}
-	return nil
-}
+type ResourceRef = apiv2.RefInService[limes.ServiceType, limesresources.ResourceName]
