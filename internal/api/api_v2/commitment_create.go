@@ -159,6 +159,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			}
 		} else {
 			ccr := liquid.CommitmentChangeRequest{
+				DryRun:      req.DryRun,
 				AZ:          path.AvailabilityZone,
 				InfoVersion: service.LiquidVersion,
 				ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
