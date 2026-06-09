@@ -4,6 +4,8 @@
 package resourcesv2
 
 import (
+	"time"
+
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -11,6 +13,23 @@ import (
 
 	"github.com/sapcc/limes/internal/db"
 )
+
+// CommitmentListOpts contains query parameters for GET /v2/commitments.
+type CommitmentListOpts struct {
+	// main filters; at least one of these must be given
+	ProjectID   Option[string]      `q:"project_id"` // if given, must be below authenticated scope; if not given, shows all commitments within authenticated scope (except if OnlyPublic = true, see there)
+	ResourceRef Option[ResourceRef] `q:"resource"`   // formatted like "service/resource", e.g. "cinder/capacity"
+	OnlyPublic  bool                `q:"public"`     // list all commitments in all projects that have transfer_status = "public" (for marketplace usecase)
+
+	// extra filters
+	UpdatedAfter Option[time.Time] `q:"updated_after"` // TODO: requires new DB field project_commitments.updated_at
+	WithDeleted  bool              `q:"with=deleted"`  // requires extra permission (Orbitus only)
+}
+
+// CommitmentList is the response payload format for GET /v2/commitments and POST /v2/commitments/:uuid/split.
+type CommitmentList struct {
+	Commitments []Commitment `json:"commitments"`
+}
 
 // Commitment is the response payload format for GET /v2/commitments/:uuid and several endpoints that create or modify commitments.
 type Commitment struct {
@@ -82,3 +101,34 @@ type CommitmentRequest struct {
 	// NotifyOnConfirm may not be set for commitments that are created in status "confirmed".
 	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"` // may not be set for "confirmed"
 }
+
+// CommitmentPatchRequest is the request payload format for PATCH /v2/commitments/:uuid.
+// The current implementation will reject requests where more than one field is set at once.
+type CommitmentPatchRequest struct {
+	TransferStatus Option[limesresources.CommitmentTransferStatus] `json:"transfer_status,omitzero"`
+	Duration       Option[limesresources.CommitmentDuration]       `json:"duration,omitzero"` // may only be used to increase duration, not decrease it
+}
+
+// CommitmentSplitRequest is the request payload format for POST /v2/commitments/:uuid/split.
+type CommitmentSplitRequest struct {
+	Amounts []uint64 `json:"amounts"` // must sum to the amount of the existing commitment
+}
+
+// CommitmentMergeRequest is the request payload format for POST /v2/commitments/merge.
+type CommitmentMergeRequest struct {
+	CommitmentUUIDs []string `json:"commitment_uuids"` // all must be in the same project AZ resource
+}
+
+// CommitmentRenewRequest is the request payload format for POST /v2/commitments/:uuid/renew.
+type CommitmentRenewRequest struct {
+	Duration limesresources.CommitmentDuration `json:"duration"`
+}
+
+// CommitmentTransferRequest is the request payload format for POST /v2/commitments/:uuid/transfer.
+type CommitmentTransferRequest struct {
+	TargetProjectUUID string         `json:"target_project_id"` // token scope must cover this project
+	TransferToken     string         `json:"transfer_token"`    // may be empty if token scope covers source project
+	Amount            Option[uint64] `json:"amount"`            // if set, split the commitment and only transfer this portion (TODO: only allow for TransferStatusPublic?)
+}
+
+// TODO: do we include commitment conversion in v2? might now be required because of new KVM requirements; if so, extend /v2/info to show conversion rules

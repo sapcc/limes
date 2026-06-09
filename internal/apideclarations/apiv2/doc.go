@@ -57,6 +57,17 @@
 //
 // TODO: fill when implemented
 //
+// # Endpoint: GET /resources/v2/commitments
+//
+// TODO: fill when implemented
+//   - Takes query parameters as defined in [resourcesv2.CommitmentListOpts].
+//   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
+//
+// # Endpoint: GET /resources/v2/commitments/:uuid
+//
+// TODO: fill when implemented
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
 // # Endpoint: POST /resources/v2/commitments/new
 //
 // Creates a new commitment (or performs a dry run of a commitment creation request).
@@ -65,6 +76,44 @@
 //   - On success, status code 201 (Created) will be returned, including for dry runs.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
+//
+// # Endpoint: PATCH /resources/v2/commitments/:uuid
+//
+// TODO: fill when implemented
+//   - The request body payload must be of type [resourcesv2.CommitmentPatchRequest].
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/split
+//
+// TODO: fill when implemented
+//   - The request body payload must be of type [resourcesv2.CommitmentSplitRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
+//
+// # Endpoint: POST /resources/v2/commitments/merge
+//
+// TODO: fill when implemented
+//   - The request body payload must be of type [resourcesv2.CommitmentMergeRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/renew
+//
+// TODO: fill when implemented
+//   - The request body payload must be of type [resourcesv2.CommitmentRenewRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/transfer
+//
+// TODO: fill when implemented
+//   - The request body payload must be of type [resourcesv2.CommitmentTransferRequest].
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: DELETE /resources/v2/commitments/:uuid
+//
+// TODO: fill when implemented
+//   - On success, status code 204 (No Content) will be returned.
 //
 // # Endpoint: GET /rates/v2/info
 //
@@ -90,6 +139,8 @@
 // [Limes]: https://github.com/sapcc/limes
 package apiv2
 
+// FIXME: this causes an import cycle (consider moving the "Endpoint: ..." docs into the subpackages)
+/*
 import (
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
@@ -100,3 +151,4 @@ var (
 	_ = resourcesv2.InfoReport{}
 	_ = ratesv2.InfoReport{}
 )
+*/
