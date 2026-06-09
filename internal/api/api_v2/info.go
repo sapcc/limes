@@ -86,12 +86,13 @@ func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy
 	report := resourcesv2.InfoReport{
 		Areas: make(map[string]resourcesv2.AreaInfoReport),
 	}
-	services := p.Cluster.SIC.GetServices()
-	resources := p.Cluster.SIC.GetResources()
-	categories := p.Cluster.SIC.GetCategories()
+	sis := p.Cluster.SIC.GetSnapshot()
+	services := sis.GetServices()
+	categories := sis.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
+		resources, _ := sis.GetResourcesForType(serviceType) // can have no resources
 		// skip non-allowed resources for this user, if any
 		allowedResources, serviceTypeOK := allowedResourcesByService[serviceType]
 		if !serviceTypeOK {
@@ -122,8 +123,8 @@ func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
-		for _, resourceName := range slices.Sorted(maps.Keys(resources[serviceType])) {
-			resource := resources[serviceType][resourceName]
+		for _, resourceName := range slices.Sorted(maps.Keys(resources)) {
+			resource := resources[resourceName]
 			// skip non-allowed resources for this user, if any
 			if !slices.Contains(allowedResources, resourceName) {
 				continue
@@ -175,12 +176,13 @@ func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Tok
 	report := ratesv2.InfoReport{
 		Areas: make(map[string]ratesv2.AreaInfoReport),
 	}
-	services := p.Cluster.SIC.GetServices()
-	rates := p.Cluster.SIC.GetRates()
-	categories := p.Cluster.SIC.GetCategories()
+	sis := p.Cluster.SIC.GetSnapshot()
+	services := sis.GetServices()
+	categories := sis.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
+		rates, _ := sis.GetRatesForType(serviceType) // can have no rates
 		config := p.Cluster.Config.Liquids[serviceType]
 		area := config.Area
 		// defense in depth: config should be in sync with serviceInfo
@@ -206,8 +208,8 @@ func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Tok
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
-		for _, rateName := range slices.Sorted(maps.Keys(rates[serviceType])) {
-			rate := rates[serviceType][rateName]
+		for _, rateName := range slices.Sorted(maps.Keys(rates)) {
+			rate := rates[rateName]
 			rir := ratesv2.RateInfoReport{
 				DisplayName: rate.DisplayName,
 				Topology:    rate.Topology,

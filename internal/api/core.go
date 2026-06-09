@@ -224,8 +224,8 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 }
 
 // GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
-func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, now time.Time, dbi db.Interface, filter reports.Filter, resources core.ResourcesByNameType) (*limesresources.DomainReport, error) {
-	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, now, dbi, filter, resources)
+func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, now time.Time, dbi db.Interface, filter reports.Filter, sis *core.ServiceInfoSnapshot) (*limesresources.DomainReport, error) {
+	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, now, dbi, filter, sis)
 	if err != nil {
 		return nil, err
 	}
@@ -236,9 +236,9 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, now time.Time, d
 }
 
 // GetProjectResourceReport is a convenience wrapper around reports.GetProjectResources() for getting a single project resource report.
-func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, now time.Time, dbi db.Interface, filter reports.Filter, resources core.ResourcesByNameType) (*limesresources.ProjectReport, error) {
+func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, now time.Time, dbi db.Interface, filter reports.Filter, sis *core.ServiceInfoSnapshot) (*limesresources.ProjectReport, error) {
 	var result *limesresources.ProjectReport
-	err := reports.GetProjectResources(cluster, dbDomain, &dbProject, now, dbi, filter, resources, func(r *limesresources.ProjectReport) error {
+	err := reports.GetProjectResources(cluster, dbDomain, &dbProject, now, dbi, filter, sis, func(r *limesresources.ProjectReport) error {
 		result = r
 		return nil
 	})
@@ -252,9 +252,9 @@ func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProje
 }
 
 // GetProjectRateReport is a convenience wrapper around reports.GetProjectRates() for getting a single project rate report.
-func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, rates core.RatesByNameType) (*limesrates.ProjectReport, error) {
+func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, sis *core.ServiceInfoSnapshot) (*limesrates.ProjectReport, error) {
 	var result *limesrates.ProjectReport
-	err := reports.GetProjectRates(cluster, dbDomain, &dbProject, dbi, filter, rates, func(r *limesrates.ProjectReport) error {
+	err := reports.GetProjectRates(cluster, dbDomain, &dbProject, dbi, filter, sis, func(r *limesrates.ProjectReport) error {
 		result = r
 		return nil
 	})

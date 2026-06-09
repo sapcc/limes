@@ -10,7 +10,9 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/must"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -26,7 +28,9 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, srv db.Service, resources map[liquid.ResourceName]db.Resource) error {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, filteredSIS *core.FilteredServiceInfoSnapshot) error {
+	service := must.BeOK(filteredSIS.GetFilteredService())
+	resources, _ := filteredSIS.GetResourcesForType(service.Type)
 	// We will first collect all existing data into one of these structs for each
 	// resource. Then we will compute the target state of the DB record. We only
 	// need to write into the DB if `.Target` ends up different from `.Original`.
@@ -48,9 +52,9 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, srv db.
 
 	// collect existing project_resources for this service
 	var projectResources []db.ProjectResource
-	_, err := dbi.Select(&projectResources, `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`, srv.ID, project.ID)
+	_, err := dbi.Select(&projectResources, `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`, service.ID, project.ID)
 	if err != nil {
-		return fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
+		return fmt.Errorf("while loading %s project resources: %w", service.Type, err)
 	}
 	for _, res := range projectResources {
 		correspondingResource := resourcesByID[res.ResourceID]
@@ -85,12 +89,12 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, srv db.
 		if state.Original == nil {
 			err := dbi.Insert(&res)
 			if err != nil {
-				return fmt.Errorf("while inserting %s/%s resource in the DB: %w", srv.Type, resName, err)
+				return fmt.Errorf("while inserting %s/%s resource in the DB: %w", service.Type, resName, err)
 			}
 		} else if !reflect.DeepEqual(*state.Original, res) {
 			_, err := dbi.Update(&res)
 			if err != nil {
-				return fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, resName, err)
+				return fmt.Errorf("while updating %s/%s resource in the DB: %w", service.Type, resName, err)
 			}
 		}
 	}

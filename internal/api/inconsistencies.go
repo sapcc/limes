@@ -20,9 +20,9 @@ func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
-	inconsistencies, err := reports.GetInconsistencies(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, resources), resources)
+	inconsistencies, err := reports.GetInconsistencies(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, sis), sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

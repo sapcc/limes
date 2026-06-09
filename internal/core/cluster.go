@@ -115,7 +115,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// initialize SIC
-	c.SIC, err = NewServiceInfoCache(c.DB, dbURL)
+	c.SIC, err = NewServiceInfoCache(c.DB, c.Config, dbURL)
 	if err != nil {
 		errs.Addf("could not create service info cache: %w", err)
 		return errs

@@ -34,7 +34,8 @@ type Filter struct {
 }
 
 // ReadFilter extracts a Filter from the given Request.
-func ReadFilter(r *http.Request, cluster *core.Cluster, resources core.ResourcesByNameType) Filter {
+func ReadFilter(r *http.Request, cluster *core.Cluster, sis *core.ServiceInfoSnapshot) Filter {
+	resources := sis.GetResources()
 	queryValues := r.URL.Query()
 	apiServiceTypes := apiFilter(queryValues["service"])
 	apiResourceNames := apiFilter(queryValues["resource"])

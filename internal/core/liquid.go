@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/promquery"
 	. "go.xyrillian.de/gg/option"
 
@@ -84,37 +85,39 @@ func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient, servic
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (err error) {
-	service, ok := l.sic.GetServiceForType(l.ServiceType)
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (sis *ServiceInfoSnapshot, err error) {
+	sis = l.sic.GetSnapshot()
+	service, ok := sis.GetServiceForType(l.ServiceType)
 	if !ok {
 		service = db.Service{LiquidVersion: -1}
 	}
 	currentVersion := service.LiquidVersion
 	if infoVersion == currentVersion {
-		return nil
+		return sis, nil
 	}
 
 	logg.Info("ServiceInfo version for %s changed from %d to %d; reloading and persisting ServiceInfo.", l.ServiceType, currentVersion, infoVersion)
 	serviceInfo, err := l.retrieveServiceInfo(ctx)
 	if err != nil {
-		return err
+		return sis, err
 	}
 	// recheck to be sure, that there was no update between pulling the report and getting the ServiceInfo
 	newVersion := serviceInfo.Version
 	if infoVersion != newVersion {
-		return fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
+		return sis, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
 	}
 	err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
-		return fmt.Errorf("saving ServiceInfo: %w", err)
+		return sis, fmt.Errorf("saving ServiceInfo: %w", err)
 	}
 
 	// do reload of the SIC after successful database update
 	err = l.sic.InvalidateService(Some(l.ServiceType))
 	if err != nil {
-		return fmt.Errorf("invalidating ServiceInfoCache: %w", err)
+		return sis, fmt.Errorf("invalidating ServiceInfoCache: %w", err)
 	}
-	return nil
+	sis = l.sic.GetSnapshot()
+	return sis, nil
 }
 
 // retrieveServiceInfo queries the backend service for the latest ServiceInfo and validates it.
@@ -143,61 +146,63 @@ func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context) (result liqu
 // The `prevSerializedState` holds the `result.SerializedState` value from the previous call for the same project.
 // This state is persisted in the Limes DB between calls, and not otherwise interpreted by the core application in any way.
 // The liquid can use this field to carry state between Scrape() calls, esp. to detect and handle counter resets in the backend.
-func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, err error) {
-	service, _ := l.sic.GetServiceForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
+func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, sis *ServiceInfoSnapshot, err error) {
+	sis = l.sic.GetSnapshot()
+	service, _ := sis.GetServiceForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
 	req := BuildServiceUsageRequest(project, allAZs, service.UsageReportNeedsProjectMetadata, prevSerializedState)
 	result, err = l.LiquidClient.GetUsageReport(ctx, string(project.UUID), req)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	sis, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	serviceInfo, err := l.sic.GetServiceInfo(l.ServiceType)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	err = liquid.ValidateUsageReport(result, req, serviceInfo)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
-	return result, nil
+	return result, sis, nil
 }
 
 // ScrapeCapacity queries the backend service(s) for the capacities of the resources
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, err error) {
-	resources, _ := l.sic.GetResourcesForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
-	req, err := BuildServiceCapacityRequest(backchannel, allAZs, l.ServiceType, resources)
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, sis *ServiceInfoSnapshot, err error) {
+	sis = l.sic.GetSnapshot()
+	filteredSIS := sis.Filter(ServiceInfoFilter{ServiceType: Some(l.ServiceType)}) // we validated the existence of the service before scraping
+	req, err := BuildServiceCapacityRequest(backchannel, allAZs, filteredSIS)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	result, err = l.LiquidClient.GetCapacityReport(ctx, req)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
-	err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	sis, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	serviceInfo, err := l.sic.GetServiceInfo(l.ServiceType)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	err = liquid.ValidateCapacityReport(result, req, serviceInfo)
 	if err != nil {
-		return result, err
+		return result, sis, err
 	}
 
 	// manual capacity collection
@@ -221,12 +226,12 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 		client, err := prometheusCapaConfig.APIConfig.Connect()
 		if err != nil {
-			return result, err
+			return result, sis, err
 		}
 		for resName, query := range prometheusCapaConfig.Queries {
 			azReports, err := prometheusScrapeOneResource(prometheusCapaConfig, ctx, client, query, allAZs)
 			if err != nil {
-				return result, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
+				return result, sis, fmt.Errorf("while scraping prometheus capacity %q/%q: %w", l.ServiceType, resName, err)
 			}
 			result.Resources[resName] = &liquid.ResourceCapacityReport{
 				PerAZ: azReports,
@@ -234,7 +239,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		}
 	}
 
-	return result, nil
+	return result, sis, nil
 }
 
 // prometheusScrapeOneResource retrieves capacity for one resource via a prometheus client.
@@ -298,7 +303,9 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // BuildServiceCapacityRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/report-capacity. In order to be reusable for exposing an API which prints the
 // request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, serviceType db.ServiceType, resources ResourcesByName) (liquid.ServiceCapacityRequest, error) {
+func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, filteredSIS *FilteredServiceInfoSnapshot) (liquid.ServiceCapacityRequest, error) {
+	service := must.BeOK(filteredSIS.GetFilteredService())        // when we get here, this is already validated
+	resources, _ := filteredSIS.GetResourcesForType(service.Type) // can have no resources
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
 		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(resources)),
@@ -312,9 +319,9 @@ func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs [
 		if !resource.NeedsResourceDemand {
 			continue
 		}
-		req.DemandByResource[resName], err = backchannel.GetResourceDemand(serviceType, resName)
+		req.DemandByResource[resName], err = backchannel.GetResourceDemand(service.Type, resName)
 		if err != nil {
-			return liquid.ServiceCapacityRequest{}, fmt.Errorf("while getting resource demand for %s/%s: %w", serviceType, resName, err)
+			return liquid.ServiceCapacityRequest{}, fmt.Errorf("while getting resource demand for %s/%s: %w", service.Type, resName, err)
 		}
 	}
 	return req, nil
@@ -338,7 +345,7 @@ func BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.Availabili
 // given domain to the values specified here.
 func (l *LiquidConnection) SetQuota(ctx context.Context, project KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
-	service, ok := l.sic.GetServiceForType(l.ServiceType)
+	service, ok := l.sic.GetSnapshot().GetServiceForType(l.ServiceType)
 	if !ok {
 		return fmt.Errorf(`service for type "%s" not found`, l.ServiceType)
 	}

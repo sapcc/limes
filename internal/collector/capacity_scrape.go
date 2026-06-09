@@ -126,7 +126,7 @@ func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.L
 	}
 	// if the above check succeeded, this should never fail because the SIC is updated after the
 	// LiquidConnection is initialized.
-	_, ok = c.Cluster.SIC.GetServiceForType(task.ServiceType)
+	_, ok = c.Cluster.SIC.GetSnapshot().GetServiceForType(task.ServiceType)
 	if !ok {
 		return task, fmt.Errorf("no data found in ServiceInfoCache for type %s", task.ServiceType)
 	}
@@ -147,7 +147,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	connection := c.Cluster.LiquidConnections[serviceType]
 	if connection == nil {
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
-		service, _ := c.Cluster.SIC.GetServiceForType(serviceType)
+		service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		_, err := c.DB.Update(&service)
 		if err != nil {
@@ -158,15 +158,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// scrape capacity data
-	capacityData, serializedMetrics, err := c.scrapeLiquidCapacity(ctx, connection)
+	capacityData, serializedMetrics, sis, err := c.scrapeLiquidCapacity(ctx, connection)
 
-	// IMPORTANT: service may have been updated, only load it here
-	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
-	resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType)
-	azResources, _ := c.Cluster.SIC.GetAZResourcesForType(serviceType)
+	service, sExists := sis.GetServiceForType(serviceType)
 	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
 	}
+	resources, _ := sis.GetResourcesForType(serviceType)     // might have no resources
+	azResources, _ := sis.GetAZResourcesForType(serviceType) // might have no az_resources
 
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
@@ -284,24 +283,24 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, err error) {
-	capacityData, err = connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis *core.ServiceInfoSnapshot, err error) {
+	capacityData, sis, err = connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, nil, err
+		return liquid.ServiceCapacityReport{}, nil, sis, err
 	}
-	service, sExists := c.Cluster.SIC.GetServiceForType(connection.ServiceType)
-	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
-		return capacityData, nil, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
+	service, sExists := sis.GetServiceForType(connection.ServiceType)
+	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
+		return capacityData, nil, sis, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
 	}
 	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, nil, err
+		return liquid.ServiceCapacityReport{}, nil, sis, err
 	}
 	serializedMetrics, err = liquidSerializeMetrics(capacityMetricFamilies, capacityData.Metrics)
 	if err != nil {
-		return liquid.ServiceCapacityReport{}, nil, err
+		return liquid.ServiceCapacityReport{}, nil, sis, err
 	}
-	return capacityData, serializedMetrics, nil
+	return capacityData, serializedMetrics, sis, nil
 }
 
 func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, resource db.Resource) error {

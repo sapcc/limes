@@ -23,33 +23,495 @@ import (
 	. "go.xyrillian.de/gg/option"
 )
 
+///////////////////////////////////////////////////////////////////////
+
+// ServiceInfoFilter is a set of possible attributes by which ServiceInfoSnapshot
+// can be filtered. Most of the time, these come directly or indirectly from an API
+// requests' scope, e.g. query filters or attributes of a processed commitment.
+type ServiceInfoFilter struct {
+	ServiceArea  Option[string]
+	ServiceType  Option[db.ServiceType]
+	Category     Option[liquid.CategoryName]
+	ResourceName Option[liquid.ResourceName]
+	RateName     Option[liquid.RateName]
+}
+
+///////////////////////////////////////////////////////////////////////
+
+// ServiceInfoReader defines shared methods for reading
+// filtered or unfiltered ServiceInfoSnapshots.
+type ServiceInfoReader interface {
+	// GetServices returns all services.
+	GetServices() ServicesByType
+	// GetServiceForType returns the service for the given service type.
+	GetServiceForType(serviceType db.ServiceType) (db.Service, bool)
+	// GetResources returns all resources
+	GetResources() ResourcesByNameType
+	// GetResourcesForType returns all resources for the given service type, keyed by resource name.
+	GetResourcesForType(serviceType db.ServiceType) (ResourcesByName, bool)
+	// GetResourceForTypeName returns the resource for the given service type and resource name.
+	GetResourceForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (db.Resource, bool)
+	// GetResourceForPath returns the resource for the given path.
+	GetResourceForPath(path db.ResourcePath) (db.Resource, bool)
+	// GetAZResources returns all AZ resources, indexed by service type, resource name, and availability zone.
+	GetAZResources() AZResourcesByAZNameType
+	// GetAZResourcesForType returns all AZ resources for the given service type, keyed by resource name and availability zone.
+	GetAZResourcesForType(serviceType db.ServiceType) (AZResourcesByAZName, bool)
+	// GetAZResourcesForTypeName returns all AZ resources for the given service type, resource name, keyed by availability zone.
+	GetAZResourcesForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (AZResourcesByAZ, bool)
+	// GetAZResourceForTypeNameAZ returns the AZ resource for the given service type, resource name, and availability zone.
+	GetAZResourceForTypeNameAZ(serviceType db.ServiceType, resourceName liquid.ResourceName, az limes.AvailabilityZone) (db.AZResource, bool)
+	// GetAZResourceForPath returns the AZ resource for the given path.
+	GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool)
+	// GetRates returns all cached rates, indexed by service type and rate name.
+	GetRates() RatesByNameType
+	// GetRatesForType returns all rates, indexed by service type and rate name.
+	GetRatesForType(serviceType db.ServiceType) (RatesByName, bool)
+	// GetRateForTypeName returns the rate for the given service type and rate name.
+	GetRateForTypeName(serviceType db.ServiceType, rateName liquid.RateName) (db.Rate, bool)
+	// GetCategories returns all categories, indexed by category ID.
+	GetCategories() CategoriesByID
+	// GetCategoryForID returns the cached category for the given category ID.
+	GetCategoryForID(categoryID db.CategoryID) (db.Category, bool)
+}
+
+///////////////////////////////////////////////////////////////////////
+
+type (
+	// ServiceInfoSnapshot is the combined representation of db.Service, db.Resource
+	// db.AZResource, db.Rate and db.Category. We chose to provide this as only
+	// data structure and output of ServiceInfoCache mainly for 2 reasons:
+	// This ensures we get one consistent state from the ServiceInfoCache and
+	// not multiple outputs where the cache might have changed in between.
+	// Also, we can express filtering all entities by the same ServiceInfoFilter
+	// which makes application of the same filter to all entities easier.
+	// ServiceInfoSnapshot offers almost the same external method set for
+	// on-read access as FilteredServiceInfoSnapshot, they are defined by the
+	// ServiceInfoReader interface.
+	ServiceInfoSnapshot struct {
+		services    ServicesByType
+		resources   ResourcesByNameType
+		azResources AZResourcesByAZNameType
+		rates       RatesByNameType
+		categories  CategoriesByID
+		// necessary for constructing filters by area
+		areaMapping map[db.ServiceType]string
+	}
+	// ServicesByType are services, indexed by their service type.
+	ServicesByType map[db.ServiceType]db.Service
+	// ResourcesByNameType are resources, indexed by their name and type.
+	ResourcesByNameType map[db.ServiceType]ResourcesByName
+	// ResourcesByName are resources of a single service, indexed by their name.
+	ResourcesByName map[liquid.ResourceName]db.Resource
+	// AZResourcesByAZNameType are az_resources, indexed by their az, name and type.
+	AZResourcesByAZNameType map[db.ServiceType]AZResourcesByAZName
+	// AZResourcesByAZName are az_resources of a single service, indexed by their az and name.
+	AZResourcesByAZName map[liquid.ResourceName]AZResourcesByAZ
+	// AZResourcesByAZ are az_resources of a single service and resource, indexed by their az.
+	AZResourcesByAZ map[limes.AvailabilityZone]db.AZResource
+	// RatesByNameType are rates, indexed by their name and type.
+	RatesByNameType map[db.ServiceType]RatesByName
+	// RatesByName are rates of a single service, indexed by their name.
+	RatesByName map[liquid.RateName]db.Rate
+	// CategoriesByID are categories, indexed by their id.
+	CategoriesByID map[db.CategoryID]db.Category
+)
+
+// removeType removes all data of a given serviceType, making the cache ready
+// for populating this serviceType from scratch. Categories are always flushed
+// completely.
+func (s *ServiceInfoSnapshot) removeType(serviceType db.ServiceType) {
+	delete(s.services, serviceType)
+	delete(s.resources, serviceType)
+	delete(s.azResources, serviceType)
+	delete(s.rates, serviceType)
+	s.categories = make(map[db.CategoryID]db.Category)
+}
+
+// deepClone delivers a deep copy of the ServiceInfoSnapshot. This is used to
+// create a copy which can be altered without interfering with the original.
+// It shall only be used from ServiceInfoCache or when creating a
+// FilteredServiceInfoSnapshot.
+func (s *ServiceInfoSnapshot) deepClone() *ServiceInfoSnapshot {
+	result := &ServiceInfoSnapshot{
+		services:  maps.Clone(s.services),
+		resources: deepCloneMap(s.resources, maps.Clone),
+		azResources: deepCloneMap(s.azResources, func(inner AZResourcesByAZName) AZResourcesByAZName {
+			return deepCloneMap(inner, maps.Clone)
+		}),
+		rates:       deepCloneMap(s.rates, maps.Clone),
+		categories:  maps.Clone(s.categories),
+		areaMapping: s.areaMapping, // should never get modified
+	}
+	return result
+}
+
+// Filter applies the filter to the ServiceInfoSnapshot and produces an
+// eagerly filtered FilteredServiceInfoSnapshot.
+func (s *ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) *FilteredServiceInfoSnapshot {
+	f := &FilteredServiceInfoSnapshot{
+		snapshot: s, // gets cloned by AddToFilter
+	}
+	return f.AddToFilter(filter)
+}
+
+// GetServices implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetServices() ServicesByType {
+	return maps.Clone(s.services)
+}
+
+// GetServiceForType implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetServiceForType(serviceType db.ServiceType) (db.Service, bool) {
+	val, ok := s.services[serviceType]
+	return val, ok
+}
+
+// GetResources implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetResources() ResourcesByNameType {
+	return deepCloneMap(s.resources, maps.Clone)
+}
+
+// GetResourcesForType implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) (ResourcesByName, bool) {
+	val, ok := s.resources[serviceType]
+	return maps.Clone(val), ok
+}
+
+// GetResourceForTypeName implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetResourceForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (db.Resource, bool) {
+	val, ok := s.resources[serviceType][resourceName]
+	return val, ok
+}
+
+// GetResourceForPath implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetResourceForPath(path db.ResourcePath) (db.Resource, bool) {
+	return s.GetResourceForTypeName(path.ServiceType, path.ResourceName)
+}
+
+// GetAZResources implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetAZResources() AZResourcesByAZNameType {
+	return deepCloneMap(s.azResources, func(inner AZResourcesByAZName) AZResourcesByAZName {
+		return deepCloneMap(inner, maps.Clone)
+	})
+}
+
+// GetAZResourcesForType implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetAZResourcesForType(serviceType db.ServiceType) (AZResourcesByAZName, bool) {
+	val, ok := s.azResources[serviceType]
+	return deepCloneMap(val, maps.Clone), ok
+}
+
+// GetAZResourcesForTypeName implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetAZResourcesForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (AZResourcesByAZ, bool) {
+	val, ok := s.azResources[serviceType][resourceName]
+	return maps.Clone(val), ok
+}
+
+// GetAZResourceForTypeNameAZ implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetAZResourceForTypeNameAZ(serviceType db.ServiceType, resourceName liquid.ResourceName, az limes.AvailabilityZone) (db.AZResource, bool) {
+	val, ok := s.azResources[serviceType][resourceName][az]
+	return val, ok
+}
+
+// GetAZResourceForPath implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool) {
+	return s.GetAZResourceForTypeNameAZ(path.ServiceType, path.ResourceName, path.AvailabilityZone)
+}
+
+// GetRates implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetRates() RatesByNameType {
+	return deepCloneMap(s.rates, maps.Clone)
+}
+
+// GetRatesForType implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) (RatesByName, bool) {
+	val, ok := s.rates[serviceType]
+	return maps.Clone(val), ok
+}
+
+// GetRateForTypeName implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetRateForTypeName(serviceType db.ServiceType, rateName liquid.RateName) (db.Rate, bool) {
+	val, ok := s.rates[serviceType][rateName]
+	return val, ok
+}
+
+// GetCategories implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetCategories() CategoriesByID {
+	return maps.Clone(s.categories)
+}
+
+// GetCategoryForID implements the [ServiceInfoReader] interface.
+func (s *ServiceInfoSnapshot) GetCategoryForID(categoryID db.CategoryID) (db.Category, bool) {
+	val, ok := s.categories[categoryID]
+	return val, ok
+}
+
+// newEmptyServiceInfoSnapshot() returns an empty ServiceInfoSnapshot with all
+// maps initialized on their first level.
+func newEmptyServiceInfoSnapshot(config ClusterConfiguration) ServiceInfoSnapshot {
+	areaMapping := make(map[db.ServiceType]string)
+	for serviceType, liquidConfiguration := range config.Liquids {
+		areaMapping[serviceType] = liquidConfiguration.Area
+	}
+	return ServiceInfoSnapshot{
+		services:    make(ServicesByType),
+		resources:   make(ResourcesByNameType),
+		azResources: make(AZResourcesByAZNameType),
+		rates:       make(RatesByNameType),
+		categories:  make(CategoriesByID),
+		areaMapping: areaMapping,
+	}
+}
+
+///////////////////////////////////////////////////////////////////////
+
+// FilteredServiceInfoSnapshot is a ServiceInfoSnapshot
+// filtered by the specification of the ServiceInfoFilter.
+// It offers the same method-set as ServiceInfoSnapshot.
+type FilteredServiceInfoSnapshot struct {
+	snapshot *ServiceInfoSnapshot
+	filter   ServiceInfoFilter
+}
+
+// GetFilter returns the current filter.
+func (f *FilteredServiceInfoSnapshot) GetFilter() ServiceInfoFilter {
+	return f.filter
+}
+
+// AddToFilter merges the given filter to the existing filter.
+// The filter can only become more specific.
+// If a property was already filtered before, the additional filter is
+// omitted.
+func (f *FilteredServiceInfoSnapshot) AddToFilter(filter ServiceInfoFilter) *FilteredServiceInfoSnapshot {
+	if serviceArea, ok := filter.ServiceArea.Unpack(); ok && f.filter.ServiceArea.IsNone() {
+		f.filter.ServiceArea = Some(serviceArea)
+	}
+	if serviceType, ok := filter.ServiceType.Unpack(); ok && f.filter.ServiceType.IsNone() {
+		f.filter.ServiceType = Some(serviceType)
+	}
+	if resourceCategory, ok := filter.Category.Unpack(); ok && f.filter.Category.IsNone() {
+		f.filter.Category = Some(resourceCategory)
+	}
+	if azResource, ok := filter.ResourceName.Unpack(); ok && f.filter.ResourceName.IsNone() {
+		f.filter.ResourceName = Some(azResource)
+	}
+
+	// filter services by area
+	newSnapshot := f.snapshot.deepClone()
+	if areaFilter, ok := f.filter.ServiceArea.Unpack(); ok {
+		for serviceType, area := range f.snapshot.areaMapping {
+			if area == areaFilter {
+				continue
+			}
+			delete(newSnapshot.services, serviceType)
+			delete(newSnapshot.resources, serviceType)
+			delete(newSnapshot.azResources, serviceType)
+			delete(newSnapshot.rates, serviceType)
+		}
+	}
+	// filter services by type
+	if typeFilter, ok := f.filter.ServiceType.Unpack(); ok {
+		for serviceType := range newSnapshot.services {
+			if typeFilter == serviceType {
+				continue
+			}
+			delete(newSnapshot.services, serviceType)
+			delete(newSnapshot.azResources, serviceType)
+			delete(newSnapshot.resources, serviceType)
+			delete(newSnapshot.rates, serviceType)
+		}
+	}
+	categoriesToRemove := make(map[db.CategoryID]struct{})
+	// find categories to remove
+	if categoryFilter, ok := f.filter.Category.Unpack(); ok {
+		for categoryID, info := range newSnapshot.categories {
+			if info.Name != categoryFilter {
+				delete(newSnapshot.categories, categoryID)
+				categoriesToRemove[categoryID] = struct{}{}
+			}
+		}
+	}
+	seenCategories := make(map[db.CategoryID]struct{})
+	resourceNameFilter, resourceFilterExists := f.filter.ResourceName.Unpack()
+	// filter resources/ az_resources by category or name
+	if len(categoriesToRemove) > 0 || resourceFilterExists {
+		for serviceType, resources := range newSnapshot.resources {
+			for resourceName, resource := range resources {
+				categoryID, cExists := resource.CategoryID.Unpack()
+				if _, removeCategory := categoriesToRemove[categoryID]; (cExists && removeCategory) || (resourceFilterExists && resourceName != resourceNameFilter) {
+					delete(newSnapshot.resources[serviceType], resourceName)
+					delete(newSnapshot.azResources[serviceType], resourceName)
+					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
+						delete(newSnapshot.services, serviceType)
+						delete(newSnapshot.resources, serviceType)
+						delete(newSnapshot.azResources, serviceType)
+						delete(newSnapshot.rates, serviceType)
+					}
+				} else {
+					seenCategories[categoryID] = struct{}{}
+				}
+			}
+		}
+	}
+	rateNameFilter, rateFilterExists := f.filter.RateName.Unpack()
+	// filter rates by category or name
+	if len(categoriesToRemove) > 0 || rateFilterExists {
+		for serviceType, rates := range newSnapshot.rates {
+			for rateName, rate := range rates {
+				categoryID, cExists := rate.CategoryID.Unpack()
+				if _, removeCategory := categoriesToRemove[categoryID]; (cExists && removeCategory) || (rateFilterExists && rateName != rateNameFilter) {
+					delete(newSnapshot.rates[serviceType], rateName)
+					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
+						delete(newSnapshot.services, serviceType)
+						delete(newSnapshot.resources, serviceType)
+						delete(newSnapshot.azResources, serviceType)
+						delete(newSnapshot.rates, serviceType)
+					}
+				} else {
+					seenCategories[categoryID] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// if we filtered by rate or service name, we must thin out the categories
+	if resourceFilterExists || rateFilterExists {
+		for categoryID := range newSnapshot.categories {
+			if _, ok := seenCategories[categoryID]; !ok {
+				delete(newSnapshot.categories, categoryID)
+			}
+		}
+	}
+	f.snapshot = newSnapshot
+	return f
+}
+
+// GetFilteredService returns the service for the filtered type.
+// It is useful to access the service, when you know it was filtered.
+func (f *FilteredServiceInfoSnapshot) GetFilteredService() (db.Service, bool) {
+	serviceType, ok := f.filter.ServiceType.Unpack()
+	if !ok {
+		return db.Service{}, false
+	}
+	service, ok := f.snapshot.services[serviceType]
+	return service, ok
+}
+
+// GetFilteredResource returns the resource for the filtered type and name.
+// It is useful to access the resource, when you know it was filtered.
+func (f *FilteredServiceInfoSnapshot) GetFilteredResource() (db.Resource, bool) {
+	serviceType, ok := f.filter.ServiceType.Unpack()
+	if !ok {
+		return db.Resource{}, false
+	}
+	resourceName, ok := f.filter.ResourceName.Unpack()
+	if !ok {
+		return db.Resource{}, false
+	}
+	resource, ok := f.snapshot.resources[serviceType][resourceName]
+	return resource, ok
+}
+
+// GetFilteredRate returns the rate for the filtered type and name.
+// It is useful to access the rate, when you know it was filtered.
+func (f *FilteredServiceInfoSnapshot) GetFilteredRate() (db.Rate, bool) {
+	serviceType, ok := f.filter.ServiceType.Unpack()
+	if !ok {
+		return db.Rate{}, false
+	}
+	rateName, ok := f.filter.RateName.Unpack()
+	if !ok {
+		return db.Rate{}, false
+	}
+	rate, ok := f.snapshot.rates[serviceType][rateName]
+	return rate, ok
+}
+
+// GetServices implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetServices() ServicesByType {
+	return f.snapshot.GetServices()
+}
+
+// GetServiceForType implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetServiceForType(serviceType db.ServiceType) (db.Service, bool) {
+	return f.snapshot.GetServiceForType(serviceType)
+}
+
+// GetResources implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetResources() ResourcesByNameType {
+	return f.snapshot.GetResources()
+}
+
+// GetResourcesForType implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) (ResourcesByName, bool) {
+	return f.snapshot.GetResourcesForType(serviceType)
+}
+
+// GetResourceForTypeName implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetResourceForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (db.Resource, bool) {
+	return f.snapshot.GetResourceForTypeName(serviceType, resourceName)
+}
+
+// GetResourceForPath implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetResourceForPath(path db.ResourcePath) (db.Resource, bool) {
+	return f.snapshot.GetResourceForPath(path)
+}
+
+// GetAZResources implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetAZResources() AZResourcesByAZNameType {
+	return f.snapshot.GetAZResources()
+}
+
+// GetAZResourcesForType implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetAZResourcesForType(serviceType db.ServiceType) (AZResourcesByAZName, bool) {
+	return f.snapshot.GetAZResourcesForType(serviceType)
+}
+
+// GetAZResourcesForTypeName implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetAZResourcesForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (AZResourcesByAZ, bool) {
+	return f.snapshot.GetAZResourcesForTypeName(serviceType, resourceName)
+}
+
+// GetAZResourceForTypeNameAZ implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetAZResourceForTypeNameAZ(serviceType db.ServiceType, resourceName liquid.ResourceName, az limes.AvailabilityZone) (db.AZResource, bool) {
+	return f.snapshot.GetAZResourceForTypeNameAZ(serviceType, resourceName, az)
+}
+
+// GetAZResourceForPath implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool) {
+	return f.snapshot.GetAZResourceForPath(path)
+}
+
+// GetRates implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetRates() RatesByNameType {
+	return f.snapshot.GetRates()
+}
+
+// GetRatesForType implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) (RatesByName, bool) {
+	return f.snapshot.GetRatesForType(serviceType)
+}
+
+// GetRateForTypeName implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetRateForTypeName(serviceType db.ServiceType, rateName liquid.RateName) (db.Rate, bool) {
+	return f.snapshot.GetRateForTypeName(serviceType, rateName)
+}
+
+// GetCategories implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetCategories() CategoriesByID {
+	return f.snapshot.GetCategories()
+}
+
+// GetCategoryForID implements the [ServiceInfoReader] interface.
+func (f *FilteredServiceInfoSnapshot) GetCategoryForID(categoryID db.CategoryID) (db.Category, bool) {
+	return f.snapshot.GetCategoryForID(categoryID)
+}
+
+///////////////////////////////////////////////////////////////////////
+
 // serviceNotifyChannel is the PostgreSQL NOTIFY channel name used to signal
 // that a service's data has changed and the cache should be invalidated.
 const serviceNotifyChannel = "limitas_service_update"
-
-// The following types are defined explicitly to aid using the return
-// types of functions of ServiceInfoCache as parameters of other functions.
-// Basically, they are the internal representation of liquid.ServiceInfo.
-type (
-	// ServicesByType are all services, indexed by their service type.
-	ServicesByType map[db.ServiceType]db.Service
-	// ResourcesByNameType are all resources, indexed by their name and type.
-	ResourcesByNameType map[db.ServiceType]ResourcesByName
-	// ResourcesByName are all resources of a single service, indexed by their name.
-	ResourcesByName map[liquid.ResourceName]db.Resource
-	// AZResourcesByAZNameType are all az_resources, indexed by their az, name and type.
-	AZResourcesByAZNameType map[db.ServiceType]AZResourcesByAZName
-	// AZResourcesByAZName are all az_resources of a single service, indexed by their az and name.
-	AZResourcesByAZName map[liquid.ResourceName]AZResourcesByAZ
-	// AZResourcesByAZ are all az_resources of a single service and resource, indexed by their az.
-	AZResourcesByAZ map[limes.AvailabilityZone]db.AZResource
-	// RatesByNameType are all rates, indexed by their name and type.
-	RatesByNameType map[db.ServiceType]RatesByName
-	// RatesByName are all rates of a single service, indexed by their name.
-	RatesByName map[liquid.RateName]db.Rate
-	// CategoriesByID are all categories, indexed by their id.
-	CategoriesByID map[db.CategoryID]db.Category
-)
 
 // ServiceInfoCache is the interface to the database to retrieve all data,
 // which was previously populated from the liquid.ServiceInfo. The principle
@@ -64,6 +526,8 @@ type ServiceInfoCache struct {
 	// state
 	DB       *gorp.DbMap
 	listener *pq.Listener
+	config   ClusterConfiguration
+	data     ServiceInfoSnapshot
 	// we use one mutex as all data is written together and reading is quick
 	dataMutex sync.RWMutex
 
@@ -73,25 +537,14 @@ type ServiceInfoCache struct {
 	// non-blocking so production code is unaffected when nobody reads.
 	OnInvalidate   <-chan struct{}
 	sendInvalidate chan<- struct{}
-
-	// data
-	servicesByType          ServicesByType
-	resourcesByNameType     ResourcesByNameType
-	azResourcesByAZNameType AZResourcesByAZNameType
-	ratesByNameType         RatesByNameType
-	categoriesByID          CategoriesByID
 }
 
 // NewServiceInfoCache generates a ServiceInfoCache and fills all services' data.
-func NewServiceInfoCache(dbm *gorp.DbMap, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
+func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
 	sic := &ServiceInfoCache{
-		DB: dbm,
-
-		servicesByType:          make(ServicesByType),
-		resourcesByNameType:     make(ResourcesByNameType),
-		azResourcesByAZNameType: make(AZResourcesByAZNameType),
-		ratesByNameType:         make(RatesByNameType),
-		categoriesByID:          make(CategoriesByID),
+		DB:     dbm,
+		config: config,
+		data:   newEmptyServiceInfoSnapshot(config),
 	}
 
 	// populate all data from the DB on startup
@@ -177,18 +630,9 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 	defer s.dataMutex.Unlock()
 
 	if st, ok := serviceType.Unpack(); ok {
-		delete(s.servicesByType, st)
-		delete(s.resourcesByNameType, st)
-		delete(s.azResourcesByAZNameType, st)
-		delete(s.ratesByNameType, st)
-
-		s.categoriesByID = make(CategoriesByID)
+		s.data.removeType(st)
 	} else {
-		s.servicesByType = make(ServicesByType)
-		s.resourcesByNameType = make(ResourcesByNameType)
-		s.azResourcesByAZNameType = make(AZResourcesByAZNameType)
-		s.ratesByNameType = make(RatesByNameType)
-		s.categoriesByID = make(CategoriesByID)
+		s.data = newEmptyServiceInfoSnapshot(s.config)
 	}
 
 	// now we fill the cache for the invalidated services again
@@ -196,7 +640,7 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 	if err != nil {
 		return fmt.Errorf("while reading services for type(s) %v: %w", serviceType, err)
 	}
-	maps.Copy(s.servicesByType, servicesByType)
+	maps.Copy(s.data.services, servicesByType)
 
 	resourcesByPath, err := db.BuildIndexOfDBResult(
 		s.DB,
@@ -208,10 +652,10 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, resource := range resourcesByPath {
-		if _, sExists := s.resourcesByNameType[path.ServiceType]; !sExists {
-			s.resourcesByNameType[path.ServiceType] = make(ResourcesByName)
+		if _, sExists := s.data.resources[path.ServiceType]; !sExists {
+			s.data.resources[path.ServiceType] = make(ResourcesByName)
 		}
-		s.resourcesByNameType[path.ServiceType][path.ResourceName] = resource
+		s.data.resources[path.ServiceType][path.ResourceName] = resource
 	}
 
 	azResourcesByPath, err := db.BuildIndexOfDBResult(
@@ -224,13 +668,13 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
 	for path, azResource := range azResourcesByPath {
-		if _, sExists := s.azResourcesByAZNameType[path.ServiceType]; !sExists {
-			s.azResourcesByAZNameType[path.ServiceType] = make(AZResourcesByAZName)
+		if _, sExists := s.data.azResources[path.ServiceType]; !sExists {
+			s.data.azResources[path.ServiceType] = make(AZResourcesByAZName)
 		}
-		if _, rExists := s.azResourcesByAZNameType[path.ServiceType][path.ResourceName]; !rExists {
-			s.azResourcesByAZNameType[path.ServiceType][path.ResourceName] = make(AZResourcesByAZ)
+		if _, rExists := s.data.azResources[path.ServiceType][path.ResourceName]; !rExists {
+			s.data.azResources[path.ServiceType][path.ResourceName] = make(AZResourcesByAZ)
 		}
-		s.azResourcesByAZNameType[path.ServiceType][path.ResourceName][path.AvailabilityZone] = azResource
+		s.data.azResources[path.ServiceType][path.ResourceName][path.AvailabilityZone] = azResource
 	}
 
 	ratesByPath, err := db.BuildIndexOfDBResult(
@@ -243,13 +687,13 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
 	for path, rate := range ratesByPath {
-		if _, rExists := s.ratesByNameType[path.ServiceType]; !rExists {
-			s.ratesByNameType[path.ServiceType] = make(RatesByName)
+		if _, rExists := s.data.rates[path.ServiceType]; !rExists {
+			s.data.rates[path.ServiceType] = make(RatesByName)
 		}
-		s.ratesByNameType[path.ServiceType][path.RateName] = rate
+		s.data.rates[path.ServiceType][path.RateName] = rate
 	}
 
-	s.categoriesByID, err = db.BuildIndexOfDBResult(
+	s.data.categories, err = db.BuildIndexOfDBResult(
 		s.DB,
 		func(c db.Category) db.CategoryID { return c.ID },
 		"SELECT * FROM categories",
@@ -260,146 +704,11 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 	return nil
 }
 
-// deepCloneMap returns a deep copy of a map by cloning each value using the
-// provided cloneValue function. For leaf maps (where values are not maps),
-// pass maps.Clone directly. For nested maps, pass a function that itself
-// calls deepCloneMap to clone the next level.
-func deepCloneMap[M ~map[K]V, K comparable, V any](m M, cloneValue func(V) V) M {
-	if m == nil {
-		return nil
-	}
-	result := make(M, len(m))
-	for k, v := range m {
-		result[k] = cloneValue(v)
-	}
-	return result
-}
-
-// GetServices returns a map of all cached services keyed by their service type.
-func (s *ServiceInfoCache) GetServices() ServicesByType {
+// GetSnapshot returns a ServiceInfoSnapshot with the current data in the ServiceInfoCache.
+func (s *ServiceInfoCache) GetSnapshot() *ServiceInfoSnapshot {
 	s.dataMutex.RLock()
 	defer s.dataMutex.RUnlock()
-	return maps.Clone(s.servicesByType)
-}
-
-// GetServiceForType returns the cached service for the given service type.
-func (s *ServiceInfoCache) GetServiceForType(serviceType db.ServiceType) (db.Service, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.servicesByType[serviceType]
-	return val, ok
-}
-
-// HasServiceForType checks whether the given service exists.
-func (s *ServiceInfoCache) HasServiceForType(serviceType db.ServiceType) bool {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	_, exists := s.servicesByType[serviceType]
-	return exists
-}
-
-// GetResources returns all cached resources, indexed by service type and resource name.
-func (s *ServiceInfoCache) GetResources() ResourcesByNameType {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	return deepCloneMap(s.resourcesByNameType, maps.Clone)
-}
-
-// GetResourcesForType returns all cached resources for the given service type, keyed by resource name.
-func (s *ServiceInfoCache) GetResourcesForType(serviceType db.ServiceType) (ResourcesByName, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.resourcesByNameType[serviceType]
-	return val, ok
-}
-
-// GetResourceForTypeName returns the cached resource for the given service type and resource name.
-func (s *ServiceInfoCache) GetResourceForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (db.Resource, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.resourcesByNameType[serviceType][resourceName]
-	return val, ok
-}
-
-// GetResourceForPath returns the cached resource for the given path.
-func (s *ServiceInfoCache) GetResourceForPath(path db.ResourcePath) (db.Resource, bool) {
-	return s.GetResourceForTypeName(path.ServiceType, path.ResourceName)
-}
-
-// GetAZResources returns all cached AZ resources, indexed by service type, resource name, and availability zone.
-func (s *ServiceInfoCache) GetAZResources() AZResourcesByAZNameType {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	return deepCloneMap(s.azResourcesByAZNameType, func(inner AZResourcesByAZName) AZResourcesByAZName {
-		return deepCloneMap(inner, maps.Clone)
-	})
-}
-
-// GetAZResourcesForType returns all cached AZ resources for the given service type, keyed by resource name and availability zone.
-func (s *ServiceInfoCache) GetAZResourcesForType(serviceType db.ServiceType) (AZResourcesByAZName, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.azResourcesByAZNameType[serviceType]
-	return deepCloneMap(val, maps.Clone), ok
-}
-
-// GetAZResourcesForTypeName returns all cached AZ resources for the given service type, resource name, keyed by availability zone.
-func (s *ServiceInfoCache) GetAZResourcesForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) (AZResourcesByAZ, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.azResourcesByAZNameType[serviceType][resourceName]
-	return maps.Clone(val), ok
-}
-
-// GetAZResourceForTypeNameAZ returns the cached AZ resource for the given service type, resource name, and availability zone.
-func (s *ServiceInfoCache) GetAZResourceForTypeNameAZ(serviceType db.ServiceType, resourceName liquid.ResourceName, az limes.AvailabilityZone) (db.AZResource, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.azResourcesByAZNameType[serviceType][resourceName][az]
-	return val, ok
-}
-
-// GetAZResourceForPath returns the cached AZ resource for the given path.
-func (s *ServiceInfoCache) GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool) {
-	return s.GetAZResourceForTypeNameAZ(path.ServiceType, path.ResourceName, path.AvailabilityZone)
-}
-
-// GetRates returns all cached rates, indexed by service type and rate name.
-func (s *ServiceInfoCache) GetRates() RatesByNameType {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	return deepCloneMap(s.ratesByNameType, maps.Clone)
-}
-
-// GetRatesForType returns all cached rates, indexed by service type and rate name.
-func (s *ServiceInfoCache) GetRatesForType(serviceType db.ServiceType) (RatesByName, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.ratesByNameType[serviceType]
-	return maps.Clone(val), ok
-}
-
-// GetRateForTypeName returns the cached rate for the given service type and rate name.
-func (s *ServiceInfoCache) GetRateForTypeName(serviceType db.ServiceType, rateName liquid.RateName) (db.Rate, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.ratesByNameType[serviceType][rateName]
-	return val, ok
-}
-
-// GetCategories returns all cached categories, indexed by category ID.
-func (s *ServiceInfoCache) GetCategories() CategoriesByID {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	return maps.Clone(s.categoriesByID)
-}
-
-// GetCategoryForID returns the cached category for the given category ID.
-func (s *ServiceInfoCache) GetCategoryForID(categoryID db.CategoryID) (db.Category, bool) {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	val, ok := s.categoriesByID[categoryID]
-	return val, ok
+	return s.data.deepClone()
 }
 
 // GetServiceInfo should only be used when interacting with the liquid
@@ -409,10 +718,10 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 	s.dataMutex.RLock()
 	defer s.dataMutex.RUnlock()
 	// we can assume the data is saved because of the call context
-	service := s.servicesByType[serviceType]
-	resources := s.resourcesByNameType[serviceType]
-	rates := s.ratesByNameType[serviceType]
-	categories := s.categoriesByID
+	service := s.data.services[serviceType]
+	resources := s.data.resources[serviceType]
+	rates := s.data.rates[serviceType]
+	categories := s.data.categories
 
 	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 	if err != nil {
@@ -480,23 +789,20 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 	return info, nil
 }
 
-///////////////////////////////
-// utility functions on the results of the above functions
-///////////////////////////////
+///////////////////////////////////////////////////////////////////////
+// Utility functions
 
-// HasResourceForTypeName checks whether the given service and resource exist.
-func (s *ServiceInfoCache) HasResourceForTypeName(serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	_, exists := s.resourcesByNameType[serviceType][resourceName]
-	return exists
-}
-
-// HasUsageForRate checks whether the given service and resource exist and whether it has usage.
-func (r RatesByNameType) HasUsageForRate(serviceType db.ServiceType, rateName liquid.RateName) bool {
-	rate, exists := r[serviceType][rateName]
-	if !exists {
-		return false
+// deepCloneMap returns a deep copy of a map by cloning each value using the
+// provided cloneValue function. For leaf maps (where values are not maps),
+// pass maps.Clone directly. For nested maps, pass a function that itself
+// calls deepCloneMap to deepClone the next level.
+func deepCloneMap[M ~map[K]V, K comparable, V any](m M, cloneValue func(V) V) M {
+	if m == nil {
+		return nil
 	}
-	return rate.HasUsage
+	result := make(M, len(m))
+	for k, v := range m {
+		result[k] = cloneValue(v)
+	}
+	return result
 }
