@@ -292,8 +292,11 @@ func (f *FilteredServiceInfoSnapshot) AddToFilter(filter ServiceInfoFilter) *Fil
 	if resourceCategory, ok := filter.Category.Unpack(); ok && f.filter.Category.IsNone() {
 		f.filter.Category = Some(resourceCategory)
 	}
-	if azResource, ok := filter.ResourceName.Unpack(); ok && f.filter.ResourceName.IsNone() {
-		f.filter.ResourceName = Some(azResource)
+	if resourceName, ok := filter.ResourceName.Unpack(); ok && f.filter.ResourceName.IsNone() {
+		f.filter.ResourceName = Some(resourceName)
+	}
+	if rateName, ok := filter.RateName.Unpack(); ok && f.filter.RateName.IsNone() {
+		f.filter.RateName = Some(rateName)
 	}
 
 	// filter services by area
@@ -333,12 +336,16 @@ func (f *FilteredServiceInfoSnapshot) AddToFilter(filter ServiceInfoFilter) *Fil
 	}
 	seenCategories := make(map[db.CategoryID]struct{})
 	resourceNameFilter, resourceFilterExists := f.filter.ResourceName.Unpack()
+	categoryFilterExists := f.filter.Category.IsSome()
 	// filter resources/ az_resources by category or name
-	if len(categoriesToRemove) > 0 || resourceFilterExists {
+	if categoryFilterExists || resourceFilterExists {
 		for serviceType, resources := range newSnapshot.resources {
 			for resourceName, resource := range resources {
 				categoryID, cExists := resource.CategoryID.Unpack()
-				if _, removeCategory := categoriesToRemove[categoryID]; (cExists && removeCategory) || (resourceFilterExists && resourceName != resourceNameFilter) {
+				_, inRemoveSet := categoriesToRemove[categoryID]
+				shouldRemove := (resourceFilterExists && resourceName != resourceNameFilter) ||
+					(categoryFilterExists && (!cExists || inRemoveSet))
+				if shouldRemove {
 					delete(newSnapshot.resources[serviceType], resourceName)
 					delete(newSnapshot.azResources[serviceType], resourceName)
 					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
@@ -355,11 +362,14 @@ func (f *FilteredServiceInfoSnapshot) AddToFilter(filter ServiceInfoFilter) *Fil
 	}
 	rateNameFilter, rateFilterExists := f.filter.RateName.Unpack()
 	// filter rates by category or name
-	if len(categoriesToRemove) > 0 || rateFilterExists {
+	if categoryFilterExists || rateFilterExists {
 		for serviceType, rates := range newSnapshot.rates {
 			for rateName, rate := range rates {
 				categoryID, cExists := rate.CategoryID.Unpack()
-				if _, removeCategory := categoriesToRemove[categoryID]; (cExists && removeCategory) || (rateFilterExists && rateName != rateNameFilter) {
+				_, inRemoveSet := categoriesToRemove[categoryID]
+				shouldRemove := (rateFilterExists && rateName != rateNameFilter) ||
+					(categoryFilterExists && (!cExists || inRemoveSet))
+				if shouldRemove {
 					delete(newSnapshot.rates[serviceType], rateName)
 					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
 						delete(newSnapshot.services, serviceType)

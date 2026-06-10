@@ -11,6 +11,7 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
@@ -25,10 +26,142 @@ const configJSON = `{
 	},
 	"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
 	"liquids": {
-		"shared": {"area": "shared"},
-		"unshared": {"area": "unshared"}
+		"first": {"area": "shared"},
+		"second": {"area": "unshared"}
 	}
 }`
+
+func TestServiceInfoSnapshotFilter(t *testing.T) {
+	// "first" has area "shared", resources empty, rates: objects:create, objects:delete, objects:update, objects:unlimited
+	// "second" has area "unshared", resources: capacity (category: foo_category), things (no category)
+	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
+	serviceInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
+		"objects:create":    {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:delete":    {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:update":    {DisplayName: "Object Updates", Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:unlimited": {DisplayName: "Object Unlimited Operations", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
+	}
+	serviceInfoFirst.Resources = map[liquid.ResourceName]liquid.ResourceInfo{}
+	s := test.NewSetup(t,
+		test.WithConfig(configJSON),
+		test.WithPersistedServiceInfo("first", serviceInfoFirst),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+	)
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
+	t.Cleanup(func() { s.Cluster.SIC.Close() })
+
+	sis := s.Cluster.SIC.GetSnapshot()
+
+	// filter by ServiceType
+	filtered := sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
+	assert.Equal(t, len(filtered.GetServices()), 1)
+	_, ok := filtered.GetServiceForType("second")
+	assert.Equal(t, ok, true)
+	_, ok = filtered.GetServiceForType("first")
+	assert.Equal(t, ok, false)
+	resources, ok := filtered.GetResourcesForType("second")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(resources), 2)
+	_, ok = filtered.GetResourcesForType("first")
+	assert.Equal(t, ok, false)
+	_, ok = filtered.GetRatesForType("first")
+	assert.Equal(t, ok, false)
+	service, ok := filtered.GetFilteredService()
+	assert.Equal(t, ok, true)
+	assert.Equal(t, service.DisplayName, "Second")
+
+	// filter by ServiceArea
+	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("shared")})
+	assert.Equal(t, len(filtered.GetServices()), 1)
+	_, ok = filtered.GetServiceForType("first")
+	assert.Equal(t, ok, true)
+	_, ok = filtered.GetServiceForType("second")
+	assert.Equal(t, ok, false)
+	rates, ok := filtered.GetRatesForType("first")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(rates), 4)
+
+	// filter by ResourceName
+	filtered = sis.Filter(core.ServiceInfoFilter{ResourceName: Some[liquid.ResourceName]("capacity")})
+	resources, ok = filtered.GetResourcesForType("second")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(resources), 1)
+	_, ok = resources["capacity"]
+	assert.Equal(t, ok, true)
+	_, ok = resources["things"]
+	assert.Equal(t, ok, false)
+	_, ok = filtered.GetFilteredResource()
+	assert.Equal(t, ok, false) // ServiceType not set
+	filtered2 := sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second"), ResourceName: Some[liquid.ResourceName]("capacity")})
+	resource, ok := filtered2.GetFilteredResource()
+	assert.Equal(t, ok, true)
+	assert.Equal(t, resource.DisplayName, "Capacity")
+
+	// filter by Category
+	filtered = sis.Filter(core.ServiceInfoFilter{Category: Some[liquid.CategoryName]("foo_category")})
+	resources, ok = filtered.GetResourcesForType("second")
+	assert.Equal(t, ok, true)
+	_, ok = resources["capacity"]
+	assert.Equal(t, ok, true)
+	_, ok = resources["things"]
+	assert.Equal(t, ok, false)
+	_, ok = filtered.GetServiceForType("first")
+	assert.Equal(t, ok, false)
+
+	// filter by RateName
+	filtered = sis.Filter(core.ServiceInfoFilter{RateName: Some[liquid.RateName]("objects:create")})
+	rates, ok = filtered.GetRatesForType("first")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(rates), 1)
+	_, ok = rates["objects:create"]
+	assert.Equal(t, ok, true)
+	_, ok = filtered.GetFilteredRate()
+	assert.Equal(t, ok, false) // ServiceType not set
+	filtered2 = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("first"), RateName: Some[liquid.RateName]("objects:create")})
+	rate, ok := filtered2.GetFilteredRate()
+	assert.Equal(t, ok, true)
+	assert.Equal(t, rate.DisplayName, "Object Creations")
+
+	// stacking filters via AddToFilter
+	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("unshared")})
+	filtered = filtered.AddToFilter(core.ServiceInfoFilter{ResourceName: Some[liquid.ResourceName]("capacity")})
+	assert.Equal(t, len(filtered.GetServices()), 1)
+	resources, ok = filtered.GetResourcesForType("second")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(resources), 1)
+	_, ok = resources["capacity"]
+	assert.Equal(t, ok, true)
+
+	// AddToFilter does not widen an existing filter
+	filtered = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
+	filtered = filtered.AddToFilter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("first")})
+	_, ok = filtered.GetServiceForType("second")
+	assert.Equal(t, ok, true)
+	_, ok = filtered.GetServiceForType("first")
+	assert.Equal(t, ok, false)
+
+	// snapshot immutability: mutations on returned maps don't affect snapshot
+	services := sis.GetServices()
+	services["injected"] = db.Service{DisplayName: "Injected"}
+	_, ok = sis.GetServiceForType("injected")
+	assert.Equal(t, ok, false)
+	resourcesClone := must.BeOKT(sis.GetResourcesForType("second"))(t)
+	resourcesClone["injected"] = db.Resource{DisplayName: "Injected"}
+	originalResources := must.BeOKT(sis.GetResourcesForType("second"))(t)
+	_, ok = originalResources["injected"]
+	assert.Equal(t, ok, false)
+
+	// FilteredServiceInfoSnapshot immutability
+	filtered = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
+	filteredServices := filtered.GetServices()
+	filteredServices["injected"] = db.Service{DisplayName: "Injected"}
+	_, ok = filtered.GetServiceForType("injected")
+	assert.Equal(t, ok, false)
+
+	// Filter does not affect original snapshot
+	_ = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
+	assert.Equal(t, len(sis.GetServices()), 2)
+}
 
 func TestServiceInfoCache(t *testing.T) {
 	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
