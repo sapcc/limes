@@ -43,15 +43,25 @@
 //
 // # Endpoint: GET /resources/v2/cluster
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic resource data for the whole cluster.
+// This path is only available to users with cloud-admin token.
+//   - On success, the response body payload will be of type [resourcesv2.ClusterGetResponse].
 //
 // # Endpoint: GET /resources/v2/domains(/:domain_id)?
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic resource data for one or many domains.
+// A project-scoped token cannot access this path.
+// A domain-scoped token can only access this path, if its domain_id is set in the URL parameter.
+// A cloud-admin token can receive data for requests with and without domain_id.
+//   - On success, the response body payload will be of type [resourcesv2.DomainGetResponse].
 //
 // # Endpoint: GET /resources/v2/projects(/:project_id)?
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic resource data for one or many projects.
+// A project-scoped token can only access this path, if its project_id is set in the URL parameter.
+// A domain-scoped token can only access this path, if a project_id from its domain is set in the URL parameter or when a domain_id query parameter is set.
+// A cloud-admin token can receive data for requests with and without project_id/ domain_id.
+//   - On success, the response body payload will be of type [resourcesv2.ProjectGetResponse].
 //
 // # Endpoint: GET /resources/v2/availability
 //
@@ -67,15 +77,25 @@
 //
 // # Endpoint: GET /rates/v2/cluster
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic rate data for the whole cluster.
+// This path is only available to users with cloud-admin token.
+//   - On success, the response body payload will be of type [ratesv2.ClusterGetResponse].
 //
 // # Endpoint: GET /rates/v2/domains(/:domain_id)?
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic rate data for one or many domains.
+// A project-scoped token cannot access this path.
+// A domain-scoped token can only access this path, if its domain_id is set in the URL parameter.
+// A cloud-admin token can receive data for requests with and without domain_id.
+//   - On success, the response body payload will be of type [ratesv2.DomainGetResponse].
 //
 // # Endpoint: GET /rates/v2/projects(/:project_id)?
 //
-// TODO: fill when implemented
+// Returns the latest state of all dynamic rate data for one or many projects.
+// A project-scoped token can only access this path, if its project_id is set in the URL parameter.
+// A domain-scoped token can only access this path, if a project_id from its domain is set in the URL parameter or when a domain_id query parameter is set.
+// A cloud-admin token can receive data for requests with and without project_id/ domain_id.
+//   - On success, the response body payload will be of type [ratesv2.ProjectGetResponse].
 //
 // [Keystone token]: https://docs.openstack.org/api-ref/identity/v3/index.html#password-authentication-with-scoped-authorization
 // [Limes]: https://github.com/sapcc/limes
