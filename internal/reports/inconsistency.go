@@ -72,7 +72,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, sis *core.ServiceInfoSnapshot) (*Inconsistencies, error) {
+func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*Inconsistencies, error) {
 	// Initialize inconsistencies as Inconsistencies type.
 	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{

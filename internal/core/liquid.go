@@ -85,7 +85,7 @@ func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient, servic
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (sis *ServiceInfoSnapshot, err error) {
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (sis ServiceInfoSnapshot, err error) {
 	sis = l.sic.GetSnapshot()
 	service, ok := sis.GetServiceForType(l.ServiceType)
 	if !ok {
@@ -146,7 +146,7 @@ func (l *LiquidConnection) retrieveServiceInfo(ctx context.Context) (result liqu
 // The `prevSerializedState` holds the `result.SerializedState` value from the previous call for the same project.
 // This state is persisted in the Limes DB between calls, and not otherwise interpreted by the core application in any way.
 // The liquid can use this field to carry state between Scrape() calls, esp. to detect and handle counter resets in the backend.
-func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, sis *ServiceInfoSnapshot, err error) {
+func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result liquid.ServiceUsageReport, sis ServiceInfoSnapshot, err error) {
 	sis = l.sic.GetSnapshot()
 	service, _ := sis.GetServiceForType(l.ServiceType) // we can ignore "ok" because we validated this before scraping
 	req := BuildServiceUsageRequest(project, allAZs, service.UsageReportNeedsProjectMetadata, prevSerializedState)
@@ -177,7 +177,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // that this LiquidConnection is concerned with. The result is a two-dimensional map,
 // with the first key being the service type, and the second key being the
 // resource name.
-func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, sis *ServiceInfoSnapshot, err error) {
+func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, sis ServiceInfoSnapshot, err error) {
 	sis = l.sic.GetSnapshot()
 	filteredSIS := sis.Filter(ServiceInfoFilter{ServiceType: Some(l.ServiceType)}) // we validated the existence of the service before scraping
 	req, err := BuildServiceCapacityRequest(backchannel, allAZs, filteredSIS)
@@ -303,7 +303,7 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // BuildServiceCapacityRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/report-capacity. In order to be reusable for exposing an API which prints the
 // request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, filteredSIS *FilteredServiceInfoSnapshot) (liquid.ServiceCapacityRequest, error) {
+func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, filteredSIS FilteredServiceInfoSnapshot) (liquid.ServiceCapacityRequest, error) {
 	service := must.BeOK(filteredSIS.GetFilteredService())        // when we get here, this is already validated
 	resources, _ := filteredSIS.GetResourcesForType(service.Type) // can have no resources
 	req := liquid.ServiceCapacityRequest{

@@ -310,7 +310,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 // parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
 // This function in its current form should only be used if the serviceInfo is not necessary to be used outside
 // of this validation to avoid unnecessary database queries.
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (_ *limesresources.CommitmentRequest, _ *db.AZResourcePath, _ *core.ScopedCommitmentBehavior, filteredSIS *core.FilteredServiceInfoSnapshot) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (_ *limesresources.CommitmentRequest, _ *db.AZResourcePath, _ *core.ScopedCommitmentBehavior, filteredSIS core.FilteredServiceInfoSnapshot) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`

@@ -217,22 +217,22 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, serviceType db.Ser
 	return fmt.Errorf("during scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, *core.ServiceInfoSnapshot, error) {
+func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, core.ServiceInfoSnapshot, error) {
 	report, sis, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, &core.ServiceInfoSnapshot{}, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
 	service, sExists := sis.GetServiceForType(connection.ServiceType)
 	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
-		return liquid.ServiceUsageReport{}, nil, &core.ServiceInfoSnapshot{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
 	}
 	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, &core.ServiceInfoSnapshot{}, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
 	serializedMetrics, err := liquidSerializeMetrics(usageMetricFamilies, report.Metrics)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, &core.ServiceInfoSnapshot{}, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
 	return report, serializedMetrics, sis, nil
 }
@@ -255,7 +255,7 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 	return result, string(report.SerializedState)
 }
 
-func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis *core.ServiceInfoSnapshot) error {
+func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
 	filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
 	service, sExists := filteredSIS.GetServiceForType(serviceType)
 	resources, _ := filteredSIS.GetResourcesForType(serviceType)     // can have no resources
@@ -466,7 +466,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	return nil
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int, sis *core.ServiceInfoSnapshot) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int, sis core.ServiceInfoSnapshot) error {
 	projectService := task.ProjectService
 	service, sExists := sis.GetServiceForType(serviceType)
 	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
@@ -634,7 +634,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 	return tx.Commit()
 }
 
-func enrichUsageReportTotals(value *liquid.ServiceUsageReport, filteredSIS *core.FilteredServiceInfoSnapshot) {
+func enrichUsageReportTotals(value *liquid.ServiceUsageReport, filteredSIS core.FilteredServiceInfoSnapshot) {
 	if value == nil || value.Resources == nil {
 		return
 	}

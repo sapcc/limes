@@ -84,7 +84,7 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis *core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
+func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -351,7 +351,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 }
 
 // GetClusterRates returns the rate data report for the whole cluster.
-func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis *core.ServiceInfoSnapshot) (*limesrates.ClusterReport, error) {
+func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesrates.ClusterReport, error) {
 	nm := core.BuildRateNameMapping(cluster, sis)
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
@@ -430,7 +430,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis *core.ServiceInfoSnapshot) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis core.ServiceInfoSnapshot) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 

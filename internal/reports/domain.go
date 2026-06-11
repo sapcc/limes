@@ -76,7 +76,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, sis *core.ServiceInfoSnapshot) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) ([]*limesresources.DomainReport, error) {
 	var fields map[string]any
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
@@ -292,7 +292,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	return result, nil
 }
 
-func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis *core.ServiceInfoSnapshot) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis core.ServiceInfoSnapshot) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 

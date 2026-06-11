@@ -70,7 +70,7 @@ type TransferableCommitmentCache struct {
 	// utilities
 	dbi                           db.Interface
 	cluster                       *core.Cluster
-	filteredSIS                   *core.FilteredServiceInfoSnapshot
+	filteredSIS                   core.FilteredServiceInfoSnapshot
 	path                          db.AZResourcePath
 	now                           time.Time
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
@@ -83,7 +83,7 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, filteredSIS *core.FilteredServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, filteredSIS core.FilteredServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, path)
 	if err != nil {
 		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path, err)

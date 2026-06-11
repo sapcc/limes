@@ -283,7 +283,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis *core.ServiceInfoSnapshot, err error) {
+func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis core.ServiceInfoSnapshot, err error) {
 	capacityData, sis, err = connection.ScrapeCapacity(ctx, datamodel.NewCapacityScrapeBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, nil, sis, err

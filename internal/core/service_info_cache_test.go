@@ -122,24 +122,6 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	assert.Equal(t, ok, true)
 	assert.Equal(t, rate.DisplayName, "Object Creations")
 
-	// stacking filters via AddToFilter
-	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("unshared")})
-	filtered = filtered.AddToFilter(core.ServiceInfoFilter{ResourceName: Some[liquid.ResourceName]("capacity")})
-	assert.Equal(t, len(filtered.GetServices()), 1)
-	resources, ok = filtered.GetResourcesForType("second")
-	assert.Equal(t, ok, true)
-	assert.Equal(t, len(resources), 1)
-	_, ok = resources["capacity"]
-	assert.Equal(t, ok, true)
-
-	// AddToFilter does not widen an existing filter
-	filtered = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
-	filtered = filtered.AddToFilter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("first")})
-	_, ok = filtered.GetServiceForType("second")
-	assert.Equal(t, ok, true)
-	_, ok = filtered.GetServiceForType("first")
-	assert.Equal(t, ok, false)
-
 	// snapshot immutability: mutations on returned maps don't affect snapshot
 	services := sis.GetServices()
 	services["injected"] = db.Service{DisplayName: "Injected"}

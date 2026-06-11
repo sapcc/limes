@@ -37,7 +37,7 @@ type dbRateRef struct {
 }
 
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
-func BuildResourceNameMapping(cluster *Cluster, sis *ServiceInfoSnapshot) ResourceNameMapping {
+func BuildResourceNameMapping(cluster *Cluster, sis ServiceInfoSnapshot) ResourceNameMapping {
 	nm := ResourceNameMapping{
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
@@ -54,7 +54,7 @@ func BuildResourceNameMapping(cluster *Cluster, sis *ServiceInfoSnapshot) Resour
 }
 
 // BuildRateNameMapping constructs a new RateNameMapping instance.
-func BuildRateNameMapping(cluster *Cluster, sis *ServiceInfoSnapshot) RateNameMapping {
+func BuildRateNameMapping(cluster *Cluster, sis ServiceInfoSnapshot) RateNameMapping {
 	nm := RateNameMapping{
 		cluster:     cluster,
 		fromAPIToDB: make(map[RateRef]dbRateRef),
