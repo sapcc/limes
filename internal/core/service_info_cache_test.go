@@ -171,7 +171,7 @@ func TestServiceInfoCache(t *testing.T) {
 	assert.Equal(t, len(sis.GetServices()), 2)
 	must.NotBeOKT(sis.GetResourcesForType("first"))(t)
 	assert.Equal(t, len(must.BeOKT(sis.GetResourcesForType("second"))(t)), 2)
-	assert.Equal(t, must.BeOKT(sis.GetResourceForTypeName("second", "capacity"))(t).Name, "capacity")
+	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).Name, "capacity")
 	must.NotBeOKT(sis.GetRatesForType("second"))(t)
 	assert.Equal(t, len(sis.GetCategories()), 1)
 
@@ -185,16 +185,16 @@ func TestServiceInfoCache(t *testing.T) {
 	assert.Equal(t, must.BeOKT(sis.GetServiceForType("second"))(t).DisplayName, "Second")
 
 	// resource update
-	assert.Equal(t, must.BeOKT(sis.GetResourceForTypeName("second", "capacity"))(t).DisplayName, "Capacity")
-	assert.Equal(t, must.BeOKT(sis.GetResourceForTypeName("second", "things"))(t).DisplayName, "Things")
+	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).DisplayName, "Capacity")
+	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "things"}))(t).DisplayName, "Things")
 	s.MustDBExec("UPDATE resources r SET display_name = 'Changed' where id = $1", secondCapacity)
 	<-s.Cluster.SIC.OnInvalidate
 	sis = s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, must.BeOKT(sis.GetResourceForTypeName("second", "capacity"))(t).DisplayName, "Changed")
-	assert.Equal(t, must.BeOKT(sis.GetResourceForTypeName("second", "things"))(t).DisplayName, "Things")
+	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).DisplayName, "Changed")
+	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "things"}))(t).DisplayName, "Things")
 
 	// check az_resource insert
-	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForTypeName("second", "capacity"))(t)), 5) // gives out total, any and unknown, too
+	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t)), 5) // gives out total, any and unknown, too
 	s.MustDBInsert(&db.AZResource{
 		ResourceID:       secondCapacity,
 		AvailabilityZone: "test",
@@ -203,7 +203,7 @@ func TestServiceInfoCache(t *testing.T) {
 	})
 	<-s.Cluster.SIC.OnInvalidate
 	sis = s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForTypeName("second", "capacity"))(t)), 6)
+	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t)), 6)
 
 	// check rate deletion
 	assert.Equal(t, len(must.BeOKT(sis.GetRatesForType("first"))(t)), 4)

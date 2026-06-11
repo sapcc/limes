@@ -152,7 +152,7 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 				commitment.OldExpiresAt = options.Map(commitment.OldExpiresAt, time.Time.UTC)
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
-			resource, ok := sis.GetResourceForTypeName(serviceType, resourceName)
+			resource, ok := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
 			if !ok {
 				return result, fmt.Errorf("resource %s not found when delegating commitment change for %s", resourceName, projectUUID)
 			}

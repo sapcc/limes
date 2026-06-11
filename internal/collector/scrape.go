@@ -265,7 +265,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	}
 
 	for resName, resData := range resourceData.Resources {
-		resource, rExists := filteredSIS.GetResourceForTypeName(serviceType, resName)
+		resource, rExists := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 		if !rExists {
 			return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 		}
@@ -315,7 +315,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	// we only need to ensure existence of project_resources - the values don't impact this operation
 	err = datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			resource, rExists := filteredSIS.GetResourceForTypeName(serviceType, resName)
+			resource, rExists := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			if !rExists {
 				return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			}
@@ -572,7 +572,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 			// until we know better, we will assume Forbidden = true to ensure that
 			// quota does not get distributed into projects that cannot accept it
-			resource, _ := filteredSIS.GetResourceForTypeName(serviceType, resName)
+			resource, _ := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			if resource.HasQuota {
 				res.Forbidden = true
 			}
@@ -646,7 +646,7 @@ func enrichUsageReportTotals(value *liquid.ServiceUsageReport, filteredSIS core.
 		}
 
 		// we use the values of resource which default to false
-		resource, _ := filteredSIS.GetResourceForTypeName(service.Type, resName)
+		resource, _ := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: service.Type, ResourceName: resName})
 		var total liquid.AZResourceUsageReport
 		for _, azValue := range resValue.PerAZ {
 			total.Usage += azValue.Usage

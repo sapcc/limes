@@ -155,7 +155,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 
 		if az == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-			resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
 			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
 
@@ -309,7 +309,7 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		resourceReport = &limesresources.DomainResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),

@@ -215,7 +215,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 			// when found in the name mapping, the resource exists
-			resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 
 			if requested[dbServiceType] == nil {
 				requested[dbServiceType] = make(map[liquid.ResourceName]*audit.MaxQuotaChange)
@@ -361,7 +361,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 			// when found in the name mapping, the resource exists
-			resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 
 			forbidAutogrowth, isSome := resRequest.ForbidAutogrowth.Unpack()
 			if !isSome {

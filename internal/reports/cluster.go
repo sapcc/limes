@@ -128,7 +128,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, we will set the quota here
-			resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 			resourceReport.Usage = *usage
 			if quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
 				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
@@ -217,7 +217,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
 				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
 				// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-				resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+				resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 				if translate != nil {
 					*subcapacities, err = translate(*subcapacities, *availabilityZone, resource)
 					if err != nil {
@@ -374,7 +374,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis
 			return err
 		}
 
-		if _, ok := sis.GetRateForTypeName(dbServiceType, dbRateName); !ok {
+		if _, ok := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: dbRateName}); !ok {
 			return nil
 		}
 		apiServiceType, _, exists := nm.MapToV1API(dbServiceType, dbRateName)
@@ -447,7 +447,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		resourceReport = &limesresources.ClusterResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForCluster().ForAPI(now).AsPointer(),

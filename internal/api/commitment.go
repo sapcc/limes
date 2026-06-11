@@ -223,7 +223,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resource, rExists := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+	resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 	// this check is defense in depth (when a name mapping was found, the resource must be found too)
 	if !rExists {
 		msg := fmt.Sprintf("could not load underlying resource: %q", resource.Path)
@@ -329,6 +329,11 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return nil, nil, nil, filteredSIS
 	}
+	path := db.AZResourcePath{
+		ServiceType:      dbServiceType,
+		ResourceName:     dbResourceName,
+		AvailabilityZone: req.AvailabilityZone,
+	}
 	filteredSIS = sis.Filter(core.ServiceInfoFilter{ServiceType: Some(dbServiceType), ResourceName: Some(dbResourceName)})
 
 	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
@@ -336,7 +341,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil, filteredSIS
 	}
-	resource := must.BeOK(filteredSIS.GetResourceForTypeName(dbServiceType, dbResourceName))
+	resource := must.BeOK(filteredSIS.GetResourceForPath(path.Resource()))
 	if resource.Topology == liquid.FlatTopology {
 		if req.AvailabilityZone != limes.AvailabilityZoneAny {
 			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
@@ -359,11 +364,6 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		return nil, nil, nil, filteredSIS
 	}
 
-	path := db.AZResourcePath{
-		ServiceType:      dbServiceType,
-		ResourceName:     dbResourceName,
-		AvailabilityZone: req.AvailabilityZone,
-	}
 	// when the name mapping succeeded, service and resource must be found
 	return &req, &path, &behavior, filteredSIS
 }
@@ -1756,7 +1756,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	sourceResource, rExists := sis.GetResourceForTypeName(sourceServiceType, sourceResourceName)
+	sourceResource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: sourceServiceType, ResourceName: sourceResourceName})
 	if !rExists {
 		http.Error(w, "service not found", http.StatusNotFound)
 		return

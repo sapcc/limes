@@ -195,7 +195,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new resource report when necessary
 		resReport := srvReport.Resources[apiIdentity.Name]
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource, _ := sis.GetResourceForTypeName(dbServiceType, dbResourceName)
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo: behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
@@ -488,7 +488,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		}
 
 		// if we don't have a valid rate, we're done with this result row
-		rate, ok := sis.GetRateForTypeName(dbServiceType, dbRateName)
+		rate, ok := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: dbRateName})
 		if !ok {
 			return nil
 		}
@@ -599,7 +599,7 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 			}
 
 			// we ignore when a rate can't be found in the app layer yet, it will appear with empty values
-			rate, _ := sis.GetRateForTypeName(dbServiceType, rateLimitConfig.Name)
+			rate, _ := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: rateLimitConfig.Name})
 			srvReport.Rates[apiRateName] = &limesrates.ProjectRateReport{
 				RateInfo: core.BuildAPIRateInfo(apiRateName, rate.Unit),
 				Limit:    rateLimitConfig.Limit,
