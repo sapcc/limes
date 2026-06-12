@@ -57,6 +57,15 @@
 //
 // TODO: fill when implemented
 //
+// # Endpoint: POST /resources/v2/commitments/new
+//
+// Creates a new commitment (or performs a dry run of a commitment creation request).
+//
+//   - The request body payload must be of type [resourcesv2.CommitmentRequest].
+//   - On success, status code 201 (Created) will be returned, including for dry runs.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
+//
 // # Endpoint: GET /rates/v2/info
 //
 // Returns information about the cluster's rates, potentially limited to those rates that are accessible within the authenticated scope:

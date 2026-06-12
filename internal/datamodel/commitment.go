@@ -153,7 +153,13 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 				resourceCommitmentChangeset.Commitments[i] = commitment
 			}
 
-			if resources[resourceName].HandlesCommitments {
+			resInfo, ok := resources[resourceName]
+			if !ok {
+				// defense in depth: the caller should not have constructed invalid CCRs
+				err := fmt.Errorf("CommitmentChangeRequest refers to unknown resource %q", resourceName)
+				return liquid.CommitmentChangeResponse{}, err
+			}
+			if resInfo.HandlesCommitments {
 				_, exists := remoteCommitmentChanges.ByProject[projectUUID]
 				if !exists {
 					remoteCommitmentChanges.ByProject[projectUUID] = liquid.ProjectCommitmentChangeset{

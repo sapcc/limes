@@ -4,10 +4,13 @@
 package api_v2
 
 import (
+	"bytes"
 	"cmp"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -44,6 +47,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 	tv := p.tokenValidator
 	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
 	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	r.Methods("POST").Path("/resources/v2/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
 }
 
 // Wrapper for request handlers that enforces a structure,
@@ -89,9 +93,38 @@ func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(
 	}
 }
 
+// parseRequestBodyAs unmarshals a JSON-encoded request body.
+func parseRequestBodyAs[T any](r *http.Request) (T, error) {
+	var result T
+
+	// To guard against complexity attacks using extremely large request bodies,
+	// we never read more than 8 KiB. There are no request types in the v2 API
+	// that could ever require more than that.
+	const maxRequestSize = 8192
+	buf, err := io.ReadAll(io.LimitReader(r.Body, maxRequestSize))
+	if err != nil {
+		return result, fmt.Errorf("while reading request body: %w", err)
+	}
+	if len(buf) == maxRequestSize {
+		// looks like we could have read more if we wanted to
+		err = errors.New("request body too large")
+		return result, respondwith.CustomStatus(http.StatusRequestEntityTooLarge, err)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(buf))
+	dec.DisallowUnknownFields()
+	err = dec.Decode(&result)
+	if err != nil {
+		err = respondwith.CustomStatus(http.StatusBadRequest,
+			fmt.Errorf("request body is not valid JSON: %w", err),
+		)
+	}
+	return result, err
+}
+
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) { //nolint:unused // TODO: remove this nolint once it is used
+func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
