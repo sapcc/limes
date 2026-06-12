@@ -99,7 +99,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType) // we can ignore "ok" because the len matters
+		resources, _ := c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType) // we can ignore "ok" because the len matters
 		if len(resources) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
@@ -156,7 +156,7 @@ type CapacityCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityCollectionMetricsOkGauge.Describe(ch)
-	for _, service := range c.Cluster.SIC.GetServices() {
+	for _, service := range c.Cluster.SIC.GetSnapshot().GetServices() {
 		capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 		if err != nil {
 			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing capacity_metric_families for %s: %w", service.Type, err))
@@ -200,7 +200,7 @@ func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric
 
 func (c *CapacityCollectionMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance CapacityCollectionMetricsInstance) {
 	// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-	service, _ := c.Cluster.SIC.GetServiceForType(instance.ServiceType)
+	service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(instance.ServiceType)
 	successAsFloat := 1.0
 	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 	if err != nil {
@@ -254,7 +254,7 @@ type QuotaCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	usageCollectionMetricsOkGauge.Describe(ch)
-	for _, service := range c.Cluster.SIC.GetServices() {
+	for _, service := range c.Cluster.SIC.GetSnapshot().GetServices() {
 		usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 		if err != nil {
 			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing usage_metric_families for %s: %w", service.Type, err))
@@ -304,7 +304,7 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
 	// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-	service, _ := c.Cluster.SIC.GetServiceForType(instance.ServiceType)
+	service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(instance.ServiceType)
 	successAsFloat := 1.0
 	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 	if err != nil {
@@ -518,7 +518,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
-	resources := d.Cluster.SIC.GetResources()
+	resources := d.Cluster.SIC.GetSnapshot().GetResources()
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level

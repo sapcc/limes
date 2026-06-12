@@ -72,7 +72,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) (*Inconsistencies, error) {
+func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*Inconsistencies, error) {
 	// Initialize inconsistencies as Inconsistencies type.
 	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
@@ -82,7 +82,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
 
-	nm := core.BuildResourceNameMapping(cluster, resources)
+	nm := core.BuildResourceNameMapping(cluster, sis)
 
 	// ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
@@ -98,6 +98,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 			&ospq.Project.UUID, &ospq.Project.Name, &dbServiceType,
 			&dbResourceName, &ospq.Quota, &ospq.Usage,
 		)
+		path := db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName}
 		if err != nil {
 			return err
 		}
@@ -109,7 +110,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 		}
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-		ospq.Unit = resources[dbServiceType][dbResourceName].Unit
+		resource, _ := sis.GetResourceForPath(path)
+		ospq.Unit = resource.Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -143,7 +145,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 		}
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-		mmpq.Unit = resources[dbServiceType][dbResourceName].Unit
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
+		mmpq.Unit = resource.Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

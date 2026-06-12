@@ -118,7 +118,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		return fmt.Errorf("no quota connection registered for service type %s", serviceType)
 	}
 	startedAt := c.MeasureTime()
-	resources, ok := c.Cluster.SIC.GetResourcesForType(serviceType)
+
+	resources, ok := c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType)
 	if !ok {
 		return fmt.Errorf("no data found in ServiceInfoCache for %s", serviceType)
 	}

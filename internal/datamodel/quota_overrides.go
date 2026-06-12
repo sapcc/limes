@@ -28,8 +28,8 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		return
 	}
 
-	resources := c.SIC.GetResources()
-	nameMapping := core.BuildResourceNameMapping(c, resources)
+	sis := c.SIC.GetSnapshot()
+	nameMapping := core.BuildResourceNameMapping(c, sis)
 
 	// the quota-overrides.json file refers to services and resources using IdentityInV1API, so we:
 	// a) need to lookup by API identity
@@ -39,7 +39,7 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		if !exists {
 			return limes.UnitNone, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
-		resource, exists := resources[dbServiceType][dbResourceName]
+		resource, exists := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		if !exists {
 			return limes.UnitNone, fmt.Errorf("no data found in ServiceInfoCache for %s/%s", serviceType, resourceName)
 		}

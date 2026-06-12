@@ -521,7 +521,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	}}
 
 	// run ACPQ in order to be able to test how data metrics reporters handle project quota
-	val, ok := s.Cluster.SIC.GetResourcesForType("unittest")
+	val, ok := s.Cluster.SIC.GetSnapshot().GetResourcesForType("unittest")
 	assert.Equal(t, ok, true)
 	for _, resource := range val {
 		must.SucceedT(t, datamodel.ApplyComputedProjectQuota("unittest", resource, s.Cluster, s.Clock.Now()))

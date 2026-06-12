@@ -84,7 +84,7 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) (*limesresources.ClusterReport, error) {
+func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -117,7 +117,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
-		serviceReport, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
+		serviceReport, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
 
 		serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
 		serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
@@ -128,7 +128,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 
 		if *availabilityZone == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, we will set the quota here
-			resource := resources[dbServiceType][dbResourceName]
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 			resourceReport.Usage = *usage
 			if quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
 				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
@@ -184,7 +184,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 			return nil
 		}
-		_, resourceReport, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
+		_, resourceReport, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
 		overcommitFactor := behavior.OvercommitFactor
 
 		if availabilityZone == nil {
@@ -217,7 +217,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
 				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
 				// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-				resource := resources[dbServiceType][dbResourceName]
+				resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 				if translate != nil {
 					*subcapacities, err = translate(*subcapacities, *availabilityZone, resource)
 					if err != nil {
@@ -276,7 +276,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
 				return nil
 			}
-			_, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, resources)
+			_, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
 
 			azReport := resourceReport.PerAZ[az]
 			if azReport == nil {
@@ -351,8 +351,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 }
 
 // GetClusterRates returns the rate data report for the whole cluster.
-func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, rates core.RatesByNameType) (*limesrates.ClusterReport, error) {
-	nm := core.BuildRateNameMapping(cluster, rates)
+func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesrates.ClusterReport, error) {
+	nm := core.BuildRateNameMapping(cluster, sis)
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -374,7 +374,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, rat
 			return err
 		}
 
-		if _, ok := rates[dbServiceType][dbRateName]; !ok {
+		if _, ok := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: dbRateName}); !ok {
 			return nil
 		}
 		apiServiceType, _, exists := nm.MapToV1API(dbServiceType, dbRateName)
@@ -430,7 +430,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, rat
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, resources core.ResourcesByNameType) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis core.ServiceInfoSnapshot) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport, core.ResourceBehavior) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
@@ -447,7 +447,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource := resources[dbServiceType][dbResourceName]
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		resourceReport = &limesresources.ClusterResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForCluster().ForAPI(now).AsPointer(),
