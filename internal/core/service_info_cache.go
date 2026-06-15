@@ -151,36 +151,35 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	}
 
 	// filter services by area
-	newSnapshot := f.snapshot.deepClone()
 	if areaFilter, ok := f.filter.ServiceArea.Unpack(); ok {
 		for serviceType, area := range f.snapshot.areaMapping {
 			if area == areaFilter {
 				continue
 			}
-			delete(newSnapshot.services, serviceType)
-			delete(newSnapshot.resources, serviceType)
-			delete(newSnapshot.azResources, serviceType)
-			delete(newSnapshot.rates, serviceType)
+			delete(f.snapshot.services, serviceType)
+			delete(f.snapshot.resources, serviceType)
+			delete(f.snapshot.azResources, serviceType)
+			delete(f.snapshot.rates, serviceType)
 		}
 	}
 	// filter services by type
 	if typeFilter, ok := f.filter.ServiceType.Unpack(); ok {
-		for serviceType := range newSnapshot.services {
+		for serviceType := range f.snapshot.services {
 			if typeFilter == serviceType {
 				continue
 			}
-			delete(newSnapshot.services, serviceType)
-			delete(newSnapshot.azResources, serviceType)
-			delete(newSnapshot.resources, serviceType)
-			delete(newSnapshot.rates, serviceType)
+			delete(f.snapshot.services, serviceType)
+			delete(f.snapshot.azResources, serviceType)
+			delete(f.snapshot.resources, serviceType)
+			delete(f.snapshot.rates, serviceType)
 		}
 	}
 	categoriesToRemove := make(map[db.CategoryID]struct{})
 	// find categories to remove
 	if categoryFilter, ok := f.filter.Category.Unpack(); ok {
-		for categoryID, info := range newSnapshot.categories {
+		for categoryID, info := range f.snapshot.categories {
 			if info.Name != categoryFilter {
-				delete(newSnapshot.categories, categoryID)
+				delete(f.snapshot.categories, categoryID)
 				categoriesToRemove[categoryID] = struct{}{}
 			}
 		}
@@ -190,20 +189,20 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	categoryFilterExists := f.filter.Category.IsSome()
 	// filter resources/ az_resources by category or name
 	if categoryFilterExists || resourceFilterExists {
-		for serviceType, resources := range newSnapshot.resources {
+		for serviceType, resources := range f.snapshot.resources {
 			for resourceName, resource := range resources {
 				categoryID, cExists := resource.CategoryID.Unpack()
 				_, inRemoveSet := categoriesToRemove[categoryID]
 				shouldRemove := (resourceFilterExists && resourceName != resourceNameFilter) ||
 					(categoryFilterExists && (!cExists || inRemoveSet))
 				if shouldRemove {
-					delete(newSnapshot.resources[serviceType], resourceName)
-					delete(newSnapshot.azResources[serviceType], resourceName)
-					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
-						delete(newSnapshot.services, serviceType)
-						delete(newSnapshot.resources, serviceType)
-						delete(newSnapshot.azResources, serviceType)
-						delete(newSnapshot.rates, serviceType)
+					delete(f.snapshot.resources[serviceType], resourceName)
+					delete(f.snapshot.azResources[serviceType], resourceName)
+					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
+						delete(f.snapshot.services, serviceType)
+						delete(f.snapshot.resources, serviceType)
+						delete(f.snapshot.azResources, serviceType)
+						delete(f.snapshot.rates, serviceType)
 					}
 				} else {
 					seenCategories[categoryID] = struct{}{}
@@ -214,19 +213,19 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	rateNameFilter, rateFilterExists := f.filter.RateName.Unpack()
 	// filter rates by category or name
 	if categoryFilterExists || rateFilterExists {
-		for serviceType, rates := range newSnapshot.rates {
+		for serviceType, rates := range f.snapshot.rates {
 			for rateName, rate := range rates {
 				categoryID, cExists := rate.CategoryID.Unpack()
 				_, inRemoveSet := categoriesToRemove[categoryID]
 				shouldRemove := (rateFilterExists && rateName != rateNameFilter) ||
 					(categoryFilterExists && (!cExists || inRemoveSet))
 				if shouldRemove {
-					delete(newSnapshot.rates[serviceType], rateName)
-					if len(newSnapshot.resources[serviceType]) == 0 && len(newSnapshot.rates[serviceType]) == 0 {
-						delete(newSnapshot.services, serviceType)
-						delete(newSnapshot.resources, serviceType)
-						delete(newSnapshot.azResources, serviceType)
-						delete(newSnapshot.rates, serviceType)
+					delete(f.snapshot.rates[serviceType], rateName)
+					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
+						delete(f.snapshot.services, serviceType)
+						delete(f.snapshot.resources, serviceType)
+						delete(f.snapshot.azResources, serviceType)
+						delete(f.snapshot.rates, serviceType)
 					}
 				} else {
 					seenCategories[categoryID] = struct{}{}
@@ -237,13 +236,12 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 
 	// if we filtered by rate or service name, we must thin out the categories
 	if resourceFilterExists || rateFilterExists {
-		for categoryID := range newSnapshot.categories {
+		for categoryID := range f.snapshot.categories {
 			if _, ok := seenCategories[categoryID]; !ok {
-				delete(newSnapshot.categories, categoryID)
+				delete(f.snapshot.categories, categoryID)
 			}
 		}
 	}
-	f.snapshot = newSnapshot
 	return f
 }
 
