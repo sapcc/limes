@@ -64,6 +64,7 @@ type ServiceInfoCache struct {
 	// state
 	DB       *gorp.DbMap
 	listener *pq.Listener
+	config   ClusterConfiguration
 	// we use one mutex as all data is written together and reading is quick
 	dataMutex sync.RWMutex
 
@@ -83,9 +84,10 @@ type ServiceInfoCache struct {
 }
 
 // NewServiceInfoCache generates a ServiceInfoCache and fills all services' data.
-func NewServiceInfoCache(dbm *gorp.DbMap, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
+func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
 	sic := &ServiceInfoCache{
-		DB: dbm,
+		DB:     dbm,
+		config: config,
 
 		servicesByType:          make(ServicesByType),
 		resourcesByNameType:     make(ResourcesByNameType),

@@ -30,9 +30,12 @@
     "v2:meta:no_error_obfuscation": "rule:cluster_admin",
 
     "v2:project:info": "rule:project_viewer",
+    "v2:project:report": "rule:project_viewer",
 
     "v2:domain:info": "rule:domain_viewer",
+    "v2:domain:report": "rule:domain_viewer",
 
     "v2:cluster:info": "rule:cluster_admin",
+    "v2:cluster:report": "rule:cluster_viewer",
     "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default"
 }
