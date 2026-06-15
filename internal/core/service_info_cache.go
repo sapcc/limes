@@ -147,21 +147,7 @@ func (s ServiceInfoSnapshot) deepClone() ServiceInfoSnapshot {
 func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInfoSnapshot {
 	f := FilteredServiceInfoSnapshot{
 		snapshot: s.deepClone(),
-	}
-	if serviceArea, ok := filter.ServiceArea.Unpack(); ok {
-		f.filter.ServiceArea = Some(serviceArea)
-	}
-	if serviceType, ok := filter.ServiceType.Unpack(); ok {
-		f.filter.ServiceType = Some(serviceType)
-	}
-	if resourceCategory, ok := filter.Category.Unpack(); ok {
-		f.filter.Category = Some(resourceCategory)
-	}
-	if resourceName, ok := filter.ResourceName.Unpack(); ok {
-		f.filter.ResourceName = Some(resourceName)
-	}
-	if rateName, ok := filter.RateName.Unpack(); ok {
-		f.filter.RateName = Some(rateName)
+		filter:   filter,
 	}
 
 	// filter services by area
