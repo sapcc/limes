@@ -731,7 +731,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
@@ -949,7 +949,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
@@ -1101,7 +1101,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	sis := p.Cluster.SIC.GetSnapshot()
 	_, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
@@ -1273,7 +1273,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
@@ -1513,7 +1513,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 
 	resource, rExists := p.Cluster.SIC.GetSnapshot().GetResourceForPath(path.Resource())
 	if !rExists {
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 
@@ -1575,7 +1575,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
@@ -1757,7 +1757,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	}
 	sourceResource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: sourceServiceType, ResourceName: sourceResourceName})
 	if !rExists {
-		http.Error(w, "service not found", http.StatusNotFound)
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	sourceBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(sourceServiceType, sourceResourceName))
@@ -1849,9 +1849,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResourcePath(sourcePath.Resource()).ForDomain(dbDomain.Name)
 
 	sis := p.Cluster.SIC.GetSnapshot()
-	sourceService, rExists := sis.GetServiceForType(sourcePath.ServiceType)
-	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+	sourceService, sExists := sis.GetServiceForType(sourcePath.ServiceType)
+	if !sExists {
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 
@@ -2175,8 +2175,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
-	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service not found", http.StatusNotFound)
+	if !rExists {
+		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
