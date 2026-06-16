@@ -15,8 +15,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-
-	. "go.xyrillian.de/gg/option"
 )
 
 // GetServiceCapacityRequest handles GET /admin/liquid/service-capacity-request?service_type=:type.
@@ -33,14 +31,15 @@ func (p *v1Provider) GetServiceCapacityRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
-	if len(filteredSIS.GetServices()) == 0 {
+	sis := p.Cluster.SIC.GetSnapshot()
+	_, ok := sis.GetServiceForType(serviceType)
+	if !ok {
 		http.Error(w, "unknown service type", http.StatusBadRequest)
 		return
 	}
 
 	backchannel := datamodel.NewCapacityScrapeBackchannel(p.Cluster, p.DB)
-	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, filteredSIS)
+	serviceCapacityRequest, err := core.BuildServiceCapacityRequest(backchannel, p.Cluster.Config.AvailabilityZones, sis, serviceType)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

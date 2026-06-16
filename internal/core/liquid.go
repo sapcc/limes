@@ -179,8 +179,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 // resource name.
 func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone) (result liquid.ServiceCapacityReport, sis ServiceInfoSnapshot, err error) {
 	sis = l.sic.GetSnapshot()
-	filteredSIS := sis.Filter(ServiceInfoFilter{ServiceType: Some(l.ServiceType)}) // we validated the existence of the service before scraping
-	req, err := BuildServiceCapacityRequest(backchannel, allAZs, filteredSIS)
+	req, err := BuildServiceCapacityRequest(backchannel, allAZs, sis, l.ServiceType) // we validated the existence of the service before scraping
 	if err != nil {
 		return result, sis, err
 	}
@@ -303,9 +302,9 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // BuildServiceCapacityRequest generates the request body payload for querying the LIQUID API
 // endpoint /v1/report-capacity. In order to be reusable for exposing an API which prints the
 // request for admin purposes, it does not use the LiquidConnection as receiver type.
-func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, filteredSIS FilteredServiceInfoSnapshot) (liquid.ServiceCapacityRequest, error) {
-	service := must.BeOK(filteredSIS.GetFilteredService())        // when we get here, this is already validated
-	resources, _ := filteredSIS.GetResourcesForType(service.Type) // can have no resources
+func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, sis ServiceInfoSnapshot, serviceType db.ServiceType) (liquid.ServiceCapacityRequest, error) {
+	service := must.BeOK(sis.GetServiceForType(serviceType)) // when we get here, this is already validated
+	resources, _ := sis.GetResourcesForType(service.Type)    // can have no resources
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
 		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(resources)),

@@ -130,7 +130,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	}
 
 	// load service info (used to generate liquid.ProjectMetadata)
-	sis := cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType), ResourceName: Some(path.ResourceName)})
+	sis := cluster.SIC.GetSnapshot()
 	_, sExists := sis.GetServiceForType(path.ServiceType)
 	if !sExists {
 		return nil, fmt.Errorf("service not found when trying to confirm commitments for %s", path)

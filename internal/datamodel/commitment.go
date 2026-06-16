@@ -130,7 +130,7 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, az limes.Availabilit
 // preloaded - but does not have to. In case the LiquidConnection is not filled,
 // a LiquidClient is instantiated on the fly to perform the operation remotely. It utilizes a given
 // ServiceInfo so that no double retrieval is necessary caused by operations to assemble the liquid.CommitmentChange.
-func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, sis core.ServiceInfoReader, serviceType db.ServiceType, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
+func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req liquid.CommitmentChangeRequest, sis core.ServiceInfoSnapshot, serviceType db.ServiceType, dbi db.Interface) (result liquid.CommitmentChangeResponse, err error) {
 	localCommitmentChanges := liquid.CommitmentChangeRequest{
 		DryRun:      req.DryRun,
 		AZ:          req.AZ,

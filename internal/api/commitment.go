@@ -310,62 +310,61 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 // parseAndValidateCommitmentRequest parses and validates the request body for a commitment creation or confirmation.
 // This function in its current form should only be used if the serviceInfo is not necessary to be used outside
 // of this validation to avoid unnecessary database queries.
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (_ *limesresources.CommitmentRequest, _ *db.AZResourcePath, _ *core.ScopedCommitmentBehavior, filteredSIS core.FilteredServiceInfoSnapshot) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, dbDomain db.Domain) (_ *limesresources.CommitmentRequest, _ *db.AZResourcePath, _ *core.ScopedCommitmentBehavior, sis core.ServiceInfoSnapshot) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
-		return nil, nil, nil, filteredSIS
+		return nil, nil, nil, sis
 	}
 	req := parseTarget.Request
 
 	// validate request
-	sis := p.Cluster.SIC.GetSnapshot()
+	sis = p.Cluster.SIC.GetSnapshot()
 	nm := core.BuildResourceNameMapping(p.Cluster, sis)
 	dbServiceType, dbResourceName, ok := nm.MapFromV1API(req.ServiceType, req.ResourceName)
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil, filteredSIS
+		return nil, nil, nil, sis
 	}
 	path := db.AZResourcePath{
 		ServiceType:      dbServiceType,
 		ResourceName:     dbResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 	}
-	filteredSIS = sis.Filter(core.ServiceInfoFilter{ServiceType: Some(dbServiceType), ResourceName: Some(dbResourceName)})
 
 	behavior := p.Cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(dbDomain.Name)
 	if len(behavior.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return nil, nil, nil, filteredSIS
+		return nil, nil, nil, sis
 	}
-	resource := must.BeOK(filteredSIS.GetResourceForPath(path.Resource()))
+	resource := must.BeOK(sis.GetResourceForPath(path.Resource()))
 	if resource.Topology == liquid.FlatTopology {
 		if req.AvailabilityZone != limes.AvailabilityZoneAny {
 			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
-			return nil, nil, nil, filteredSIS
+			return nil, nil, nil, sis
 		}
 	} else {
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
 			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-			return nil, nil, nil, filteredSIS
+			return nil, nil, nil, sis
 		}
 	}
 	if !slices.Contains(behavior.Durations, req.Duration) {
 		buf := must.Return(json.Marshal(behavior.Durations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil, filteredSIS
+		return nil, nil, nil, sis
 	}
 	if req.Amount == 0 {
 		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
-		return nil, nil, nil, filteredSIS
+		return nil, nil, nil, sis
 	}
 
 	// when the name mapping succeeded, service and resource must be found
-	return &req, &path, &behavior, filteredSIS
+	return &req, &path, &behavior, sis
 }
 
 // CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
@@ -465,11 +464,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, path, behavior, filteredSIS := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
+	req, path, behavior, sis := p.parseAndValidateCommitmentRequest(w, r, *dbDomain)
 	if req == nil {
 		return
 	}
-	service := must.BeOK(filteredSIS.GetFilteredService())
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	var (
 		azResourceID              db.AZResourceID
@@ -549,7 +548,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
 			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
 		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, filteredSIS, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, sis, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -605,7 +604,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 				},
 			},
 		}
-		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, tx)
+		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -650,7 +649,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// render response
-	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, path.AvailabilityZone, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), must.BeOK(filteredSIS.GetResourceForPath(path.Resource())).Unit)
+	commitment := datamodel.ConvertCommitmentToDisplayForm(dbCommitment, path.AvailabilityZone, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbCommitment, p.timeNow), must.BeOK(sis.GetResourceForPath(path.Resource())).Unit)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": commitment})
 }
 
@@ -729,13 +728,13 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	resource, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// Start transaction for creating new commitment and marking merged commitments as superseded
 	tx, err := p.DB.Begin()
@@ -849,7 +848,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, tx)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -947,13 +946,13 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	resource, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	creationContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonRenew,
@@ -1031,7 +1030,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, tx)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1099,13 +1098,13 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	_, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	_, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// ignore expired, superseded or soft-deleted commitments
 	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusExpired, liquid.CommitmentStatusSuperseded, util.CommitmentStatusDeleted}, dbCommitment.Status) {
@@ -1152,7 +1151,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 			},
 		},
 	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, p.DB)
+	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1271,13 +1270,13 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	resource, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// when moving into CommitmentTransferStatusNone, the token is cleared;
 	// otherwise a new token is generated and filled in for the transfer
@@ -1402,7 +1401,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			NewTransferStatus: req.TransferStatus,
 		}
 
-		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, tx)
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1573,13 +1572,13 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	resource, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// get old project additionally
 	var sourceProject db.Project
@@ -1682,7 +1681,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1850,8 +1849,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResourcePath(sourcePath.Resource()).ForDomain(dbDomain.Name)
 
 	sis := p.Cluster.SIC.GetSnapshot()
-	filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(sourcePath.ServiceType)})
-	sourceService, rExists := filteredSIS.GetServiceForType(sourcePath.ServiceType)
+	sourceService, rExists := sis.GetServiceForType(sourcePath.ServiceType)
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
@@ -2026,7 +2024,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, sourceService.Type, tx)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, sourceService.Type, tx)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2175,13 +2173,13 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	filteredSIS := p.Cluster.SIC.GetSnapshot().Filter(core.ServiceInfoFilter{ServiceType: Some(path.ServiceType)})
-	resource, rExists := filteredSIS.GetResourceForPath(path.Resource())
+	sis := p.Cluster.SIC.GetSnapshot()
+	resource, rExists := sis.GetResourceForPath(path.Resource())
 	if !rExists { // checking the deepest level is enough
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
-	service := must.BeOK(filteredSIS.GetServiceForType(path.ServiceType))
+	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// might only reject in the remote-case, locally we accept extensions as limes does not know future capacity
 	ccr := liquid.CommitmentChangeRequest{
@@ -2213,7 +2211,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, filteredSIS, service.Type, p.DB)
+	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, p.DB)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

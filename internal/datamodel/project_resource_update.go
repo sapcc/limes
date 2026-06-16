@@ -28,9 +28,9 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, filteredSIS core.FilteredServiceInfoSnapshot) error {
-	service := must.BeOK(filteredSIS.GetFilteredService())
-	resources, _ := filteredSIS.GetResourcesForType(service.Type)
+func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) error {
+	service := must.BeOK(sis.GetServiceForType(serviceType)) // should have been checked to exist before, else no update makes sense
+	resources, _ := sis.GetResourcesForType(service.Type)
 	// We will first collect all existing data into one of these structs for each
 	// resource. Then we will compute the target state of the DB record. We only
 	// need to write into the DB if `.Target` ends up different from `.Original`.

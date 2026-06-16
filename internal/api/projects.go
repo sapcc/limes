@@ -265,7 +265,6 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// when we got here, we can be sure the service exists
-		filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
 		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
@@ -276,7 +275,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, filteredSIS)
+		}.Run(tx, *dbProject, sis, serviceType)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -406,7 +405,6 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// when we got here, we can be sure the service exists
-		filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
 		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
@@ -416,7 +414,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, filteredSIS)
+		}.Run(tx, *dbProject, sis, serviceType)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

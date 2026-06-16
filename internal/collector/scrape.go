@@ -256,16 +256,15 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 }
 
 func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
-	filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
-	service, sExists := filteredSIS.GetServiceForType(serviceType)
-	resources, _ := filteredSIS.GetResourcesForType(serviceType)     // can have no resources
-	azResources, _ := filteredSIS.GetAZResourcesForType(serviceType) // can have no az_resources
-	if !sExists {                                                    // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
+	service, sExists := sis.GetServiceForType(serviceType)
+	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
+	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
+	if !sExists {                                            // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
 	for resName, resData := range resourceData.Resources {
-		resource, rExists := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+		resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 		if !rExists {
 			return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 		}
@@ -294,7 +293,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 			}
 		}
 	}
-	enrichUsageReportTotals(&resourceData, filteredSIS)
+	enrichUsageReportTotals(&resourceData, sis, serviceType)
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -315,7 +314,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	// we only need to ensure existence of project_resources - the values don't impact this operation
 	err = datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			resource, rExists := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+			resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			if !rExists {
 				return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			}
@@ -324,7 +323,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, filteredSIS)
+	}.Run(tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -559,7 +558,6 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 	sis := c.Cluster.SIC.GetSnapshot()
-	filteredSIS := sis.Filter(core.ServiceInfoFilter{ServiceType: Some(serviceType)})
 	service, sExists := sis.GetServiceForType(serviceType)
 	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
 	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
@@ -572,13 +570,13 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 			// until we know better, we will assume Forbidden = true to ensure that
 			// quota does not get distributed into projects that cannot accept it
-			resource, _ := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			if resource.HasQuota {
 				res.Forbidden = true
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, filteredSIS)
+	}.Run(tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -634,11 +632,11 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 	return tx.Commit()
 }
 
-func enrichUsageReportTotals(value *liquid.ServiceUsageReport, filteredSIS core.FilteredServiceInfoSnapshot) {
+func enrichUsageReportTotals(value *liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) {
 	if value == nil || value.Resources == nil {
 		return
 	}
-	service := must.BeOK(filteredSIS.GetFilteredService())
+	service := must.BeOK(sis.GetServiceForType(serviceType))
 
 	for resName, resValue := range value.Resources {
 		if len(resValue.PerAZ) == 0 {
@@ -646,7 +644,7 @@ func enrichUsageReportTotals(value *liquid.ServiceUsageReport, filteredSIS core.
 		}
 
 		// we use the values of resource which default to false
-		resource, _ := filteredSIS.GetResourceForPath(db.ResourcePath{ServiceType: service.Type, ResourceName: resName})
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: service.Type, ResourceName: resName})
 		var total liquid.AZResourceUsageReport
 		for _, azValue := range resValue.PerAZ {
 			total.Usage += azValue.Usage

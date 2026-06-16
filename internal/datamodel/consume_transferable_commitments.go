@@ -70,7 +70,7 @@ type TransferableCommitmentCache struct {
 	// utilities
 	dbi                           db.Interface
 	cluster                       *core.Cluster
-	filteredSIS                   core.FilteredServiceInfoSnapshot
+	sis                           core.ServiceInfoSnapshot
 	path                          db.AZResourcePath
 	now                           time.Time
 	generateProjectCommitmentUUID func() liquid.CommitmentUUID
@@ -83,7 +83,7 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, filteredSIS core.FilteredServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, sis core.ServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
 	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, path)
 	if err != nil {
 		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path, err)
@@ -116,14 +116,14 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, fil
 	// fill utilities
 	t.dbi = dbi
 	t.cluster = cluster
-	t.filteredSIS = filteredSIS
+	t.sis = sis
 	t.path = path
 	t.now = now
 	t.generateProjectCommitmentUUID = generateProjectCommitmentUUID
 	t.generateTransferToken = generateTransferToken
 	t.mailTemplate = mailTemplate
 
-	resource, ok := t.filteredSIS.GetResourceForPath(path.Resource())
+	resource, ok := sis.GetResourceForPath(path.Resource())
 	if !ok {
 		return t, fmt.Errorf("resource %s not found in provided resources", path.ResourceName)
 	}
@@ -171,7 +171,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 	ccr := liquid.CommitmentChangeRequest{
 		DryRun:      dryRun,
 		AZ:          t.path.AvailabilityZone,
-		InfoVersion: must.BeOK(t.filteredSIS.GetServiceForType(t.path.ServiceType)).LiquidVersion,
+		InfoVersion: must.BeOK(t.sis.GetServiceForType(t.path.ServiceType)).LiquidVersion,
 		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
 			project.UUID: {
 				ProjectMetadata: LiquidProjectMetadataFromDBProject(project, domain),
@@ -533,7 +533,7 @@ func (t *TransferableCommitmentCache) delegateChangeCommitmentsWithShortcut(ctx 
 			}
 		}
 	default:
-		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.filteredSIS, t.path.ServiceType, t.dbi)
+		commitmentChangeResponse, err := DelegateChangeCommitments(ctx, t.cluster, ccr, t.sis, t.path.ServiceType, t.dbi)
 		if err != nil {
 			return result, err
 		}
