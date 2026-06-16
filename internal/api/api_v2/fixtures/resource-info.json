@@ -1,4 +1,8 @@
 {
+  "all_azs": [
+    "az-one",
+    "az-two"
+  ],
   "service_areas": {
     "first": {
       "display_name": "First",

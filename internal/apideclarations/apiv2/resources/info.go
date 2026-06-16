@@ -13,6 +13,8 @@ import (
 // InfoReport is the response type for GET /resources/v2/info.
 // It contains all metadata information about the cluster's services and resources.
 type InfoReport struct {
+	// All AZs known to Limes (excluding pseudo-AZs like "any").
+	AllAZs []liquid.AvailabilityZone `json:"all_azs"`
 	// The Area is a grouping of multiple services which serve similar purposes.
 	// E.g. compute, storage, network, etc.
 	Areas map[string]AreaInfoReport `json:"service_areas"`
