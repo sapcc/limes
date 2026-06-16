@@ -91,3 +91,5 @@ var (
 	_ = resourcesv2.InfoReport{}
 	_ = ratesv2.InfoReport{}
 )
+
+// TODO: switch all json:"..." tags from snake_case to camelCase for consistency with LIQUID

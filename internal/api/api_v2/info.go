@@ -84,7 +84,8 @@ func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy
 
 	// assemble the report
 	report := resourcesv2.InfoReport{
-		Areas: make(map[string]resourcesv2.AreaInfoReport),
+		AllAZs: p.Cluster.Config.AvailabilityZones,
+		Areas:  make(map[string]resourcesv2.AreaInfoReport),
 	}
 	sis := p.Cluster.SIC.GetSnapshot()
 	services := sis.GetServices()
@@ -174,7 +175,8 @@ func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Tok
 
 	// assemble the report
 	report := ratesv2.InfoReport{
-		Areas: make(map[string]ratesv2.AreaInfoReport),
+		AllAZs: p.Cluster.Config.AvailabilityZones,
+		Areas:  make(map[string]ratesv2.AreaInfoReport),
 	}
 	sis := p.Cluster.SIC.GetSnapshot()
 	services := sis.GetServices()
