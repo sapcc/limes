@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -95,6 +96,7 @@ func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(
 
 // parseRequestBodyAs unmarshals a JSON-encoded request body.
 func parseRequestBodyAs[T any](r *http.Request) (T, error) {
+	// TODO: With how clever this function is now, it probably should be in go-bits.
 	var result T
 
 	// To guard against complexity attacks using extremely large request bodies,
@@ -115,16 +117,30 @@ func parseRequestBodyAs[T any](r *http.Request) (T, error) {
 	dec.DisallowUnknownFields()
 	err = dec.Decode(&result)
 	if err != nil {
-		err = respondwith.CustomStatus(http.StatusBadRequest,
+		return result, respondwith.CustomStatus(http.StatusBadRequest,
 			fmt.Errorf("request body is not valid JSON: %w", err),
 		)
 	}
-	return result, err
+
+	// Decoder.Decode() only reads until the end of a JSON payload, which may be before the end of `buf`;
+	// complain if there is anything of substance after the JSON payload (e.g. another JSON payload)
+	remainder, err := io.ReadAll(dec.Buffered())
+	if err != nil {
+		// defense in depth: reading from a buffer should never fail
+		return result, fmt.Errorf("unexpected error when checking buffer remains in parseRequestBodyAs: %w", err)
+	}
+	if len(bytes.TrimSpace(remainder)) > 0 {
+		return result, respondwith.CustomStatus(http.StatusBadRequest,
+			fmt.Errorf("request body contains %d unexpected bytes after the JSON payload", len(remainder)),
+		)
+	}
+
+	return result, nil
 }
 
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
+func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
@@ -138,7 +154,7 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, poli
 	case err == nil:
 		t.Context.Request = map[string]string{
 			"domain_id":  domain.UUID,
-			"project_id": projectUUID,
+			"project_id": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err != nil {
@@ -147,7 +163,7 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, poli
 	case errors.Is(err, sql.ErrNoRows):
 		t.Context.Request = map[string]string{
 			"domain_id":  "unknown",
-			"project_id": projectUUID,
+			"project_id": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err == nil {
