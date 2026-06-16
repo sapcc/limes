@@ -79,12 +79,12 @@ const commitmentCreateConfigJSON = `{
 }`
 
 // Helper function for a successful commitment creation. This always tests the dry-run first, and then does the actual creation.
-func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, ccrAcceptedByLiquid bool, request map[string]any, expected jsonmatch.Object, getTarget func() cadf.Resource) {
+func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, liquidHandlesCommitments bool, request map[string]any, expected jsonmatch.Object, getTarget func() cadf.Resource) {
 	t.Helper()
 	ctx := t.Context()
 	mockLiquid := s.LiquidClients[db.ServiceType(request["service_type"].(string))]
 
-	if ccrAcceptedByLiquid {
+	if liquidHandlesCommitments {
 		// explicitly clear LastCommitmentChangeRequest, so we can detect if the dry-run incorrectly writes into it
 		mockLiquid.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 	}
@@ -99,7 +99,7 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 
 	s.Auditor.ExpectEvents(t, nil...)
 	tr.DBChanges().AssertEmpty()
-	if ccrAcceptedByLiquid {
+	if liquidHandlesCommitments {
 		// if there was a CCR, then it must have been a dry-run
 		if !reflect.DeepEqual(mockLiquid.LastCommitmentChangeRequest, liquid.CommitmentChangeRequest{}) {
 			assert.Equal(t, mockLiquid.LastCommitmentChangeRequest.DryRun, true)
@@ -119,7 +119,7 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 		Target:      target,
 	})
 
-	if ccrAcceptedByLiquid {
+	if liquidHandlesCommitments {
 		// check that the mock liquid saw the correct CommitmentChangeRequest
 		// (the same as inside the audit event payload)
 		actualCCR := must.Return(json.Marshal(mockLiquid.LastCommitmentChangeRequest))
@@ -576,7 +576,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 	}
 
 	// invalid presence/absence of confirm_by for chosen state
-	for _, status := range []string{"planned"} {
+	for _, status := range []string{"planned"} { // TODO: add "guaranteed" here
 		createCommitmentAndExpectError(t, s, tr, map[string]any{
 			"amount":            1,
 			"duration":          "1 hour",

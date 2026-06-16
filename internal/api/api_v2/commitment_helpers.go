@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	errAZMayNotBeAny             = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
+	errAZMustNotBeAny            = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
 	errAZMustBeAny               = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
 	errCommitmentsDisabled       = errors.New("commitments are not enabled for this resource")
 	errConfirmByInPast           = errors.New("confirm_by may not be set in the past")
@@ -113,7 +113,7 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, dbDomain db.
 		}
 	} else {
 		if path.AvailabilityZone == limes.AvailabilityZoneAny {
-			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errAZMayNotBeAny)
+			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errAZMustNotBeAny)
 			return
 		}
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, path.AvailabilityZone) {

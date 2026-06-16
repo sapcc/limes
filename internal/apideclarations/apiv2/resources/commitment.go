@@ -57,7 +57,7 @@ type Commitment struct {
 // See documentation on [Commitment] for the semantics of all fields.
 // Documentation on this type's fields only mentions specifics related to the commitment creation process.
 type CommitmentRequest struct {
-	// DryRun can be set to true to avoid any side effects.
+	// DryRun can be set to true to avoid any side effects: No data will be saved in the system.
 	// The response from a dry run will be identical to if a commitment had actually been created,
 	// except that the UUID will be set to a dummy value.
 	DryRun bool   `json:"dry_run"`
@@ -74,11 +74,11 @@ type CommitmentRequest struct {
 	//   - liquid.CommitmentStatusPlanned
 	//   - liquid.CommitmentStatusPending
 	//   - liquid.CommitmentStatusConfirmed
-	//   - liquid.CommitmentStatusGuaranteed
+	//   - liquid.CommitmentStatusGuaranteed (TODO: coming soon)
 	Status liquid.CommitmentStatus `json:"status"`
 	// ConfirmBy must be set for statuses "planned" and "guaranteed", and may not be set otherwise.
 	// Commitments created in status "pending" will have a ConfirmBy value equal to the current time.
 	ConfirmBy Option[limes.UnixEncodedTime] `json:"confirm_by,omitzero"`
 	// NotifyOnConfirm may not be set for commitments that are created in status "confirmed".
-	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"` // may not be set for "confirmed"
+	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`
 }

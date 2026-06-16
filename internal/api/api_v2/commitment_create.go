@@ -110,7 +110,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	// its ID (for use in the SupersedeContext of consumed commitments),
 	// but we need to be able to revert this insertion if the CommitmentChangeRequest is rejected
 	var auditEvents []audittools.Event
-	err = withinTransactionThatMayBeADryRun(p.DB, req.DryRun, func(tx db.Interface) error {
+	err = withinDryRunnableTx(p.DB, req.DryRun, func(tx db.Interface) error {
 		stats, err := getCommitmentStats(tx, dbProject.ID, azResource.ID)
 		if err != nil {
 			return err
@@ -238,9 +238,9 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	return result, nil
 }
 
-// withinTransactionThatMayBeADryRun starts a transaction such that the type system helps enforce that a dry run is not accidentally committed:
+// withinDryRunnableTx starts a transaction such that the type system helps enforce that a dry run is not accidentally committed:
 // Within `action`, `tx` is only a generic interface handle that does not allow calling `tx.Commit()` directly.
-func withinTransactionThatMayBeADryRun(dbm *gorp.DbMap, dryRun bool, action func(tx db.Interface) error) error {
+func withinDryRunnableTx(dbm *gorp.DbMap, dryRun bool, action func(tx db.Interface) error) error {
 	tx, err := dbm.Begin()
 	if err != nil {
 		return err
