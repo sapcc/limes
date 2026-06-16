@@ -5,6 +5,7 @@ package api
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 
@@ -46,12 +47,12 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	// projects runs as large as 160 MiB for the pure JSON.)
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
-	filter := reports.ReadFilter(r, p.Cluster, resources)
+	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("project_list", filter)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, resources, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, sis, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -69,11 +70,11 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		return
 	}
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
-	filter := reports.ReadFilter(r, p.Cluster, resources)
+	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("project_show", filter)
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, resources)
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -200,10 +201,10 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster, resources)
+	nm := core.BuildResourceNameMapping(p.Cluster, sis)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.MaxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
@@ -213,6 +214,8 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				http.Error(w, msg, http.StatusUnprocessableEntity)
 				return
 			}
+			// when found in the name mapping, the resource exists
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 
 			if requested[dbServiceType] == nil {
 				requested[dbServiceType] = make(map[liquid.ResourceName]*audit.MaxQuotaChange)
@@ -220,7 +223,6 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			if resRequest.MaxQuota == nil {
 				requested[dbServiceType][dbResourceName] = &audit.MaxQuotaChange{NewValue: None[uint64]()}
 			} else {
-				resource := resources[dbServiceType][dbResourceName]
 				if !resource.HasQuota {
 					msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -255,19 +257,14 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	var services []db.Service
-	_, err = tx.Select(&services,
-		`SELECT s.* FROM services s JOIN project_services ps ON ps.service_id = s.id and ps.project_id = $1 ORDER BY s.type`, dbProject.ID)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	for _, srv := range services {
-		requestedInService, exists := requested[srv.Type]
+	for _, serviceType := range slices.Sorted(maps.Keys(sis.GetServices())) {
+		service, _ := sis.GetServiceForType(serviceType)
+		requestedInService, exists := requested[service.Type]
 		if !exists {
 			continue
 		}
 
+		// when we got here, we can be sure the service exists
 		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
@@ -278,7 +275,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, srv, resources[srv.Type])
+		}.Run(tx, *dbProject, sis, serviceType)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -349,10 +346,10 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
 	// validate request
-	nm := core.BuildResourceNameMapping(p.Cluster, resources)
+	nm := core.BuildResourceNameMapping(p.Cluster, sis)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*audit.AutogrowthChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
@@ -362,6 +359,8 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				http.Error(w, msg, http.StatusUnprocessableEntity)
 				return
 			}
+			// when found in the name mapping, the resource exists
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 
 			forbidAutogrowth, isSome := resRequest.ForbidAutogrowth.Unpack()
 			if !isSome {
@@ -370,8 +369,6 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
-			// we ignore when a resource can't be found in the app layer yet, it will default to return
-			resource := resources[dbServiceType][dbResourceName]
 			if !resource.HasQuota {
 				msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 				http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -400,21 +397,14 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	var services []db.Service
-	_, err = tx.Select(&services,
-		`SELECT s.* FROM services s JOIN project_services ps ON ps.service_id = s.id and ps.project_id = $1 ORDER BY s.type`, dbProject.ID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	for _, srv := range services {
-		requestedInService, exists := requested[srv.Type]
+	for _, serviceType := range slices.Sorted(maps.Keys(sis.GetServices())) {
+		service, _ := sis.GetServiceForType(serviceType)
+		requestedInService, exists := requested[service.Type]
 		if !exists {
 			continue
 		}
 
 		// when we got here, we can be sure the service exists
-		filteredResources := resources[srv.Type]
 		err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 				requestedChange := requestedInService[resName]
@@ -424,7 +414,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, srv, filteredResources)
+		}.Run(tx, *dbProject, sis, serviceType)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

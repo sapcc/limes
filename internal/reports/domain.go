@@ -76,7 +76,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, resources core.ResourcesByNameType) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) ([]*limesresources.DomainReport, error) {
 	var fields map[string]any
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
@@ -151,11 +151,11 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if !filter.Includes[dbServiceType][dbResourceName] {
 			return nil
 		}
-		serviceReport, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, resources)
+		serviceReport, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, sis)
 
 		if az == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-			resource := resources[dbServiceType][dbResourceName]
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
 			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
 
@@ -225,7 +225,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if !filter.Includes[dbServiceType][dbResourceName] {
 				return nil
 			}
-			_, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, resources)
+			_, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, sis)
 
 			if resourceReport.PerAZ[az] == nil {
 				return nil
@@ -292,7 +292,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	return result, nil
 }
 
-func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, resources core.ResourcesByNameType) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time, sis core.ServiceInfoSnapshot) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 
@@ -309,7 +309,7 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 	resourceReport, exists := serviceReport.Resources[apiIdentity.Name]
 	if !exists {
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource := resources[dbServiceType][dbResourceName]
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
 		resourceReport = &limesresources.DomainResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
 			CommitmentConfig: cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer(),

@@ -37,12 +37,12 @@ type dbRateRef struct {
 }
 
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
-func BuildResourceNameMapping(cluster *Cluster, resources ResourcesByNameType) ResourceNameMapping {
+func BuildResourceNameMapping(cluster *Cluster, sis ServiceInfoSnapshot) ResourceNameMapping {
 	nm := ResourceNameMapping{
 		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
 		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
-	for dbServiceType, resByName := range resources {
+	for dbServiceType, resByName := range sis.GetResources() {
 		for dbResourceName := range resByName {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
@@ -54,13 +54,13 @@ func BuildResourceNameMapping(cluster *Cluster, resources ResourcesByNameType) R
 }
 
 // BuildRateNameMapping constructs a new RateNameMapping instance.
-func BuildRateNameMapping(cluster *Cluster, rates RatesByNameType) RateNameMapping {
+func BuildRateNameMapping(cluster *Cluster, sis ServiceInfoSnapshot) RateNameMapping {
 	nm := RateNameMapping{
 		cluster:     cluster,
 		fromAPIToDB: make(map[RateRef]dbRateRef),
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
-	for dbServiceType, rateByName := range rates {
+	for dbServiceType, rateByName := range sis.GetRates() {
 		dbRateNames := make(map[liquid.RateName]struct{})
 		for dbRateName := range rateByName {
 			dbRateNames[dbRateName] = struct{}{}

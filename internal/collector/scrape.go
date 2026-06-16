@@ -17,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 
@@ -117,7 +118,7 @@ func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labe
 	}
 	// if the above check succeeded, this should never fail because the SIC is updated after the
 	// LiquidConnection is initialized.
-	_, ok = c.Cluster.SIC.GetServiceForType(serviceType)
+	_, ok = c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType)
 	if !ok {
 		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
@@ -158,7 +159,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	logg.Debug("scraping %s resources for %s/%s", serviceType, dbDomain.Name, dbProject.Name)
 
 	// perform scrape
-	report, serializedMetrics, err := c.scrapeLiquid(ctx, connection, project, projectService)
+	report, serializedMetrics, sis, err := c.scrapeLiquid(ctx, connection, project, projectService)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = gophercloudext.UnpackError(err)
@@ -169,13 +170,13 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	// collect additional DB records (it is important to do this step after the
 	// scrape, because the scrape might observe a new ServiceInfo version)
 	// write resource results
-	err = c.writeResourceScrapeResult(task, serviceType, dbProject, report)
+	err = c.writeResourceScrapeResult(task, serviceType, dbProject, report, sis)
 	if err != nil {
 		return fmt.Errorf("while writing resource results into DB: %w", err)
 	}
 
 	// write rate results
-	err = c.writeRateScrapeResult(task, serviceType, rateData)
+	err = c.writeRateScrapeResult(task, serviceType, rateData, sis)
 	if err != nil {
 		return fmt.Errorf("while writing rate results into DB: %w", err)
 	}
@@ -216,24 +217,24 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, serviceType db.Ser
 	return fmt.Errorf("during scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, error) {
-	report, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
+func (c *Collector) scrapeLiquid(ctx context.Context, connection *core.LiquidConnection, project core.KeystoneProject, projectService db.ProjectService) (liquid.ServiceUsageReport, []byte, core.ServiceInfoSnapshot, error) {
+	report, sis, err := connection.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones, projectService.SerializedScrapeState)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
-	service, sExists := c.Cluster.SIC.GetServiceForType(connection.ServiceType)
-	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
-		return liquid.ServiceUsageReport{}, nil, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
+	service, sExists := sis.GetServiceForType(connection.ServiceType)
+	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
 	}
 	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
 	serializedMetrics, err := liquidSerializeMetrics(usageMetricFamilies, report.Metrics)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, nil, err
+		return liquid.ServiceUsageReport{}, nil, core.ServiceInfoSnapshot{}, err
 	}
-	return report, serializedMetrics, nil
+	return report, serializedMetrics, sis, nil
 }
 
 func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateName]*big.Int, serializedState string) {
@@ -254,15 +255,19 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 	return result, string(report.SerializedState)
 }
 
-func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport) error {
-	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
-	resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType)
-	azResources, _ := c.Cluster.SIC.GetAZResourcesForType(serviceType)
-	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
+func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
+	service, sExists := sis.GetServiceForType(serviceType)
+	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
+	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
+	if !sExists {                                            // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
+
 	for resName, resData := range resourceData.Resources {
-		resource := resources[resName]
+		resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+		if !rExists {
+			return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+		}
 		if len(resData.PerAZ) == 0 {
 			// ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.PerAZ = liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0})
@@ -288,7 +293,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 			}
 		}
 	}
-	enrichUsageReportTotals(&resourceData, resources)
+	enrichUsageReportTotals(&resourceData, sis, serviceType)
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -309,13 +314,16 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	// we only need to ensure existence of project_resources - the values don't impact this operation
 	err = datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			resource := resources[resName]
+			resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+			if !rExists {
+				return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+			}
 			if resource.HasQuota {
 				res.Forbidden = resourceData.Resources[resName].Forbidden
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, service, resources)
+	}.Run(tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -457,13 +465,13 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	return nil
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int, sis core.ServiceInfoSnapshot) error {
 	projectService := task.ProjectService
-	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
-	rates, _ := c.Cluster.SIC.GetRatesForType(serviceType)
-	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
+	service, sExists := sis.GetServiceForType(serviceType)
+	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
+	rates, _ := sis.GetRatesForType(serviceType) // can have no rates
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -549,10 +557,11 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	service, sExists := c.Cluster.SIC.GetServiceForType(serviceType)
-	resources, _ := c.Cluster.SIC.GetResourcesForType(serviceType)
-	azResources, _ := c.Cluster.SIC.GetAZResourcesForType(serviceType)
-	if !sExists { // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
+	sis := c.Cluster.SIC.GetSnapshot()
+	service, sExists := sis.GetServiceForType(serviceType)
+	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
+	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
+	if !sExists {                                            // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
@@ -561,13 +570,13 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
 			// until we know better, we will assume Forbidden = true to ensure that
 			// quota does not get distributed into projects that cannot accept it
-			resource := resources[resName]
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 			if resource.HasQuota {
 				res.Forbidden = true
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, service, resources)
+	}.Run(tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -576,7 +585,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 		resByAZ := azResources[resName]
 		resource := resources[resName]
 		for _, az := range slices.Sorted(maps.Keys(resByAZ)) {
-			azRes := resByAZ[az]
+			azResource := resByAZ[az]
 			if az == limes.AvailabilityZoneUnknown {
 				// we don't write dummy entries for unknown - this should just exist, when there is real usage
 				continue
@@ -592,7 +601,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 			}
 			err := tx.Insert(&db.ProjectAZResource{
 				ProjectID:    dbProject.ID,
-				AZResourceID: azRes.ID,
+				AZResourceID: azResource.ID,
 				Usage:        0,
 				BackendQuota: backendQuota,
 				Quota:        quota,
@@ -623,17 +632,19 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 	return tx.Commit()
 }
 
-func enrichUsageReportTotals(value *liquid.ServiceUsageReport, resources map[liquid.ResourceName]db.Resource) {
+func enrichUsageReportTotals(value *liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) {
 	if value == nil || value.Resources == nil {
 		return
 	}
+	service := must.BeOK(sis.GetServiceForType(serviceType))
 
 	for resName, resValue := range value.Resources {
 		if len(resValue.PerAZ) == 0 {
 			continue
 		}
 
-		resource := resources[resName]
+		// we use the values of resource which default to false
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: service.Type, ResourceName: resName})
 		var total liquid.AZResourceUsageReport
 		for _, azValue := range resValue.PerAZ {
 			total.Usage += azValue.Usage

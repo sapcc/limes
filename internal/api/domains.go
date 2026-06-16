@@ -23,10 +23,10 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// missing services/ resources will lead to empty filter --> empty report
-	resources := p.Cluster.SIC.GetResources()
-	filter := reports.ReadFilter(r, p.Cluster, resources)
+	sis := p.Cluster.SIC.GetSnapshot()
+	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("domain_list", filter)
-	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, resources)
+	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -46,11 +46,11 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resources := p.Cluster.SIC.GetResources()
+	sis := p.Cluster.SIC.GetSnapshot()
 
-	filter := reports.ReadFilter(r, p.Cluster, resources)
+	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("domain_show", filter)
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, resources)
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
