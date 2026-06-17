@@ -69,6 +69,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowUncommit
 	case "info":
 		return e.AllowInfo
+	case "block_commitments":
+		return false
 	default:
 		return true
 	}

@@ -470,6 +470,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
+	// manual override for blocking commitments in order to avoid broken capacity scrapes
+	token.Context.Request["service"] = string(path.ServiceType)
+	token.Context.Request["resource"] = string(path.ResourceName)
+	if token.Check("project:block_commitments") {
+		http.Error(w, "creating new commitments is temporarily disabled for this resource", http.StatusForbidden)
+		return
+	}
+
 	var (
 		azResourceID              db.AZResourceID
 		resourceAllowsCommitments bool
