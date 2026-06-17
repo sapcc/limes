@@ -4,15 +4,19 @@
 package api_v2
 
 import (
+	"bytes"
 	"cmp"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -44,6 +48,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 	tv := p.tokenValidator
 	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
 	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	r.Methods("POST").Path("/resources/v2/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
 }
 
 // Wrapper for request handlers that enforces a structure,
@@ -89,9 +94,53 @@ func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(
 	}
 }
 
+// parseRequestBodyAs unmarshals a JSON-encoded request body.
+func parseRequestBodyAs[T any](r *http.Request) (T, error) {
+	// TODO: With how clever this function is now, it probably should be in go-bits.
+	var result T
+
+	// To guard against complexity attacks using extremely large request bodies,
+	// we never read more than 8 KiB. There are no request types in the v2 API
+	// that could ever require more than that.
+	const maxRequestSize = 8192
+	buf, err := io.ReadAll(io.LimitReader(r.Body, maxRequestSize))
+	if err != nil {
+		return result, fmt.Errorf("while reading request body: %w", err)
+	}
+	if len(buf) == maxRequestSize {
+		// looks like we could have read more if we wanted to
+		err = errors.New("request body too large")
+		return result, respondwith.CustomStatus(http.StatusRequestEntityTooLarge, err)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(buf))
+	dec.DisallowUnknownFields()
+	err = dec.Decode(&result)
+	if err != nil {
+		return result, respondwith.CustomStatus(http.StatusBadRequest,
+			fmt.Errorf("request body is not valid JSON: %w", err),
+		)
+	}
+
+	// Decoder.Decode() only reads until the end of a JSON payload, which may be before the end of `buf`;
+	// complain if there is anything of substance after the JSON payload (e.g. another JSON payload)
+	remainder, err := io.ReadAll(dec.Buffered())
+	if err != nil {
+		// defense in depth: reading from a buffer should never fail
+		return result, fmt.Errorf("unexpected error when checking buffer remains in parseRequestBodyAs: %w", err)
+	}
+	if len(bytes.TrimSpace(remainder)) > 0 {
+		return result, respondwith.CustomStatus(http.StatusBadRequest,
+			fmt.Errorf("request body contains %d unexpected bytes after the JSON payload", len(remainder)),
+		)
+	}
+
+	return result, nil
+}
+
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) { //nolint:unused // TODO: remove this nolint once it is used
+func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
@@ -105,7 +154,7 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, poli
 	case err == nil:
 		t.Context.Request = map[string]string{
 			"domain_id":  domain.UUID,
-			"project_id": projectUUID,
+			"project_id": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err != nil {
@@ -114,7 +163,7 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID, poli
 	case errors.Is(err, sql.ErrNoRows):
 		t.Context.Request = map[string]string{
 			"domain_id":  "unknown",
-			"project_id": projectUUID,
+			"project_id": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err == nil {
