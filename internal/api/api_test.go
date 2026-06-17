@@ -68,13 +68,13 @@ const (
 				"area": "shared",
 				"rate_limits": {
 					"global": [
-						{"name": "objects:create", "limit": 5000, "window": "1s"}
+						{"name": "objects:create", "limit": 5000, "window": "1s", "unit": "piece"}
 					],
 					"project_default": [
-						{"name": "objects:create", "limit": 5, "window": "1m"},
+						{"name": "objects:create", "limit": 5, "window": "1m", "unit": "piece"},
 						{"name": "objects:delete", "limit": 1, "window": "1m", "unit": "MiB"},
-						{"name": "objects:update", "limit": 2, "window": "1s"},
-						{"name": "objects:read", "limit": 3, "window": "1s"}
+						{"name": "objects:update", "limit": 2, "window": "1s", "unit": "piece"},
+						{"name": "objects:read", "limit": 3, "window": "1s", "unit": "piece"}
 					]
 				},
 				"commitment_behavior_per_resource": [
@@ -91,9 +91,9 @@ const (
 				"area": "unshared",
 				"rate_limits": {
 					"project_default": [
-						{"name": "instances:create", "limit": 5, "window": "1m"},
-						{"name": "instances:delete", "limit": 1, "window": "1m"},
-						{"name": "instances:update", "limit": 2, "window": "1s"}
+						{"name": "instances:create", "limit": 5, "window": "1m", "unit": "piece"},
+						{"name": "instances:delete", "limit": 1, "window": "1m", "unit": "piece"},
+						{"name": "instances:update", "limit": 2, "window": "1s", "unit": "piece"}
 					]
 				}
 			}

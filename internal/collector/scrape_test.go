@@ -71,10 +71,10 @@ const (
 				// to check how they are merged with the ServiceInfo of the liquids
 				"rate_limits": {
 					"global": [
-						{"name": "rateWithClusterLimit", "limit": 5000, "window": "1s"}
+						{"name": "rateWithClusterLimit", "limit": 5000, "window": "1s", "unit": "piece"}
 					],
 					"project_default": [
-						{"name": "rateWithProjectLimit", "limit": 50, "window": "1s"}
+						{"name": "rateWithProjectLimit", "limit": 50, "window": "1s", "unit": "piece"}
 					]
 				}
 			}
@@ -102,7 +102,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			},
 			"things": {
 				DisplayName: "Things",
-				Unit:        liquid.UnitNone,
+				Unit:        liquid.UnitPiece,
 				Topology:    liquid.AZAwareTopology,
 				HasCapacity: false,
 				HasQuota:    true,
@@ -137,6 +137,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		Name:          "xAnotherRate",
 		DisplayName:   "X Another Rate",
 		Path:          db.RatePath{ServiceType: "unittest", RateName: "xAnotherRate"},
+		Unit:          liquid.UnitPiece,
 		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
 	})
@@ -791,7 +792,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (1, 1, 1, TRUE);
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 1, 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'az-aware', TRUE, 'noop/things', 'Things');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'piece', 'az-aware', TRUE, 'noop/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'noop', %[1]d, 1, 'Noop');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.RecheckInterval).Unix(),

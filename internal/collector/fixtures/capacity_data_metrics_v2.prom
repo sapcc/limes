@@ -16,7 +16,7 @@ limitas_resource_autogrow_quota_overcommit_threshold_percent{resource="capacity"
 limitas_resource_autogrow_quota_overcommit_threshold_percent{resource="things",service="shared"} 0
 # HELP limitas_resource_info Info metric for resources. The value is always 1, and information can be found in labels.
 # TYPE limitas_resource_info gauge
-limitas_resource_info{category="shared",display_name="Things",has_quota="true",qdm="autogrow",resource="things",service="shared",topology="flat",unit=""} 1
+limitas_resource_info{category="shared",display_name="Things",has_quota="true",qdm="autogrow",resource="things",service="shared",topology="flat",unit="piece"} 1
 limitas_resource_info{category="unshared",display_name="Capacity",has_quota="true",qdm="autogrow",resource="capacity",service="unshared",topology="flat",unit="B"} 1
 # HELP limitas_resource_overcommit_factor Multiplier for converting this resource's raw capacity into reported capacity.
 # TYPE limitas_resource_overcommit_factor gauge
@@ -24,5 +24,5 @@ limitas_resource_overcommit_factor{resource="capacity",service="unshared"} 1
 limitas_resource_overcommit_factor{resource="things",service="shared"} 1
 # HELP limitas_resource_unit_multiplier Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.
 # TYPE limitas_resource_unit_multiplier gauge
-limitas_resource_unit_multiplier{base_unit="",resource="things",service="shared"} 1
 limitas_resource_unit_multiplier{base_unit="B",resource="capacity",service="unshared"} 1
+limitas_resource_unit_multiplier{base_unit="piece",resource="things",service="shared"} 1

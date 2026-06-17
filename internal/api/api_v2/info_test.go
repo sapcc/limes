@@ -47,11 +47,11 @@ const infoConfigJSON = `{
 			"commitment_behavior_per_resource": [],
 			"rate_limits": {
 				"global": [
-					{"name": "objects:create", "limit": 5000, "window": "1s"}
+					{"name": "objects:create", "limit": 5000, "window": "1s", "unit": "piece"}
 				],
 				"project_default": [
-					{"name": "objects:create", "limit": 5, "window": "1m"},
-					{"name": "objects:update", "limit": 2, "window": "1s"}
+					{"name": "objects:create", "limit": 5, "window": "1m", "unit": "piece"},
+					{"name": "objects:update", "limit": 2, "window": "1s", "unit": "piece"}
 				]
 			}
 		},

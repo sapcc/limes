@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // ParseQuotaOverrides parses the contents of a quota-overrides.json file.
@@ -51,7 +52,7 @@ func ParseQuotaOverrides(buf []byte, getUnit func(limes.ServiceType, ResourceNam
 
 func parseSingleQuotaOverrideValue(input json.RawMessage, serviceType limes.ServiceType, resourceName ResourceName, unit limes.Unit) (uint64, error) {
 	// case 1: counted resources represent quota as a single number
-	if unit == limes.UnitNone {
+	if unit == limes.UnitNone || unit == liquid.UnitPiece {
 		var value uint64
 		err := json.Unmarshal([]byte(input), &value)
 		if err != nil {

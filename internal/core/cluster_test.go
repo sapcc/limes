@@ -52,7 +52,7 @@ const (
 						{"name": "with_global_limit", "limit": 10, "window": "1m", "unit": "MiB"}
 					],
 					"project_default": [
-						{"name": "with_project_limit", "limit": 5, "window": "1m"}
+						{"name": "with_project_limit", "limit": 5, "window": "1m", "unit": "piece"}
 					]
 				}
 			}
@@ -86,7 +86,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
-		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false}, //nolint:staticcheck // intentionally using deprecated name UnitNone to validate the automatic rewrite into UnitPiece
 	}
 
 	s := test.NewSetup(t,
@@ -111,9 +111,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (1, 2, 'only_usage', 1, 'MiB', 'flat', TRUE, 'unshared/only_usage', 1);
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path) VALUES (2, 2, 'with_global_limit', 1, 'MiB', 'flat', 'unshared/with_global_limit');
-		INSERT INTO rates (id, service_id, name, liquid_version, topology, path) VALUES (3, 2, 'with_project_limit', 1, 'flat', 'unshared/with_project_limit');
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path) VALUES (3, 2, 'with_project_limit', 1, 'piece', 'flat', 'unshared/with_project_limit');
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'flat', TRUE, 'unshared/things', 'Things');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'piece', 'flat', TRUE, 'unshared/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 1, 'Unshared');
 	`)
 
@@ -142,7 +142,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (15, 5, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (16, 5, 'total', 0, 'shared/things/total');
 		UPDATE resources SET liquid_version = 3 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
-		INSERT INTO resources (id, service_id, name, liquid_version, topology, has_quota, path, display_name) VALUES (5, 1, 'things', 3, 'flat', TRUE, 'shared/things', 'Things');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (5, 1, 'things', 3, 'piece', 'flat', TRUE, 'shared/things', 'Things');
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 2;
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 3, 'Shared');
 	`)
@@ -215,7 +215,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
-		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -236,7 +236,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 
 	errs := generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 1)
-	assert.ErrEqual(t, errs[0], `failed to initialize service shared: saving ServiceInfo: cannot change unit of resource with id 2 from "" to "MiB", because the base units differ`)
+	assert.ErrEqual(t, errs[0], `failed to initialize service shared: saving ServiceInfo: cannot change unit of resource with id 2 from "piece" to "MiB", because the base units differ`)
 	tr.DBChanges().AssertEmpty()
 
 	// now we place some values in the database and convert from B to GiB
@@ -348,15 +348,15 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 	srvInfoShared.Resources["capacity"] = resCapacity
 	s.LiquidClients["shared"].ServiceInfo.Set(srvInfoShared)
 
-	// we try to do an impossible change for rates: unitMebibytes to unitNone
+	// we try to do an impossible change for rates: unitMebibytes to unitPiece
 	rateOnlyUsage := srvInfoUnshared.Rates["only_usage"]
-	rateOnlyUsage.Unit = liquid.UnitNone
+	rateOnlyUsage.Unit = liquid.UnitPiece
 	srvInfoUnshared.Rates["only_usage"] = rateOnlyUsage
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 
 	errs = generateNewClusterWithPersistingServiceInfo(t, s, false)
 	assert.Equal(t, len(errs), 1)
-	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: cannot change unit of rate with id 1 from "MiB" to "", because the base units differ`)
+	assert.ErrEqual(t, errs[0], `failed to initialize service unshared: saving ServiceInfo: cannot change unit of rate with id 1 from "MiB" to "piece", because the base units differ`)
 	tr.DBChanges().AssertEmpty()
 
 	// now, we enter some values and do a conversion
@@ -400,7 +400,7 @@ func Test_ClusterServiceInfoRateLimitsUnitIncompatible(t *testing.T) {
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
 		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
-		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false},
+		"with_project_limit": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,

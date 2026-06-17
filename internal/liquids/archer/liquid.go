@@ -34,13 +34,13 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"endpoints": {
 				DisplayName: "Endpoints",
-				Unit:        liquid.UnitNone,
+				Unit:        liquid.UnitPiece,
 				Topology:    liquid.FlatTopology,
 				HasQuota:    true,
 			},
 			"services": {
 				DisplayName: "Services",
-				Unit:        liquid.UnitNone,
+				Unit:        liquid.UnitPiece,
 				Topology:    liquid.FlatTopology,
 				HasQuota:    true,
 			},

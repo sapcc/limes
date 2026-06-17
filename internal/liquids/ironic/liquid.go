@@ -91,7 +91,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 		resources[resourceNameForFlavorName(flavor.Name)] = liquid.ResourceInfo{
 			DisplayName: flavor.Name,
-			Unit:        liquid.UnitNone,
+			Unit:        liquid.UnitPiece,
 			Topology:    liquid.AZAwareTopology,
 			HasCapacity: true,
 			HasQuota:    true,

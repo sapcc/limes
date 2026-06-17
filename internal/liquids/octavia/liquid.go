@@ -75,7 +75,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			if exists {
 				resources[resName] = liquid.ResourceInfo{
 					DisplayName: mappedNames.DisplayName,
-					Unit:        liquid.UnitNone,
+					Unit:        liquid.UnitPiece,
 					Topology:    liquid.FlatTopology,
 					HasCapacity: false,
 					HasQuota:    true,

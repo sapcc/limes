@@ -148,7 +148,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			resources[mappedNames.resourceName] = liquid.ResourceInfo{
 				DisplayName: mappedNames.displayName,
 				Category:    mappedNames.categoryName,
-				Unit:        liquid.UnitNone,
+				Unit:        liquid.UnitPiece,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: false,
 				HasQuota:    true,

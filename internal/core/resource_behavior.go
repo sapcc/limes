@@ -39,12 +39,12 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	return errs
 }
 
-// BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
+// BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the v1 API
 // format, using the category mapping in this behavior object.
 func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceName, resource db.Resource) limesresources.ResourceInfo {
 	return limesresources.ResourceInfo{
 		Name:     resName,
-		Unit:     resource.Unit,
+		Unit:     ConvertUnitToV1(resource.Unit),
 		Category: b.Category,
 		NoQuota:  !resource.HasQuota,
 	}

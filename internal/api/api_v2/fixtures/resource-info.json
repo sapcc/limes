@@ -16,6 +16,7 @@
               "resources": {
                 "things": {
                   "display_name": "Things",
+                  "unit": "piece",
                   "topology": "flat",
                   "has_capacity": false,
                   "has_quota": true
@@ -50,6 +51,7 @@
               "resources": {
                 "things": {
                   "display_name": "Things",
+                  "unit": "piece",
                   "topology": "flat",
                   "has_capacity": false,
                   "has_quota": true
