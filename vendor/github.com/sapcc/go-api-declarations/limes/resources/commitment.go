@@ -101,7 +101,7 @@ const (
 // but also allows large durations with calendar-compatible calculations
 // (e.g. "1y" is actually one year and not just 365 days).
 type CommitmentDuration struct {
-	//NOTE: this does not use uint etc. because time.Time.AddDate() wants int
+	// NOTE: this does not use uint etc. because time.Time.AddDate() wants int
 	Years  int
 	Months int
 	Days   int
@@ -214,6 +214,17 @@ func (d *CommitmentDuration) UnmarshalYAML(unmarshal func(any) error) error {
 		return err
 	}
 	*d, err = ParseCommitmentDuration(input)
+	return err
+}
+
+// MarshalText implements the encoding.TextMarshaler interface.
+func (d CommitmentDuration) MarshalText() (text []byte, err error) {
+	return []byte(d.String()), nil
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
+func (d *CommitmentDuration) UnmarshalText(text []byte) (err error) {
+	*d, err = ParseCommitmentDuration(string(text))
 	return err
 }
 

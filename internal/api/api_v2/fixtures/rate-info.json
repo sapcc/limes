@@ -28,6 +28,7 @@
                 },
                 "objects:update": {
                   "display_name": "Object Updates",
+                  "unit": "piece",
                   "topology": "flat",
                   "has_usage": true,
                   "project_default_limit": 2,
@@ -40,6 +41,7 @@
               "rates": {
                 "objects:create": {
                   "display_name": "Object Creations",
+                  "unit": "piece",
                   "topology": "flat",
                   "has_usage": true,
                   "project_default_limit": 5,

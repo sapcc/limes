@@ -235,7 +235,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 					converted, err := limes.ValueWithUnit{
 						Unit:  unit,
 						Value: *resRequest.MaxQuota,
-					}.ConvertTo(resource.Unit)
+					}.ConvertTo(core.ConvertUnitToV1(resource.Unit))
 					if err != nil {
 						msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 						http.Error(w, msg, http.StatusUnprocessableEntity)

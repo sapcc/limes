@@ -274,6 +274,21 @@ func generateDeleteFunc[T any](dbm *gorp.DbMap, getAZResourcePathPattern func(o 
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
 func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gorp.DbMap) (err error) {
+	// TODO: remove this once the move from UnitNone to UnitPiece is finished
+	//       (i.e. when liquid.ValidateServiceInfo is updated to reject UnitNone)
+	for resName, resInfo := range serviceInfo.Resources {
+		if resInfo.Unit == liquid.UnitNone { //nolint:staticcheck // necessary use of deprecated symbol
+			resInfo.Unit = liquid.UnitPiece
+			serviceInfo.Resources[resName] = resInfo
+		}
+	}
+	for rateName, rateInfo := range serviceInfo.Rates {
+		if rateInfo.Unit == liquid.UnitNone { //nolint:staticcheck // necessary use of deprecated symbol
+			rateInfo.Unit = liquid.UnitPiece
+			serviceInfo.Rates[rateName] = rateInfo
+		}
+	}
+
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {

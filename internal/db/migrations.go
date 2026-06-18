@@ -130,4 +130,12 @@ var sqlMigrations = map[string]string{
 	`081_add_project_commitments_updated_at.down.sql`: `
 		ALTER TABLE project_commitments DROP COLUMN updated_at;
 	`,
+	"082_rewrite_unitnone_into_unitpiece.up.sql": `
+		UPDATE resources SET unit = 'piece' WHERE unit = '';
+		UPDATE rates SET unit = 'piece' WHERE unit = '';
+	`,
+	"082_rewrite_unitnone_into_unitpiece.down.sql": `
+		UPDATE resources SET unit = '' WHERE unit = 'piece';
+		UPDATE rates SET unit = '' WHERE unit = 'piece';
+	`,
 }

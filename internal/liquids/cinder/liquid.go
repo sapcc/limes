@@ -149,7 +149,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	}
 	resInfoVolumes := liquid.ResourceInfo{
 		DisplayName: "Volumes",
-		Unit:        liquid.UnitNone,
+		Unit:        liquid.UnitPiece,
 		Topology:    liquid.AZAwareTopology,
 		HasCapacity: false,
 		HasQuota:    true,

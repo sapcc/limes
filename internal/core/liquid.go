@@ -367,11 +367,20 @@ type CapacityScrapeBackchannel interface {
 	GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error)
 }
 
-// BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.
+// ConvertUnitToV1 is usually a no-op, but if a resource or rate uses UnitPiece within Limes (and in the v2 API), this returns UnitNone instead.
+// This is intended to be used by the v1 API which continues using UnitNone instead of UnitPiece for backwards compatibility.
+func ConvertUnitToV1(unit liquid.Unit) limes.Unit {
+	if unit == liquid.UnitPiece {
+		return limes.UnitNone
+	}
+	return unit
+}
+
+// BuildAPIRateInfo converts a RateInfo from LIQUID into the v1 API format.
 func BuildAPIRateInfo(rateName limesrates.RateName, unit liquid.Unit) limesrates.RateInfo {
 	return limesrates.RateInfo{
 		Name: rateName,
-		Unit: unit,
+		Unit: ConvertUnitToV1(unit),
 	}
 }
 

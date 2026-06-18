@@ -80,11 +80,11 @@ limitas_rate_default_limit{rate="rateWithProjectLimit",service="unittest"} 50
 limitas_rate_default_window_seconds{rate="rateWithProjectLimit",service="unittest"} 1
 # HELP limitas_rate_info Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).
 # TYPE limitas_rate_info gauge
-limitas_rate_info{category="unittest",display_name="Cluster-Limited Rate",has_limit="false",has_usage="false",rate="rateWithClusterLimit",service="unittest",topology="flat",unit=""} 1
-limitas_rate_info{category="unittest",display_name="First Rate",has_limit="false",has_usage="true",rate="firstrate",service="unittest",topology="flat",unit=""} 1
-limitas_rate_info{category="unittest",display_name="Project-Limited Rate",has_limit="true",has_usage="false",rate="rateWithProjectLimit",service="unittest",topology="flat",unit=""} 1
+limitas_rate_info{category="unittest",display_name="Cluster-Limited Rate",has_limit="false",has_usage="false",rate="rateWithClusterLimit",service="unittest",topology="flat",unit="piece"} 1
+limitas_rate_info{category="unittest",display_name="First Rate",has_limit="false",has_usage="true",rate="firstrate",service="unittest",topology="flat",unit="piece"} 1
+limitas_rate_info{category="unittest",display_name="Project-Limited Rate",has_limit="true",has_usage="false",rate="rateWithProjectLimit",service="unittest",topology="flat",unit="piece"} 1
 limitas_rate_info{category="unittest",display_name="Second Rate",has_limit="false",has_usage="true",rate="secondrate",service="unittest",topology="flat",unit="KiB"} 1
-limitas_rate_info{category="unittest",display_name="X Another Rate",has_limit="false",has_usage="false",rate="xAnotherRate",service="unittest",topology="flat",unit=""} 1
+limitas_rate_info{category="unittest",display_name="X Another Rate",has_limit="false",has_usage="false",rate="xAnotherRate",service="unittest",topology="flat",unit="piece"} 1
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unittest"} 1
@@ -96,12 +96,12 @@ limitas_resource_autogrow_quota_overcommit_threshold_percent{resource="things",s
 # HELP limitas_resource_info Info metric for resources. The value is always 1, and information can be found in labels.
 # TYPE limitas_resource_info gauge
 limitas_resource_info{category="unittest",display_name="Capacity",has_quota="true",qdm="autogrow",resource="capacity",service="unittest",topology="az-aware",unit="B"} 1
-limitas_resource_info{category="unittest",display_name="Things",has_quota="true",qdm="autogrow",resource="things",service="unittest",topology="az-aware",unit=""} 1
+limitas_resource_info{category="unittest",display_name="Things",has_quota="true",qdm="autogrow",resource="things",service="unittest",topology="az-aware",unit="piece"} 1
 # HELP limitas_resource_overcommit_factor Multiplier for converting this resource's raw capacity into reported capacity.
 # TYPE limitas_resource_overcommit_factor gauge
 limitas_resource_overcommit_factor{resource="capacity",service="unittest"} 2
 limitas_resource_overcommit_factor{resource="things",service="unittest"} 1
 # HELP limitas_resource_unit_multiplier Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.
 # TYPE limitas_resource_unit_multiplier gauge
-limitas_resource_unit_multiplier{base_unit="",resource="things",service="unittest"} 1
 limitas_resource_unit_multiplier{base_unit="B",resource="capacity",service="unittest"} 1
+limitas_resource_unit_multiplier{base_unit="piece",resource="things",service="unittest"} 1

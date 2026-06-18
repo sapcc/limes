@@ -165,7 +165,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		NeedsResourceDemand: true,
 	}
 	resInfoForObjects := liquid.ResourceInfo{
-		Unit:        liquid.UnitNone,
+		Unit:        liquid.UnitPiece,
 		Topology:    topology,
 		HasCapacity: true,
 		HasQuota:    true,
@@ -174,7 +174,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+1)
 	resources["share_networks"] = liquid.ResourceInfo{
 		DisplayName: "Share Networks",
-		Unit:        liquid.UnitNone,
+		Unit:        liquid.UnitPiece,
 		Topology:    liquid.FlatTopology,
 		HasCapacity: true,
 		HasQuota:    true,

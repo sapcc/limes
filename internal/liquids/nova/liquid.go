@@ -154,7 +154,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
 			DisplayName:         "Cores",
-			Unit:                liquid.UnitNone,
+			Unit:                liquid.UnitPiece,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
 			HasQuota:            true,
@@ -162,7 +162,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		},
 		"instances": {
 			DisplayName:         "Instances",
-			Unit:                liquid.UnitNone,
+			Unit:                liquid.UnitPiece,
 			Topology:            liquid.AZAwareTopology,
 			HasCapacity:         true,
 			HasQuota:            true,
@@ -178,13 +178,13 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		},
 		"server_groups": {
 			DisplayName: "Server Groups",
-			Unit:        liquid.UnitNone,
+			Unit:        liquid.UnitPiece,
 			Topology:    liquid.FlatTopology,
 			HasQuota:    true,
 		},
 		"server_group_members": {
 			DisplayName: "Server Group Members",
-			Unit:        liquid.UnitNone,
+			Unit:        liquid.UnitPiece,
 			Topology:    liquid.FlatTopology,
 			HasQuota:    true,
 		},
@@ -206,7 +206,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
 				Category:            category,
 				DisplayName:         f.Name + " Instances",
-				Unit:                liquid.UnitNone,
+				Unit:                liquid.UnitPiece,
 				Topology:            liquid.AZAwareTopology,
 				HasCapacity:         true,
 				HasQuota:            true,
@@ -226,7 +226,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 				DisplayName: util.TitleCase(hwVersion),
 			}
 		}
-		unit := liquid.UnitNone
+		unit := liquid.UnitPiece
 		var displayName string
 		switch {
 		case strings.HasSuffix(string(resourceName), "cores"):

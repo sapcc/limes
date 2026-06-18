@@ -111,7 +111,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
 		resource, _ := sis.GetResourceForPath(path)
-		ospq.Unit = resource.Unit
+		ospq.Unit = core.ConvertUnitToV1(resource.Unit)
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -146,7 +146,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
 		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
-		mmpq.Unit = resource.Unit
+		mmpq.Unit = core.ConvertUnitToV1(resource.Unit)
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

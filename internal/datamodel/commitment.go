@@ -107,7 +107,7 @@ func ConvertCommitmentToDisplayForm(c db.ProjectCommitment, az limes.Availabilit
 		ResourceName:     apiIdentity.Name,
 		AvailabilityZone: az,
 		Amount:           c.Amount,
-		Unit:             unit,
+		Unit:             core.ConvertUnitToV1(unit),
 		Duration:         c.Duration,
 		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
 		CreatorUUID:      c.CreatorUUID,
