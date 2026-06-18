@@ -125,7 +125,7 @@ github.com/prometheus/client_golang/prometheus/promhttp/internal
 # github.com/prometheus/client_model v0.6.2
 ## explicit; go 1.22.0
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.68.1
+# github.com/prometheus/common v0.69.0
 ## explicit; go 1.25.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/model
@@ -134,7 +134,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/rabbitmq/amqp091-go v1.11.0
+# github.com/rabbitmq/amqp091-go v1.12.0
 ## explicit; go 1.20
 github.com/rabbitmq/amqp091-go
 # github.com/rs/cors v1.11.1
@@ -153,7 +153,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20260611141223-328f49772fed
+# github.com/sapcc/go-bits v0.0.0-20260618084436-170d5f1d10b3
 ## explicit; go 1.26
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -181,7 +181,7 @@ github.com/sapcc/go-bits/syncext
 # github.com/sergi/go-diff v1.4.0
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
-# go.xyrillian.de/gg v1.9.0
+# go.xyrillian.de/gg v1.9.1
 ## explicit; go 1.24
 go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
