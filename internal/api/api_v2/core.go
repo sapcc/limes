@@ -71,6 +71,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(*http.Request, *gopherpolicy.Token) (T, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t := tv.CheckToken(r)
+		t.Context.Request = mux.Vars(r)
 
 		var (
 			resp T
@@ -164,8 +165,8 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 	switch {
 	case err == nil:
 		t.Context.Request = map[string]string{
-			"domain_id":  domain.UUID,
-			"project_id": string(projectUUID),
+			"domain_uuid":  domain.UUID,
+			"project_uuid": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err != nil {
@@ -173,8 +174,8 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 		}
 	case errors.Is(err, sql.ErrNoRows):
 		t.Context.Request = map[string]string{
-			"domain_id":  "unknown",
-			"project_id": string(projectUUID),
+			"domain_uuid":  "unknown",
+			"project_uuid": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err == nil {

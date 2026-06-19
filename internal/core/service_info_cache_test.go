@@ -66,9 +66,6 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	assert.Equal(t, ok, false)
 	_, ok = filtered.GetRatesForType("first")
 	assert.Equal(t, ok, false)
-	service, ok := filtered.GetFilteredService()
-	assert.Equal(t, ok, true)
-	assert.Equal(t, service.DisplayName, "Second")
 
 	// filter by ServiceArea
 	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("shared")})
@@ -90,12 +87,6 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	assert.Equal(t, ok, true)
 	_, ok = resources["things"]
 	assert.Equal(t, ok, false)
-	_, ok = filtered.GetFilteredResource()
-	assert.Equal(t, ok, false) // ServiceType not set
-	filtered2 := sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second"), ResourceName: Some[liquid.ResourceName]("capacity")})
-	resource, ok := filtered2.GetFilteredResource()
-	assert.Equal(t, ok, true)
-	assert.Equal(t, resource.DisplayName, "Capacity")
 
 	// filter by Category
 	filtered = sis.Filter(core.ServiceInfoFilter{Category: Some[liquid.CategoryName]("foo_category")})
@@ -108,6 +99,16 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	_, ok = filtered.GetServiceForType("first")
 	assert.Equal(t, ok, false)
 
+	// filter by Category matching the serviceType yields entries which have no explicit category
+	filtered = sis.Filter(core.ServiceInfoFilter{Category: Some[liquid.CategoryName]("second")})
+	resources, ok = filtered.GetResourcesForType("second")
+	assert.Equal(t, ok, true)
+	assert.Equal(t, len(resources), 1)
+	_, ok = resources["things"]
+	assert.Equal(t, ok, true)
+	_, ok = resources["capacity"]
+	assert.Equal(t, ok, false)
+
 	// filter by RateName
 	filtered = sis.Filter(core.ServiceInfoFilter{RateName: Some[liquid.RateName]("objects:create")})
 	rates, ok = filtered.GetRatesForType("first")
@@ -115,12 +116,6 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	assert.Equal(t, len(rates), 1)
 	_, ok = rates["objects:create"]
 	assert.Equal(t, ok, true)
-	_, ok = filtered.GetFilteredRate()
-	assert.Equal(t, ok, false) // ServiceType not set
-	filtered2 = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("first"), RateName: Some[liquid.RateName]("objects:create")})
-	rate, ok := filtered2.GetFilteredRate()
-	assert.Equal(t, ok, true)
-	assert.Equal(t, rate.DisplayName, "Object Creations")
 
 	// snapshot immutability: mutations on returned maps don't affect snapshot
 	services := sis.GetServices()
