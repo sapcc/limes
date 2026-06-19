@@ -60,6 +60,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(*http.Request, *gopherpolicy.Token) (T, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t := tv.CheckToken(r)
+		t.Context.Request = mux.Vars(r)
 
 		var (
 			resp T
