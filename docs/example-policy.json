@@ -2,6 +2,7 @@
     "project_scope": "project_domain_id:%(domain_id)s and project_id:%(project_id)s",
     "domain_scope": "domain_id:%(domain_id)s",
     "cluster_admin": "role:cloud_resource_admin",
+    "cluster_viewer": "role:cloud_resource_viewer or rule:cluster_admin",
     "domain_editor": "rule:cluster_admin or (rule:domain_scope and role:resource_admin)",
     "domain_viewer": "rule:domain_editor or (rule:domain_scope and role:resource_viewer)",
     "project_editor": "rule:domain_editor or (rule:project_scope and role:admin)",
@@ -27,13 +28,22 @@
     "cluster:show_errors": "rule:cluster_admin",
     "cluster:edit": "rule:cluster_admin",
 
+    "v2:project:scope": "project_domain_id:%(domain_uuid)s and project_id:%(project_uuid)s",
+    "v2:domain:scope": "domain_id:%(domain_uuid)s",
+    "v2:project:role": "role:member or role:admin",
+    "v2:domain:role": "role:resource_viewer or role:resource_admin",
     "v2:meta:no_error_obfuscation": "rule:cluster_admin",
 
-    "v2:project:info": "rule:project_viewer",
+    "v2:project:info": "rule:'v2:domain:info' or rule:'v2:project:role'",
+    "v2:project:report_single": "rule:'v2:project:report_multiple' or (rule:'v2:project:scope' and rule:'v2:project:role')",
+    "v2:project:report_multiple": "rule:cluster_viewer or (rule:'v2:domain:scope' and rule:'v2:domain:role')",
     "v2:project:commitment_create": "rule:project_editor",
 
-    "v2:domain:info": "rule:domain_viewer",
+    "v2:domain:info": "rule:'v2:cluster:info' or rule:'v2:domain:role'",
+    "v2:domain:report_single": "rule:'v2:domain:report_multiple' or (rule:'v2:domain:scope' and rule:'v2:domain:role')",
+    "v2:domain:report_multiple": "rule:cluster_viewer",
 
-    "v2:cluster:info": "rule:cluster_admin",
+    "v2:cluster:info": "rule:cluster_viewer",
+    "v2:cluster:report_single": "rule:cluster_viewer",
     "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default"
 }
