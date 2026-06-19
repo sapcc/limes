@@ -49,7 +49,7 @@ type CategoryInfoReport struct {
 }
 
 // RateInfoReport contains details about a rate.
-// It appears in [ServiceInfoReport].
+// It appears in [CategoryInfoReport].
 type RateInfoReport struct {
 	DisplayName          string                    `json:"display_name"`
 	Unit                 liquid.Unit               `json:"unit,omitzero"`
