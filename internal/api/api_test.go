@@ -21,10 +21,10 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
@@ -903,7 +903,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, string(serviceType)))
 		return nil
 	}))
-	assert.DeepEqual(t, "stale project services", actualPairs, pairs)
+	assert.Equal(t, actualPairs, pairs)
 }
 
 func Test_EmptyProjectList(t *testing.T) {
@@ -1435,83 +1435,83 @@ func TestResourceRenaming(t *testing.T) {
 	expect := func(query string, expectedDurations ...string) {
 		t.Helper()
 
-		////// project level
+		t.Run("scope=project,query="+query, func(t *testing.T) {
+			var projectData struct {
+				Report limesresources.ProjectReport `json:"project"`
+			}
+			oldassert.HTTPRequest{
+				Method:       "GET",
+				Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin" + query,
+				ExpectStatus: 200,
+				ExpectBody:   JSONThatUnmarshalsInto{Value: &projectData},
+			}.Check(t, s.Handler)
 
-		var projectData struct {
-			Report limesresources.ProjectReport `json:"project"`
-		}
-		oldassert.HTTPRequest{
-			Method:       "GET",
-			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin" + query,
-			ExpectStatus: 200,
-			ExpectBody:   JSONThatUnmarshalsInto{Value: &projectData},
-		}.Check(t, s.Handler)
-
-		var actualDurationsInProject []string
-		for serviceType, serviceReport := range projectData.Report.Services {
-			for resourceName, resourceReport := range serviceReport.Resources {
-				if resourceReport.CommitmentConfig != nil {
-					for _, duration := range resourceReport.CommitmentConfig.Durations {
-						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
-						actualDurationsInProject = append(actualDurationsInProject, msg)
+			var actualDurationsInProject []string
+			for serviceType, serviceReport := range projectData.Report.Services {
+				for resourceName, resourceReport := range serviceReport.Resources {
+					if resourceReport.CommitmentConfig != nil {
+						for _, duration := range resourceReport.CommitmentConfig.Durations {
+							msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+							actualDurationsInProject = append(actualDurationsInProject, msg)
+						}
 					}
 				}
 			}
-		}
-		sort.Strings(actualDurationsInProject)
-		assert.DeepEqual(t, "durations on project level with query "+query, actualDurationsInProject, expectedDurations)
+			sort.Strings(actualDurationsInProject)
+			assert.Equal(t, actualDurationsInProject, expectedDurations)
+		})
 
-		////// domain level
+		t.Run("scope=domain,query="+query, func(t *testing.T) {
+			var domainData struct {
+				Report limesresources.DomainReport `json:"domain"`
+			}
+			oldassert.HTTPRequest{
+				Method:       "GET",
+				Path:         "/v1/domains/uuid-for-germany" + query,
+				ExpectStatus: 200,
+				ExpectBody:   JSONThatUnmarshalsInto{Value: &domainData},
+			}.Check(t, s.Handler)
 
-		var domainData struct {
-			Report limesresources.DomainReport `json:"domain"`
-		}
-		oldassert.HTTPRequest{
-			Method:       "GET",
-			Path:         "/v1/domains/uuid-for-germany" + query,
-			ExpectStatus: 200,
-			ExpectBody:   JSONThatUnmarshalsInto{Value: &domainData},
-		}.Check(t, s.Handler)
-
-		var actualDurationsInDomain []string
-		for serviceType, serviceReport := range domainData.Report.Services {
-			for resourceName, resourceReport := range serviceReport.Resources {
-				if resourceReport.CommitmentConfig != nil {
-					for _, duration := range resourceReport.CommitmentConfig.Durations {
-						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
-						actualDurationsInDomain = append(actualDurationsInDomain, msg)
+			var actualDurationsInDomain []string
+			for serviceType, serviceReport := range domainData.Report.Services {
+				for resourceName, resourceReport := range serviceReport.Resources {
+					if resourceReport.CommitmentConfig != nil {
+						for _, duration := range resourceReport.CommitmentConfig.Durations {
+							msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+							actualDurationsInDomain = append(actualDurationsInDomain, msg)
+						}
 					}
 				}
 			}
-		}
-		sort.Strings(actualDurationsInDomain)
-		assert.DeepEqual(t, "durations on domain level with query "+query, actualDurationsInDomain, expectedDurations)
+			sort.Strings(actualDurationsInDomain)
+			assert.Equal(t, actualDurationsInDomain, expectedDurations)
+		})
 
-		////// cluster level
+		t.Run("scope=cluster,query="+query, func(t *testing.T) {
+			var clusterData struct {
+				Report limesresources.ClusterReport `json:"cluster"`
+			}
+			oldassert.HTTPRequest{
+				Method:       "GET",
+				Path:         "/v1/clusters/current" + query,
+				ExpectStatus: 200,
+				ExpectBody:   JSONThatUnmarshalsInto{Value: &clusterData},
+			}.Check(t, s.Handler)
 
-		var clusterData struct {
-			Report limesresources.ClusterReport `json:"cluster"`
-		}
-		oldassert.HTTPRequest{
-			Method:       "GET",
-			Path:         "/v1/clusters/current" + query,
-			ExpectStatus: 200,
-			ExpectBody:   JSONThatUnmarshalsInto{Value: &clusterData},
-		}.Check(t, s.Handler)
-
-		var actualDurationsInCluster []string
-		for serviceType, serviceReport := range clusterData.Report.Services {
-			for resourceName, resourceReport := range serviceReport.Resources {
-				if resourceReport.CommitmentConfig != nil {
-					for _, duration := range resourceReport.CommitmentConfig.Durations {
-						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
-						actualDurationsInCluster = append(actualDurationsInCluster, msg)
+			var actualDurationsInCluster []string
+			for serviceType, serviceReport := range clusterData.Report.Services {
+				for resourceName, resourceReport := range serviceReport.Resources {
+					if resourceReport.CommitmentConfig != nil {
+						for _, duration := range resourceReport.CommitmentConfig.Durations {
+							msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+							actualDurationsInCluster = append(actualDurationsInCluster, msg)
+						}
 					}
 				}
 			}
-		}
-		sort.Strings(actualDurationsInCluster)
-		assert.DeepEqual(t, "durations on cluster level with query "+query, actualDurationsInCluster, expectedDurations)
+			sort.Strings(actualDurationsInCluster)
+			assert.Equal(t, actualDurationsInCluster, expectedDurations)
+		})
 	}
 
 	// baseline

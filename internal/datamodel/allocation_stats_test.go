@@ -9,7 +9,7 @@ package datamodel
 import (
 	"testing"
 
-	"github.com/sapcc/go-bits/assert"
+	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"

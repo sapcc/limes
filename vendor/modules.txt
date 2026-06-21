@@ -181,8 +181,10 @@ github.com/sapcc/go-bits/syncext
 # github.com/sergi/go-diff v1.4.0
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
-# go.xyrillian.de/gg v1.9.1
-## explicit; go 1.24
+# go.xyrillian.de/gg v1.10.1
+## explicit; go 1.26
+go.xyrillian.de/gg/assert
+go.xyrillian.de/gg/internal/path
 go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
 go.xyrillian.de/gg/option

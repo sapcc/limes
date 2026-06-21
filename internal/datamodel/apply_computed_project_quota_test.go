@@ -8,12 +8,12 @@ package datamodel
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
@@ -1249,16 +1249,8 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 		}
 	}
 
-	// We could just assert.DeepEqual() at this point, but the output of that
-	// would not be really helpful because fmt.Printf("%#v", ...) stops at
-	// pointer boundaries.
-	if reflect.DeepEqual(actual, expected) {
-		return
+	if !assert.Equal(t, actual, expected) {
+		t.Logf("config was %#v", cfg)
+		t.Logf("input was %s", must.ReturnT(json.Marshal(input))(t))
 	}
-
-	t.Error("ExpectACPQResult failed")
-	t.Logf("    config = %#v", cfg)
-	t.Logf("     input = %s", must.ReturnT(json.Marshal(input))(t))
-	t.Logf("  expected = %s", must.ReturnT(json.Marshal(expected))(t))
-	t.Logf("    actual = %s", must.ReturnT(json.Marshal(actual))(t))
 }
