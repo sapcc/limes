@@ -22,6 +22,8 @@ type PolicyEnforcer struct {
 	AllowUncommit     bool
 	// flags by v2 action
 	AllowInfo             bool
+	AllowReportSingle     bool
+	AllowReportMultiple   bool
 	AllowCommitmentCreate bool
 	// v2:level:role
 	IsDomainRole  bool
@@ -79,6 +81,10 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowUncommit
 	case "info":
 		return e.AllowInfo
+	case "report_single":
+		return e.AllowReportSingle
+	case "report_multiple":
+		return e.AllowReportMultiple
 	case "commitment_create":
 		return e.AllowCommitmentCreate
 	case "block_commitments":

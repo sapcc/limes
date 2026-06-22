@@ -21,7 +21,7 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 	httpapi.IdentifyEndpoint(r, "/resources/v2/cluster")
 	none := resourcesv2.ClusterGetResponse{}
 
-	err = token.Enforce("v2:cluster:report")
+	err = token.Enforce("v2:cluster:report_single")
 	if err != nil {
 		return none, err
 	}
@@ -41,7 +41,7 @@ func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.
 	httpapi.IdentifyEndpoint(r, "/rates/v2/cluster")
 	none := ratesv2.ClusterGetResponse{}
 
-	err = token.Enforce("v2:cluster:report")
+	err = token.Enforce("v2:cluster:report_single")
 	if err != nil {
 		return none, err
 	}
@@ -49,9 +49,13 @@ func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
+	filter, err := reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetClusterRates(p.Cluster, token, filter, options)
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
