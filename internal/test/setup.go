@@ -267,6 +267,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowUncommit:     true,
 		// v2 actions
 		AllowInfo:             true,
+		AllowReport:           true,
 		AllowCommitmentCreate: true,
 		// v2:level:role
 		IsDomainRole:  false,
