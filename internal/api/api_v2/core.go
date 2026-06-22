@@ -47,8 +47,19 @@ func NewV2API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, audi
 func (p *v2Provider) AddTo(r *mux.Router) {
 	tv := p.tokenValidator
 	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
-	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	r.Methods("GET").Path("/resources/v2/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesCluster))
+	r.Methods("GET").Path("/resources/v2/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomains))
+	r.Methods("GET").Path("/resources/v2/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
+	r.Methods("GET").Path("/resources/v2/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
+	r.Methods("GET").Path("/resources/v2/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
 	r.Methods("POST").Path("/resources/v2/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+
+	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	r.Methods("GET").Path("/rates/v2/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))
+	r.Methods("GET").Path("/rates/v2/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomains))
+	r.Methods("GET").Path("/rates/v2/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomain))
+	r.Methods("GET").Path("/rates/v2/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProjects))
+	r.Methods("GET").Path("/rates/v2/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProject))
 }
 
 // Wrapper for request handlers that enforces a structure,
