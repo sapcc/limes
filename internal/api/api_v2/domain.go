@@ -69,37 +69,24 @@ func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpoli
 // handleGetRatesDomains handles GET /rates/v2/domains.
 func (p *v2Provider) handleGetRatesDomains(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/domains")
-	none := ratesv2.DomainGetResponse{}
-
-	err = token.Enforce("v2:domain:report_multiple")
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.NewScope(false, r, None[string](), token, p.DB)
-	if err != nil {
-		return none, err
-	}
-	options, err := opts.ParseQueryString[common.DomainRateReportOpts](r.URL.Query())
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
-	if err != nil {
-		return none, err
-	}
-	return none, nil
+	return p.commonHandleGetRatesDomain(r, token, "v2:domain:report_multiple")
 }
 
 // handleGetRatesDomain handles GET /rates/v2/domains/:domain_uuid.
 func (p *v2Provider) handleGetRatesDomain(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/domains/:domain_uuid")
+	return p.commonHandleGetRatesDomain(r, token, "v2:domain:report_single")
+}
+
+// commonHandleGetRatesDomain handles single- and multi-domain rate calls.
+func (p *v2Provider) commonHandleGetRatesDomain(r *http.Request, token *gopherpolicy.Token, rule string) (_ ratesv2.DomainGetResponse, err error) {
 	none := ratesv2.DomainGetResponse{}
 
-	err = token.Enforce("v2:domain:report_single")
+	err = token.Enforce(rule)
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.NewScope(false, r, None[string](), token, p.DB)
+	scope, err := reports_v2.NewScope(false, r, None[string](), token, p.DB)
 	if err != nil {
 		return none, err
 	}
@@ -107,9 +94,13 @@ func (p *v2Provider) handleGetRatesDomain(r *http.Request, token *gopherpolicy.T
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
+	filter, err := reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetDomainRates(p.Cluster, token, filter, options, scope)
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
