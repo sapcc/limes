@@ -299,6 +299,12 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 		api.NewV1API(cluster, tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
 		api_v2.NewV2API(cluster, tokenValidator, commonAuditor, time.Now),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{
+			SkipRequestLog: true,
+			Check: func() error {
+				return cluster.DB.Db.PingContext(ctx)
+			},
+		},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))
