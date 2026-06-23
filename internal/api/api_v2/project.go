@@ -21,7 +21,7 @@ func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpo
 	httpapi.IdentifyEndpoint(r, "/resources/v2/projects")
 	none := resourcesv2.ProjectGetResponse{}
 
-	// important: validate scope before token.Enforce, so that URL/ query domain_uuid is written back to token scope
+	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
 	options, err := opts.ParseQueryString[common.ProjectResourceReportOpts](r.URL.Query())
 	if err != nil {
 		return none, err
@@ -46,7 +46,7 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid")
 	none := resourcesv2.ProjectGetResponse{}
 
-	// important: validate scope before token.Enforce, so that URL/ query domain_uuid is written back to token scope
+	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
 	options, err := opts.ParseQueryString[common.ProjectResourceReportOpts](r.URL.Query())
 	if err != nil {
 		return none, err
@@ -69,49 +69,39 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 // handleGetRatesProjects handles GET /rates/v2/projects.
 func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/projects")
-	none := ratesv2.ProjectGetResponse{}
-
-	// important: validate scope before token.Enforce, so that URL/ query domain_uuid is written back to token scope
-	options, err := opts.ParseQueryString[common.ProjectRateReportOpts](r.URL.Query())
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
-	if err != nil {
-		return none, err
-	}
-	err = token.Enforce("v2:project:report_multiple")
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
-	if err != nil {
-		return none, err
-	}
-	return none, nil
+	return p.commonHandleGetRatesProject(r, token, "v2:project:report_multiple")
 }
 
 // handleGetRatesProject handles GET /rates/v2/projects/:project_uuid.
 func (p *v2Provider) handleGetRatesProject(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/projects/:project_uuid")
+	return p.commonHandleGetRatesProject(r, token, "v2:project:report_single")
+}
+
+// commonHandleGetRatesProject handles single- and multi-project rate calls.
+func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, token *gopherpolicy.Token, rule string) (_ ratesv2.ProjectGetResponse, err error) {
 	none := ratesv2.ProjectGetResponse{}
 
-	// important: validate scope before token.Enforce, so that URL/ query domain_uuid is written back to token scope
+	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
 	options, err := opts.ParseQueryString[common.ProjectRateReportOpts](r.URL.Query())
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
+	scope, err := reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
 	if err != nil {
 		return none, err
 	}
-	err = token.Enforce("v2:project:report_single")
+	err = token.Enforce(rule)
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
+	filter, err := reports_v2.FilterFromRateOpts(p.Cluster, options.RateReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetProjectRates(p.Cluster, token, filter, options, scope)
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
