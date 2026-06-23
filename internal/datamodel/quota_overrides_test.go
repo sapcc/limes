@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -122,8 +122,8 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
-	assert.Equal(t, errs.Join(", "), "")
-	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
+	assert.Equal(t, errs, nil)
+	assert.Equal(t, overrides, expectedQuotaOverrides)
 }
 
 func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
@@ -136,6 +136,6 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 		test.WithLiquidConnections,
 	)
 	overrides, errs := datamodel.LoadQuotaOverrides(s.Cluster)
-	assert.Equal(t, errs.Join(", "), "")
-	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
+	assert.Equal(t, errs, nil)
+	assert.Equal(t, overrides, expectedQuotaOverrides)
 }

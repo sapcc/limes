@@ -16,7 +16,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.24.0
 	github.com/sapcc/go-bits v0.0.0-20260618170412-b440edfb4e25
 	github.com/sergi/go-diff v1.4.0
-	go.xyrillian.de/gg v1.9.1
+	go.xyrillian.de/gg v1.10.1
 	go.xyrillian.de/schwift/v2 v2.1.0
 )
 

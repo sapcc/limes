@@ -17,11 +17,11 @@ import (
 	"github.com/sapcc/go-api-declarations/cadf"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
@@ -1214,10 +1214,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	}
 	for serviceType, expectedDemandsByResource := range expectedDemandsByService {
 		for resourceName, expectedDemands := range expectedDemandsByResource {
-			actualDemands, err := bc.GetResourceDemand(serviceType, resourceName)
-			must.SucceedT(t, err)
-			desc := fmt.Sprintf("GetGlobalResourceDemand for %s/%s", serviceType, resourceName)
-			assert.DeepEqual(t, desc, actualDemands.PerAZ, expectedDemands)
+			t.Run(fmt.Sprintf("service=%s,resource=%s", serviceType, resourceName), func(t *testing.T) {
+				actualDemands := must.ReturnT(bc.GetResourceDemand(serviceType, resourceName))(t)
+				assert.Equal(t, actualDemands.PerAZ, expectedDemands)
+			})
 		}
 	}
 

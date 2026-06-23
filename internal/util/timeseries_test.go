@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/util"
 )
@@ -121,6 +121,6 @@ func expectJSON[T cmp.Ordered](t *testing.T, value util.TimeSeries[T], repr stri
 	if err != nil {
 		t.Error("while unmarshaling: " + err.Error())
 	} else {
-		assert.DeepEqual(t, "unmarshaled value", unmarshaled, value)
+		assert.Equal(t, unmarshaled, value)
 	}
 }

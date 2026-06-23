@@ -6,7 +6,7 @@ package util
 import (
 	"testing"
 
-	"github.com/sapcc/go-bits/assert"
+	"go.xyrillian.de/gg/assert"
 )
 
 func TestTitleCase(t *testing.T) {

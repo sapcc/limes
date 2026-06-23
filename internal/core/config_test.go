@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/errext"
+	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -28,7 +28,7 @@ func TestFilterDomains(t *testing.T) {
 	expected := []core.KeystoneDomain{
 		{Name: "foo1"},
 	}
-	assert.DeepEqual(t, "filtered domains", cfg.FilterDomains(input), expected)
+	assert.Equal(t, cfg.FilterDomains(input), expected)
 }
 
 func TestConfigValidation(t *testing.T) {

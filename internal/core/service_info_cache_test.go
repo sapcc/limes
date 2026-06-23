@@ -8,9 +8,9 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
