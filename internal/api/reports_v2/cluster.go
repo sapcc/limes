@@ -20,7 +20,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var clusterReportQuery = sqlext.SimplifyWhitespace(`
+var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT pra.rate_id, SUM(pra.usage_as_bigint::BIGINT)::TEXT AS usage_as_bigint
 	FROM project_rates pra
 	WHERE {{pra.rate_id = ANY($rate_id)}}
@@ -41,7 +41,7 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 	}
 
 	// the result will have all rates without usage --> we will filter later
-	query, args := filter.ExpandServiceFilters(clusterReportQuery)
+	query, args := filter.ExpandServiceFilters(clusterRateReportQuery)
 	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
 		var (
 			rateID        db.RateID
@@ -51,7 +51,7 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 		if err != nil {
 			return err
 		}
-		setInRateReport(filter, cluster, result, rateID, ratesv2.ClusterRateReport{UsageAsBigint: usageAsBigint})
+		setInClusterRateReport(filter, cluster, result, rateID, ratesv2.ClusterRateReport{UsageAsBigint: usageAsBigint})
 		return nil
 	})
 
@@ -61,10 +61,10 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 	return *result, nil
 }
 
-// setInRateReport creates or iterates higher level structs on the way to the nested
+// setInClusterRateReport creates or iterates higher level structs on the way to the nested
 // location of the db.RateID in the report and assigns the value for ratesv2.ClusterRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
-func setInRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ClusterGetResponse, rateID db.RateID, value ratesv2.ClusterRateReport) {
+func setInClusterRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ClusterGetResponse, rateID db.RateID, value ratesv2.ClusterRateReport) {
 	services := filter.GetServices()
 	categories := filter.GetCategories()
 
