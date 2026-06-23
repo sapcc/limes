@@ -1,0 +1,187 @@
+{
+  "info": {
+    "all_azs": [
+      "az-one",
+      "az-two"
+    ],
+    "service_areas": {
+      "first": {
+        "display_name": "First",
+        "services": {
+          "first": {
+            "categories": {
+              "first": {
+                "display_name": "First",
+                "rates": {
+                  "objects:delete": {
+                    "display_name": "Object Deletions",
+                    "has_usage": true,
+                    "topology": "flat",
+                    "unit": "MiB"
+                  },
+                  "objects:unlimited": {
+                    "display_name": "Object Unlimited Operations",
+                    "has_usage": true,
+                    "topology": "flat",
+                    "unit": "KiB"
+                  },
+                  "objects:update": {
+                    "display_name": "Object Updates",
+                    "has_usage": false,
+                    "project_default_limit": 2,
+                    "project_default_window": "1s",
+                    "topology": "flat",
+                    "unit": "piece"
+                  }
+                }
+              },
+              "foo_category": {
+                "display_name": "Foo Category",
+                "rates": {
+                  "objects:create": {
+                    "display_name": "Object Creations",
+                    "has_usage": true,
+                    "project_default_limit": 5,
+                    "project_default_window": "1m",
+                    "topology": "flat",
+                    "unit": "piece"
+                  }
+                }
+              }
+            },
+            "display_name": "First",
+            "version": 1
+          }
+        }
+      },
+      "second": {
+        "display_name": "Second",
+        "services": {
+          "second": {
+            "categories": {},
+            "display_name": "Second",
+            "version": 1
+          }
+        }
+      }
+    }
+  },
+  "domains": {
+    "uuid-for-france": {
+      "projects": {
+        "uuid-for-paris": {
+          "uuid": "uuid-for-paris",
+          "name": "paris",
+          "parent_uuid": "uuid-for-france",
+          "domain": {
+            "uuid": "uuid-for-france",
+            "name": "france"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "categories": {
+                    "first": {
+                      "rates": {
+                        "objects:delete": {
+                          "usage_as_bigint": "5"
+                        },
+                        "objects:unlimited": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "rates": {
+                        "objects:create": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "uuid-for-germany": {
+      "projects": {
+        "uuid-for-berlin": {
+          "uuid": "uuid-for-berlin",
+          "name": "berlin",
+          "parent_uuid": "uuid-for-germany",
+          "domain": {
+            "uuid": "uuid-for-germany",
+            "name": "germany"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "categories": {
+                    "first": {
+                      "rates": {
+                        "objects:delete": {
+                          "usage_as_bigint": "5"
+                        },
+                        "objects:unlimited": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "rates": {
+                        "objects:create": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "uuid-for-dresden": {
+          "uuid": "uuid-for-dresden",
+          "name": "dresden",
+          "parent_uuid": "uuid-for-berlin",
+          "domain": {
+            "uuid": "uuid-for-germany",
+            "name": "germany"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "categories": {
+                    "first": {
+                      "rates": {
+                        "objects:delete": {
+                          "usage_as_bigint": "5"
+                        },
+                        "objects:unlimited": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "rates": {
+                        "objects:create": {
+                          "usage_as_bigint": "5"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
