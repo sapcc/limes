@@ -6,11 +6,12 @@ package api_v2
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
-	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/core"
@@ -18,6 +19,7 @@ import (
 
 type versionProvider struct {
 	Cluster                *core.Cluster
+	DomainNames            DomainNames
 	currentVersion         string
 	experimentalVersions   []string
 	otherSupportedVersions []string
@@ -39,9 +41,10 @@ type VersionLinkData struct {
 }
 
 // NewVersionProviderAPI creates an httpapi.API that serves the version advertisement API.
-func NewVersionProviderAPI(cluster *core.Cluster) httpapi.API {
+func NewVersionProviderAPI(cluster *core.Cluster, domainNames DomainNames) httpapi.API {
 	return &versionProvider{
 		Cluster:              cluster,
+		DomainNames:          domainNames,
 		currentVersion:       "v1",
 		experimentalVersions: []string{"v2"},
 	}
@@ -97,9 +100,44 @@ func (p *versionProvider) AddTo(r *mux.Router) {
 	}
 }
 
-// Path constructs a full URL for a given URL path below the respective /v[version]/ endpoint.
-func (p *versionProvider) Path(version string, elements ...string) string {
-	parts := []string{strings.TrimSuffix(p.Cluster.Config.CatalogURL, "/"), version}
-	parts = append(parts, elements...)
-	return strings.Join(parts, "/") + "/"
+// Path constructs a full URL for the respective /v[version]/ endpoint.
+func (p *versionProvider) Path(version string) string {
+	u := url.URL{
+		Scheme: "https",
+		Host:   p.DomainNames.V2,
+		Path:   version + "/",
+	}
+	if version == "v1" {
+		u.Host = p.DomainNames.V1
+	}
+	return u.String()
+}
+
+// DomainNames holds the domain names used by Limes's APIs.
+type DomainNames struct {
+	V1 string `json:"v1"`
+	V2 string `json:"v2"`
+}
+
+// CollectDomainNamesFromEnv constructs a [DomainNames] instance.
+func CollectDomainNamesFromEnv() (result DomainNames, err error) {
+	getAndCheck := func(key string) (string, error) {
+		value, err := osext.NeedGetenv(key)
+		if err != nil {
+			return "", err
+		}
+		// check that `value` is a hostname and nothing else
+		testURL, err := url.Parse("https://" + value)
+		if err != nil || testURL.Host != value {
+			return "", fmt.Errorf("invalid value for %s: expected a hostname, but got %q", key, value)
+		}
+		return value, nil
+	}
+
+	result.V1, err = getAndCheck("LIMES_API_DOMAIN_NAME_V1")
+	if err != nil {
+		return
+	}
+	result.V2, err = getAndCheck("LIMES_API_DOMAIN_NAME_V2")
+	return
 }

@@ -30,6 +30,8 @@ on the top left corner of this document to get to a specific section of this gui
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `LIMES_API_DOMAIN_NAME_V1` | *(required)* | Domain name of Limes v1 API as it appears in the Keystone service catalog for this cluster. The public endpoint URL in the catalog entry for service type `resources` must be `https://THIS_VALUE`. |
+| `LIMES_API_DOMAIN_NAME_V2` | *(required)* | Domain name of Limes v2 API as it appears in the Keystone service catalog for this cluster. The public endpoint URLs in the catalog entries for service types `limitas-resources` and `limitas-rates` must be `https://THIS_VALUE/resources` and `https://THIS_VALUE/rates`, respectively. |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
 | `LIMES_API_POLICY_PATH` | `/etc/limes/policy.json` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 
@@ -128,7 +130,6 @@ The following fields and sections are supported:
 | Field | Required | Description |
 | --- | --- | --- |
 | `availability_zones` | yes | List of availability zones in this cluster. |
-| `catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
 | `discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
 | `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
