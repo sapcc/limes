@@ -6,6 +6,7 @@
 UPDAT = "UPDAT"
 thi = "thi"
 
+
 [files]
 extend-exclude = [
   "go.mod",
