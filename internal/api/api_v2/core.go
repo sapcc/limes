@@ -51,6 +51,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
 	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
 	r.Methods("POST").Path("/resources/v2/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+	r.Methods("DELETE").Path("/resources/v2/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
 }
 
 // Wrapper for request handlers that enforces a structure,

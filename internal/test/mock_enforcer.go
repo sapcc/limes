@@ -21,8 +21,10 @@ type PolicyEnforcer struct {
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
 	// flags by v2 action
-	AllowInfo             bool
-	AllowCommitmentCreate bool
+	AllowInfo                  bool
+	AllowCommitmentCreate      bool
+	AllowCommitmentDelete      bool
+	AllowCommitmentDeleteAdmin bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -72,6 +74,10 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowInfo
 	case "commitment_create":
 		return e.AllowCommitmentCreate
+	case "commitment_delete":
+		return e.AllowCommitmentDelete
+	case "commitment_delete_admin":
+		return e.AllowCommitmentDeleteAdmin
 	case "block_commitments":
 		return false
 	default:

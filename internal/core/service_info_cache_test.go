@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/must"
@@ -192,6 +193,16 @@ func TestServiceInfoCache(t *testing.T) {
 	sis = s.Cluster.SIC.GetSnapshot()
 	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).DisplayName, "Changed")
 	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "things"}))(t).DisplayName, "Things")
+
+	// check GetAZResourceForID
+	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
+	azRes, ok := sis.GetAZResourceForID(secondCapacityAZOne)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, azRes.Path.ServiceType, db.ServiceType("second"))
+	assert.Equal(t, azRes.Path.ResourceName, liquid.ResourceName("capacity"))
+	assert.Equal(t, azRes.Path.AvailabilityZone, limes.AvailabilityZone("az-one"))
+	_, ok = sis.GetAZResourceForID(99999) // non-existent ID
+	assert.Equal(t, ok, false)
 
 	// check az_resource insert
 	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t)), 5) // gives out total, any and unknown, too
