@@ -64,6 +64,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 	resRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
 	resRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
 	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+	resRouter.Methods("DELETE").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
 
 	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
 	ratesRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))

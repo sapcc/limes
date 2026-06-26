@@ -76,6 +76,15 @@
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
 //
+// # Endpoint: DELETE /resources/v2/commitments/:uuid
+//
+// Deletes the specified commitment.
+// A project-scoped token can only access this path, if a commitment_uuid from his project is set in the URL parameter.
+// A domain-scoped token can only access this path, if a commitment_uuid from his domain is set in the URL parameter.
+// A cloud-admin token can delete any commitment_uuid.
+// For project- and domain-scoped tokens, the commitment needs to be deletable - meaning maximum 24 hours old and not yet transferred.
+//   - On success, status code 204 (No Content) will be returned.
+//
 // # Endpoint: GET /rates/v2/info
 //
 // Returns information about the cluster's rates, potentially limited to those rates that are accessible within the authenticated scope:

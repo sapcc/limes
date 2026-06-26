@@ -65,6 +65,8 @@ type ServiceInfoReader interface {
 	GetAZResourcesForPath(path db.ResourcePath) (map[limes.AvailabilityZone]db.AZResource, bool)
 	// GetAZResourceForPath returns the AZ resource for the given AZResourcePath.
 	GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool)
+	// GetAZResourceForID returns the AZ resource for the given db.AZResourceID.
+	GetAZResourceForID(id db.AZResourceID) (db.AZResource, bool)
 	// GetRates returns all rates.
 	GetRates() map[db.ServiceType]map[liquid.RateName]db.Rate
 	// GetRatesForType returns all rates for the given service type.
@@ -305,6 +307,20 @@ func (s ServiceInfoSnapshot) GetAZResourceForPath(path db.AZResourcePath) (db.AZ
 	return val, ok
 }
 
+// GetAZResourceForID implements the [ServiceInfoReader] interface.
+func (s ServiceInfoSnapshot) GetAZResourceForID(id db.AZResourceID) (db.AZResource, bool) {
+	for _, azResByAZName := range s.azResources {
+		for _, azResByAZ := range azResByAZName {
+			for _, azRes := range azResByAZ {
+				if azRes.ID == id {
+					return azRes, true
+				}
+			}
+		}
+	}
+	return db.AZResource{}, false
+}
+
 // GetRates implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetRates() ratesByNameType {
 	return deepCloneMap(s.rates, maps.Clone)
@@ -410,6 +426,11 @@ func (f FilteredServiceInfoSnapshot) GetAZResourcesForPath(path db.ResourcePath)
 // GetAZResourceForPath implements the [ServiceInfoReader] interface.
 func (f FilteredServiceInfoSnapshot) GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool) {
 	return f.snapshot.GetAZResourceForPath(path)
+}
+
+// GetAZResourceForID implements the [ServiceInfoReader] interface.
+func (f FilteredServiceInfoSnapshot) GetAZResourceForID(id db.AZResourceID) (db.AZResource, bool) {
+	return f.snapshot.GetAZResourceForID(id)
 }
 
 // GetRates implements the [ServiceInfoReader] interface.
