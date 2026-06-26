@@ -38,6 +38,8 @@
     "v2:project:report_single": "rule:'v2:project:report_multiple' or (rule:'v2:project:scope' and rule:'v2:project:role')",
     "v2:project:report_multiple": "rule:cluster_viewer or (rule:'v2:domain:scope' and rule:'v2:domain:role')",
     "v2:project:commitment_create": "rule:cluster_admin or (rule:'v2:domain:scope' and role:resource_admin) or (rule:'v2:project:scope' and role:admin)",
+    "v2:project:commitment_delete": "rule:cluster_admin or (rule:'v2:domain_scope' and role:resource_admin) or (rule:'v2:project_scope' and role:admin)",
+    "v2:project:commitment_delete_admin": "rule:cluster_admin",
 
     "v2:domain:info": "rule:'v2:cluster:info' or rule:'v2:domain:role'",
     "v2:domain:report_single": "rule:'v2:domain:report_multiple' or (rule:'v2:domain:scope' and rule:'v2:domain:role')",

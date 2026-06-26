@@ -56,7 +56,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	now := p.timeNow()
 
 	// validate request contents
-	dbDomain, dbProject, err := p.checkProjectAccess(token, req.ProjectUUID, "v2:project:commitment_create")
+	dbDomain, dbProject, err := p.checkProjectAccess(token, Some(req.ProjectUUID), None[db.ProjectID](), "v2:project:commitment_create")
 	if err != nil {
 		return none, err
 	}
@@ -230,7 +230,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 		}
 	}
 
-	canBeDeleted := datamodel.CanDeleteCommitment(token, c, p.timeNow)
+	canBeDeleted := isDeletable(token, c, p.timeNow)
 	result := convertCommitmentToDisplayForm(c, path, dbProject, canBeDeleted)
 	if req.DryRun {
 		result.UUID = "00000000-0000-0000-0000-000000000000"
