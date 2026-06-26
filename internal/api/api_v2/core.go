@@ -66,6 +66,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 	resRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
 	resRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
 	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+	resRouter.Methods("DELETE").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
 
 	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
 	ratesRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))
@@ -206,4 +207,59 @@ func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Tok
 		err = respondwith.CustomStatus(http.StatusNotFound, err)
 	}
 	return reports_v2.ProjectScope{Domain: domain, Project: project}, err
+}
+
+// checkProjectAccessByID is like [checkProjectAccess], but identifies the project by its internal database ID
+// instead of by its UUID.
+func (p *v2Provider) checkProjectAccessByID(ctx context.Context, t *gopherpolicy.Token, projectID db.ProjectID, policyRule string) (_ reports_v2.ProjectScope, err error) {
+	// NOTE: This method is NOT written with resiliency against timing side-channel,
+	// as someone already guessed a non-project/domain uuid correctly at this point.
+
+	// find the project and its domain
+	project, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `id = $1`, projectID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// defense in depth (should not happen except in case of dirty read)
+		t.Context.Request = map[string]string{
+			"domain_uuid":  "unknown",
+			"project_uuid": "unknown",
+		}
+		err = t.Enforce(policyRule)
+		if err == nil {
+			err = fmt.Errorf("no such project (ID = %d)", projectID)
+			err = respondwith.CustomStatus(http.StatusNotFound, err)
+		}
+		return
+	case err != nil:
+		return
+	}
+
+	domain, err := db.DomainStore.SelectOneWhere(ctx, p.DB, `id = $1`, project.DomainID)
+	switch {
+	case err == nil:
+		t.Context.Request = map[string]string{
+			"domain_uuid":  domain.UUID,
+			"project_uuid": string(project.UUID),
+		}
+		err = t.Enforce(policyRule)
+		if err != nil {
+			return
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		// defense in depth (should not happen except in case of dirty read)
+		t.Context.Request = map[string]string{
+			"domain_uuid":  "unknown",
+			"project_uuid": string(project.UUID),
+		}
+		err = t.Enforce(policyRule)
+		if err == nil {
+			err = fmt.Errorf("no such project (ID = %d)", projectID)
+			err = respondwith.CustomStatus(http.StatusNotFound, err)
+		}
+		return
+	default:
+		return
+	}
+
+	return reports_v2.ProjectScope{Domain: domain, Project: project}, nil
 }
