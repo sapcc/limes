@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -206,4 +207,20 @@ func analyzeCommitmentChangeResponse(resp liquid.CommitmentChangeResponse) error
 	} else {
 		return respondwith.CustomStatus(http.StatusConflict, err)
 	}
+}
+
+// isDeletable checks whether the user with the given token is allowed to delete this commitment.
+// For that, the commitment cannot be older than 24 hours and only directly created.
+// An admin exception is also allowed.
+func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow func() time.Time) bool {
+	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusConfirmed}, c.Status) {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(c.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(c.CreatedAt.Add(24*time.Hour)) {
+			return token.Check("v2:project:commitment_delete")
+		}
+	}
+
+	// admin exception
+	return token.Check("v2:project:commitment_delete_admin")
 }

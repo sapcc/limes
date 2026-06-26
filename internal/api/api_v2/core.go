@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"time"
 
+	. "go.xyrillian.de/gg/option"
+
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -139,31 +141,36 @@ func parseRequestBodyAs[T any](r *http.Request) (T, error) {
 }
 
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
+// One of projectUUID and projectID must be IsSome(), projectUUID takes precendence.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
+func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID Option[liquid.ProjectUUID], projectID Option[db.ProjectID], policyRule string) (_ db.Domain, _ db.Project, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
 	// find the domain belonging to this project
+	var (
+		where string
+		arg   any
+	)
+	if id, ok := projectUUID.Unpack(); ok {
+		where = "p.uuid = $1"
+		arg = id
+	} else if id, ok := projectID.Unpack(); ok {
+		where = "p.id = $1"
+		arg = id
+	} else {
+		panic("cannot check project access without project UUID or ID")
+	}
 	var domain db.Domain
 	err = p.DB.SelectOne(&domain,
-		`SELECT d.* FROM domains d JOIN projects p ON d.id = p.domain_id WHERE p.uuid = $1`,
-		projectUUID,
+		`SELECT d.* FROM domains d JOIN projects p ON d.id = p.domain_id WHERE `+where,
+		arg,
 	)
 	switch {
-	case err == nil:
-		t.Context.Request = map[string]string{
-			"domain_id":  domain.UUID,
-			"project_id": string(projectUUID),
-		}
-		err = t.Enforce(policyRule)
-		if err != nil {
-			return
-		}
 	case errors.Is(err, sql.ErrNoRows):
 		t.Context.Request = map[string]string{
-			"domain_id":  "unknown",
-			"project_id": string(projectUUID),
+			"domain_uuid":  "unknown",
+			"project_uuid": "unknown",
 		}
 		err = t.Enforce(policyRule)
 		if err == nil {
@@ -171,16 +178,25 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 			err = respondwith.CustomStatus(http.StatusNotFound, err)
 		}
 		return
-	default:
+	case err != nil:
 		return
 	}
 
 	var project db.Project
-	err = p.DB.SelectOne(&project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	err = p.DB.SelectOne(&project, `SELECT * FROM projects p WHERE `+where, arg)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this branch should not be reachable if the first database query found a result
 		err = fmt.Errorf("no such project (UUID = %s)", projectUUID)
 		err = respondwith.CustomStatus(http.StatusNotFound, err)
+		return
+	}
+	t.Context.Request = map[string]string{
+		"domain_uuid":  domain.UUID,
+		"project_uuid": string(project.UUID),
+	}
+	err = t.Enforce(policyRule)
+	if err != nil {
+		return
 	}
 	return domain, project, err
 }

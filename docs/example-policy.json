@@ -27,10 +27,16 @@
     "cluster:show_errors": "rule:cluster_admin",
     "cluster:edit": "rule:cluster_admin",
 
+    "v2:project_scope": "project_domain_id:%(domain_uuid)s and project_id:%(project_uuid)s",
+    "v2:domain_scope": "domain_id:%(domain_uuid)s",
+    "v2:project_user": "role:member or role:admin",
+    "v2:domain_user": "role:resource_viewer or role:resource_admin",
     "v2:meta:no_error_obfuscation": "rule:cluster_admin",
 
     "v2:project:info": "rule:project_viewer",
-    "v2:project:commitment_create": "rule:project_editor",
+    "v2:project:commitment_create": "(rule:'v2:project_scope' and role:admin) or (rule:'v2:domain_scope' and role:resource_admin) or rule:cluster_admin",
+    "v2:project:commitment_delete": "(rule:'v2:project_scope' and role:admin) or (rule:'v2:domain_scope' and role:resource_admin) or rule:cluster_admin",
+    "v2:project:commitment_delete_admin": "rule:cluster_admin",
 
     "v2:domain:info": "rule:domain_viewer",
 
