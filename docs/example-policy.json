@@ -46,6 +46,8 @@
     "v2:project:with_historical_usage": "rule:v2_cluster_viewer",
     "v2:project:with_timing": "rule:v2_cluster_viewer",
     "v2:project:commitment_create": "rule:v2_project_admin",
+    "v2:project:commitment_delete": "rule:cluster_admin or (rule:'v2:domain_scope' and role:resource_admin) or (rule:'v2:project_scope' and role:admin)",
+    "v2:project:commitment_delete_admin": "rule:cluster_admin",
 
     "v2:domain:info": "rule:v2_domain_viewer",
     "v2:domain:report_single": "rule:v2_domain_viewer",
