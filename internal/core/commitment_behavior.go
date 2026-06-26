@@ -11,6 +11,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
+	"go.xyrillian.de/gg/is"
 	. "go.xyrillian.de/gg/option"
 
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
@@ -102,7 +103,7 @@ func (b CommitmentBehavior) ForCluster() ScopedCommitmentBehavior {
 
 // CanConfirmCommitmentsAt evaluates the MinConfirmDate field.
 func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) (errorMsg string) {
-	canConfirm := b.MinConfirmDate.IsNoneOr(func(input time.Time) bool { return input.Before(t) })
+	canConfirm := b.MinConfirmDate.IsNoneOr(is.NotAfter(t))
 	if canConfirm {
 		return ""
 	}

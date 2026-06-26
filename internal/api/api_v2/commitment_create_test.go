@@ -394,6 +394,7 @@ func TestCommitmentCreateBasic(t *testing.T) {
 }
 
 func TestCommitmentCreateValidationErrors(t *testing.T) {
+	ctx := t.Context()
 	s := test.NewSetup(t,
 		test.WithConfig(commitmentCreateConfigJSON),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
@@ -644,6 +645,19 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 	}, func(r httptest.Response) {
 		r.ExpectText(t, http.StatusUnprocessableEntity, "this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n")
 	})
+
+	// HOWEVER a commitment with confirm_by = min_confirm_by exactly should be accepted
+	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+		"dry_run":           true,
+		"amount":            1,
+		"duration":          "1 hour",
+		"project_id":        "uuid-for-berlin",
+		"service_type":      "first",
+		"resource_name":     "things",
+		"availability_zone": "any",
+		"status":            "planned",
+		"confirm_by":        must.Return(time.Parse(time.RFC3339, "1970-01-08T00:00:00Z")).Unix(),
+	})).ExpectStatus(t, http.StatusCreated)
 
 	// invalid choice of notify_on_confirm
 	createCommitmentAndExpectError(t, s, tr, map[string]any{
