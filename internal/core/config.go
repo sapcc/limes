@@ -29,7 +29,6 @@ import (
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
 	AvailabilityZones        []limes.AvailabilityZone               `json:"availability_zones"`
-	CatalogURL               string                                 `json:"catalog_url"`
 	Discovery                DiscoveryConfiguration                 `json:"discovery"`
 	Areas                    map[string]AreaInfo                    `json:"areas"`
 	Liquids                  map[db.ServiceType]LiquidConfiguration `json:"liquids"`
