@@ -17,12 +17,35 @@ Example to list resource providers
 		fmt.Printf("%+v\n", r)
 	}
 
+Example to list resource providers with repeating member_of and required parameters (microversion >= 1.39)
+
+	placementClient.Microversion = "1.39"
+
+	listOpts := resourceproviders.ListOpts139{
+		MemberOf: []string{"42896e0d-205d-4fe3-bd1e-100924931787", "in:7834d585-31d4-486f-be8c-b3c1a58ca710,5e08ea53-c4c6-448e-9334-ac4953de3cfa"},
+		Required: []string{"CUSTOM_TRAIT1", "CUSTOM_TRAIT2"},
+	}
+
+	allPages, err := resourceproviders.List(placementClient, listOpts).AllPages(context.TODO())
+	if err != nil {
+		panic(err)
+	}
+
+	allResourceProviders, err := resourceproviders.ExtractResourceProviders(allPages)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, r := range allResourceProviders {
+		fmt.Printf("%+v\n", r)
+	}
+
 Example to create resource providers
 
 	createOpts := resourceproviders.CreateOpts{
-		Name: "new-rp",
-		UUID: "b99b3ab4-3aa6-4fba-b827-69b88b9c544a",
-		ParentProvider: "c7f50b40-6f32-4d7a-9f32-9384057be83b"
+		Name:               "new-rp",
+		UUID:               "b99b3ab4-3aa6-4fba-b827-69b88b9c544a",
+		ParentProviderUUID: "c7f50b40-6f32-4d7a-9f32-9384057be83b",
 	}
 
 	rp, err := resourceproviders.Create(context.TODO(), placementClient, createOpts).Extract()
@@ -49,14 +72,35 @@ Example to Get a resource provider
 Example to Update a resource provider
 
 	resourceProviderID := "b99b3ab4-3aa6-4fba-b827-69b88b9c544a"
+	name := "new-rp"
+	parent := "c7f50b40-6f32-4d7a-9f32-9384057be83b"
 
 	updateOpts := resourceproviders.UpdateOpts{
-		Name: "new-rp",
-		ParentProvider: "c7f50b40-6f32-4d7a-9f32-9384057be83b"
+		Name:               &name,
+		ParentProviderUUID: &parent,
 	}
 
 	placementClient.Microversion = "1.37"
-	resourceProvider, err := resourceproviders.Update(context.TODO(), placementClient, resourceProviderID).Extract()
+	resourceProvider, err := resourceproviders.Update(context.TODO(), placementClient, resourceProviderID, updateOpts).Extract()
+	if err != nil {
+		panic(err)
+	}
+
+Example to transform a provider to a new root provider (set parent_provider_uuid to null).
+Note that Gophercloud uses an empty string as a sentinel value to represent JSON null
+for this optional field.
+
+	resourceProviderID := "b99b3ab4-3aa6-4fba-b827-69b88b9c544a"
+	name := "existing-rp"
+	parent := ""
+
+	updateOpts := resourceproviders.UpdateOpts{
+		Name:               &name,
+		ParentProviderUUID: &parent,
+	}
+
+	placementClient.Microversion = "1.37"
+	resourceProvider, err = resourceproviders.Update(context.TODO(), placementClient, resourceProviderID, updateOpts).Extract()
 	if err != nil {
 		panic(err)
 	}

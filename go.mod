@@ -7,14 +7,14 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.4.0
-	github.com/gophercloud/gophercloud/v2 v2.12.0
+	github.com/gophercloud/gophercloud/v2 v2.13.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.12.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.69.0
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.24.0
-	github.com/sapcc/go-bits v0.0.0-20260623114633-b9734b46a368
+	github.com/sapcc/go-bits v0.0.0-20260626143732-3999ce9f8fdc
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.10.1
 	go.xyrillian.de/schwift/v2 v2.1.0
