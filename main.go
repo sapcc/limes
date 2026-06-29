@@ -296,7 +296,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	commonAuditor := generateAuditor(ctx)
 	apiDomainNames := must.Return(api_v2.CollectDomainNamesFromEnv())
 	mux.Handle("/", httpapi.Compose(
-		api_v2.NewVersionProviderAPI(cluster, apiDomainNames),
+		api_v2.NewVersionProviderAPI(apiDomainNames),
 		api.NewV1API(cluster, Some(apiDomainNames), tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
 		api_v2.NewV2API(cluster, Some(apiDomainNames), tokenValidator, commonAuditor, time.Now),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},

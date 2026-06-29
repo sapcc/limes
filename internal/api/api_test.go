@@ -1755,7 +1755,7 @@ func TestDomainNameSeparation(t *testing.T) {
 	)
 
 	for _, format := range []string{"http://%s", "http://%s:8080", "https://%s", "https://%s:4443"} {
-		t.Run(fmt.Sprintf("format=%s", format), func(t *testing.T) {
+		t.Run("format="+format, func(t *testing.T) {
 			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v1/clusters/current`, fmt.Sprintf(format, "limes.example.com"))).
 				ExpectStatus(t, http.StatusOK)
 			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v1/clusters/current`, fmt.Sprintf(format, "limitas.example.com"))).

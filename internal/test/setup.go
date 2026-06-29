@@ -305,7 +305,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		httpapi.WithoutLogging(),
 	)
 	if apiDomainNames, ok := params.APIDomainNames.Unpack(); ok {
-		apis = append(apis, api_v2.NewVersionProviderAPI(s.Cluster, apiDomainNames))
+		apis = append(apis, api_v2.NewVersionProviderAPI(apiDomainNames))
 	}
 	s.Handler = httptest.NewHandler(httpapi.Compose(apis...))
 
