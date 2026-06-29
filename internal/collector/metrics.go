@@ -12,6 +12,7 @@ import (
 	"maps"
 	"math/big"
 	"net/http"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -368,11 +369,33 @@ type DataMetricsV1Reporter struct {
 // our implementation should match those changes (including to the Content-Type).
 const ContentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=underscores"
 
+func reportHeapStats(moment string) {
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	logg.Debug("heap stats %s: alloc = %g MiB, sys = %g MiB, idle = %g MiB, inuse = %g MiB",
+		moment,
+		float64(stats.HeapAlloc)/(1<<20),
+		float64(stats.HeapSys)/(1<<20),
+		float64(stats.HeapIdle)/(1<<20),
+		float64(stats.HeapInuse)/(1<<20),
+	)
+}
+
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsV1Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if logg.ShowDebug {
+		reportHeapStats("before collectMetrics()")
+	}
 	metricSet, err := d.collectMetrics()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
+	}
+	if logg.ShowDebug {
+		reportHeapStats("after collectMetrics()")
+		defer func() {
+			runtime.GC()
+			reportHeapStats("after end of ServeHTTP()")
+		}()
 	}
 
 	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
@@ -864,9 +887,19 @@ type DataMetricsV2Reporter struct {
 
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if logg.ShowDebug {
+		reportHeapStats("before collectMetrics()")
+	}
 	metricSet, err := d.collectMetrics()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
+	}
+	if logg.ShowDebug {
+		reportHeapStats("after collectMetrics()")
+		defer func() {
+			runtime.GC()
+			reportHeapStats("after end of ServeHTTP()")
+		}()
 	}
 
 	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
