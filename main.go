@@ -294,10 +294,11 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	commonAuditor := generateAuditor(ctx)
+	apiDomainNames := must.Return(api_v2.CollectDomainNamesFromEnv())
 	mux.Handle("/", httpapi.Compose(
-		api_v2.NewVersionProviderAPI(cluster, must.Return(api_v2.CollectDomainNamesFromEnv())),
-		api.NewV1API(cluster, tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
-		api_v2.NewV2API(cluster, tokenValidator, commonAuditor, time.Now),
+		api_v2.NewVersionProviderAPI(cluster, apiDomainNames),
+		api.NewV1API(cluster, Some(apiDomainNames), tokenValidator, commonAuditor, time.Now, datamodel.GenerateTransferToken, datamodel.GenerateProjectCommitmentUUID, nil),
+		api_v2.NewV2API(cluster, Some(apiDomainNames), tokenValidator, commonAuditor, time.Now),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,

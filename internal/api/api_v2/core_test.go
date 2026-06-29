@@ -11,6 +11,7 @@ import (
 
 	"github.com/sapcc/go-bits/httptest"
 
+	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -44,4 +45,27 @@ func TestRequestBodyParsing(t *testing.T) {
 		httptest.WithHeader("Content-Type", "application/json"),
 		httptest.WithBody(strings.NewReader(`{"service_type":"first"}{"service_type":"second"}`)),
 	).ExpectText(t, http.StatusBadRequest, "request body contains 25 unexpected bytes after the JSON payload\n")
+}
+
+func TestDomainNameSeparation(t *testing.T) {
+	ctx := t.Context()
+	s := test.NewSetup(t,
+		test.WithConfig(commitmentCreateConfigJSON),
+		test.WithAPIDomainNames(api_v2.DomainNames{
+			V1: "limes.example.com",
+			V2: "limitas.example.com",
+		}),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+	)
+
+	for _, format := range []string{"http://%s", "http://%s:8080", "https://%s", "https://%s:4443"} {
+		t.Run(fmt.Sprintf("format=%s", format), func(t *testing.T) {
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limes.example.com"))).
+				ExpectText(t, http.StatusBadRequest, "endpoint /resources/v2/info cannot be accessed on limes.example.com\n")
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limitas.example.com"))).
+				ExpectStatus(t, http.StatusOK)
+		})
+	}
 }

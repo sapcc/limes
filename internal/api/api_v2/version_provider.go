@@ -4,7 +4,9 @@
 package api_v2
 
 import (
+	"cmp"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -140,4 +142,30 @@ func CollectDomainNamesFromEnv() (result DomainNames, err error) {
 	}
 	result.V2, err = getAndCheck("LIMES_API_DOMAIN_NAME_V2")
 	return
+}
+
+// EnforceDomainName returns a middleware that rejects requests where
+// the hostname in the request URL does not match the given value.
+func EnforceDomainName(domainName string) mux.MiddlewareFunc {
+	return func(inner http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hostName := getHostNameFor(r)
+			if hostName == domainName {
+				inner.ServeHTTP(w, r)
+			} else {
+				msg := fmt.Sprintf("endpoint %s cannot be accessed on %s", r.URL.EscapedPath(), hostName)
+				http.Error(w, msg, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func getHostNameFor(r *http.Request) string {
+	hostAndMaybePort := cmp.Or(r.Header.Get("X-Forwarded-Host"), r.Host)
+	host, _, err := net.SplitHostPort(hostAndMaybePort)
+	if err == nil {
+		return host
+	} else {
+		return hostAndMaybePort // no port to split off
+	}
 }
