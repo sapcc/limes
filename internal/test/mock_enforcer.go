@@ -22,7 +22,11 @@ type PolicyEnforcer struct {
 	AllowUncommit     bool
 	// flags by v2 action
 	AllowInfo             bool
+	AllowReport           bool
 	AllowCommitmentCreate bool
+	// v2:level:role
+	IsDomainRole  bool
+	IsProjectRole bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -31,6 +35,12 @@ type PolicyEnforcer struct {
 func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 	if e.RejectServiceType != "" && ctx.Request["service_type"] == e.RejectServiceType {
 		return false
+	}
+	switch rule {
+	case "v2:domain:role":
+		return e.IsDomainRole
+	case "v2:project:role":
+		return e.IsProjectRole
 	}
 	fields := strings.Split(rule, ":")
 	// for the v2 api we are introducing a new scheme of v2:scope:endpoint
@@ -70,6 +80,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowUncommit
 	case "info":
 		return e.AllowInfo
+	case "report":
+		return e.AllowReport
 	case "commitment_create":
 		return e.AllowCommitmentCreate
 	case "block_commitments":
