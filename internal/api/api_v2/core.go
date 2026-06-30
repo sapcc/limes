@@ -21,6 +21,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -29,6 +30,7 @@ import (
 type v2Provider struct {
 	Cluster        *core.Cluster
 	DB             *gorp.DbMap
+	DomainNames    Option[DomainNames]
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
 
@@ -39,16 +41,25 @@ type v2Provider struct {
 // NewV2API creates an httpapi.API that serves the Limes v2 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV2API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time) httpapi.API {
-	return &v2Provider{Cluster: cluster, DB: cluster.DB, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
+func NewV2API(cluster *core.Cluster, domainNames Option[DomainNames], tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time) httpapi.API {
+	return &v2Provider{Cluster: cluster, DB: cluster.DB, DomainNames: domainNames, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 }
 
 // AddTo implements the httpapi.API interface.
 func (p *v2Provider) AddTo(r *mux.Router) {
+	resRouter := r.PathPrefix("/resources/v2/").Subrouter()
+	ratesRouter := r.PathPrefix("/rates/v2/").Subrouter()
+
+	if apiDomainNames, ok := p.DomainNames.Unpack(); ok {
+		mw := EnforceDomainName(apiDomainNames.V2)
+		resRouter.Use(mw)
+		ratesRouter.Use(mw)
+	}
+
 	tv := p.tokenValidator
-	r.Methods("GET").Path("/resources/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
-	r.Methods("GET").Path("/rates/v2/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
-	r.Methods("POST").Path("/resources/v2/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+	resRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
+	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
 }
 
 // Wrapper for request handlers that enforces a structure,

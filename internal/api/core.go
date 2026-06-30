@@ -27,7 +27,9 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
+	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
@@ -36,6 +38,7 @@ import (
 type v1Provider struct {
 	Cluster        *core.Cluster
 	DB             *gorp.DbMap
+	DomainNames    Option[api_v2.DomainNames]
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
 	// see comment in ListProjects() for details
@@ -51,10 +54,11 @@ type v1Provider struct {
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID, registerer prometheus.Registerer) httpapi.API {
+func NewV1API(cluster *core.Cluster, domainNames Option[api_v2.DomainNames], tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string, generateProjectCommitmentUUID func() liquid.CommitmentUUID, registerer prometheus.Registerer) httpapi.API {
 	p := &v1Provider{
 		Cluster:                       cluster,
 		DB:                            cluster.DB,
+		DomainNames:                   domainNames,
 		tokenValidator:                tokenValidator,
 		auditor:                       auditor,
 		timeNow:                       timeNow,
@@ -92,52 +96,63 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 
 // AddTo implements the httpapi.API interface.
 func (p *v1Provider) AddTo(r *mux.Router) {
-	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
-	r.Methods("GET").Path("/rates/v1/clusters/current").HandlerFunc(p.GetClusterRates)
+	resRouter := r.PathPrefix("/v1/").Subrouter()
+	ratesRouter := r.PathPrefix("/rates/v1/").Subrouter()
+	adminRouter := r.PathPrefix("/admin/").Subrouter()
 
-	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
-	r.Methods("GET").Path("/v1/admin/scrape-errors").HandlerFunc(p.ListScrapeErrors)
-	r.Methods("GET").Path("/rates/v1/admin/scrape-errors").HandlerFunc(p.ListRateScrapeErrors)
+	if apiDomainNames, ok := p.DomainNames.Unpack(); ok {
+		mw := api_v2.EnforceDomainName(apiDomainNames.V1)
+		resRouter.Use(mw)
+		ratesRouter.Use(mw)
+		adminRouter.Use(mw)
+	}
 
-	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
-	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
-	r.Methods("POST").Path("/v1/domains/discover").HandlerFunc(p.DiscoverDomains)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/simulate-put").HandlerFunc(p.SimulatePutDomain)
-	r.Methods("PUT").Path("/v1/domains/{domain_id}").HandlerFunc(p.PutDomain)
+	resRouter.Methods("GET").Path("/clusters/current").HandlerFunc(p.GetCluster)
+	ratesRouter.Methods("GET").Path("/clusters/current").HandlerFunc(p.GetClusterRates)
 
-	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
-	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
-	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
-	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}/max-quota").HandlerFunc(p.PutProjectMaxQuota)
-	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}/forbid-autogrowth").HandlerFunc(p.PutQuotaAutogrowth)
-	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjectRates)
-	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
-	r.Methods("POST").Path("/rates/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProjectRates)
-	r.Methods("POST").Path("/rates/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProjectRates)
-	r.Methods("PUT").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProjectRates)
+	resRouter.Methods("GET").Path("/inconsistencies").HandlerFunc(p.ListInconsistencies)
+	resRouter.Methods("GET").Path("/admin/scrape-errors").HandlerFunc(p.ListScrapeErrors)
+	ratesRouter.Methods("GET").Path("/admin/scrape-errors").HandlerFunc(p.ListRateScrapeErrors)
 
-	r.Methods("GET").Path("/v1/public-commitments").HandlerFunc(p.GetPublicCommitments)
-	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments").HandlerFunc(p.GetProjectCommitments)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/new").HandlerFunc(p.CreateProjectCommitment)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/merge").HandlerFunc(p.MergeProjectCommitments)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/can-confirm").HandlerFunc(p.CanConfirmNewProjectCommitment)
-	r.Methods("DELETE").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}").HandlerFunc(p.DeleteProjectCommitment)
-	r.Methods("DELETE").Path("/v1/commitments/{id}").HandlerFunc(p.DeleteProjectCommitmentAsCloudAdmin)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}/renew").HandlerFunc(p.RenewProjectCommitments)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransfer)
-	r.Methods("POST").Path("/v1/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransferAsCloudAdmin)
-	r.Methods("GET").Path("/v1/commitments/{token}").HandlerFunc(p.GetCommitmentByTransferToken)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}").HandlerFunc(p.TransferCommitment)
-	r.Methods("GET").Path("/v1/commitment-conversion/{service_type}/{resource_name}").HandlerFunc(p.GetCommitmentConversions)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert").HandlerFunc(p.ConvertCommitment)
-	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration").HandlerFunc(p.UpdateCommitmentDuration)
+	resRouter.Methods("GET").Path("/domains").HandlerFunc(p.ListDomains)
+	resRouter.Methods("GET").Path("/domains/{domain_id}").HandlerFunc(p.GetDomain)
+	resRouter.Methods("POST").Path("/domains/discover").HandlerFunc(p.DiscoverDomains)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/simulate-put").HandlerFunc(p.SimulatePutDomain)
+	resRouter.Methods("PUT").Path("/domains/{domain_id}").HandlerFunc(p.PutDomain)
 
-	r.Methods("GET").Path("/admin/liquid/service-capacity-request").HandlerFunc(p.GetServiceCapacityRequest)
-	r.Methods("GET").Path("/admin/liquid/service-usage-request").HandlerFunc(p.GetServiceUsageRequest)
-	r.Methods("GET").Path("/admin/mail/render").HandlerFunc(p.RenderMailTemplate)
+	resRouter.Methods("GET").Path("/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
+	resRouter.Methods("GET").Path("/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
+	resRouter.Methods("PUT").Path("/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
+	resRouter.Methods("PUT").Path("/domains/{domain_id}/projects/{project_id}/max-quota").HandlerFunc(p.PutProjectMaxQuota)
+	resRouter.Methods("PUT").Path("/domains/{domain_id}/projects/{project_id}/forbid-autogrowth").HandlerFunc(p.PutQuotaAutogrowth)
+	ratesRouter.Methods("GET").Path("/domains/{domain_id}/projects").HandlerFunc(p.ListProjectRates)
+	ratesRouter.Methods("GET").Path("/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
+	ratesRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProjectRates)
+	ratesRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProjectRates)
+	ratesRouter.Methods("PUT").Path("/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProjectRates)
+
+	resRouter.Methods("GET").Path("/public-commitments").HandlerFunc(p.GetPublicCommitments)
+	resRouter.Methods("GET").Path("/domains/{domain_id}/projects/{project_id}/commitments").HandlerFunc(p.GetProjectCommitments)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/new").HandlerFunc(p.CreateProjectCommitment)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/merge").HandlerFunc(p.MergeProjectCommitments)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/can-confirm").HandlerFunc(p.CanConfirmNewProjectCommitment)
+	resRouter.Methods("DELETE").Path("/domains/{domain_id}/projects/{project_id}/commitments/{id}").HandlerFunc(p.DeleteProjectCommitment)
+	resRouter.Methods("DELETE").Path("/commitments/{id}").HandlerFunc(p.DeleteProjectCommitmentAsCloudAdmin)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/{id}/renew").HandlerFunc(p.RenewProjectCommitments)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransfer)
+	resRouter.Methods("POST").Path("/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransferAsCloudAdmin)
+	resRouter.Methods("GET").Path("/commitments/{token}").HandlerFunc(p.GetCommitmentByTransferToken)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}").HandlerFunc(p.TransferCommitment)
+	resRouter.Methods("GET").Path("/commitment-conversion/{service_type}/{resource_name}").HandlerFunc(p.GetCommitmentConversions)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert").HandlerFunc(p.ConvertCommitment)
+	resRouter.Methods("POST").Path("/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration").HandlerFunc(p.UpdateCommitmentDuration)
+
+	adminRouter.Methods("GET").Path("/liquid/service-capacity-request").HandlerFunc(p.GetServiceCapacityRequest)
+	adminRouter.Methods("GET").Path("/liquid/service-usage-request").HandlerFunc(p.GetServiceUsageRequest)
+	adminRouter.Methods("GET").Path("/mail/render").HandlerFunc(p.RenderMailTemplate)
 }
 
 // RequireJSON will parse the request body into the given data structure, or

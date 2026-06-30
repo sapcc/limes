@@ -40,6 +40,7 @@ import (
 
 type setupParams struct {
 	ConfigJSON                       string
+	APIDomainNames                   Option[api_v2.DomainNames]
 	APIMiddlewares                   []httpapi.API
 	WithInitialDiscovery             bool
 	WithEmptyResourceRecordsAsNeeded bool
@@ -80,6 +81,17 @@ func RemoveCommentsFromJSON(jsonStr string) string {
 func WithAPIMiddleware(mw func(http.Handler) http.Handler) SetupOption {
 	return func(params *setupParams) {
 		params.APIMiddlewares = append(params.APIMiddlewares, httpapi.WithGlobalMiddleware(mw))
+	}
+}
+
+// WithAPIDomainNames is a SetupOption for supplying domain name configuration to the
+// HTTP handler providing the Limes API within the test.
+//
+// By default, `s.Handler` does not care about domain names.
+// This is intended for testing domain name matching only.
+func WithAPIDomainNames(domainNames api_v2.DomainNames) SetupOption {
+	return func(params *setupParams) {
+		params.APIDomainNames = Some(domainNames)
 	}
 }
 
@@ -286,13 +298,16 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	transferTokenGenerator, currentTransferTokenNumber := transferTokenGenerator()
 	s.CurrentProjectCommitmentID = currentProjectCommitmentID
 	s.CurrentTransferTokenNumber = currentTransferTokenNumber
-	s.Handler = httptest.NewHandler(httpapi.Compose(
-		append(params.APIMiddlewares,
-			api.NewV1API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator, s.Registry),
-			api_v2.NewV2API(s.Cluster, s.TokenValidator, s.Auditor, s.Clock.Now),
-			httpapi.WithoutLogging(),
-		)...,
-	))
+
+	apis := append(slices.Clone(params.APIMiddlewares),
+		api.NewV1API(s.Cluster, params.APIDomainNames, s.TokenValidator, s.Auditor, s.Clock.Now, transferTokenGenerator, projectCommitmentUUIDGenerator, s.Registry),
+		api_v2.NewV2API(s.Cluster, params.APIDomainNames, s.TokenValidator, s.Auditor, s.Clock.Now),
+		httpapi.WithoutLogging(),
+	)
+	if apiDomainNames, ok := params.APIDomainNames.Unpack(); ok {
+		apis = append(apis, api_v2.NewVersionProviderAPI(apiDomainNames))
+	}
+	s.Handler = httptest.NewHandler(httpapi.Compose(apis...))
 
 	s.Collector = &collector.Collector{
 		Cluster:     s.Cluster,

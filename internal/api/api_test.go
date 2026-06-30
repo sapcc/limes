@@ -27,6 +27,7 @@ import (
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -1738,4 +1739,27 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/separated_topology_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
+}
+
+func TestDomainNameSeparation(t *testing.T) {
+	ctx := t.Context()
+	s := test.NewSetup(t,
+		test.WithConfig(testAZSeparatedConfigJSON),
+		test.WithAPIDomainNames(api_v2.DomainNames{
+			V1: "limes.example.com",
+			V2: "limitas.example.com",
+		}),
+		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+	)
+
+	for _, format := range []string{"http://%s", "http://%s:8080", "https://%s", "https://%s:4443"} {
+		t.Run("format="+format, func(t *testing.T) {
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v1/clusters/current`, fmt.Sprintf(format, "limes.example.com"))).
+				ExpectStatus(t, http.StatusOK)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v1/clusters/current`, fmt.Sprintf(format, "limitas.example.com"))).
+				ExpectText(t, http.StatusBadRequest, "endpoint /v1/clusters/current cannot be accessed on limitas.example.com\n")
+		})
+	}
 }
