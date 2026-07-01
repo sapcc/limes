@@ -52,8 +52,11 @@ func TestDomainNameSeparation(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(commitmentCreateConfigJSON),
 		test.WithAPIDomainNames(api_v2.DomainNames{
-			V1: "limes.example.com",
-			V2: "limitas.example.com",
+			// This test simulates both a public endpoint that differs by API
+			// version, and an internal endpoint that is always the same
+			// (e.g. derived from a Kubernetes service name).
+			V1: []string{"limes.example.com", "limes-api.limes.svc.example.com"},
+			V2: []string{"limitas.example.com", "limes-api.limes.svc.example.com"},
 		}),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
@@ -65,6 +68,8 @@ func TestDomainNameSeparation(t *testing.T) {
 			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limes.example.com"))).
 				ExpectText(t, http.StatusBadRequest, "endpoint /resources/v2/info cannot be accessed on limes.example.com\n")
 			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limitas.example.com"))).
+				ExpectStatus(t, http.StatusOK)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
 				ExpectStatus(t, http.StatusOK)
 		})
 	}
