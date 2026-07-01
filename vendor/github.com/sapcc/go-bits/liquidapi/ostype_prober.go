@@ -167,8 +167,9 @@ func (p *OSTypeProber) findFromBootVolume(ctx context.Context, instanceID string
 
 func (p *OSTypeProber) findFromImage(ctx context.Context, imageID string) (string, error) {
 	var result struct {
-		Tags         []string `json:"tags"`
-		VMwareOSType string   `json:"vmware_ostype"`
+		Tags         []string       `json:"tags"`
+		VMwareOSType string         `json:"vmware_ostype"`
+		Properties   map[string]any `json:"properties"`
 	}
 	err := images.Get(ctx, p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
@@ -186,6 +187,16 @@ func (p *OSTypeProber) findFromImage(ctx context.Context, imageID string) (strin
 			return result.VMwareOSType, nil
 		}
 	}
+
+	// on some images, vmware_ostype values are maintained as properties.os_distro instead
+	if osDistroStr, ok := result.Properties["os_distro"].(string); ok {
+		for _, regex := range isValidVMwareOSTypeRegex {
+			if regex.MatchString(osDistroStr) {
+				return osDistroStr, nil
+			}
+		}
+	}
+
 	// look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
 	osType := ""
 	for _, tag := range result.Tags {
