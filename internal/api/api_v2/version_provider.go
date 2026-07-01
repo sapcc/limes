@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/httpapi"
@@ -60,23 +62,32 @@ func (p *versionProvider) AddTo(r *mux.Router) {
 
 // DomainNames holds the domain names used by Limes's APIs.
 type DomainNames struct {
-	V1 string `json:"v1"`
-	V2 string `json:"v2"`
+	V1 []string `json:"v1"`
+	V2 []string `json:"v2"`
 }
 
 // CollectDomainNamesFromEnv constructs a [DomainNames] instance.
 func CollectDomainNamesFromEnv() (result DomainNames, err error) {
-	getAndCheck := func(key string) (string, error) {
-		value, err := osext.NeedGetenv(key)
+	getAndCheck := func(key string) ([]string, error) {
+		valuesStr, err := osext.NeedGetenv(key)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		// check that `value` is a hostname and nothing else
-		testURL, err := url.Parse("https://" + value)
-		if err != nil || testURL.Host != value {
-			return "", fmt.Errorf("invalid value for %s: expected a hostname, but got %q", key, value)
+		var values []string
+		for value := range strings.SplitSeq(valuesStr, ",") {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			values = append(values, value)
+
+			// check that `value` is a hostname and nothing else
+			testURL, err := url.Parse("https://" + value)
+			if err != nil || testURL.Host != value {
+				return nil, fmt.Errorf("invalid value for %s: expected a hostname, but got %q", key, value)
+			}
 		}
-		return value, nil
+		return values, nil
 	}
 
 	result.V1, err = getAndCheck("LIMES_API_DOMAIN_NAME_V1")
@@ -89,11 +100,11 @@ func CollectDomainNamesFromEnv() (result DomainNames, err error) {
 
 // EnforceDomainName returns a middleware that rejects requests where
 // the hostname in the request URL does not match the given value.
-func EnforceDomainName(domainName string) mux.MiddlewareFunc {
+func EnforceDomainName(domainNames []string) mux.MiddlewareFunc {
 	return func(inner http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hostName := getHostNameFor(r)
-			if hostName == domainName {
+			if slices.Contains(domainNames, hostName) {
 				inner.ServeHTTP(w, r)
 			} else {
 				msg := fmt.Sprintf("endpoint %s cannot be accessed on %s", r.URL.EscapedPath(), hostName)

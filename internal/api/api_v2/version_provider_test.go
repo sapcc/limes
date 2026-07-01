@@ -27,8 +27,18 @@ func TestParseDomainNames(t *testing.T) {
 	names, err := api_v2.CollectDomainNamesFromEnv()
 	if assert.ErrEqual(t, err, nil) {
 		assert.Equal(t, names, api_v2.DomainNames{
-			V1: "limes.example.com",
-			V2: "limitas.example.com",
+			V1: []string{"limes.example.com"},
+			V2: []string{"limitas.example.com"},
+		})
+	}
+
+	t.Setenv("LIMES_API_DOMAIN_NAME_V1", "limes.example.com,limes-api.limes.svc.example.com")
+	t.Setenv("LIMES_API_DOMAIN_NAME_V2", "limitas.example.com, limes-api.limes.svc.example.com, \n")
+	names, err = api_v2.CollectDomainNamesFromEnv()
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, names, api_v2.DomainNames{
+			V1: []string{"limes.example.com", "limes-api.limes.svc.example.com"},
+			V2: []string{"limitas.example.com", "limes-api.limes.svc.example.com"},
 		})
 	}
 }
