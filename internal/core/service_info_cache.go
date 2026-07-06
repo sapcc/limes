@@ -36,6 +36,11 @@ type ServiceInfoFilter struct {
 	RateName     Option[liquid.RateName]
 }
 
+// isEmpty returns whether all optional filters are not set.
+func (s ServiceInfoFilter) isEmpty() bool {
+	return s.ServiceArea.IsNone() && s.ServiceType.IsNone() && s.Category.IsNone() && s.ResourceName.IsNone() && s.RateName.IsNone()
+}
+
 ///////////////////////////////////////////////////////////////////////
 
 // ServiceInfoReader defines shared methods for reading filtered or unfiltered ServiceInfoSnapshots.
@@ -176,7 +181,8 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	}
 	categoriesToRemove := make(map[db.CategoryID]struct{})
 	// find categories to remove
-	if categoryFilter, ok := f.filter.Category.Unpack(); ok {
+	categoryFilter, categoryFilterExists := f.filter.Category.Unpack()
+	if categoryFilterExists {
 		for categoryID, info := range f.snapshot.categories {
 			if info.Name != categoryFilter {
 				delete(f.snapshot.categories, categoryID)
@@ -186,7 +192,6 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	}
 	seenCategories := make(map[db.CategoryID]struct{})
 	resourceNameFilter, resourceFilterExists := f.filter.ResourceName.Unpack()
-	categoryFilterExists := f.filter.Category.IsSome()
 	// filter resources/ az_resources by category or name
 	if categoryFilterExists || resourceFilterExists {
 		for serviceType, resources := range f.snapshot.resources {
@@ -194,7 +199,8 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 				categoryID, cExists := resource.CategoryID.Unpack()
 				_, inRemoveSet := categoriesToRemove[categoryID]
 				shouldRemove := (resourceFilterExists && resourceName != resourceNameFilter) ||
-					(categoryFilterExists && (!cExists || inRemoveSet))
+					(categoryFilterExists && cExists && inRemoveSet) ||
+					(categoryFilterExists && !cExists && string(categoryFilter) != string(serviceType))
 				if shouldRemove {
 					delete(f.snapshot.resources[serviceType], resourceName)
 					delete(f.snapshot.azResources[serviceType], resourceName)
@@ -218,7 +224,8 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 				categoryID, cExists := rate.CategoryID.Unpack()
 				_, inRemoveSet := categoriesToRemove[categoryID]
 				shouldRemove := (rateFilterExists && rateName != rateNameFilter) ||
-					(categoryFilterExists && (!cExists || inRemoveSet))
+					(categoryFilterExists && cExists && inRemoveSet) ||
+					(categoryFilterExists && !cExists && string(categoryFilter) != string(serviceType))
 				if shouldRemove {
 					delete(f.snapshot.rates[serviceType], rateName)
 					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
@@ -353,45 +360,11 @@ type FilteredServiceInfoSnapshot struct {
 	filter   ServiceInfoFilter
 }
 
-// GetFilteredService returns the service for the filtered type.
-// It is useful to access the service, when you know it was filtered.
-func (f FilteredServiceInfoSnapshot) GetFilteredService() (db.Service, bool) {
-	serviceType, ok := f.filter.ServiceType.Unpack()
-	if !ok {
-		return db.Service{}, false
-	}
-	service, ok := f.snapshot.services[serviceType]
-	return service, ok
-}
-
-// GetFilteredResource returns the resource for the filtered type and name.
-// It is useful to access the resource, when you know it was filtered.
-func (f FilteredServiceInfoSnapshot) GetFilteredResource() (db.Resource, bool) {
-	serviceType, ok := f.filter.ServiceType.Unpack()
-	if !ok {
-		return db.Resource{}, false
-	}
-	resourceName, ok := f.filter.ResourceName.Unpack()
-	if !ok {
-		return db.Resource{}, false
-	}
-	resource, ok := f.snapshot.resources[serviceType][resourceName]
-	return resource, ok
-}
-
-// GetFilteredRate returns the rate for the filtered type and name.
-// It is useful to access the rate, when you know it was filtered.
-func (f FilteredServiceInfoSnapshot) GetFilteredRate() (db.Rate, bool) {
-	serviceType, ok := f.filter.ServiceType.Unpack()
-	if !ok {
-		return db.Rate{}, false
-	}
-	rateName, ok := f.filter.RateName.Unpack()
-	if !ok {
-		return db.Rate{}, false
-	}
-	rate, ok := f.snapshot.rates[serviceType][rateName]
-	return rate, ok
+// FilterIsEmpty returns whether all optional filters are empty.
+// As the FilteredServiceInfoSnapshot get's re-used for applying parsed API
+// options to the ServiceInfoSnapshot, the filter can also be empty.
+func (f FilteredServiceInfoSnapshot) FilterIsEmpty() bool {
+	return f.filter.isEmpty()
 }
 
 // GetServices implements the [ServiceInfoReader] interface.

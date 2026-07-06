@@ -397,9 +397,10 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			categoryID := options.Map(serviceInfo.Resources[resourceName].Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
-				ServiceID:           srv.ID,
-				Name:                resourceName,
-				DisplayName:         serviceInfo.Resources[resourceName].DisplayName,
+				ServiceID:   srv.ID,
+				Name:        resourceName,
+				DisplayName: serviceInfo.Resources[resourceName].DisplayName,
+				// TODO: consider serializing empty categories as serviceType here, instead at the consumers
 				CategoryID:          categoryID,
 				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
@@ -424,6 +425,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 				}
 			}
 			res.DisplayName = serviceInfo.Resources[res.Name].DisplayName
+			// TODO: consider serializing empty categories as serviceType here, instead at the consumers
 			res.CategoryID = options.Map(serviceInfo.Resources[res.Name].Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			res.Unit = serviceInfo.Resources[res.Name].Unit

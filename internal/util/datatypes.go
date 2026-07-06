@@ -51,3 +51,6 @@ func FromUnixEncodedTime(t limes.UnixEncodedTime) time.Time {
 // CommitmentStatusDeleted is used for soft-deleting commitments before they get hard-deleted after a grace period.
 // It is defined here instead of in the liquid package, because in liquid we model deletions as status=None.
 const CommitmentStatusDeleted liquid.CommitmentStatus = "deleted"
+
+// util.SQLFilterNoop is used to replace a filter string in an SQL with a noop.
+const SQLFilterNoop = "TRUE = TRUE"

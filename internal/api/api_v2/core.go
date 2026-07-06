@@ -58,8 +58,19 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 
 	tv := p.tokenValidator
 	resRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
-	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	resRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesCluster))
+	resRouter.Methods("GET").Path("/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomains))
+	resRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
+	resRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
+	resRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
 	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+
+	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	ratesRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))
+	ratesRouter.Methods("GET").Path("/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomains))
+	ratesRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomain))
+	ratesRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProjects))
+	ratesRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProject))
 }
 
 // Wrapper for request handlers that enforces a structure,
@@ -71,6 +82,7 @@ func (p *v2Provider) AddTo(r *mux.Router) {
 func handlerFunc[T any](successCode int, tv gopherpolicy.Validator, action func(*http.Request, *gopherpolicy.Token) (T, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t := tv.CheckToken(r)
+		t.Context.Request = mux.Vars(r)
 
 		var (
 			resp T
@@ -164,8 +176,8 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 	switch {
 	case err == nil:
 		t.Context.Request = map[string]string{
-			"domain_id":  domain.UUID,
-			"project_id": string(projectUUID),
+			"domain_uuid":  domain.UUID,
+			"project_uuid": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err != nil {
@@ -173,8 +185,8 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 		}
 	case errors.Is(err, sql.ErrNoRows):
 		t.Context.Request = map[string]string{
-			"domain_id":  "unknown",
-			"project_id": string(projectUUID),
+			"domain_uuid":  "unknown",
+			"project_uuid": string(projectUUID),
 		}
 		err = t.Enforce(policyRule)
 		if err == nil {
