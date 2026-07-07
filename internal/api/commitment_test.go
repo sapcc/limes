@@ -14,12 +14,14 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 	"github.com/sapcc/limes/internal/util"
 
@@ -28,181 +30,114 @@ import (
 
 const day = 24 * time.Hour
 
-const testCommitmentsJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+var testCommitmentsJSON = httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
+		"liquids": {
+			"first": {
+				"area": "first",
+				"commitment_behavior_per_resource": [
+					{
+						"key": ".*",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
+						}
+					}
+				]
+			},
+			"second": {
+				"area": "second",
+				"commitment_behavior_per_resource": []
+			}
+		}
+	}`), "testCommitmentsJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo)
+var testCommitmentsJSONWithoutMinConfirmDate = testCommitmentsJSON.
+	Modify(".liquids.second.commitment_behavior_per_resource = .liquids.first.commitment_behavior_per_resource").
+	Modify("del(.liquids.first.commitment_behavior_per_resource)").
+	Modify(`.liquids.second.commitment_behavior_per_resource[0].value.durations_per_domain[0].value += ["3 hours"]`).
+	Modify("del(.liquids.second.commitment_behavior_per_resource[0].value.min_confirm_date)")
+var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(`
+	{
+		"areas": { "third": { "display_name": "Third" }, "fourth": { "display_name": "Fourth" }},
+		"liquids": {
+			"third": {
+				"area": "third",
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity_c32",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor1", "weight": 32}
+						}
+					},
+					{
+						"key": "capacity_c48",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor1", "weight": 48}
+						}
+					},
+					{
+						"key": "capacity_c96",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor1", "weight": 96}
+						}
+					},
+					{
+						"key": "capacity_c120",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor1", "weight": 120}
+						}
+					},
+					{
+						"key": "capacity2_c144",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor2", "weight": 144}
+						}
+					},
+					{
+						"key": ".*",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
+						}
+					}
+				]
+			},
+			"fourth": {
+				"area": "fourth",
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity_a",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor3", "weight": 48}
+						}
+					},
+					{
+						"key": "capacity_b",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rule": {"identifier": "flavor3", "weight": 32}
+						}
+					},
+					{
+						"key": ".*",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
+						}
+					}
 				]
 			}
 		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first",
-			"commitment_behavior_per_resource": [
-				{
-					"key": ".*",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
-					}
-				}
-			]
-		},
-		"second": {
-			"area": "second",
-			"commitment_behavior_per_resource": []
-		}
-	}
-}`
-const testCommitmentsJSONWithoutMinConfirmDate = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-				]
-			}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first",
-			"commitment_behavior_per_resource": []
-		},
-		"second": {
-			"area": "second",
-			"commitment_behavior_per_resource": [
-				{
-					"key": ".*",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours", "3 hours"]}]
-					}
-				}
-			]
-		}
-	}
-}`
-
-const testConvertCommitmentsJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-				]
-			}
-		}
-	},
-	"areas": { "third": { "display_name": "Third" }, "fourth": { "display_name": "Fourth" }},
-	"liquids": {
-		"third": {
-			"area": "third",
-			"commitment_behavior_per_resource": [
-				{
-					"key": "capacity_c32",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor1", "weight": 32}
-					}
-				},
-				{
-					"key": "capacity_c48",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor1", "weight": 48}
-					}
-				},
-				{
-					"key": "capacity_c96",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor1", "weight": 96}
-					}
-				},
-				{
-					"key": "capacity_c120",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor1", "weight": 120}
-					}
-				},
-				{
-					"key": "capacity2_c144",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor2", "weight": 144}
-					}
-				},
-				{
-					"key": ".*",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
-					}
-				}
-			]
-		},
-		"fourth": {
-			"area": "fourth",
-			"commitment_behavior_per_resource": [
-				{
-					"key": "capacity_a",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor3", "weight": 48}
-					}
-				},
-				{
-					"key": "capacity_b",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"conversion_rule": {"identifier": "flavor3", "weight": 32}
-					}
-				},
-				{
-					"key": ".*",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
-					}
-				}
-			]
-		}
-	}
-}`
+	}`, "testConvertCommitmentsJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo)
 
 func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 	// setup ServiceInfo to mimic the old `fixtures/start-data-commitments.sql`
@@ -318,7 +253,7 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 }
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	// GET returns an empty list if there are no commitments
 	oldassert.HTTPRequest{
@@ -683,7 +618,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 }
 
 func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
 	request := func(amount uint64) oldassert.JSONObject {
@@ -897,7 +832,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 // is used by ScrapeCapacity, so the extensive testing of all the different edge cases
 // happens there. This is only to prevent that we unintentionally break the API integration.
 func TestAutomaticCommitmentTransfer(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
@@ -1020,7 +955,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 }
 
 func TestCommitmentDelegationToDB(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
@@ -1048,7 +983,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowView = false
@@ -1073,7 +1008,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 }
 
 func TestGetPublicCommitments(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	// GET returns an empty list when there are no commitments at all
 	oldassert.HTTPRequest{
@@ -1162,7 +1097,7 @@ func TestGetPublicCommitments(t *testing.T) {
 }
 
 func TestGetPublicCommitmentsErrorCases(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	// invalid service/resource selection
 	oldassert.HTTPRequest{
@@ -1198,7 +1133,7 @@ func TestGetPublicCommitmentsErrorCases(t *testing.T) {
 }
 
 func TestPutCommitmentErrorCases(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	request := oldassert.JSONObject{
 		"service_type":      "first",
@@ -1347,7 +1282,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 }
 
 func TestDeleteCommitmentErrorCases(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 
 	// we need a commitment in the DB to test deletion
 	request := oldassert.JSONObject{
@@ -1395,7 +1330,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 }
 
 func Test_StartCommitmentTransfer(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	var transferToken = test.GenerateDummyTransferToken(1)
 
@@ -1601,7 +1536,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 }
 
 func Test_GetCommitmentByToken(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	var transferToken = test.GenerateDummyTransferToken(1)
 	// Prepare a commitment to test against in transfer mode.
@@ -1665,7 +1600,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 }
 
 func Test_TransferCommitment(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	var transferToken = test.GenerateDummyTransferToken(1)
 	req1 := oldassert.JSONObject{
@@ -1922,7 +1857,7 @@ func Test_TransferCommitment(t *testing.T) {
 }
 
 func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	// create commitments for resource "second/capacity" in AZ "az-one"
 	// for all projects, so that all existing capacity is covered
@@ -2033,7 +1968,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 }
 
 func TestTransferCommitmentForbiddenResource(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -2061,7 +1996,7 @@ func TestTransferCommitmentForbiddenResource(t *testing.T) {
 }
 
 func Test_GetCommitmentConversion(t *testing.T) {
-	s := setupCommitmentTest(t, testConvertCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testConvertCommitmentsJSON.MarshalJSON())))
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []oldassert.JSONObject{
@@ -2111,7 +2046,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 }
 
 func Test_ConvertCommitments(t *testing.T) {
-	s := setupCommitmentTest(t, testConvertCommitmentsJSON)
+	s := setupCommitmentTest(t, string(must.Return(testConvertCommitmentsJSON.MarshalJSON())))
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) oldassert.JSONObject {
 		return oldassert.JSONObject{
@@ -2372,7 +2307,7 @@ func Test_ConvertCommitments(t *testing.T) {
 }
 
 func Test_UpdateCommitmentDuration(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	// Positive: confirmed commitment
 	oldassert.HTTPRequest{
@@ -2574,7 +2509,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 }
 
 func Test_MergeCommitments(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	// Create two confirmed commitments on the same resource
 	req1 := oldassert.JSONObject{
@@ -2838,7 +2773,7 @@ func Test_MergeCommitments(t *testing.T) {
 }
 
 func Test_RenewCommitments(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 
 	req1 := oldassert.JSONObject{
 		"id":                1,
@@ -3017,7 +2952,7 @@ func Test_RenewCommitments(t *testing.T) {
 }
 
 func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
-	s := setupCommitmentTest(t, testCommitmentsJSONWithoutMinConfirmDate)
+	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSONWithoutMinConfirmDate.MarshalJSON())))
 	var transferToken = test.GenerateDummyTransferToken(1)
 
 	req1 := oldassert.JSONObject{

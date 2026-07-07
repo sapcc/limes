@@ -6,11 +6,12 @@ package reports_v2_test
 import (
 	"maps"
 	"net/http"
-	"net/http/httptest"
+	nethttptest "net/http/httptest"
 	"testing"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
@@ -18,43 +19,18 @@ import (
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-const scopeConfigJSON = `{
-	"availability_zones": ["az-one"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-				]
-			}
-		}
-	},
-	"areas": {
-		"some": {
-			"display_name": "Some"
-		}
-	},
-	"liquids": {
-		"some": {
-			"area": "some"
-		}
-	}
-}`
+var scopeConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "scopeConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	MarshalJSON()))
 
 type singleScopeTestInput struct {
 	s               test.Setup
@@ -103,7 +79,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	must.SucceedT(t, s.DB.SelectOne(&projectParis, "SELECT * FROM projects WHERE uuid = 'uuid-for-paris'"))
 
 	// cluster level is only possible for cloud_admin, so nothing happens
-	r := httptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
+	r := nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
 	executeSingleScopeTest(t, singleScopeTestInput{
 		s:          s,
 		r:          r,
@@ -111,7 +87,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	}, singleScopeTestExpectation{})
 
 	// domain level is possible for domain tokens, does not alter the token
-	r = httptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-france", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-france", http.NoBody)
 	r = mux.SetURLVars(r, map[string]string{"domain_uuid": "uuid-for-france"})
 	s.TokenValidator.Enforcer.IsDomainRole = true
 	executeSingleScopeTest(t, singleScopeTestInput{
@@ -134,7 +110,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	})
 
 	// project level is possible for project tokens, will add domain to the token context
-	r = httptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
 	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
 	s.TokenValidator.Enforcer.IsProjectRole = true
 	executeSingleScopeTest(t, singleScopeTestInput{
@@ -149,7 +125,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	})
 
 	// project level is possible for domain token (specific project), will add domain to the token context
-	r = httptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
 	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
 	s.TokenValidator.Enforcer.IsDomainRole = true
 	s.TokenValidator.Enforcer.IsProjectRole = false
@@ -164,7 +140,7 @@ func TestV2ScopeCreation(t *testing.T) {
 		project:            Some(projectParis),
 	})
 	// project level is possible for domain token (whole domain), will add domain to the token context
-	r = httptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
 	executeSingleScopeTest(t, singleScopeTestInput{
 		s:               s,
 		r:               r,
@@ -176,7 +152,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	})
 
 	// project level is possible for cloud_admin (specific project), does not alter the token
-	r = httptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
 	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
 	s.TokenValidator.Enforcer.IsDomainRole = false
 	executeSingleScopeTest(t, singleScopeTestInput{
@@ -189,7 +165,7 @@ func TestV2ScopeCreation(t *testing.T) {
 		project:            Some(projectParis),
 	})
 	// project level is possible for cloud_admin (whole domain), does not alter the token
-	r = httptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
 	executeSingleScopeTest(t, singleScopeTestInput{
 		s:               s,
 		r:               r,
@@ -201,7 +177,7 @@ func TestV2ScopeCreation(t *testing.T) {
 
 	// errors:
 	// project level with domain token but no identifier specified
-	r = httptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
 	s.TokenValidator.Enforcer.IsDomainRole = true
 	executeSingleScopeTest(t, singleScopeTestInput{
 		s:          s,
@@ -212,7 +188,7 @@ func TestV2ScopeCreation(t *testing.T) {
 	})
 
 	// both identifiers set at the same time
-	r = httptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
+	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
 	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
 	executeSingleScopeTest(t, singleScopeTestInput{
 		s:               s,

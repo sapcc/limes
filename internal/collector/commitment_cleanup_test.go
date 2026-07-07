@@ -11,6 +11,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
@@ -18,30 +19,12 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/util"
 )
 
-const (
-	testCleanupOldCommitmentsConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
+var testCleanupOldCommitmentsConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"unittest": {
@@ -58,8 +41,10 @@ const (
 				]
 			}
 		}
-	}`
-)
+	}`, "testCleanupOldCommitmentsConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func TestCleanupOldCommitmentsJob(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo("Unit Test")

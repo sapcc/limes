@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 var errMailUndeliverable = errors.New("mail undeliverable")
@@ -34,7 +36,7 @@ func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) erro
 		return errors.New("fail project id 1")
 	case "uuid-for-dresden":
 		return nil
-	case "uuid-for-frankfurt":
+	case "uuid-for-paris":
 		m.UndeliverableMails++
 		return collector.UndeliverableMailError{Inner: errMailUndeliverable}
 	}
@@ -44,28 +46,26 @@ func (m *MockMail) PostMail(ctx context.Context, req collector.MailRequest) erro
 func Test_MailDelivery(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo("Shared")
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"discovery": {
-				"method": "static",
 				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
 					"projects": {
 						"uuid-for-germany": [
-							{"name": "walldorf", "id": "uuid-for-walldorf", "parent_id": "uuid-for-germany"},
-							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"},
-							{"name": "frankfurt", "id": "uuid-for-frankfurt", "parent_id": "uuid-for-germany"}
+							{"name": "walldorf", "id": "uuid-for-walldorf", "parent_id": "uuid-for-germany"}
 						]
 					}
 				}
-			},
-			"areas": { "testing": { "display_name": "Testing" }},
-			"liquids": {
-				"shared": {"area": "testing"}
 			}
-		}`),
+		}`, "Test_MailDelivery").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+			ModifyWithVariable(".discovery.method = $ref.method", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(".discovery.static_config.domains = $ref.static_config.domains", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(`.discovery.static_config.projects["uuid-for-germany"] += $ref.static_config.projects["uuid-for-germany"]`, common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(`.discovery.static_config.projects["uuid-for-france"] = $ref.static_config.projects["uuid-for-france"]`, common_fixtures.DiscoveryBerlinDresdenParis).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", srvInfo),
+		test.WithPersistedServiceInfo("unshared", srvInfo),
 		test.WithInitialDiscovery,
 	)
 
@@ -88,7 +88,7 @@ func Test_MailDelivery(t *testing.T) {
 		NextSubmissionAt: s.Clock.Now().Add(48 * time.Hour),
 	})
 	s.MustDBInsert(&db.MailNotification{
-		ProjectID:        s.GetProjectID("frankfurt"),
+		ProjectID:        s.GetProjectID("paris"),
 		Subject:          "dummy",
 		Body:             "dummy",
 		NextSubmissionAt: s.Clock.Now().Add(72 * time.Hour),

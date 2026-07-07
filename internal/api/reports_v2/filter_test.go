@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
@@ -16,27 +17,14 @@ import (
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const filterConfigJSON = `{
-	"availability_zones": ["az-one"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [],
-			"projects": {}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first"
-		},
-		"second": {
-			"area": "second"
-		}
-	}
-}`
+var filterConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "filterConfigJSON").
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	MarshalJSON()))
 
 func TestV2FilterCreation(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")

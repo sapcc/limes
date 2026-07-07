@@ -7,33 +7,21 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 func TestInconsistencyReport(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [
-						{"name": "germany", "id": "uuid-for-germany"},
-						{"name": "pakistan", "id": "uuid-for-pakistan"}
-					],
-					"projects": {
-						"uuid-for-germany": [{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}],
-						"uuid-for-pakistan": [{"name": "karachi", "id": "uuid-for-karachi", "parent_id": "uuid-for-pakistan"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }},
-			"liquids": {
-				"shared": {"area": "shared"}
-			}
-		}`),
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString("{}", "TestInconsistencyReport").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
@@ -74,7 +62,7 @@ func TestInconsistencyReport(t *testing.T) {
 		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
 	)
 	s.MustDBExec(`UPDATE project_az_resources SET quota = 14, backend_quota = 14 WHERE project_id = $1 AND az_resource_id = $2`,
-		s.GetProjectID("karachi"),
+		s.GetProjectID("paris"),
 		s.GetAZResourceID("shared", "capacity", liquid.AvailabilityZoneTotal),
 	)
 

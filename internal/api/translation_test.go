@@ -9,29 +9,20 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
-const testTranslationConfigJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [{"name": "domainone", "id": "uuid-for-domainone"}],
-			"projects": {
-				"uuid-for-domainone": [{"name": "projectone", "id": "uuid-for-projectone", "parent_id": "uuid-for-domainone"}]
-			}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }},
-	"liquids": {
-		"first": {"area": "first"}
-	}
-}`
+var testTranslationConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "testTranslationConfigJSON").
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	MarshalJSON()))
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // subcapacity translation
@@ -496,14 +487,14 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-domainone/projects/uuid-for-projectone?resource=capacity&detail",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?resource=capacity&detail",
 		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: http.StatusOK,
 		ExpectBody: oldassert.JSONObject{
 			"project": oldassert.JSONObject{
-				"id":        "uuid-for-projectone",
-				"name":      "projectone",
-				"parent_id": "uuid-for-domainone",
+				"id":        "uuid-for-paris",
+				"name":      "paris",
+				"parent_id": "uuid-for-france",
 				"services": []oldassert.JSONObject{
 					{
 						"type": "first",

@@ -1,0 +1,8 @@
+{
+  "shared": {
+    "display_name": "Shared"
+  },
+  "unshared": {
+    "display_name": "Unshared"
+  }
+}

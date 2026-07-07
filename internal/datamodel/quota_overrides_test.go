@@ -8,76 +8,37 @@ import (
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-const (
-	testQuotaOverridesNoRenamingConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
-		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-		"liquids": {
-			"first": {"area": "first"},
-			"second": {"area": "second"}
-		}
-	}`
+var testQuotaOverridesNoRenamingConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "testQuotaOverridesNoRenamingConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
-	testQuotaOverridesWithRenamingConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
-		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-		"liquids": {
-			"first": {"area": "first"},
-			"second": {"area": "second"}
-		},
+var testQuotaOverridesWithRenamingConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"resource_behavior": [
 			{"resource": "first/capacity", "identity_in_v1_api": "capacities/first"},
 			{"resource": "(first)/thi(ngs)", "identity_in_v1_api": "thi$2/$1"}
 		]
-	}`
-)
+	}`, "testQuotaOverridesWithRenamingConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid.ResourceName]uint64{
 	"firstdomain": {

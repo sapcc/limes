@@ -4,11 +4,11 @@
     "project_quota_overspent": [
       {
         "project": {
-          "id": "uuid-for-karachi",
-          "name": "karachi",
+          "id": "uuid-for-paris",
+          "name": "paris",
           "domain": {
-            "id": "uuid-for-pakistan",
-            "name": "pakistan"
+            "id": "uuid-for-france",
+            "name": "france"
           }
         },
         "service": "shared",

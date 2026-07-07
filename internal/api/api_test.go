@@ -22,6 +22,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/assert"
@@ -32,6 +33,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
@@ -42,28 +44,9 @@ func TestMain(m *testing.M) {
 // NOTE: MiB makes no sense for a deletion rate, but I want to test as many
 // combinations of "has unit or not", "has limit or not" and "has usage or not"
 // as possible
-const (
-	testConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
-		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
+
+var testConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
 		"liquids": {
 			"shared": {
 				"area": "shared",
@@ -106,8 +89,11 @@ const (
 				"category": "foo_category"
 			}
 		]
-	}`
-)
+	}`), "testConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasSharedUnshared).
+	MarshalJSON()))
 
 func setupTest(t *testing.T) test.Setup {
 	// NOTE: For new tests, please try to use a more minimal setup that focuses on the specific needs of the test.
@@ -314,26 +300,12 @@ func setupTest(t *testing.T) test.Setup {
 
 func Test_ScrapeErrorOperations(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-					"projects": {
-						"uuid-for-germany": [
-							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}
-						]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
-			"liquids": {
-				"shared": {"area": "shared"},
-				"unshared": {"area": "unshared"}
-			}
-		}`),
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{}`, "Test_ScrapeErrorOperations").
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			Modify("del(.discovery.static_config.domains[1])", `del(.discovery.static_config.projects["uuid-for-france"])`).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
@@ -909,20 +881,18 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) 
 
 func Test_EmptyProjectList(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"discovery": {
 				"method": "static",
 				"static_config": {
 					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
 					"projects": {"uuid-for-germany": []}
 				}
-			},
-			"areas": { "first": { "display_name": "First" }},
-			"liquids": {
-				"first": {"area": "first"}
 			}
-		}`),
+		}`, "Test_EmptyProjectList").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidDummy).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
@@ -1093,23 +1063,13 @@ func Test_LargeProjectList(t *testing.T) {
 
 func Test_PutMaxQuotaOnProject(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-					"projects": {
-						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }},
-			"liquids": {
-				"shared": {"area": "shared"}
-			}
-		}`),
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString("{}", "Test_PutMaxQuotaOnProject").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
+		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
@@ -1216,18 +1176,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 func Test_PutQuotaAutogrowth(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-					"projects": {
-						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"liquids": {
 				"shared": {
 					"area": "shared",
@@ -1242,7 +1191,11 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 				},
 				"unshared": {"area": "unshared"}
 			}
-		}`),
+		}`, "Test_PutQuotaAutogrowth").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(".areas = $ref", common_fixtures.AreasSharedUnshared).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
@@ -1391,18 +1344,7 @@ func TestResourceRenaming(t *testing.T) {
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-					"projects": {
-						"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"liquids": {
 				"shared": {
 					"area": "shared",
@@ -1419,7 +1361,11 @@ func TestResourceRenaming(t *testing.T) {
 					]
 				}
 			}
-		}`),
+		}`, "TestResourceRenaming").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(".areas = $ref", common_fixtures.AreasSharedUnshared).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("shared", test.DefaultLiquidServiceInfo("Shared")),
 		test.WithPersistedServiceInfo("unshared", test.DefaultLiquidServiceInfo("Unshared")),
 		test.WithInitialDiscovery,
@@ -1641,31 +1587,33 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 	return true
 }
 
-const testAZSeparatedConfigJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-			"projects": {
-				"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+var testAZSeparatedConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
+		"discovery": {
+			"method": "static",
+			"static_config": {
+				"domains": [{"name": "germany", "id": "uuid-for-germany"}],
+				"projects": {
+					"uuid-for-germany": [{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}]
+				}
 			}
-		}
-	},
-	"areas": { "shared": { "display_name": "Shared" }},
-	"liquids": {
-		"shared": {
-			"area": "shared"
-		}
-	},
-	"resource_behavior": [
-		{
-			// check that category mapping is reported
-			"resource": ".+/capacity_az_separated",
-			"category": "foo_category"
-		}
-	]
-}`
+		},
+		"areas": { "shared": { "display_name": "Shared" }},
+		"liquids": {
+			"shared": {
+				"area": "shared"
+			}
+		},
+		"resource_behavior": [
+			{
+				// check that category mapping is reported
+				"resource": ".+/capacity_az_separated",
+				"category": "foo_category"
+			}
+		]
+	}`), "testAZSeparatedConfigJSON").
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func Test_SeparatedTopologyOperations(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{

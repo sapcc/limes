@@ -1,0 +1,12 @@
+{
+  "areas": {
+    "dummy": {
+      "display_name": "Dummy"
+    }
+  },
+  "liquids": {
+    "dummy": {
+      "area": "dummy"
+    }
+  }
+}
