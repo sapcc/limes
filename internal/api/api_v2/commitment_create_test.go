@@ -22,61 +22,47 @@ import (
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const commitmentCreateConfigJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+var commitmentCreateConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
+		"liquids": {
+			"first": {
+				"area": "first",
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
+						}
+					},
+					{
+						"key": "things",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
+						}
+					}
 				]
+			},
+			"second": {
+				"area": "second"
+			}
+		},
+		"mail_notifications": {
+			// Mail templates are configured solely to prove that API use does not generate mail notifications.
+			"templates": {
+				"confirmed_commitments":   { "subject": "Confirmed!",   "body": "Hello" },
+				"expiring_commitments":    { "subject": "Expiring!",    "body": "Hello" },
+				"transferred_commitments": { "subject": "Transferred!", "body": "Hello" }
 			}
 		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first",
-			"commitment_behavior_per_resource": [
-				{
-					"key": "capacity",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
-					}
-				},
-				{
-					"key": "things",
-					"value": {
-						"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-						"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
-					}
-				}
-			]
-		},
-		"second": {
-			"area": "second"
-		}
-	},
-	"mail_notifications": {
-		// Mail templates are configured solely to prove that API use does not generate mail notifications.
-		"templates": {
-			"confirmed_commitments":   { "subject": "Confirmed!",   "body": "Hello" },
-			"expiring_commitments":    { "subject": "Expiring!",    "body": "Hello" },
-			"transferred_commitments": { "subject": "Transferred!", "body": "Hello" }
-		}
-	}
-}`
+	}`), "commitmentCreateConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 // Helper function for a successful commitment creation. This always tests the dry-run first, and then does the actual creation.
 func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, liquidHandlesCommitments bool, request map[string]any, expected jsonmatch.Object, getTarget func() cadf.Resource) {

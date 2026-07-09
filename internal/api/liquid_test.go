@@ -8,32 +8,24 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
-const (
-	liquidCapacityTestConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [{"name": "domain-1", "id": "uuid-for-domain-1"}],
-				"projects": {
-					"uuid-for-domain-1": [{"name": "project-1", "id": "uuid-for-project-1", "parent_id": "uuid-for-domain-1"}]
-				}
-			}
-		},
-		"areas": { "testing": { "display_name": "Testing" }},
-		"liquids": {
-			"unittest": {"area": "testing"}
-		},
+var liquidCapacityTestConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"resource_behavior": [
-			{"resource": "unittest/capacity", "overcommit_factor": 1.5}
+			{"resource": "first/capacity", "overcommit_factor": 1.5}
 		]
-	}`
-)
+	}`, "liquidCapacityTestConfigJSON").
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	MarshalJSON()))
 
 func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Setup) {
 	t.Helper()
@@ -41,8 +33,10 @@ func commonLiquidTestSetup(t *testing.T, srvInfo liquid.ServiceInfo) (s test.Set
 		test.WithConfig(liquidCapacityTestConfigJSON),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
-		test.WithPersistedServiceInfo("unittest", srvInfo),
-		test.WithMockLiquidClient("unittest", srvInfo),
+		test.WithPersistedServiceInfo("first", srvInfo),
+		test.WithPersistedServiceInfo("second", srvInfo),
+		test.WithMockLiquidClient("first", srvInfo),
+		test.WithMockLiquidClient("second", srvInfo),
 	)
 	return
 }
@@ -58,14 +52,14 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 	// modify the first Resource that the Setup creates
 	s.MustDBExec(
 		`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id = $1`,
-		s.GetAZResourceID("unittest", "capacity", "az-one"),
+		s.GetAZResourceID("first", "capacity", "az-one"),
 	)
 
 	// endpoint requires cluster show permissions
 	s.TokenValidator.Enforcer.AllowView = false
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-capacity-request?service_type=unittest",
+		Path:         "/admin/liquid/service-capacity-request?service_type=first",
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowView = true
@@ -89,7 +83,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 	// happy path
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-capacity-request?service_type=unittest",
+		Path:         "/admin/liquid/service-capacity-request?service_type=first",
 		ExpectStatus: 200,
 		ExpectBody: oldassert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},
@@ -98,7 +92,7 @@ func TestGetServiceCapacityRequest(t *testing.T) {
 					"overcommitFactor": 1.5,
 					"perAZ": oldassert.JSONObject{
 						"az-one": oldassert.JSONObject{
-							"usage":              10,
+							"usage":              30,
 							"unusedCommitments":  0,
 							"pendingCommitments": 0,
 						},
@@ -124,7 +118,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowView = false
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
+		Path:         "/admin/liquid/service-usage-request?service_type=first&project_id=uuid-for-paris",
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowView = true
@@ -132,7 +126,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error when service type is missing
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-project-1",
+		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-paris",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   oldassert.StringData("missing required parameter: service_type\n"),
 	}.Check(t, s.Handler)
@@ -140,7 +134,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error when project_id is missing
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest",
+		Path:         "/admin/liquid/service-usage-request?service_type=first",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   oldassert.StringData("missing required parameter: project_id\n"),
 	}.Check(t, s.Handler)
@@ -148,7 +142,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error for invalid service type
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-project-1",
+		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-paris",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   oldassert.StringData("unknown service type\n"),
 	}.Check(t, s.Handler)
@@ -156,7 +150,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error for invalid project_id
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=-1",
+		Path:         "/admin/liquid/service-usage-request?service_type=first&project_id=-1",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   oldassert.StringData("project not found\n"),
 	}.Check(t, s.Handler)
@@ -164,16 +158,16 @@ func TestServiceUsageRequest(t *testing.T) {
 	// happy path
 	oldassert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-project-1",
+		Path:         "/admin/liquid/service-usage-request?service_type=first&project_id=uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody: oldassert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},
 			"projectMetadata": oldassert.JSONObject{
-				"uuid": "uuid-for-project-1",
-				"name": "project-1",
+				"uuid": "uuid-for-paris",
+				"name": "paris",
 				"domain": oldassert.JSONObject{
-					"uuid": "uuid-for-domain-1",
-					"name": "domain-1",
+					"uuid": "uuid-for-france",
+					"name": "france",
 				},
 			},
 		},

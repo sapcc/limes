@@ -11,62 +11,49 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func TestMain(m *testing.M) {
 	easypg.WithTestDB(m, func() int { return m.Run() })
 }
 
-const infoConfigJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-				]
-			}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first",
-			"commitment_behavior_per_resource": [],
-			"rate_limits": {
-				"global": [
-					{"name": "objects:create", "limit": 5000, "window": "1s", "unit": "piece"}
-				],
-				"project_default": [
-					{"name": "objects:create", "limit": 5, "window": "1m", "unit": "piece"},
-					{"name": "objects:update", "limit": 2, "window": "1s", "unit": "piece"}
-				]
-			}
-		},
-		"second": {
-			"area": "second",
-			"commitment_behavior_per_resource": [{
-				"key": "capacity",
-				"value": {
-					"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
-					"min_confirm_date": "1970-01-08T00:00:00Z"
+var infoConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
+		"liquids": {
+			"first": {
+				"area": "first",
+				"commitment_behavior_per_resource": [],
+				"rate_limits": {
+					"global": [
+						{"name": "objects:create", "limit": 5000, "window": "1s", "unit": "piece"}
+					],
+					"project_default": [
+						{"name": "objects:create", "limit": 5, "window": "1m", "unit": "piece"},
+						{"name": "objects:update", "limit": 2, "window": "1s", "unit": "piece"}
+					]
 				}
-			}]
+			},
+			"second": {
+				"area": "second",
+				"commitment_behavior_per_resource": [{
+					"key": "capacity",
+					"value": {
+						"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
+						"min_confirm_date": "1970-01-08T00:00:00Z"
+					}
+				}]
+			}
 		}
-	}
-}`
+	}`, "infoConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func TestV2ResourcesInfoAPI(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")

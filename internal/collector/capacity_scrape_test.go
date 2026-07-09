@@ -28,61 +28,27 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const (
-	testScanCapacityConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
-		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
-		"liquids": {
-			"shared": {"area": "shared"},
-			"unshared": {"area": "unshared"}
-		}
-	}`
+var (
+	testScanCapacityConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{}`, "testScanCapacityConfigJSON").
+		ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+		ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+		ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+		MarshalJSON()))
 
-	testScanCapacitySingleLiquidConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
+	testScanCapacitySingleLiquidConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"areas": { "shared": { "display_name": "Shared" }},
 		"liquids": {
 			"shared": {"area": "shared"}
 		}
-	}`
+	}`, "testScanCapacitySingleLiquidConfigJSON").
+		ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+		ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+		MarshalJSON()))
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -841,22 +807,7 @@ func commonScanCapacityWithCommitmentsSetup(t *testing.T, configYaml string, liq
 	return
 }
 
-func Test_ScanCapacityWithCommitments(t *testing.T) {
-	s, add := commonScanCapacityWithCommitmentsSetup(t, `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					]
-				}
-			}
-		},
-		"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
+var scanCapacityWithCommitmentsConfig = httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`{
 		"liquids": {
 			"first": {
 				"area": "first",
@@ -873,13 +824,22 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		},
 		"resource_behavior": [
 			// test that overcommit factor is considered when confirming commitments
-			{"resource": "first/capacity", "overcommit_factor": 10.0}
+			{"resource": "first/capacity", "overcommit_factor": 10.0},
+			{"resource": "second/capacity", "identity_in_v1_api": "service/resource"}
 		],
 		"quota_distribution_configs": [
 			// test automatic project quota calculation with non-default settings on */capacity resources
 			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
 		]
-	}`, false)
+	}`), "Test_ScanCapacityWithCommitments").
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis)
+
+func Test_ScanCapacityWithCommitments(t *testing.T) {
+	s, add := commonScanCapacityWithCommitmentsSetup(t, string(must.Return(scanCapacityWithCommitmentsConfig.
+		Modify("del(.discovery.static_config.domains[1])", `del(.discovery.static_config.projects["uuid-for-france"])`).
+		MarshalJSON())), false)
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// fill `services` and `az_resources` as though a previous capacity scrape has already taken place,
@@ -1308,42 +1268,30 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	))
 }
 
-const commitmentConfigWithoutOvercommitJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [{"name": "germany", "id": "uuid-for-germany"}, {"name": "france", "id": "uuid-for-france"}],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
+var commitmentConfigWithoutOvercommitJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
+		"liquids": {
+			"first": {
+				"area": "first",
+				"commitment_behavior_per_resource": [
+					{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
+				]
+			},
+			"second": {
+				"area": "second",
+				"commitment_behavior_per_resource": [
+					{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
 				]
 			}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
-		"first": {
-			"area": "first",
-			"commitment_behavior_per_resource": [
-				{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
-			]
 		},
-		"second": {
-			"area": "second",
-			"commitment_behavior_per_resource": [
-				{"key": "capacity", "value": {"durations_per_domain": [{"key": ".*", "value": ["1 hour", "10 days"]}]}}
-			]
-		}
-	},
-	"resource_behavior": [
-		{"resource": "second/capacity", "identity_in_v1_api": "service/resource"}
-	]
-}`
+		"resource_behavior": [
+			{"resource": "second/capacity", "identity_in_v1_api": "service/resource"}
+		]
+	}`, "commitmentConfigWithoutOvercommitJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s, add := commonScanCapacityWithCommitmentsSetup(t, commitmentConfigWithoutOvercommitJSON, false)

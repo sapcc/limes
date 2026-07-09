@@ -12,6 +12,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
@@ -20,36 +21,15 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const (
-	testKeystoneConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"},
-					{"name": "france", "id": "uuid-for-france"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					],
-					"uuid-for-france": [
-						{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-					]
-				}
-			}
-		},
-		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
-		"liquids": {
-			"shared": {"area": "shared"},
-			"unshared": {"area": "unshared"}
-		}
-	}`
-)
+var testKeystoneConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{}`, "testKeystoneConfigJSON").
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidSharedUnshared).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	s := test.NewSetup(t,

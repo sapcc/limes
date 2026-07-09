@@ -15,6 +15,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
@@ -22,25 +23,11 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const (
-	testConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"}
-					]
-				}
-			}
-		},
-		"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
+var testConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"liquids": {
 			"shared": {
 				"area": "shared"
@@ -57,8 +44,12 @@ const (
 				}
 			}
 		}
-	}`
-)
+	}`, "testConfigJSON").
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasSharedUnshared).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	Modify("del(.discovery.static_config.domains[1])", `del(.discovery.static_config.projects["uuid-for-france"])`).
+	MarshalJSON()))
 
 func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, failOnConnectError bool) (connectErrs errext.ErrorSet) {
 	liquidClientFactory := s.Cluster.LiquidClientFactory

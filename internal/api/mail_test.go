@@ -7,30 +7,17 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/jsonmatch"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func TestRenderMailTemplate(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [
-						{"name": "germany", "id": "uuid-for-germany"}
-					],
-					"projects": {
-						"uuid-for-germany": [{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }},
-			"liquids": {
-				"shared": {"area": "shared"}
-			},
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"mail_notifications": {
 				"templates": {
 					"confirmed_commitments": {
@@ -47,7 +34,11 @@ func TestRenderMailTemplate(t *testing.T) {
 					}
 				}	
 			}
-		}`),
+		}`, "TestRenderMailTemplate").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+			MarshalJSON()))),
 	)
 
 	ctx := t.Context()
@@ -69,23 +60,7 @@ func TestRenderMailTemplate(t *testing.T) {
 
 func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [
-						{"name": "germany", "id": "uuid-for-germany"}
-					],
-					"projects": {
-						"uuid-for-germany": [{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-germany"}]
-					}
-				}
-			},
-			"areas": { "shared": { "display_name": "Shared" }},
-			"liquids": {
-				"shared": {"area": "shared"}
-			},
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"mail_notifications": {
 				"templates": {
 					"confirmed_commitments": {
@@ -102,7 +77,11 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 					}
 				}	
 			}
-		}`),
+		}`, "TestRenderMailTemplateInvalidHTML").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+			MarshalJSON()))),
 	)
 
 	ctx := t.Context()
@@ -112,8 +91,7 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 
 func TestRenderMailTemplateOverEscaped(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"discovery": {
 				"method": "static",
 				"static_config": {
@@ -145,7 +123,9 @@ func TestRenderMailTemplateOverEscaped(t *testing.T) {
 					}
 				}	
 			}
-		}`),
+		}`, "TestRenderMailTemplateOverEscaped").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			MarshalJSON()))),
 	)
 
 	ctx := t.Context()

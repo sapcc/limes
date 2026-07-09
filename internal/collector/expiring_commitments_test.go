@@ -12,34 +12,19 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func Test_ExpiringCommitmentNotification(t *testing.T) {
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [{"name": "germany", "id": "uuid-for-germany"}],
-					"projects": {
-						"uuid-for-germany": [
-							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-						]
-					}
-				}
-			},
-			"areas": { "testing": { "display_name": "Testing" }},
-			"liquids": {
-				"first": {"area": "testing"}
-			},
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString(`{
 			"resource_behavior": [
 				{"resource": "first/capacity", "identity_in_v1_api": "service/resource"}
 			],
@@ -51,8 +36,13 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 					}
 				}
 			}
-		}`),
+		}`, "Test_ExpiringCommitmentNotification").
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+			MarshalJSON()))),
 		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
 	)

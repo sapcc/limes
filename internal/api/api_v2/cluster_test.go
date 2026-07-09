@@ -9,34 +9,17 @@ import (
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const rateReportConfigJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static",
-		"static_config": {
-			"domains": [
-				{"name": "germany", "id": "uuid-for-germany"},
-				{"name": "france", "id": "uuid-for-france"}
-			],
-			"projects": {
-				"uuid-for-germany": [
-					{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-					{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-				],
-				"uuid-for-france": [
-					{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-				]
-			}
-		}
-	},
-	"areas": { "first": { "display_name": "First" }, "second": { "display_name": "Second" }},
-	"liquids": {
+var rateReportConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
+		"liquids": {
 		"first": {
 			"area": "first",
 			"commitment_behavior_per_resource": [],
@@ -55,7 +38,11 @@ const rateReportConfigJSON = `{
 			"commitment_behavior_per_resource": []
 		}
 	}
-}`
+	}`), "rateReportConfigJSON").
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func TestV2ClusterRateReport(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")

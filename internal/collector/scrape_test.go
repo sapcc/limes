@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
@@ -39,23 +40,8 @@ func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
 }
 
-const (
-	testScrapeBasicConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
-		"discovery": {
-			"method": "static",
-			"static_config": {
-				"domains": [
-					{"name": "germany", "id": "uuid-for-germany"}
-				],
-				"projects": {
-					"uuid-for-germany": [
-						{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-						{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-					]
-				}
-			}
-		},
+var testScrapeBasicConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+	{
 		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
 			"unittest": {
@@ -84,8 +70,11 @@ const (
 			{"resource": "unittest/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "usage_data_retention_period": "48h"}},
 			{"resource": "unittest/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "usage_data_retention_period": "48h"}}
 		]
-	}`
-)
+	}`), "testScrapeBasicConfigJSON").
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	Modify("del(.discovery.static_config.domains[1])", `del(.discovery.static_config.projects["uuid-for-france"])`).
+	MarshalJSON()))
 
 func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop.Job, withLabel jobloop.Option, syncJob jobloop.Job) {
 	srvInfo := liquid.ServiceInfo{
@@ -684,9 +673,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	)
 }
 
-const (
-	testNoopConfigJSON = `{
-		"availability_zones": ["az-one", "az-two"],
+var testNoopConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
+	{
 		"discovery": {
 			"method": "static",
 			"static_config": {
@@ -706,8 +694,9 @@ const (
 				"area": "testing"
 			}
 		}
-	}`
-)
+	}`, "testNoopConfigJSON").
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	MarshalJSON()))
 
 func Test_ScrapeButNoResources(t *testing.T) {
 	srvInfo := liquid.ServiceInfo{

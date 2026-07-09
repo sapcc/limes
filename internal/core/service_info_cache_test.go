@@ -9,6 +9,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
@@ -17,19 +18,14 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
-const configJSON = `{
-	"availability_zones": ["az-one", "az-two"],
-	"discovery": {
-		"method": "static"
-	},
-	"areas": { "shared": { "display_name": "Shared" }, "unshared": { "display_name": "Unshared" }},
-	"liquids": {
-		"first": {"area": "shared"},
-		"second": {"area": "unshared"}
-	}
-}`
+var configJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "configJSON").
+	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+	MarshalJSON()))
 
 func TestServiceInfoSnapshotFilter(t *testing.T) {
 	// "first" has area "shared", resources empty, rates: objects:create, objects:delete, objects:update, objects:unlimited
@@ -68,7 +64,7 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 	assert.Equal(t, ok, false)
 
 	// filter by ServiceArea
-	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("shared")})
+	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("first")})
 	assert.Equal(t, len(filtered.GetServices()), 1)
 	_, ok = filtered.GetServiceForType("first")
 	assert.Equal(t, ok, true)

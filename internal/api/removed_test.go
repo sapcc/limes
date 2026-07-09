@@ -8,41 +8,23 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
+
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/common_fixtures"
 	"github.com/sapcc/limes/internal/test/oldassert"
 )
 
 func TestForbidClusterIDHeader(t *testing.T) {
 	srvInfo := test.DefaultLiquidServiceInfo("Foo")
 	s := test.NewSetup(t,
-		test.WithConfig(`{
-			"availability_zones": ["az-one", "az-two"],
-			"discovery": {
-				"method": "static",
-				"static_config": {
-					"domains": [
-						{"name": "germany", "id": "uuid-for-germany"},
-						{"name": "france", "id": "uuid-for-france"}
-					],
-					"projects": {
-						"uuid-for-germany": [
-							{"name": "berlin", "id": "uuid-for-berlin", "parent_id": "uuid-for-germany"},
-							{"name": "dresden", "id": "uuid-for-dresden", "parent_id": "uuid-for-berlin"}
-						],
-						"uuid-for-france": [
-							{"name": "paris", "id": "uuid-for-paris", "parent_id": "uuid-for-france"}
-						]
-					}
-				}
-			},
-			"areas": { "testing": { "display_name": "Testing" }},
-			"liquids": {
-				"foo": {
-					"area": "testing"
-				}
-			}
-		}`),
+		test.WithConfig(string(must.Return(httptest.NewJQModifiableJSONString("{}", "TestForbidClusterIDHeader").
+			ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
+			ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
+			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
+			MarshalJSON()))),
 		test.WithAPIMiddleware(api.ForbidClusterIDHeader),
 		test.WithMockLiquidClient("foo", srvInfo),
 	)
