@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -497,6 +498,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	}
 
 	// if delegation is requested, merge the other liquid's ServiceUsageReport into ours
+	var delegatedReport liquid.ServiceCapacityReport
 	if client, ok := l.DelegatedLiquidClient.Unpack(); ok {
 		delegatedInfo := l.delegatedInfo.Get()
 		delegatedRequest := liquid.ServiceCapacityRequest{
@@ -509,7 +511,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 		}
 
-		delegatedReport, err := client.GetCapacityReport(ctx, delegatedRequest)
+		delegatedReport, err = client.GetCapacityReport(ctx, delegatedRequest)
 		if err != nil {
 			return liquid.ServiceCapacityReport{}, fmt.Errorf("while getting ServiceCapacityReport from %s: %w", l.DelegationEndpoint, err)
 		}
@@ -530,5 +532,50 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		result.Metrics = delegatedReport.Metrics
 	}
 
+	// special handling for hw_version-only regions (with liquid delegation):
+	// The "instance" resource in Nova tracks all VMs of all virtualizations.
+	// Its capacity is calculated by splitting the hypervisors disks by the root disk sizes.
+	// Technically, it is missing the capacity for merged hw_version instance resources .
+	// Furthermore, in a hw_version/ delegation only region, we will have a capacity of 0 because there are no non hw_version hosts for this calculation.
+	// In this case, we will therefore take the maximum of all hw_version instance count capacities as overall instance capacity.
+	// We would theoretically have to merge the numbers from hw_version instances also in mixed regions, but as we give out a flat base quota, any value works for us.
+
+	allInstanceCapacitiesZero := true
+	for _, report := range capacities["instances"].PerAZ {
+		if report.Capacity > 0 {
+			allInstanceCapacitiesZero = false
+			break
+		}
+	}
+
+	// output report 1:1 if no special handling necessary
+	if !allInstanceCapacitiesZero || l.DelegatedLiquidClient.IsNone() {
+		return result, nil
+	}
+
+	hwVersionInstanceResourceRx := regexp.MustCompile(`^hw_version_(\S+)_instances$`)
+	maxCapacityPerAZ := make(map[liquid.AvailabilityZone]uint64)
+	for resName, resourceCapacityReport := range delegatedReport.Resources {
+		if !hwVersionInstanceResourceRx.MatchString(string(resName)) {
+			continue
+		}
+		for az, azResourceCapacityReport := range resourceCapacityReport.PerAZ {
+			if current, ok := maxCapacityPerAZ[az]; ok {
+				if azResourceCapacityReport.Capacity > current {
+					maxCapacityPerAZ[az] = azResourceCapacityReport.Capacity
+				}
+			} else {
+				maxCapacityPerAZ[az] = azResourceCapacityReport.Capacity
+			}
+		}
+	}
+
+	for az, capacity := range maxCapacityPerAZ {
+		// defense in depth: we should have the same AZs between the liquids
+		if _, ok := capacities["instances"].PerAZ[az]; !ok {
+			capacities["instances"].PerAZ[az] = &liquid.AZResourceCapacityReport{}
+		}
+		capacities["instances"].PerAZ[az].Capacity = capacity
+	}
 	return result, nil
 }
