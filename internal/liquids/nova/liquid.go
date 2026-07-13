@@ -304,20 +304,6 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		}
 		if _, exists := delegatedInfo.Resources[resName]; exists {
 			delegatedRequests[resName] = req.Resources[resName]
-			// special handling for hw_version-only regions (with liquid delegation):
-			// We send these quotas to the delegated liquid but also to Nova because
-			// Nova cannot disable quota enforcement for individual resources.
-			// Currently, we only have az-separated quota's in this case, but we this
-			// code here works with az-aware values as well for defense in depth.
-			if req.Resources[resName].Quota > 0 {
-				novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
-			} else {
-				sum := uint64(0)
-				for _, azRequest := range req.Resources[resName].PerAZ {
-					sum += azRequest.Quota
-				}
-				novaUpdateOpts[string(resName)] = sum
-			}
 		} else {
 			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
 		}
