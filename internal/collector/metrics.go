@@ -520,13 +520,13 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 	   GROUP BY az_resource_id, project_id
 	)
 	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status
-	  FROM services s
-	  JOIN resources r ON r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
-	  CROSS JOIN domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
-	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = azr.id AND pcs.project_id = p.id
+	  FROM project_az_resources pazr
+	  JOIN projects p ON p.id = pazr.project_id
+	  JOIN az_resources azr ON azr.id = pazr.az_resource_id AND azr.az != {{liquid.AvailabilityZoneTotal}}
+	  JOIN resources r ON r.id = azr.resource_id
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN services s ON s.id = r.service_id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = pazr.az_resource_id AND pcs.project_id = pazr.project_id
 `))
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
