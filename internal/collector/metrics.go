@@ -531,11 +531,11 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, s.type, ra.name, pra.usage_as_bigint
-	  FROM services s
-	  JOIN rates ra ON ra.service_id = s.id
-	  CROSS JOIN domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = p.id
+	  FROM project_rates pra
+	  JOIN projects p ON p.id = pra.project_id
+	  JOIN rates ra ON ra.id = pra.rate_id
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN services s ON s.id = ra.service_id
 	 WHERE pra.usage_as_bigint != ''
 `)
 
