@@ -474,13 +474,12 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT d.name, d.uuid, s.type, r.name, SUM(pazr.quota)
-	  FROM services s
-	  JOIN resources r ON r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id
-	  CROSS JOIN domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_az_resources pazr ON pazr.project_id = p.id AND pazr.az_resource_id = azr.id
-	  WHERE azr.az = {{liquid.AvailabilityZoneTotal}}
+	  FROM project_az_resources pazr
+	  JOIN projects p ON p.id = pazr.project_id
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN az_resources azr ON azr.id = pazr.az_resource_id AND azr.az = {{liquid.AvailabilityZoneTotal}}
+	  JOIN resources r ON r.id = azr.resource_id
+	  JOIN services s ON s.id = r.service_id
 	 GROUP BY d.name, d.uuid, s.type, r.name
 `))
 
