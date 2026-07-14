@@ -337,7 +337,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		// fills all ProjectResource entries (for each pair of service and resource name)
 		// and all ProjectAZResource entries (for each pair of resource and AZ according to topology)
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
-			INSERT INTO project_resources (project_id, resource_id) 
+			INSERT INTO project_resources (project_id, resource_id)
 			SELECT
 				p.id              AS project_id,
 				r.id              AS resource_id
@@ -367,7 +367,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		// fills all ProjectRate entries (for each pair of service and rate name)
 		// TODO: Why do we have liquid.RateInfo.HasUsage but usage_as_bigint must not be null?
 		s.MustDBExec(db.ExpandEnumPlaceholders(`
-			INSERT INTO project_rates (project_id, rate_id, usage_as_bigint) 
+			INSERT INTO project_rates (project_id, rate_id, usage_as_bigint)
 			SELECT
 				p.id              AS project_id,
 				r.id              AS rate_id,
