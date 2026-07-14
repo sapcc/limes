@@ -267,10 +267,10 @@ func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, s.type, ps.serialized_metrics
-	  FROM services s
-	  CROSS JOIN domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
+	  FROM project_services ps
+	  JOIN projects p ON p.id = ps.project_id
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN services s ON s.id = ps.service_id
 	 WHERE ps.serialized_metrics != '' AND ps.serialized_metrics != '{}'
 `)
 
