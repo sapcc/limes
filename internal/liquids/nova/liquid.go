@@ -18,6 +18,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/regexpext"
@@ -304,6 +305,27 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 		}
 		if _, exists := delegatedInfo.Resources[resName]; exists {
 			delegatedRequests[resName] = req.Resources[resName]
+			// special handling for hw_version-only regions (with liquid delegation):
+			// We send these quotas to the delegated liquid but also to Nova because
+			// Nova cannot disable quota enforcement for individual resources.
+			// Currently, we only have az-separated quota's in this case, but we this
+			// code here works with az-aware values as well for defense in depth.
+			sum := req.Resources[resName].Quota
+			if sum == 0 {
+				for _, azRequest := range req.Resources[resName].PerAZ {
+					sum += azRequest.Quota
+				}
+			}
+			sumConverted := sum
+			//nolint:staticcheck // intentionally using deprecated name UnitNone to ensure we catch all cases
+			if resInfo.Unit != liquid.UnitPiece && resInfo.Unit != liquid.UnitMebibytes && resInfo.Unit != liquid.UnitNone {
+				result, err := limes.ValueWithUnit{Value: sum, Unit: resInfo.Unit}.ConvertTo(liquid.UnitMebibytes)
+				if err != nil {
+					return fmt.Errorf("while converting quota for %s to MiB: %w", resName, err)
+				}
+				sumConverted = result.Value
+			}
+			novaUpdateOpts[string(resName)] = sumConverted
 		} else {
 			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
 		}
