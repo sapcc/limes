@@ -486,24 +486,25 @@ var domainMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 var projectMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_minExpiresAt AS (
 		SELECT p.domain_id, p.id AS project_id, s.type, r.name, MIN(expires_at) AS project_commitment_min_expires_at
-		FROM services s
-		JOIN resources r ON r.service_id = s.id
-		JOIN az_resources azr ON azr.resource_id = r.id
-		JOIN project_commitments pc ON pc.az_resource_id = azr.id AND pc.status = {{liquid.CommitmentStatusConfirmed}}
+		FROM project_commitments pc
 		JOIN projects p ON p.id = pc.project_id
+		JOIN az_resources azr ON azr.id = pc.az_resource_id
+		JOIN resources r ON r.id = azr.resource_id
+		JOIN services s ON s.id = r.service_id
+		WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}
 		GROUP BY p.domain_id, p.id, s.type, r.name
 	)
 	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name,
 	       pazr.quota, pazr.backend_quota, pr.override_quota_from_config,
 	       pazr.usage AS usage, COALESCE(pazr.physical_usage, pazr.usage) AS physical_usage, COALESCE(pazr.physical_usage > 0, FALSE) AS has_physical_usage,
 	       pcmea.project_commitment_min_expires_at
-	  FROM services s
-	  JOIN resources r ON r.service_id = s.id
-	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az = {{liquid.AvailabilityZoneTotal}}
-	  CROSS JOIN domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_resources pr ON pr.resource_id = r.id AND pr.project_id = p.id
-	  JOIN project_az_resources pazr ON pazr.project_id = p.id AND pazr.az_resource_id = azr.id
+	  FROM project_az_resources pazr
+	  JOIN az_resources azr ON azr.id = pazr.az_resource_id AND azr.az = {{liquid.AvailabilityZoneTotal}}
+	  JOIN resources r ON r.id = azr.resource_id
+	  JOIN services s ON s.id = r.service_id
+	  JOIN project_resources pr ON pr.resource_id = azr.resource_id AND pr.project_id = pazr.project_id
+	  JOIN projects p ON p.id = pazr.project_id
+	  JOIN domains d ON d.id = p.domain_id
 	  LEFT JOIN project_commitment_minExpiresAt pcmea ON d.id = pcmea.domain_id AND p.id = pcmea.project_id AND s.type= pcmea.TYPE AND r.name = pcmea.name
 `))
 
