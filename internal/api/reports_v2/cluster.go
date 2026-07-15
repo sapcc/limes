@@ -5,10 +5,9 @@ package reports_v2
 
 import (
 	"database/sql"
-	"maps"
-	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 
@@ -65,55 +64,49 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 // location of the db.RateID in the report and assigns the value for ratesv2.ClusterRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
 func setInClusterRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ClusterGetResponse, rateID db.RateID, value ratesv2.ClusterRateReport) {
-	services := filter.GetServices()
-	categories := filter.GetCategories()
-
-	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
-		rates, _ := filter.GetRatesForType(serviceType) // can have no resources
-		for _, rateName := range slices.Sorted(maps.Keys(rates)) {
-			rate := rates[rateName]
-			if rate.ID != rateID {
-				continue
-			}
-			if !rate.HasUsage {
-				return
-			}
-
-			config := cluster.Config.Liquids[serviceType]
-			area := config.Area
-			// defense in depth: config should be in sync with serviceInfo
-			if area == "" {
-				return
-			}
-
-			// check area level (might be uninitialized)
-			if report.ClusterReport.Areas == nil {
-				report.ClusterReport.Areas = make(map[string]ratesv2.ClusterAreaReport)
-			}
-			if _, exists := report.ClusterReport.Areas[area]; !exists {
-				report.ClusterReport.Areas[area] = ratesv2.ClusterAreaReport{Services: make(map[db.ServiceType]ratesv2.ClusterServiceReport)}
-			}
-			areaReport := report.ClusterReport.Areas[area]
-
-			// check service level
-			if _, exists := areaReport.Services[serviceType]; !exists {
-				areaReport.Services[serviceType] = ratesv2.ClusterServiceReport{Categories: make(map[liquid.CategoryName]ratesv2.ClusterCategoryReport)}
-			}
-			serviceReport := areaReport.Services[serviceType]
-
-			// check category level
-			category := liquid.CategoryName(serviceType)
-			if categoryID, exists := rate.CategoryID.Unpack(); exists {
-				category = categories[categoryID].Name
-			}
-			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = ratesv2.ClusterCategoryReport{Rates: make(map[liquid.RateName]ratesv2.ClusterRateReport)}
-			}
-			categoryReport := serviceReport.Categories[category]
-
-			// check rate level
-			categoryReport.Rates[rate.Name] = value
-			return
-		}
+	rate, rExists := filter.GetRateForID(rateID)
+	if !rExists {
+		// defense in depth: a rate was deleted in between, so we ignore the data
+		return
 	}
+	// cannot be missing due to referential integrity
+	service := must.BeOK(filter.GetServiceForID(rate.ServiceID))
+	if !rate.HasUsage {
+		return
+	}
+
+	config := cluster.Config.Liquids[service.Type]
+	area := config.Area
+	// defense in depth: config should be in sync with serviceInfo
+	if area == "" {
+		return
+	}
+
+	// check area level (might be uninitialized)
+	if report.ClusterReport.Areas == nil {
+		report.ClusterReport.Areas = make(map[string]ratesv2.ClusterAreaReport)
+	}
+	if _, exists := report.ClusterReport.Areas[area]; !exists {
+		report.ClusterReport.Areas[area] = ratesv2.ClusterAreaReport{Services: make(map[db.ServiceType]ratesv2.ClusterServiceReport)}
+	}
+	areaReport := report.ClusterReport.Areas[area]
+
+	// check service level
+	if _, exists := areaReport.Services[service.Type]; !exists {
+		areaReport.Services[service.Type] = ratesv2.ClusterServiceReport{Categories: make(map[liquid.CategoryName]ratesv2.ClusterCategoryReport)}
+	}
+	serviceReport := areaReport.Services[service.Type]
+
+	// check category level
+	category := liquid.CategoryName(service.Type)
+	if categoryID, exists := rate.CategoryID.Unpack(); exists {
+		category = must.BeOK(filter.GetCategoryForID(categoryID)).Name
+	}
+	if _, exists := serviceReport.Categories[category]; !exists {
+		serviceReport.Categories[category] = ratesv2.ClusterCategoryReport{Rates: make(map[liquid.RateName]ratesv2.ClusterRateReport)}
+	}
+	categoryReport := serviceReport.Categories[category]
+
+	// check rate level
+	categoryReport.Rates[rate.Name] = value
 }

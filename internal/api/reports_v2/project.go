@@ -5,10 +5,9 @@ package reports_v2
 
 import (
 	"database/sql"
-	"maps"
-	"slices"
 
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -92,76 +91,70 @@ func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 // location of the db.RateID in the report and assigns the value for ratesv2.ProjectRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
 func setInProjectRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ProjectGetResponse, rateID db.RateID, project common.ProjectMetadata, value ratesv2.ProjectRateReport) {
-	services := filter.GetServices()
-	categories := filter.GetCategories()
+	rate, rExists := filter.GetRateForID(rateID)
+	if !rExists {
+		// defense in depth: a rate was deleted in between, so we ignore the data
+		return
+	}
+	// cannot be missing due to referential integrity
+	service := must.BeOK(filter.GetServiceForID(rate.ServiceID))
+	if !rate.HasUsage && value.ProjectLimit.IsNone() && value.ProjectWindow.IsNone() {
+		return
+	}
+	// note: the database has a non-null constraint here, so we correct this after the fact
+	if !rate.HasUsage {
+		value.UsageAsBigint = None[string]()
+	}
 
-	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
-		rates, _ := filter.GetRatesForType(serviceType) // can have no resources
-		for _, rateName := range slices.Sorted(maps.Keys(rates)) {
-			rate := rates[rateName]
-			if rate.ID != rateID {
-				continue
-			}
-			if !rate.HasUsage && value.ProjectLimit.IsNone() && value.ProjectWindow.IsNone() {
-				return
-			}
-			// note: the database has a non-null constraint here, so we correct this after the fact
-			if !rate.HasUsage {
-				value.UsageAsBigint = None[string]()
-			}
+	config := cluster.Config.Liquids[service.Type]
+	area := config.Area
+	// defense in depth: config should be in sync with serviceInfo
+	if area == "" {
+		return
+	}
 
-			config := cluster.Config.Liquids[serviceType]
-			area := config.Area
-			// defense in depth: config should be in sync with serviceInfo
-			if area == "" {
-				return
-			}
-
-			// check domain level (might be uninitialized)
-			if report.DomainReports == nil {
-				report.DomainReports = make(map[string]ratesv2.ProjectsByDomainReport)
-			}
-			if _, exists := report.DomainReports[project.DomainInfo.UUID]; !exists {
-				report.DomainReports[project.DomainInfo.UUID] = ratesv2.ProjectsByDomainReport{
-					ProjectReports: make(map[string]ratesv2.ProjectReport),
-				}
-			}
-			domainReport := report.DomainReports[project.DomainInfo.UUID]
-
-			// check project level
-			if _, exists := domainReport.ProjectReports[project.UUID]; !exists {
-				domainReport.ProjectReports[project.UUID] = ratesv2.ProjectReport{
-					ProjectMetadata: project,
-					Areas:           make(map[string]ratesv2.ProjectAreaReport),
-				}
-			}
-			projectReport := domainReport.ProjectReports[project.UUID]
-
-			// check area level
-			if _, exists := projectReport.Areas[area]; !exists {
-				projectReport.Areas[area] = ratesv2.ProjectAreaReport{Services: make(map[db.ServiceType]ratesv2.ProjectServiceReport)}
-			}
-			areaReport := projectReport.Areas[area]
-
-			// check service level
-			if _, exists := areaReport.Services[serviceType]; !exists {
-				areaReport.Services[serviceType] = ratesv2.ProjectServiceReport{Categories: make(map[liquid.CategoryName]ratesv2.ProjectCategoryReport)}
-			}
-			serviceReport := areaReport.Services[serviceType]
-
-			// check category level
-			category := liquid.CategoryName(serviceType)
-			if categoryID, exists := rate.CategoryID.Unpack(); exists {
-				category = categories[categoryID].Name
-			}
-			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = ratesv2.ProjectCategoryReport{Rates: make(map[liquid.RateName]ratesv2.ProjectRateReport)}
-			}
-			categoryReport := serviceReport.Categories[category]
-
-			// check rate level
-			categoryReport.Rates[rate.Name] = value
-			return
+	// check domain level (might be uninitialized)
+	if report.DomainReports == nil {
+		report.DomainReports = make(map[string]ratesv2.ProjectsByDomainReport)
+	}
+	if _, exists := report.DomainReports[project.DomainInfo.UUID]; !exists {
+		report.DomainReports[project.DomainInfo.UUID] = ratesv2.ProjectsByDomainReport{
+			ProjectReports: make(map[string]ratesv2.ProjectReport),
 		}
 	}
+	domainReport := report.DomainReports[project.DomainInfo.UUID]
+
+	// check project level
+	if _, exists := domainReport.ProjectReports[project.UUID]; !exists {
+		domainReport.ProjectReports[project.UUID] = ratesv2.ProjectReport{
+			ProjectMetadata: project,
+			Areas:           make(map[string]ratesv2.ProjectAreaReport),
+		}
+	}
+	projectReport := domainReport.ProjectReports[project.UUID]
+
+	// check area level
+	if _, exists := projectReport.Areas[area]; !exists {
+		projectReport.Areas[area] = ratesv2.ProjectAreaReport{Services: make(map[db.ServiceType]ratesv2.ProjectServiceReport)}
+	}
+	areaReport := projectReport.Areas[area]
+
+	// check service level
+	if _, exists := areaReport.Services[service.Type]; !exists {
+		areaReport.Services[service.Type] = ratesv2.ProjectServiceReport{Categories: make(map[liquid.CategoryName]ratesv2.ProjectCategoryReport)}
+	}
+	serviceReport := areaReport.Services[service.Type]
+
+	// check category level
+	category := liquid.CategoryName(service.Type)
+	if categoryID, exists := rate.CategoryID.Unpack(); exists {
+		category = must.BeOK(filter.GetCategoryForID(categoryID)).Name
+	}
+	if _, exists := serviceReport.Categories[category]; !exists {
+		serviceReport.Categories[category] = ratesv2.ProjectCategoryReport{Rates: make(map[liquid.RateName]ratesv2.ProjectRateReport)}
+	}
+	categoryReport := serviceReport.Categories[category]
+
+	// check rate level
+	categoryReport.Rates[rate.Name] = value
 }
