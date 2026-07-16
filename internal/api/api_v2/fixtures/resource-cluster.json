@@ -1,0 +1,240 @@
+{
+  "info": {
+    "all_azs": [
+      "az-one",
+      "az-two"
+    ],
+    "service_areas": {
+      "first": {
+        "display_name": "First",
+        "services": {
+          "first": {
+            "version": 1,
+            "display_name": "First",
+            "categories": {
+              "first": {
+                "display_name": "First",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              },
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "second": {
+        "display_name": "Second",
+        "services": {
+          "second": {
+            "version": 1,
+            "display_name": "Second",
+            "categories": {
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              },
+              "second": {
+                "display_name": "Second",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "cluster_report": {
+    "service_areas": {
+      "first": {
+        "services": {
+          "first": {
+            "scraped_at": 3600,
+            "categories": {
+              "first": {
+                "resources": {
+                  "things": {
+                    "availability_zones": {
+                      "any": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 15,
+                        "physical_usage": 6
+                      }
+                    }
+                  }
+                }
+              },
+              "foo_category": {
+                "resources": {
+                  "capacity": {
+                    "availability_zones": {
+                      "any": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      },
+                      "az-one": {
+                        "capacity": 2000,
+                        "raw_capacity": 1000,
+                        "overall_usage": 500,
+                        "usage": 30,
+                        "usage_uncommitted": 20,
+                        "committed_confirmed_unutilized": 0,
+                        "subcapacities": [
+                          {
+                            "foo": "bar"
+                          },
+                          {
+                            "foo": "baz"
+                          }
+                        ],
+                        "committed": {
+                          "confirmed": {
+                            "1 year": 10
+                          },
+                          "pending": {
+                            "1 year": 10
+                          },
+                          "planned": {
+                            "1 year": 10
+                          }
+                        }
+                      },
+                      "az-two": {
+                        "capacity": 2000,
+                        "raw_capacity": 1000,
+                        "overall_usage": 500,
+                        "usage": 30,
+                        "usage_uncommitted": 20,
+                        "committed_confirmed_unutilized": 40,
+                        "committed": {
+                          "confirmed": {
+                            "1 year": 50
+                          }
+                        }
+                      },
+                      "unknown": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "second": {
+        "services": {
+          "second": {
+            "scraped_at": 3600,
+            "categories": {
+              "foo_category": {
+                "resources": {
+                  "capacity": {
+                    "availability_zones": {
+                      "any": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      },
+                      "az-one": {
+                        "capacity": 500,
+                        "raw_capacity": 500,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      },
+                      "az-two": {
+                        "capacity": 500,
+                        "raw_capacity": 500,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      },
+                      "unknown": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 30,
+                        "usage_uncommitted": 30,
+                        "committed_confirmed_unutilized": 0
+                      }
+                    }
+                  }
+                }
+              },
+              "second": {
+                "resources": {
+                  "things": {
+                    "availability_zones": {
+                      "any": {
+                        "capacity": 0,
+                        "raw_capacity": 0,
+                        "usage": 15,
+                        "physical_usage": 6
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
