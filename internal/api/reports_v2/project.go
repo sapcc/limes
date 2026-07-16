@@ -33,11 +33,11 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
-func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, options common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
+func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
 	result := &ratesv2.ProjectGetResponse{}
 
 	// fill info report
-	if options.WithInfo {
+	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
 			return *result, err

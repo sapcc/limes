@@ -32,11 +32,11 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetDomainRates returns a ratesv2.DomainGetResponse.
-func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, options common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
+func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
 	result := &ratesv2.DomainGetResponse{}
 
 	// fill info report
-	if options.WithInfo {
+	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
 			return *result, err

@@ -27,11 +27,11 @@ var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterRates returns a ratesv2.ClusterGetResponse.
-func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, options common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
+func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
 	result := &ratesv2.ClusterGetResponse{}
 
 	// fill info report
-	if options.WithInfo {
+	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
 			return *result, err
