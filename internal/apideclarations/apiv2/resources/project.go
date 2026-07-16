@@ -84,6 +84,7 @@ type ProjectAvailabilityZoneReport struct {
 	// It is only returned when the resource has quota.
 	Quota Option[uint64] `json:"quota,omitzero"`
 	// Committed is the sum of committed amounts grouped by their Status and then CommitmentDuration.
+	// It is populated sparsely, so that only status and durations which exist will appear.
 	// It is only returned when the respective query option with=commitment_stats is set.
 	Committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64 `json:"committed,omitempty"`
 	// PhysicalUsage is usage of physical hardware resources which results from the Usage.
