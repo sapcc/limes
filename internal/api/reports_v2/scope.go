@@ -110,7 +110,7 @@ func NewScope(forProject bool, r *http.Request, queryDomainUUID Option[string], 
 	return s, nil
 }
 
-var scopeFilterReplaceRx = regexp.MustCompile(`{{(.*?) = \$(domain_id|project_id)}}`)
+var scopeFilterReplaceRx = regexp.MustCompile(`{{(\S+?) = \$(domain_id|project_id)}}`)
 
 // ExpandScopeFilters takes an SQL query string with curly-bracketed
 // where-clauses and will replace each one with an arg position and return the
