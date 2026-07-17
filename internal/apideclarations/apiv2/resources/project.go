@@ -92,6 +92,7 @@ type ProjectAvailabilityZoneReport struct {
 	PhysicalUsage Option[uint64] `json:"physical_usage,omitzero"`
 	// HistoricalUsage are the statistics on which the automatic quota distribution is based on.
 	// It is only returned when automatic quota distribution is configured for this resource.
+	// It is only returned when the respective query option with=historical_usage is set.
 	HistoricalUsage Option[ProjectHistoricalReport] `json:"historical_usage,omitzero"`
 	// Subresources is formatted as json.RawMessage for convenience for reading from the database.
 	// The content will be a marshalled []liquid.Subresource.

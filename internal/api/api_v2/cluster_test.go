@@ -40,6 +40,16 @@ var resourceReportConfigJSON = string(must.Return(httptest.NewJQModifiableJSONSt
 		},
 		"resource_behavior": [
 			{"resource": "first/capacity", "overcommit_factor": 2}	
+		],
+		"quota_distribution_configs": [
+			{
+				"resource": "first/capacity",
+				"model": "autogrow",
+				"autogrow": {
+					"growth_multiplier": 1.0,
+					"usage_data_retention_period": "48h"
+				}
+			}
 		]
 	}`), "resourceReportConfigJSON").
 	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).

@@ -41,6 +41,7 @@ func EvalProjectResourceExtraProps(sql string, opts common.ProjectResourceReport
 		"commitment_stats": opts.WithCommitmentStats,
 		"timing":           opts.WithTiming,
 		"subresources":     opts.WithSubresources,
+		"historical_usage": opts.WithHistoricalUsage,
 	}
 	return handleProps(sql, optSettings)
 }

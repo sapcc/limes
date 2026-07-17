@@ -40,7 +40,7 @@ type ClusterResourceReportOpts struct {
 	ResourceReportOpts
 	// WithTiming enriches the response with ScrapedAt values
 	WithTiming bool `q:"with,value:timing"`
-	// WithSubcapacities enriches the response with Subcapacities values which is only allowed for users with certain permissions
+	// WithSubcapacities enriches the response with Subcapacities values
 	WithSubcapacities bool `q:"with,value:subcapacities"`
 }
 
@@ -60,6 +60,8 @@ type ProjectResourceReportOpts struct {
 	WithTiming bool `q:"with,value:timing"`
 	// WithSubresources enriches the response with Subresources values which is only allowed for users with certain permissions
 	WithSubresources bool `q:"with,value:subresources"`
+	// WithHistoricalUsage enriches the response with HistoricalUsage values which is only allowed for users with certain permissions
+	WithHistoricalUsage bool `q:"with,value:historical_usage"`
 	// DomainUUID is a special entity filter which is only allowed for users with certain permissions
 	DomainUUID Option[string] `q:"domain_uuid"`
 }

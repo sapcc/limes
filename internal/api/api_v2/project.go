@@ -19,31 +19,17 @@ import (
 // handleGetResourcesProjects handles GET /resources/v2/projects.
 func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/projects")
-	none := resourcesv2.ProjectGetResponse{}
-
-	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
-	options, err := opts.ParseQueryString[common.ProjectResourceReportOpts](r.URL.Query())
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
-	if err != nil {
-		return none, err
-	}
-	err = token.Enforce("v2:project:report_multiple")
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
-	if err != nil {
-		return none, err
-	}
-	return none, nil
+	return p.commonHandleGetResourcesProject(r, token, "v2:project:report_multiple")
 }
 
 // handleGetResourcesProject handles GET /resources/v2/projects/:project_uuid.
 func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid")
+	return p.commonHandleGetResourcesProject(r, token, "v2:project:report_single")
+}
+
+// commonHandleGetResourcesProject handles single- and multi-project rate calls.
+func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gopherpolicy.Token, rule string) (_ resourcesv2.ProjectGetResponse, err error) {
 	none := resourcesv2.ProjectGetResponse{}
 
 	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
@@ -51,19 +37,45 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
+	scope, err := reports_v2.NewScope(true, r, options.DomainUUID, token, p.DB)
 	if err != nil {
 		return none, err
 	}
-	err = token.Enforce("v2:project:report_single")
+
+	err = token.Enforce(rule)
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
+	// important: project-resources have special ?with= params which are subject to special permissions
+	// we can only return one error, so
+	if options.WithTiming {
+		err = token.Enforce("v2:project:with_timing")
+		if err != nil {
+			return none, err
+		}
+	}
+	if options.WithSubresources {
+		err = token.Enforce("v2:project:with_subresources")
+		if err != nil {
+			return none, err
+		}
+	}
+	if options.WithHistoricalUsage {
+		err = token.Enforce("v2:project:with_historical_usage")
+		if err != nil {
+			return none, err
+		}
+	}
+
+	filter, err := reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetProjectResources(p.Cluster, token, filter, options, scope, p.timeNow())
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
 
 // handleGetRatesProjects handles GET /rates/v2/projects.
