@@ -27,7 +27,7 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 	JOIN domains d
 	ON d.id = p.domain_id
 	WHERE {{pra.rate_id = ANY($rate_id)}}
-	AND {{d.id = $domain_id}}
+	AND {{d.id = ANY($domain_id)}}
 	GROUP BY d.uuid, d.name, pra.rate_id
 `)
 

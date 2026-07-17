@@ -28,8 +28,8 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 	JOIN domains d
 	ON d.id = p.domain_id
 	WHERE {{pra.rate_id = ANY($rate_id)}}
-	AND {{d.id = $domain_id}}
-	AND {{p.id = $project_id}}
+	AND {{d.id = ANY($domain_id)}}
+	AND {{p.id = ANY($project_id)}}
 `)
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
