@@ -189,7 +189,7 @@ go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
 go.xyrillian.de/gg/option
 go.xyrillian.de/gg/options
-# go.xyrillian.de/schwift/v2 v2.1.0
+# go.xyrillian.de/schwift/v2 v2.2.0
 ## explicit; go 1.25.0
 go.xyrillian.de/schwift/v2
 go.xyrillian.de/schwift/v2/capabilities
