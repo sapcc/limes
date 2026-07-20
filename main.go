@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/api/api_v2"
@@ -356,7 +357,7 @@ func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []s
 	// serve data metrics
 	dmr := collector.DataMetricsV2Reporter{
 		Cluster: cluster,
-		DB:      cluster.DB,
+		DB:      oblast.NewDB(cluster.DB.Db),
 		TimeNow: time.Now,
 	}
 
