@@ -98,3 +98,15 @@ type ProjectRateReportOpts struct {
 	// DomainUUID is a special entity filter which is only allowed for users with certain permissions
 	DomainUUID Option[string] `q:"domain_uuid"`
 }
+
+// CommitmentListOpts contains query parameters for GET /v2/commitments.
+type CommitmentListOpts struct {
+	// main filters; at least one of these must be given
+	ProjectUUID Option[string]      `q:"project_uuid"` // if given, must be below authenticated scope; if not given, shows all commitments within authenticated scope (except if OnlyPublic = true, see there)
+	ResourceRef Option[ResourceRef] `q:"resource"`     // formatted like "service/resource", e.g. "cinder/capacity"
+	OnlyPublic  bool                `q:"public"`       // list all commitments in all projects that have transfer_status = "public" (for marketplace usecase)
+
+	// extra filters
+	UpdatedAfter Option[time.Time] `q:"updated_after"` // TODO: requires new DB field project_commitments.updated_at
+	WithDeleted  bool              `q:"with=deleted"`  // requires extra permission (Orbitus only)
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -31,14 +32,17 @@ var (
 	errAZMustNotBeAny            = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
 	errAZMustBeAny               = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
 	errCommitmentsDisabled       = errors.New("commitments are not enabled for this resource")
+	errNotDeletable              = errors.New("commitment cannot be deleted")
 	errConfirmByInPast           = errors.New("confirm_by may not be set in the past")
 	errConfirmByMissing          = errors.New("confirm_by must be set for the requested initial commitment status")
 	errConfirmByNotAllowed       = errors.New("confirm_by may not be set for the requested initial commitment status")
 	errEmptyAmount               = errors.New("amount of committed resource must be greater than zero")
 	errInvalidInitialStatus      = errors.New("initial commitment status value is invalid")
+	errInvalidResourceReference  = errors.New("reference to an unknown az resource (race condition)")
 	errNoSuchAZ                  = errors.New("no such availability zone")
 	errNoSuchResource            = errors.New("no such resource")
 	errNoSuchService             = errors.New("no such service")
+	errNoSuchCommitment          = errors.New("no such commitment")
 	errNotifyOnConfirmNotAllowed = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
 	errResourceForbidden         = errors.New("resource is not enabled in this project")
 )
@@ -206,4 +210,20 @@ func analyzeCommitmentChangeResponse(resp liquid.CommitmentChangeResponse) error
 	} else {
 		return respondwith.CustomStatus(http.StatusConflict, err)
 	}
+}
+
+// isDeletable checks whether the user with the given token is allowed to delete this commitment.
+// For that, the commitment cannot be older than 24 hours and only directly created.
+// An admin exception is also allowed.
+func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow func() time.Time) bool {
+	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusConfirmed}, c.Status) {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(c.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(c.CreatedAt.Add(24*time.Hour)) {
+			return token.Check("v2:project:commitment_delete")
+		}
+	}
+
+	// admin exception
+	return token.Check("v2:project:commitment_delete_admin")
 }

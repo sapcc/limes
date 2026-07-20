@@ -21,10 +21,12 @@ type PolicyEnforcer struct {
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
 	// flags by v2 action
-	AllowInfo             bool
-	AllowReportSingle     bool
-	AllowReportMultiple   bool
-	AllowCommitmentCreate bool
+	AllowInfo                  bool
+	AllowReportSingle          bool
+	AllowReportMultiple        bool
+	AllowCommitmentCreate      bool
+	AllowCommitmentDelete      bool
+	AllowCommitmentDeleteAdmin bool
 	// v2:level:role
 	IsDomainRole  bool
 	IsProjectRole bool
@@ -87,6 +89,10 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowReportMultiple
 	case "commitment_create":
 		return e.AllowCommitmentCreate
+	case "commitment_delete":
+		return e.AllowCommitmentDelete
+	case "commitment_delete_admin":
+		return e.AllowCommitmentDeleteAdmin
 	case "block_commitments":
 		return false
 	default:

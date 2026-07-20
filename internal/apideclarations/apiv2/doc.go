@@ -67,6 +67,23 @@
 //
 // TODO: fill when implemented
 //
+// # Endpoint: GET /resources/v2/commitments
+//
+// Returns information about multiple commitments.
+// A project-scoped token can only access this path, if its OR no project_uuid is set in the query parameter or when public=true.
+// A domain-scoped token can only access this path, if a project_uuid from his domain OR no filter is set in the query parameter or when public=true.
+// A cloud-admin token can receive data for all filters.
+//   - Takes query parameters as defined in [resourcesv2.CommitmentListOpts].
+//   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
+//
+// # Endpoint: GET /resources/v2/commitments/:uuid
+//
+// Returns information about multiple commitments.
+// A project-scoped token can only access this path, if a commitment_uuid from his project is set in the URL parameter.
+// A domain-scoped token can only access this path, if a commitment_uuid from his domain is set in the URL parameter.
+// A cloud-admin token can receive data for any commitment_uuid.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
 // # Endpoint: POST /resources/v2/commitments/new
 //
 // Creates a new commitment (or performs a dry run of a commitment creation request).
@@ -75,6 +92,15 @@
 //   - On success, status code 201 (Created) will be returned, including for dry runs.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
+//
+// # Endpoint: DELETE /resources/v2/commitments/:uuid
+//
+// Deletes the specified commitment.
+// A project-scoped token can only access this path, if a commitment_uuid from his project is set in the URL parameter.
+// A domain-scoped token can only access this path, if a commitment_uuid from his domain is set in the URL parameter.
+// A cloud-admin token can delete any commitment_uuid.
+// For project- and domain-scoped tokens, the commitment needs to be deletable - meaning maximum 24 hours old and not yet transferred.
+//   - On success, status code 204 (No Content) will be returned.
 //
 // # Endpoint: GET /rates/v2/info
 //
