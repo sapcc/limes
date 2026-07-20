@@ -5,6 +5,7 @@ package collector
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/is"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -881,7 +883,7 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 // of label pairs, and so on) in order to save memory.
 type DataMetricsV2Reporter struct {
 	Cluster *core.Cluster
-	DB      *gorp.DbMap
+	DB      *oblast.DB
 	TimeNow func() time.Time
 }
 
@@ -890,7 +892,7 @@ func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request
 	if logg.ShowDebug {
 		reportHeapStats("before collectMetrics()")
 	}
-	metricSet, err := d.collectMetrics()
+	metricSet, err := d.collectMetrics(r.Context())
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -983,21 +985,17 @@ var (
 	`)
 )
 
-func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
+func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetricSet, error) {
 	result := make(map[string][]dataMetric)
 
 	// fetch resource info
-	var resourceRecords []struct {
+	type resourceRecord struct {
 		ServiceType  db.ServiceType              `db:"service_type"`
 		CategoryName Option[liquid.CategoryName] `db:"category_name"`
 		db.Resource
 	}
-	_, err := d.DB.Select(&resourceRecords, dmv2ResourceInfoQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
-	}
 	overcommitFactors := make(map[db.ServiceType]map[liquid.ResourceName]liquid.OvercommitFactor)
-	for _, record := range resourceRecords {
+	err := oblast.MustNewStore[resourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ResourceInfoQuery).Foreach(func(record resourceRecord) error {
 		srvType, res := record.ServiceType, record.Resource
 
 		// remember overcommit factor for capacity calculations below (want to avoid calling BehaviorForResource multiple times)
@@ -1046,6 +1044,10 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		labels = fmt.Sprintf(`base_unit=%q,resource=%q,service=%q`, baseUnit.String(), res.Name, srvType)
 		metric = dataMetric{Labels: labels, Value: float64(multiplier)}
 		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
 	}
 
 	// fetch cluster-scoped data (while also building a cached mapping of AZResourceID => ServiceType/ResourceName/AvailabilityZone for later)
@@ -1057,13 +1059,8 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		Topology         liquid.Topology        `db:"topology"`
 		RawCapacity      uint64                 `db:"raw_capacity"`
 	}
-	var clusterResourceRecords []clusterResourceRecord
-	_, err = d.DB.Select(&clusterResourceRecords, dmv2ClusterResourceDataQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
-	}
-	clusterResourceRecordsByID := make(map[db.AZResourceID]clusterResourceRecord, len(clusterResourceRecords))
-	for _, crr := range clusterResourceRecords {
+	clusterResourceRecordsByID := make(map[db.AZResourceID]clusterResourceRecord)
+	err = oblast.MustNewStore[clusterResourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ClusterResourceDataQuery).Foreach(func(crr clusterResourceRecord) error {
 		clusterResourceRecordsByID[crr.AZResourceID] = crr
 
 		// skip reporting AZ "total"
@@ -1073,19 +1070,19 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		// `sum (limitas_cluster_resource_capacity) by (service, resource)` would produce unexpected results
 		// through double counting. But then this separate metric family can just be an aggregation rule in Prometheus.
 		if crr.AvailabilityZone == liquid.AvailabilityZoneTotal {
-			continue
+			return nil
 		}
 
 		// skip reporting AZ "unknown" unless it actually holds capacity
 		if crr.RawCapacity == 0 && crr.AvailabilityZone == liquid.AvailabilityZoneUnknown {
-			continue
+			return nil
 		}
 
 		// skip az_resources records that only exist as scaffolding and do not hold capacity
 		// (e.g. on AZAwareTopology, AvailabilityZoneAny is irrelevant for capacity metrics,
 		// but exists in the DB because it needs to hold quota on the project level)
 		if crr.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
-			continue
+			return nil
 		}
 
 		// emit limitas_cluster_resource_raw_capacity
@@ -1097,28 +1094,28 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		capacity := overcommitFactors[crr.ServiceType][crr.ResourceName].ApplyTo(crr.RawCapacity)
 		metric = dataMetric{Labels: labels, Value: float64(capacity)}
 		result["limitas_cluster_resource_capacity"] = append(result["limitas_cluster_resource_capacity"], metric)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
 	}
 
 	// fetch rate info
-	var rateRecords []struct {
+	type rateRecord struct {
 		ServiceType  db.ServiceType              `db:"service_type"`
 		CategoryName Option[liquid.CategoryName] `db:"category_name"`
 		db.Rate
-	}
-	_, err = d.DB.Select(&rateRecords, dmv2RateInfoQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2RateInfoQuery: %w", err)
 	}
 	type rateInfo struct {
 		Path           db.RatePath
 		ProjectDefault Option[core.RateLimitConfiguration]
 	}
-	rateInfoByID := make(map[db.RateID]rateInfo, len(rateRecords))
-	for _, record := range rateRecords {
+	rateInfoByID := make(map[db.RateID]rateInfo)
+	err = oblast.MustNewStore[rateRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2RateInfoQuery).Foreach(func(record rateRecord) error {
 		srvType, rate := record.ServiceType, record.Rate
 		lcfg, ok := d.Cluster.Config.GetLiquidConfigurationForType(srvType)
 		if !ok {
-			return nil, fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
+			return fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
 		}
 		labels := fmt.Sprintf(`rate=%q,service=%q`, rate.Name, srvType)
 
@@ -1153,6 +1150,10 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		result["limitas_rate_info"] = append(result["limitas_rate_info"], metric)
 
 		rateInfoByID[rate.ID] = rateInfo{Path: rate.Path, ProjectDefault: projectDefault}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2RateInfoQuery: %w", err)
 	}
 
 	// fetch project metadata:
@@ -1166,28 +1167,29 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		DomainName  string       `db:"domain_name"`
 		DomainUUID  string       `db:"domain_uuid"`
 	}
-	var projectInfoRecords []projectInfoRecord
-	_, err = d.DB.Select(&projectInfoRecords, dmv2ProjectInfoQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
-	}
-	projectInfoRecordsByID := make(map[db.ProjectID]projectInfoRecord, len(projectInfoRecords))
-	isResourceCommittableForDomainName := make(map[string]map[db.AZResourceID]bool)
-	for _, pir := range projectInfoRecords {
+	var (
+		projectInfoRecordsByID             = make(map[db.ProjectID]projectInfoRecord)
+		isResourceCommittableForDomainName = make(map[string]map[db.AZResourceID]bool)
+	)
+	err = oblast.MustNewStore[projectInfoRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectInfoQuery).Foreach(func(pir projectInfoRecord) error {
 		projectInfoRecordsByID[pir.ProjectID] = pir
 
 		if _, ok := isResourceCommittableForDomainName[pir.DomainName]; !ok {
-			result := make(map[db.AZResourceID]bool, len(clusterResourceRecords))
-			for _, crr := range clusterResourceRecords {
+			result := make(map[db.AZResourceID]bool, len(clusterResourceRecordsByID))
+			for _, crr := range clusterResourceRecordsByID {
 				cb := d.Cluster.CommitmentBehaviorForResource(crr.ServiceType, crr.ResourceName).ForDomain(pir.DomainName)
 				result[crr.AZResourceID] = len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(d.TimeNow()))
 			}
 			isResourceCommittableForDomainName[pir.DomainName] = result
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
 	}
 
 	// fetch project-scoped commitment data (also take sums over commitments for the allocation metrics emitted later)
-	var projectCommitmentRecords []struct {
+	type projectCommitmentRecord struct {
 		ProjectID      db.ProjectID                            `db:"project_id"`
 		AZResourceID   db.AZResourceID                         `db:"az_resource_id"`
 		UUID           liquid.CommitmentUUID                   `db:"uuid"`
@@ -1196,21 +1198,17 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		Status         liquid.CommitmentStatus                 `db:"status"`
 		TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
 	}
-	_, err = d.DB.Select(&projectCommitmentRecords, dmv2ProjectCommitmentDataQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: %w", err)
-	}
 	confirmedCommitmentSums := make(map[db.AZResourceID]map[db.ProjectID]uint64)
-	for _, pcr := range projectCommitmentRecords {
+	err = oblast.MustNewStore[projectCommitmentRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectCommitmentDataQuery).Foreach(func(pcr projectCommitmentRecord) error {
 		crr, ok := clusterResourceRecordsByID[pcr.AZResourceID]
 		if !ok {
-			return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: saw unexpected AZResourceID %d", pcr.AZResourceID)
+			return fmt.Errorf("saw unexpected AZResourceID %d", pcr.AZResourceID)
 		}
 		pir, ok := projectInfoRecordsByID[pcr.ProjectID]
 		if !ok {
 			// if a project is being created while this function is going through its motions,
 			// we will just ignore it until the next scrape
-			continue
+			return nil
 		}
 
 		labels := fmt.Sprintf(
@@ -1238,30 +1236,30 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 			}
 			m[pcr.ProjectID] += pcr.Amount
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: %w", err)
 	}
 
 	// fetch project-scoped resource utilization data
-	var projectResourceRecords []struct {
+	type projectResourceRecord struct {
 		ProjectID     db.ProjectID    `db:"project_id"`
 		AZResourceID  db.AZResourceID `db:"az_resource_id"`
 		Quota         Option[uint64]  `db:"quota"`
 		Usage         uint64          `db:"usage"`
 		PhysicalUsage Option[uint64]  `db:"physical_usage"`
 	}
-	_, err = d.DB.Select(&projectResourceRecords, dmv2ProjectResourceDataQuery)
-	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: %w", err)
-	}
-	for _, prr := range projectResourceRecords {
+	err = oblast.MustNewStore[projectResourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectResourceDataQuery).Foreach(func(prr projectResourceRecord) error {
 		crr, ok := clusterResourceRecordsByID[prr.AZResourceID]
 		if !ok {
-			return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: saw unexpected AZResourceID %d", prr.AZResourceID)
+			return fmt.Errorf("saw unexpected AZResourceID %d", prr.AZResourceID)
 		}
 		pir, ok := projectInfoRecordsByID[prr.ProjectID]
 		if !ok {
 			// if a project is being created while this function is going through its motions,
 			// we will just ignore it until the next scrape
-			continue
+			return nil
 		}
 
 		labels := fmt.Sprintf(
@@ -1299,24 +1297,24 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 				result["limitas_project_resource_quota"] = append(result["limitas_project_resource_quota"], metric)
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: %w", err)
 	}
 
 	// fetch project-scoped rate data
-	var projectRateRecords []db.ProjectRate
-	_, err = d.DB.Select(&projectRateRecords, `SELECT * FROM project_rates`)
-	if err != nil {
-		return nil, fmt.Errorf("in project_rates query: %w", err)
-	}
-	for _, prr := range projectRateRecords {
+	// TODO: replace MustNewStore with `db.ProjectRateStore` once that exists
+	err = oblast.MustNewStore[db.ProjectRate](oblast.PostgresDialect()).Select(ctx, d.DB, `SELECT * FROM project_rates`).Foreach(func(prr db.ProjectRate) error {
 		ri, ok := rateInfoByID[prr.RateID]
 		if !ok {
-			return nil, fmt.Errorf("in project_rates query: saw unexpected RateID %d", prr.RateID)
+			return fmt.Errorf("saw unexpected RateID %d", prr.RateID)
 		}
 		pir, ok := projectInfoRecordsByID[prr.ProjectID]
 		if !ok {
 			// if a project is being created while this function is going through its motions,
 			// we will just ignore it until the next scrape
-			continue
+			return nil
 		}
 		labels := fmt.Sprintf(
 			`az=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q`,
@@ -1341,12 +1339,16 @@ func (d *DataMetricsV2Reporter) collectMetrics() (*dataMetricSet, error) {
 		if prr.UsageAsBigint != "" {
 			usageAsBigFloat, _, err := big.NewFloat(0).Parse(prr.UsageAsBigint, 10)
 			if err != nil {
-				return nil, fmt.Errorf("in project_rates query: cannot parse usage_as_bigint for id = %d: %w", prr.ID, err)
+				return fmt.Errorf("cannot parse usage_as_bigint for id = %d: %w", prr.ID, err)
 			}
 			usageAsFloat, _ := usageAsBigFloat.Float64()
 			metric := dataMetric{Labels: labels, Value: float64(usageAsFloat)}
 			result["limitas_project_rate_usage_total"] = append(result["limitas_project_rate_usage_total"], metric)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("in project_rates query: %w", err)
 	}
 
 	return &dataMetricSet{ByFamily: result}, nil

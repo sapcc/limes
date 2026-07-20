@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -218,7 +219,7 @@ func Test_ScanCapacity(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: oblast.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
@@ -330,7 +331,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: oblast.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single_v2.prom")
@@ -421,7 +422,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: oblast.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")

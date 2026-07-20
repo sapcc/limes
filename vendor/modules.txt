@@ -189,6 +189,10 @@ go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
 go.xyrillian.de/gg/option
 go.xyrillian.de/gg/options
+# go.xyrillian.de/oblast v0.12.0
+## explicit; go 1.26
+go.xyrillian.de/oblast
+go.xyrillian.de/oblast/handle
 # go.xyrillian.de/schwift/v2 v2.2.0
 ## explicit; go 1.25.0
 go.xyrillian.de/schwift/v2
