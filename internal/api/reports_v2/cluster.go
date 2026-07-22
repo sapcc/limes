@@ -6,6 +6,7 @@ package reports_v2
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -92,13 +93,13 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 
 // GetClusterResources returns a resourcesv2.ClusterGetResponse.
 func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
-	result := &resourcesv2.ClusterGetResponse{}
+	var result resourcesv2.ClusterGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetResourcesInfo(cluster, token, timeNow, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -151,7 +152,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			if len(commitmentBehavior.ForCluster().Durations) != 0 {
 				err = json.Unmarshal([]byte(committedJSON), &committed)
 				if err != nil {
-					return err
+					return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 				}
 			} else {
 				usageUncommitted = None[uint64]()
@@ -170,7 +171,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
 
-		setInClusterResourceReport(filter, cluster, result, azResourceID, resourcesv2.ClusterAvailabilityZoneReport{
+		setInClusterResourceReport(filter, cluster, &result, azResourceID, resourcesv2.ClusterAvailabilityZoneReport{
 			Capacity:                     capacity,
 			RawCapacity:                  rawCapacity,
 			OverallUsage:                 overallUsage,
@@ -184,10 +185,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		return nil
 	})
 
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInClusterResourceReport creates or iterates higher level structs on the way to the nested
@@ -195,7 +193,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 func setInClusterResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, value resourcesv2.ClusterAvailabilityZoneReport, scrapedAt Option[limes.UnixEncodedTime]) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
-		// defense in depth: a rate was deleted in between, so we ignore the data
+		// defense in depth: an az_resource was deleted in between, so we ignore the data
 		return
 	}
 	// cannot be missing due to referential integrity
@@ -256,13 +254,13 @@ var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 
 // GetClusterRates returns a ratesv2.ClusterGetResponse.
 func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
-	result := &ratesv2.ClusterGetResponse{}
+	var result ratesv2.ClusterGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -278,14 +276,10 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 		if err != nil {
 			return err
 		}
-		setInClusterRateReport(filter, cluster, result, rateID, ratesv2.ClusterRateReport{UsageAsBigint: usageAsBigint})
+		setInClusterRateReport(filter, cluster, &result, rateID, ratesv2.ClusterRateReport{UsageAsBigint: usageAsBigint})
 		return nil
 	})
-
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInClusterRateReport creates or iterates higher level structs on the way to the nested

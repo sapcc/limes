@@ -83,13 +83,13 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 
 // GetProjectResources returns a resourcesv2.ProjectGetResponse.
 func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
-	result := &resourcesv2.ProjectGetResponse{}
+	var result resourcesv2.ProjectGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetResourcesInfo(cluster, token, timeNow, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -168,14 +168,14 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			if len(commitmentBehavior.ForDomain(domainName).Durations) != 0 {
 				err = json.Unmarshal([]byte(committedJSON), &committed)
 				if err != nil {
-					return err
+					return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 				}
 			}
 		}
 
 		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
 
-		setInProjectResourceReport(filter, cluster, result, azResourceID, common.ProjectMetadata{
+		setInProjectResourceReport(filter, cluster, &result, azResourceID, common.ProjectMetadata{
 			UUID:       projectUUID,
 			Name:       projectName,
 			ParentUUID: projectParentUUID,
@@ -193,11 +193,7 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		}, scrapedAtUnix, constraints)
 		return nil
 	})
-
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInProjectResourceReport creates or iterates higher level structs on the way to the nested
@@ -209,7 +205,7 @@ func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *re
 
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
-		// defense in depth: a rate was deleted in between, so we ignore the data
+		// defense in depth: an az_resource was deleted in between, so we ignore the data
 		return
 	}
 	// cannot be missing due to referential integrity
@@ -296,13 +292,13 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
 func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
-	result := &ratesv2.ProjectGetResponse{}
+	var result ratesv2.ProjectGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -327,7 +323,7 @@ func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 		if err != nil {
 			return err
 		}
-		setInProjectRateReport(filter, cluster, result, rateID, common.ProjectMetadata{
+		setInProjectRateReport(filter, cluster, &result, rateID, common.ProjectMetadata{
 			UUID:       projectUUID,
 			Name:       projectName,
 			ParentUUID: projectParentUUID,
@@ -342,11 +338,7 @@ func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 		})
 		return nil
 	})
-
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInProjectRateReport creates or iterates higher level structs on the way to the nested

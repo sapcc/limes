@@ -6,6 +6,7 @@ package reports_v2
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -97,13 +98,13 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 
 // GetDomainResources returns a resourcesv2.DomainGetResponse.
 func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
-	result := &resourcesv2.DomainGetResponse{}
+	var result resourcesv2.DomainGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetResourcesInfo(cluster, token, timeNow, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -146,7 +147,7 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 			if len(commitmentBehavior.ForDomain(domainName).Durations) != 0 {
 				err = json.Unmarshal([]byte(committedJSON), &committed)
 				if err != nil {
-					return err
+					return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 				}
 			} else {
 				usageUncommitted = None[uint64]()
@@ -154,7 +155,7 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 			}
 		}
 
-		setInDomainResourceReport(filter, cluster, result, azResourceID, common.DomainMetadata{
+		setInDomainResourceReport(filter, cluster, &result, azResourceID, common.DomainMetadata{
 			UUID: domainUUID,
 			Name: domainName,
 		}, resourcesv2.DomainAvailabilityZoneReport{
@@ -166,11 +167,7 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 		})
 		return nil
 	})
-
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInDomainResourceReport creates or iterates higher level structs on the way to the nested
@@ -178,7 +175,7 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 func setInDomainResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.DomainGetResponse, azResourceID db.AZResourceID, domain common.DomainMetadata, value resourcesv2.DomainAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
-		// defense in depth: a rate was deleted in between, so we ignore the data
+		// defense in depth: an az_resource was deleted in between, so we ignore the data
 		return
 	}
 	// cannot be missing due to referential integrity
@@ -252,13 +249,13 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 
 // GetDomainRates returns a ratesv2.DomainGetResponse.
 func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
-	result := &ratesv2.DomainGetResponse{}
+	var result ratesv2.DomainGetResponse
 
 	// fill info report
 	if opts.WithInfo {
 		infoReport, err := GetRatesInfo(cluster, token, filter)
 		if err != nil {
-			return *result, err
+			return result, err
 		}
 		result.InfoReport = Some(infoReport)
 	}
@@ -277,7 +274,7 @@ func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fil
 		if err != nil {
 			return err
 		}
-		setInDomainRateReport(filter, cluster, result, rateID, common.DomainMetadata{
+		setInDomainRateReport(filter, cluster, &result, rateID, common.DomainMetadata{
 			UUID: domainUUID,
 			Name: domainName,
 		}, ratesv2.DomainRateReport{
@@ -285,11 +282,7 @@ func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fil
 		})
 		return nil
 	})
-
-	if err != nil {
-		return *result, err
-	}
-	return *result, nil
+	return result, err
 }
 
 // setInDomainReport creates or iterates higher level structs on the way to the nested
