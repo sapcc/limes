@@ -143,30 +143,21 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		}
 		overcommitFactor := cluster.BehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName).OvercommitFactor
 		capacity := overcommitFactor.ApplyTo(rawCapacity)
-
 		var committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64
 		if opts.WithCommitmentStats {
-			// cancel out committed values when no commitments are configured for this resource in all projects
-			// the database cannot do this, because it does not know the allowed configurations
+			err = json.Unmarshal([]byte(committedJSON), &committed)
+			if err != nil {
+				return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
+			}
+
+			// do not report commitment stats if the resource does not allow new commitments in any domains
+			// (however, if there are pre-existing commitments, report those in the usual way until they all expire or are deleted)
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
-			if len(commitmentBehavior.ForCluster().Durations) != 0 {
-				err = json.Unmarshal([]byte(committedJSON), &committed)
-				if err != nil {
-					return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
-				}
-			} else {
+			if len(commitmentBehavior.ForCluster().Durations) == 0 && len(committed) == 0 {
+				committed = nil
 				usageUncommitted = None[uint64]()
 				committedConfirmedUnutilized = None[uint64]()
 			}
-		}
-
-		// cancel out committed values when no commitments are configured for this resource in all projects
-		// the database cannot do this, because it does not know the allowed configurations
-		commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
-		if len(commitmentBehavior.ForCluster().Durations) == 0 {
-			committed = make(map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64)
-			usageUncommitted = None[uint64]()
-			committedConfirmedUnutilized = None[uint64]()
 		}
 
 		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
