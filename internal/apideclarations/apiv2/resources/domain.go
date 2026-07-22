@@ -63,16 +63,20 @@ type DomainAvailabilityZoneReport struct {
 	// Usage is the sum of the usages across projects in this domain as reported by the service.
 	Usage uint64 `json:"usage"`
 	// Committed is the sum of committed amounts across projects in this domain grouped by their Status and then CommitmentDuration.
+	// It is populated sparsely, so that only status and durations which exist will appear.
+	// It is only returned when the resource supports commitments.
 	// It is only returned when the respective query option with=commitment_stats is set.
 	Committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64 `json:"committed,omitempty"`
 	// CommittedConfirmedUnutilized is the sum of CommittedConfirmed - Usage for each project in this domain.
 	// If computed as sum of CommittedConfirmed - sum of Usage, the result is semantically wrong (commitments cannot cover other projects).
+	// It is only returned when the resource supports commitments.
 	// It is only returned when the respective query option with=commitment_stats is set.
 	CommittedConfirmedUnutilized Option[uint64] `json:"committed_confirmed_unutilized,omitzero"`
-	// UncommittedUsage can also be derived as sum of Usage - (Committed.Values().Sum() - CommittedConfirmedUnutilized).
+	// UsageUncommitted can also be derived as sum of Usage - (Committed.Values().Sum() - CommittedConfirmedUnutilized).
 	// so this is only reported for convenience purposes.
+	// It is only returned when the resource supports commitments.
 	// It is only returned when the respective query option with=commitment_stats is set.
-	UncommittedUsage Option[uint64] `json:"uncommitted_usage,omitzero"`
+	UsageUncommitted Option[uint64] `json:"usage_uncommitted,omitzero"`
 	// PhysicalUsage is collected per project and then summed, same as Usage.
 	PhysicalUsage Option[uint64] `json:"physical_usage,omitzero"`
 }

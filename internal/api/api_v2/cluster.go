@@ -29,11 +29,15 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
+	filter, err := reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetClusterResources(p.Cluster, token, filter, options, p.timeNow())
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
 
 // handleGetRatesCluster handles GET /rates/v2/cluster.

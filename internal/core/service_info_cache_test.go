@@ -203,3 +203,79 @@ func TestServiceInfoCache(t *testing.T) {
 	sis = s.Cluster.SIC.GetSnapshot()
 	assert.Equal(t, len(must.BeOKT(sis.GetRatesForType("first"))(t)), 3)
 }
+
+func TestServiceInfoCacheGetByID(t *testing.T) {
+	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
+	serviceInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
+		"objects:create": {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:delete": {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+	}
+	serviceInfoFirst.Resources = map[liquid.ResourceName]liquid.ResourceInfo{}
+	serviceInfoFirst.Categories = map[liquid.CategoryName]liquid.CategoryInfo{}
+	s := test.NewSetup(t,
+		test.WithConfig(configJSON),
+		test.WithPersistedServiceInfo("first", serviceInfoFirst),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+	)
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
+	t.Cleanup(func() { s.Cluster.SIC.Close() })
+
+	sis := s.Cluster.SIC.GetSnapshot()
+
+	// GetServiceForID
+	firstServiceID := s.GetServiceID("first")
+	svc, ok := sis.GetServiceForID(firstServiceID)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, svc.Type, "first")
+	assert.Equal(t, svc.DisplayName, "First")
+	_, ok = sis.GetServiceForID(99999) // non-existent ID
+	assert.Equal(t, ok, false)
+
+	// GetResourceForID
+	secondCapacityID := s.GetResourceID("second", "capacity")
+	res, ok := sis.GetResourceForID(secondCapacityID)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, res.Name, "capacity")
+	assert.Equal(t, res.DisplayName, "Capacity")
+	_, ok = sis.GetResourceForID(99999) // non-existent ID
+	assert.Equal(t, ok, false)
+
+	// GetAZResourceForID (already tested above but verify via index)
+	secondCapacityAZOne := s.GetAZResourceID("second", "capacity", "az-one")
+	azRes, ok := sis.GetAZResourceForID(secondCapacityAZOne)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, azRes.Path.ServiceType, "second")
+	assert.Equal(t, azRes.Path.ResourceName, "capacity")
+	assert.Equal(t, azRes.Path.AvailabilityZone, "az-one")
+	_, ok = sis.GetAZResourceForID(99999) // non-existent ID
+	assert.Equal(t, ok, false)
+
+	// GetRateForID
+	firstObjectsCreateID := s.GetRateID("first", "objects:create")
+	rate, ok := sis.GetRateForID(firstObjectsCreateID)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, rate.Name, "objects:create")
+	assert.Equal(t, rate.DisplayName, "Object Creations")
+	_, ok = sis.GetRateForID(99999) // non-existent ID
+	assert.Equal(t, ok, false)
+
+	// Verify ID indexes are updated after invalidation
+	s.MustDBExec("UPDATE services SET display_name = 'UpdatedFirst' WHERE id = $1", firstServiceID)
+	<-s.Cluster.SIC.OnInvalidate
+	sis = s.Cluster.SIC.GetSnapshot()
+	svc, ok = sis.GetServiceForID(firstServiceID)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, svc.DisplayName, "UpdatedFirst")
+
+	// Verify FilteredServiceInfoSnapshot also delegates correctly
+	filtered := sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
+	res, ok = filtered.GetResourceForID(secondCapacityID)
+	assert.Equal(t, ok, true)
+	assert.Equal(t, res.Name, "capacity")
+	// rate from "first" service should NOT be accessible when filtered to "second"
+	_, ok = filtered.GetRateForID(firstObjectsCreateID)
+	assert.Equal(t, ok, false)
+	// service "first" should NOT be accessible when filtered to "second"
+	_, ok = filtered.GetServiceForID(firstServiceID)
+	assert.Equal(t, ok, false)
+}

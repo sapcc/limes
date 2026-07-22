@@ -216,7 +216,7 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 	// empty scope: all placeholders become TRUE = TRUE
 	emptyScope := reports_v2.Scope{}
 	query, args := emptyScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE {{d.id = $domain_id}} AND {{p.id = $project_id}}`,
+		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE TRUE = TRUE AND TRUE = TRUE`)
 	assert.Equal(t, len(args), 0)
@@ -226,7 +226,7 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 		Domain: Some(domainFrance),
 	}
 	query, args = domainScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE {{d.id = $domain_id}} AND {{p.id = $project_id}}`,
+		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE d.id = $1 AND TRUE = TRUE`)
 	assert.Equal(t, len(args), 1)
@@ -238,7 +238,7 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 		Project: Some(projectParis),
 	}
 	query, args = projectScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE {{d.id = $domain_id}} AND {{p.id = $project_id}}`,
+		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE d.id = $1 AND p.id = $2`)
 	assert.Equal(t, len(args), 2)
@@ -247,7 +247,7 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 
 	// with pre-existing args: arg positions continue from the highest existing index
 	query, args = projectScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE t.name = $14 AND {{d.id = $domain_id}} AND {{p.id = $project_id}}`,
+		`SELECT * FROM t WHERE t.name = $14 AND {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 		"some-value",
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE t.name = $14 AND d.id = $15 AND p.id = $16`)
@@ -258,7 +258,7 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 
 	// only project_id placeholder in query with project scope
 	query, args = projectScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE {{p.id = $project_id}}`,
+		`SELECT * FROM t WHERE {{p.id = ANY($project_id)}}`,
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE p.id = $1`)
 	assert.Equal(t, len(args), 1)
