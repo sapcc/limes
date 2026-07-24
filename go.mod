@@ -10,7 +10,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.13.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.12.3
-	github.com/prometheus/client_golang v1.24.0
+	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.70.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.24.0
@@ -18,7 +18,7 @@ require (
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.11.1
 	go.xyrillian.de/oblast v0.12.0
-	go.xyrillian.de/schwift/v2 v2.2.0
+	go.xyrillian.de/schwift/v2 v2.2.1
 )
 
 require (

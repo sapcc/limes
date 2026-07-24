@@ -112,7 +112,7 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/prometheus/client_golang v1.24.0
+# github.com/prometheus/client_golang v1.24.1
 ## explicit; go 1.25.0
 github.com/prometheus/client_golang/api
 github.com/prometheus/client_golang/api/prometheus/v1
@@ -193,12 +193,11 @@ go.xyrillian.de/gg/options
 ## explicit; go 1.26
 go.xyrillian.de/oblast
 go.xyrillian.de/oblast/handle
-# go.xyrillian.de/schwift/v2 v2.2.0
-## explicit; go 1.25.0
+# go.xyrillian.de/schwift/v2 v2.2.1
+## explicit; go 1.26
 go.xyrillian.de/schwift/v2
 go.xyrillian.de/schwift/v2/capabilities
 go.xyrillian.de/schwift/v2/gopherschwift
-go.xyrillian.de/schwift/v2/internal/errext
 # golang.org/x/sys v0.47.0
 ## explicit; go 1.25.0
 golang.org/x/sys/unix
