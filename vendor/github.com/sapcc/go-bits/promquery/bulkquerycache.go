@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+
+	"github.com/sapcc/go-bits/logg"
 )
 
 // BulkQueryCache queries Prometheus in bulk and caches the result.
@@ -93,6 +95,7 @@ func (c *BulkQueryCache[K, V]) getEntries(ctx context.Context) (map[K]*V, error)
 		return c.entries, nil
 	}
 
+	startedAt := time.Now()
 	result := make(map[K]*V)
 	for _, q := range c.queries {
 		vector, err := c.client.GetVector(ctx, q.Query)
@@ -115,8 +118,11 @@ func (c *BulkQueryCache[K, V]) getEntries(ctx context.Context) (map[K]*V, error)
 		}
 	}
 
-	now := time.Now()
-	c.filledAt = &now
+	finishedAt := time.Now()
+	c.filledAt = &finishedAt
+	if logg.ShowDebug {
+		logg.Debug("refilled %T in %g seconds", c, finishedAt.Sub(startedAt).Seconds())
+	}
 	c.entries = result
 	return result, nil
 }
