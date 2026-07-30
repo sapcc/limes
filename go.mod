@@ -6,7 +6,7 @@ require (
 	github.com/databus23/goslo.policy v0.0.0-20250326134918-4afc2c56a903
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
-	github.com/gofrs/uuid/v5 v5.4.0
+	github.com/gofrs/uuid/v5 v5.5.0
 	github.com/gophercloud/gophercloud/v2 v2.13.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.12.3
@@ -14,7 +14,7 @@ require (
 	github.com/prometheus/common v0.70.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.24.0
-	github.com/sapcc/go-bits v0.0.0-20260723170232-89c8670b5841
+	github.com/sapcc/go-bits v0.0.0-20260730170321-f6f727520601
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.11.1
 	go.xyrillian.de/oblast v0.12.0
