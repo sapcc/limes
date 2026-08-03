@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/is"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/oblast"
@@ -883,7 +884,7 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 // of label pairs, and so on) in order to save memory.
 type DataMetricsV2Reporter struct {
 	Cluster *core.Cluster
-	DB      *oblast.DB
+	DB      *gsql.DB
 	TimeNow func() time.Time
 }
 
