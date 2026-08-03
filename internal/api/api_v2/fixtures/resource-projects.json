@@ -1,0 +1,608 @@
+{
+  "info": {
+    "all_azs": [
+      "az-one",
+      "az-two"
+    ],
+    "service_areas": {
+      "first": {
+        "display_name": "First",
+        "services": {
+          "first": {
+            "version": 1,
+            "display_name": "First",
+            "categories": {
+              "first": {
+                "display_name": "First",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              },
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "second": {
+        "display_name": "Second",
+        "services": {
+          "second": {
+            "version": 1,
+            "display_name": "Second",
+            "categories": {
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              },
+              "second": {
+                "display_name": "Second",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "domains": {
+    "uuid-for-france": {
+      "projects": {
+        "uuid-for-paris": {
+          "uuid": "uuid-for-paris",
+          "name": "paris",
+          "parent_uuid": "uuid-for-france",
+          "domain": {
+            "uuid": "uuid-for-france",
+            "name": "france"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "first": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              },
+                              "subresources": [
+                                {
+                                  "name": "sub1"
+                                },
+                                {
+                                  "name": "sub2"
+                                }
+                              ]
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "second": {
+              "services": {
+                "second": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "second": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "uuid-for-germany": {
+      "projects": {
+        "uuid-for-berlin": {
+          "uuid": "uuid-for-berlin",
+          "name": "berlin",
+          "parent_uuid": "uuid-for-germany",
+          "domain": {
+            "uuid": "uuid-for-germany",
+            "name": "germany"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "first": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "committed": {
+                                "confirmed": {
+                                  "1 year": 10
+                                },
+                                "pending": {
+                                  "1 year": 10
+                                },
+                                "planned": {
+                                  "1 year": 10
+                                }
+                              },
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              },
+                              "subresources": [
+                                {
+                                  "name": "sub1"
+                                },
+                                {
+                                  "name": "sub2"
+                                }
+                              ]
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "second": {
+              "services": {
+                "second": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "second": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "uuid-for-dresden": {
+          "uuid": "uuid-for-dresden",
+          "name": "dresden",
+          "parent_uuid": "uuid-for-berlin",
+          "domain": {
+            "uuid": "uuid-for-germany",
+            "name": "germany"
+          },
+          "service_areas": {
+            "first": {
+              "services": {
+                "first": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "first": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              },
+                              "subresources": [
+                                {
+                                  "name": "sub1"
+                                },
+                                {
+                                  "name": "sub2"
+                                }
+                              ]
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 5,
+                                "max_usage": 10,
+                                "duration": "48h"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "48h"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "second": {
+              "services": {
+                "second": {
+                  "scraped_at": 3600,
+                  "categories": {
+                    "foo_category": {
+                      "resources": {
+                        "capacity": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-one": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "az-two": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            },
+                            "unknown": {
+                              "usage": 10,
+                              "quota": 100,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    },
+                    "second": {
+                      "resources": {
+                        "things": {
+                          "availability_zones": {
+                            "any": {
+                              "usage": 5,
+                              "quota": 50,
+                              "physical_usage": 2,
+                              "historical_usage": {
+                                "min_usage": 0,
+                                "max_usage": 0,
+                                "duration": "1s"
+                              }
+                            }
+                          },
+                          "forbid_autogrowth": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

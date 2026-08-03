@@ -21,37 +21,24 @@ import (
 // handleGetResourcesDomains handles GET /resources/v2/domains.
 func (p *v2Provider) handleGetResourcesDomains(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/domains")
-	none := resourcesv2.DomainGetResponse{}
-
-	err = token.Enforce("v2:domain:report_multiple")
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.NewScope(false, r, None[string](), token, p.DB)
-	if err != nil {
-		return none, err
-	}
-	options, err := opts.ParseQueryString[common.DomainResourceReportOpts](r.URL.Query())
-	if err != nil {
-		return none, err
-	}
-	_, err = reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
-	if err != nil {
-		return none, err
-	}
-	return none, nil
+	return p.commonHandleGetResourcesDomain(r, token, "v2:domain:report_multiple")
 }
 
 // handleGetResourcesDomain handles GET /resources/v2/domains/:domain_uuid.
 func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/domains/:domain_uuid")
+	return p.commonHandleGetResourcesDomain(r, token, "v2:domain:report_single")
+}
+
+// commonHandleGetResourcesDomain handles single- and multi-domain resource calls.
+func (p *v2Provider) commonHandleGetResourcesDomain(r *http.Request, token *gopherpolicy.Token, rule string) (_ resourcesv2.DomainGetResponse, err error) {
 	none := resourcesv2.DomainGetResponse{}
 
-	err = token.Enforce("v2:domain:report_single")
+	err = token.Enforce(rule)
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.NewScope(false, r, None[string](), token, p.DB)
+	scope, err := reports_v2.NewScope(false, r, None[string](), token, p.DB)
 	if err != nil {
 		return none, err
 	}
@@ -59,11 +46,15 @@ func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpoli
 	if err != nil {
 		return none, err
 	}
-	_, err = reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
+	filter, err := reports_v2.FilterFromResourceOpts(p.Cluster, options.ResourceReportOpts)
 	if err != nil {
 		return none, err
 	}
-	return none, nil
+	result, err := reports_v2.GetDomainResources(p.Cluster, token, filter, options, scope, p.timeNow())
+	if err != nil {
+		return none, err
+	}
+	return result, nil
 }
 
 // handleGetRatesDomains handles GET /rates/v2/domains.

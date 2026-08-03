@@ -25,6 +25,10 @@ type PolicyEnforcer struct {
 	AllowReportSingle     bool
 	AllowReportMultiple   bool
 	AllowCommitmentCreate bool
+	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
+	ForbidWithTiming          bool
+	ForbidWithSubresources    bool
+	ForbidWithHistoricalUsage bool
 	// v2:level:role
 	IsDomainRole  bool
 	IsProjectRole bool
@@ -87,6 +91,12 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowReportMultiple
 	case "commitment_create":
 		return e.AllowCommitmentCreate
+	case "with_timing":
+		return !e.ForbidWithTiming
+	case "with_subresources":
+		return !e.ForbidWithSubresources
+	case "with_historical_usage":
+		return !e.ForbidWithHistoricalUsage
 	case "block_commitments":
 		return false
 	default:

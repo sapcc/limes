@@ -1,0 +1,314 @@
+{
+  "info": {
+    "all_azs": [
+      "az-one",
+      "az-two"
+    ],
+    "service_areas": {
+      "first": {
+        "display_name": "First",
+        "services": {
+          "first": {
+            "version": 1,
+            "display_name": "First",
+            "categories": {
+              "first": {
+                "display_name": "First",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              },
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "second": {
+        "display_name": "Second",
+        "services": {
+          "second": {
+            "version": 1,
+            "display_name": "Second",
+            "categories": {
+              "foo_category": {
+                "display_name": "Foo Category",
+                "resources": {
+                  "capacity": {
+                    "display_name": "Capacity",
+                    "unit": "B",
+                    "topology": "az-aware",
+                    "has_capacity": true,
+                    "has_quota": true,
+                    "commitment_config": {
+                      "durations": [
+                        "1 year",
+                        "3 years"
+                      ]
+                    }
+                  }
+                }
+              },
+              "second": {
+                "display_name": "Second",
+                "resources": {
+                  "things": {
+                    "display_name": "Things",
+                    "unit": "piece",
+                    "topology": "flat",
+                    "has_capacity": false,
+                    "has_quota": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "domains": {
+    "uuid-for-france": {
+      "uuid": "uuid-for-france",
+      "name": "france",
+      "service_areas": {
+        "first": {
+          "services": {
+            "first": {
+              "categories": {
+                "first": {
+                  "resources": {
+                    "things": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 5,
+                          "physical_usage": 2
+                        }
+                      }
+                    }
+                  }
+                },
+                "foo_category": {
+                  "resources": {
+                    "capacity": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "az-one": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "az-two": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "unknown": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "second": {
+          "services": {
+            "second": {
+              "categories": {
+                "foo_category": {
+                  "resources": {
+                    "capacity": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "az-one": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "az-two": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "unknown": {
+                          "usage": 10,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        }
+                      }
+                    }
+                  }
+                },
+                "second": {
+                  "resources": {
+                    "things": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 5,
+                          "physical_usage": 2
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "uuid-for-germany": {
+      "uuid": "uuid-for-germany",
+      "name": "germany",
+      "service_areas": {
+        "first": {
+          "services": {
+            "first": {
+              "categories": {
+                "first": {
+                  "resources": {
+                    "things": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 10,
+                          "physical_usage": 4
+                        }
+                      }
+                    }
+                  }
+                },
+                "foo_category": {
+                  "resources": {
+                    "capacity": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        },
+                        "az-one": {
+                          "usage": 20,
+                          "committed": {
+                            "confirmed": {
+                              "1 year": 10
+                            },
+                            "pending": {
+                              "1 year": 10
+                            },
+                            "planned": {
+                              "1 year": 10
+                            }
+                          },
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 10
+                        },
+                        "az-two": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 40,
+                          "usage_uncommitted": 10,
+                          "committed": {
+                            "confirmed": {
+                              "1 year": 50
+                            }
+                          }
+                        },
+                        "unknown": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "second": {
+          "services": {
+            "second": {
+              "categories": {
+                "foo_category": {
+                  "resources": {
+                    "capacity": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        },
+                        "az-one": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        },
+                        "az-two": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        },
+                        "unknown": {
+                          "usage": 20,
+                          "committed_confirmed_unutilized": 0,
+                          "usage_uncommitted": 20
+                        }
+                      }
+                    }
+                  }
+                },
+                "second": {
+                  "resources": {
+                    "things": {
+                      "availability_zones": {
+                        "any": {
+                          "usage": 10,
+                          "physical_usage": 4
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

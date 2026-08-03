@@ -4,16 +4,260 @@
 package api_v2_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/util"
 )
+
+func TestV2ProjectResourceReport(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(resourceReportConfigJSON),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+	)
+	fixturePath := "./fixtures/resource-projects.json"
+
+	s.Clock.StepBy(time.Hour)
+
+	// set up usage on project_az_resources
+	// germany has 2 projects (berlin, dresden), france has 1 (paris)
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 10 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path LIKE '%/capacity/%')`)
+	s.MustDBExec(`UPDATE project_az_resources SET usage = 5, physical_usage = 2 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path LIKE '%/things/%')`)
+	// set some quota values
+	s.MustDBExec(`UPDATE project_az_resources SET quota = 100 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path LIKE '%/capacity/%')`)
+	s.MustDBExec(`UPDATE project_az_resources SET quota = 50 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path LIKE '%/things/%')`)
+	// set subresources for testing with=subresources
+	s.MustDBExec(`UPDATE project_az_resources SET subresources = '[{"name":"sub1"},{"name":"sub2"}]' WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path = 'first/capacity/az-one')`)
+	// scraped_at for timing
+	s.MustDBExec(`UPDATE project_services SET scraped_at = $1`, s.Clock.Now().UTC())
+	// historical_usage for testing with=historical_usage (only rendered for resources with autogrow quota distribution)
+	// The format is {"t":[unix_seconds...],"v":[usage_values...]}
+	historicalUsageJSON := `{"t":[3000,3300,3600],"v":[5,8,10]}`
+	s.MustDBExec(`UPDATE project_az_resources SET historical_usage = $1 WHERE az_resource_id IN (SELECT id FROM az_resources WHERE path LIKE 'first/capacity/az-%')`, historicalUsageJSON)
+
+	// setup commitments for commitment_stats testing
+	berlin := s.GetProjectID("berlin")
+	firstCapacityAZOne := s.GetAZResourceID("first", "capacity", "az-one")
+	for i, config := range []struct {
+		status      liquid.CommitmentStatus
+		confirmedAt Option[time.Time]
+	}{
+		{liquid.CommitmentStatusPlanned, None[time.Time]()},
+		{liquid.CommitmentStatusPending, None[time.Time]()},
+		{liquid.CommitmentStatusConfirmed, Some(s.Clock.Now())},
+		{liquid.CommitmentStatusSuperseded, Some(s.Clock.Now())},
+		{liquid.CommitmentStatusExpired, Some(s.Clock.Now())},
+		{util.CommitmentStatusDeleted, Some(s.Clock.Now())},
+	} {
+		s.MustDBInsert(&db.ProjectCommitment{
+			UUID:                test.GenerateDummyCommitmentUUID(uint64(i + 1)),
+			ProjectID:           berlin,
+			AZResourceID:        firstCapacityAZOne,
+			Amount:              10,
+			Duration:            must.ReturnT(limesresources.ParseCommitmentDuration("1 year"))(t),
+			CreatedAt:           s.Clock.Now(),
+			UpdatedAt:           s.Clock.Now(),
+			CreatorUUID:         "dummy",
+			CreatorName:         "dummy",
+			ConfirmedAt:         config.confirmedAt,
+			ExpiresAt:           s.Clock.Now().AddDate(1, 0, 0),
+			Status:              config.status,
+			CreationContextJSON: json.RawMessage(`{}`),
+		})
+	}
+
+	// permission checks
+	s.TokenValidator.Enforcer.AllowReportMultiple = false
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowReportMultiple = true
+	s.TokenValidator.Enforcer.AllowReportSingle = false
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowReportSingle = true
+
+	// permission checks for with= params that require special permissions
+	s.TokenValidator.Enforcer.ForbidWithTiming = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=timing").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.ForbidWithTiming = false
+
+	s.TokenValidator.Enforcer.ForbidWithSubresources = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=subresources").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.ForbidWithSubresources = false
+
+	s.TokenValidator.Enforcer.ForbidWithHistoricalUsage = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=historical_usage").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.ForbidWithHistoricalUsage = false
+
+	// full result with all options
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&with=commitment_stats&with=timing&with=subresources&with=historical_usage&with=constraints").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "all options"))
+
+	var (
+		withoutInfoMods            = []string{"del(.info)"}
+		withoutTimingMods          = []string{`walk(if type == "object" then del(.scraped_at) else . end)`}
+		withoutSubresourcesMods    = []string{`walk(if type == "object" then del(.subresources) else . end)`}
+		withoutHistoricalUsageMods = []string{`walk(if type == "object" then del(.historical_usage) else . end)`}
+		withoutCommitmentStatsMods = []string{
+			`walk(if type == "object" then del(.committed) else . end)`,
+			`walk(if type == "object" then del(.committed_confirmed_unutilized) else . end)`,
+			`walk(if type == "object" then del(.usage_uncommitted) else . end)`,
+		}
+		withoutConstraintsMods = []string{
+			`walk(if type == "object" then del(.max_quota) else . end)`,
+			`walk(if type == "object" then del(.forbid_autogrowth) else . end)`,
+		}
+	)
+
+	// without any extras
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+
+	// individual with= params
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=commitment_stats").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutConstraintsMods...))
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=timing").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=subresources").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutTimingMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=historical_usage").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=constraints").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
+			Modify(withoutInfoMods...).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...))
+
+	// single project
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter paris").
+			Modify(`del(.domains["uuid-for-germany"])`).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutConstraintsMods...))
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-berlin?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter berlin").
+			Modify(`del(.domains["uuid-for-france"])`).
+			Modify(`del(.domains["uuid-for-germany"].projects["uuid-for-dresden"])`).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutConstraintsMods...))
+
+	// domain filter
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&with=commitment_stats&domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
+			Modify(`del(.domains["uuid-for-germany"])`).
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutConstraintsMods...))
+
+	// filter by area
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&area=second").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
+			Modify("del(.info.service_areas.first)").
+			Modify("del(.domains[].projects[].service_areas.first)").
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+
+	// filter by service
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&service=first").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
+			Modify("del(.info.service_areas.second)").
+			Modify("del(.domains[].projects[].service_areas.second)").
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+
+	// filter by resource
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "resource filter").
+			Modify("del(.info.service_areas.first.services.first.categories.first)").
+			Modify("del(.info.service_areas.second.services.second.categories.second)").
+			Modify("del(.domains[].projects[].service_areas.first.services.first.categories.first)").
+			Modify("del(.domains[].projects[].service_areas.second.services.second.categories.second)").
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+
+	// filter by category
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
+			Modify("del(.info.service_areas.first.services.first.categories.first)").
+			Modify("del(.info.service_areas.second.services.second.categories.second)").
+			Modify("del(.domains[].projects[].service_areas.first.services.first.categories.first)").
+			Modify("del(.domains[].projects[].service_areas.second.services.second.categories.second)").
+			Modify(withoutTimingMods...).
+			Modify(withoutSubresourcesMods...).
+			Modify(withoutHistoricalUsageMods...).
+			Modify(withoutCommitmentStatsMods...).
+			Modify(withoutConstraintsMods...))
+
+	// scope errors
+	s.TokenValidator.Enforcer.IsDomainRole = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").ExpectText(t, http.StatusBadRequest, "specify URL project_uuid or query domain_uuid\n")
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
+	s.TokenValidator.Enforcer.IsDomainRole = false
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
+
+	// unknown domain/project
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?domain_uuid=does-not-exist").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exist)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/does-not-exist").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
+}
 
 func TestV2ProjectRateReport(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")

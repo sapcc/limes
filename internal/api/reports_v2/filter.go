@@ -76,7 +76,7 @@ func FilterFromRateOpts(cluster *core.Cluster, opts common.RateReportOpts) (f Fi
 	return f, nil
 }
 
-var filterReplaceRx = regexp.MustCompile(`{{(.*?) = ANY\(\$(service_id|resource_id|rate_id)\)}}`)
+var filterReplaceRx = regexp.MustCompile(`{{(\S+?) = ANY\(\$(service_id|resource_id|az_resource_id|rate_id)\)}}`)
 
 // ExpandServiceFilters takes an SQL query string with curly-bracketed
 // where-clauses and will replace each one with an arg position and return the
@@ -84,7 +84,7 @@ var filterReplaceRx = regexp.MustCompile(`{{(.*?) = ANY\(\$(service_id|resource_
 // The expressions must be of the form "{{[filter-field] = ANY($[id-field])}}"
 // where filter-field can be a primary key column or a foreign key and id-field
 // is the name of the entity whose ID-column values are used.
-// It supports service_id, resource_id and rate_id.
+// It supports service_id, resource_id, az_resource_id and rate_id.
 // On unknown keywords it will panic.
 func (f Filter) ExpandServiceFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
 	// get current highest index
@@ -113,6 +113,8 @@ func (f Filter) ExpandServiceFilters(originalQuery string, originalArgs ...any) 
 			args = append(args, pq.Array(f.getServiceIDs()))
 		case "resource_id":
 			args = append(args, pq.Array(f.getResourceIDs()))
+		case "az_resource_id":
+			args = append(args, pq.Array(f.getAZResourceIDs()))
 		case "rate_id":
 			args = append(args, pq.Array(f.getRateIDs()))
 		default:
@@ -135,6 +137,17 @@ func (f Filter) getResourceIDs() (ids []db.ResourceID) {
 	for _, resources := range f.GetResources() {
 		for _, resource := range resources {
 			ids = append(ids, resource.ID)
+		}
+	}
+	return ids
+}
+
+func (f Filter) getAZResourceIDs() (ids []db.AZResourceID) {
+	for _, azResources := range f.GetAZResources() {
+		for _, azResourcesByAZ := range azResources {
+			for _, azResource := range azResourcesByAZ {
+				ids = append(ids, azResource.ID)
+			}
 		}
 	}
 	return ids

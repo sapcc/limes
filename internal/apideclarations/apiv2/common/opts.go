@@ -4,8 +4,6 @@
 package common
 
 import (
-	"time"
-
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
 
@@ -32,13 +30,8 @@ type ResourceReportOpts struct {
 	GenericReportOpts
 	// ResourceName filters resources by name
 	ResourceName Option[liquid.ResourceName] `q:"resource"`
-	// WithUserSpecifiedConstraints enriches the response with MaxQuota and ForbidAutogrowth values
-	WithUserSpecifiedConstraints bool `q:"with,value:constraints"`
 	// WithCommitmentStats enriches the response with Committed values
 	WithCommitmentStats bool `q:"with,value:commitment_stats"`
-	// MinScrapedAt and MaxScrapedAt allow to filter services by their latest successful scrape time
-	MinScrapedAt Option[time.Time] `q:"min_scraped_at"`
-	MaxScrapedAt Option[time.Time] `q:"max_scraped_at"`
 }
 
 // ClusterResourceReportOpts contains query parameter options for cluster
@@ -47,7 +40,7 @@ type ClusterResourceReportOpts struct {
 	ResourceReportOpts
 	// WithTiming enriches the response with ScrapedAt values
 	WithTiming bool `q:"with,value:timing"`
-	// WithSubcapacities enriches the response with Subcapacities values which is only allowed for users with certain permissions
+	// WithSubcapacities enriches the response with Subcapacities values
 	WithSubcapacities bool `q:"with,value:subcapacities"`
 }
 
@@ -61,10 +54,14 @@ type DomainResourceReportOpts struct {
 // resource reports.
 type ProjectResourceReportOpts struct {
 	ResourceReportOpts
+	// WithUserSpecifiedConstraints enriches the response with MaxQuota and ForbidAutogrowth values
+	WithUserSpecifiedConstraints bool `q:"with,value:constraints"`
 	// WithTiming enriches the response with ScrapedAt values which is only allowed for users with certain permissions
 	WithTiming bool `q:"with,value:timing"`
 	// WithSubresources enriches the response with Subresources values which is only allowed for users with certain permissions
 	WithSubresources bool `q:"with,value:subresources"`
+	// WithHistoricalUsage enriches the response with HistoricalUsage values which is only allowed for users with certain permissions
+	WithHistoricalUsage bool `q:"with,value:historical_usage"`
 	// DomainUUID is a special entity filter which is only allowed for users with certain permissions
 	DomainUUID Option[string] `q:"domain_uuid"`
 }
