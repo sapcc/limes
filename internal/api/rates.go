@@ -221,8 +221,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		if !exists {
 			continue // no rate limits for this service
 		}
-		// FIXME: the query for `rates` should be limited to the current service
-		rates, err := db.RateStore.Select(ctx, tx, `SELECT * FROM rates ORDER BY NAME`).Collect()
+		rates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1 ORDER BY NAME`, srv.ID).Collect()
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
