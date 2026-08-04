@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -62,7 +61,7 @@ var maxScrapedAtGauge = prometheus.NewGaugeVec(
 // dynamically-calculated aggregate metrics about scraping progress.
 type AggregateMetricsCollector struct {
 	Cluster *core.Cluster
-	DB      *gorp.DbMap
+	DB      *gsql.DB
 }
 
 // Describe implements the prometheus.Collector interface.
@@ -144,7 +143,7 @@ var capacityCollectionMetricsOkGauge = prometheus.NewGaugeVec(
 // CapacityCollectionMetricsCollector is a prometheus.Collector that submits metrics
 type CapacityCollectionMetricsCollector struct {
 	Cluster *core.Cluster
-	DB      *gorp.DbMap
+	DB      *gsql.DB
 	// When .Override is set, the DB is bypassed and only the given
 	// CapacityCollectionMetricsInstances are considered. This is used for testing only.
 	Override []CapacityCollectionMetricsInstance
@@ -241,7 +240,7 @@ var usageCollectionMetricsOkGauge = prometheus.NewGaugeVec(
 // UsageCollectionMetricsCollector is a prometheus.Collector that submits metrics
 type UsageCollectionMetricsCollector struct {
 	Cluster *core.Cluster
-	DB      *gorp.DbMap
+	DB      *gsql.DB
 	// When .Override is set, the DB is bypassed and only the given
 	// QuotaCollectionMetricsInstances are considered. This is used for testing only.
 	Override []QuotaCollectionMetricsInstance
@@ -361,7 +360,7 @@ func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- pro
 // to get the necessary liquid.ResourceInfo data.
 type DataMetricsV1Reporter struct {
 	Cluster      *core.Cluster
-	DB           *gorp.DbMap
+	DB           *gsql.DB
 	ReportZeroes bool
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
@@ -109,6 +110,7 @@ var (
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
 func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -147,8 +149,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	// enumerate relevant project commitments
 	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(map[string]any{"pc.project_id": dbProject.ID}, len(joinArgs))
-	var dbCommitments []db.ProjectCommitment
-	_, err = p.DB.Select(&dbCommitments, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
+	dbCommitments, err := db.ProjectCommitmentStore.Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Collect()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -172,6 +173,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 // GetPublicCommitments handles GET /v1/public-commitments.
 func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/public-commitments")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
@@ -188,8 +190,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		var domain db.Domain
-		err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
+		domain, err := db.DomainStore.SelectOne(ctx, p.DB, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			http.Error(w, "no such domain", http.StatusNotFound)
@@ -281,8 +282,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	}
 
 	// list commitments
-	var dbCommitments []db.ProjectCommitment
-	_, err = p.DB.Select(&dbCommitments, getPublicCommitmentsQuery, fmt.Sprintf("%s/%s", dbServiceType, dbResourceName))
+	dbCommitments, err := db.ProjectCommitmentStore.Select(ctx, p.DB, getPublicCommitmentsQuery, fmt.Sprintf("%s/%s", dbServiceType, dbResourceName)).Collect()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -370,6 +370,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 // CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
 func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/can-confirm")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -437,7 +438,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// check for committable capacity via the transferableCommitmentCache
 	// it automatically does the delegation to liquid if required
-	transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(p.DB, p.Cluster, filteredSIS, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, None[core.MailTemplate]())
+	transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(ctx, p.DB, p.Cluster, filteredSIS, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, None[core.MailTemplate]())
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -452,6 +453,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 // CreateProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/new.
 func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/new")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -544,7 +546,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// we will pre-insert the commitment, because we need the db.ProjectCommitmentID to
 	// be referenced in the supersede context of the transferable commitments
-	err = tx.Insert(&dbCommitment)
+	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -556,7 +558,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
 			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
 		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, sis, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(ctx, tx, p.Cluster, sis, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -574,7 +576,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 		// retrieve mails and audit event
 		auditEvents = append(auditEvents, transferableCommitmentCache.RetrieveAuditEvents()...)
-		err = transferableCommitmentCache.GenerateTransferMails(p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
+		err = transferableCommitmentCache.GenerateTransferMails(ctx, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -635,7 +637,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// create commitment
 	dbCommitment.UpdatedAt = now
-	_, err = tx.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -664,6 +666,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 // MergeProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/merge.
 func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/merge")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -692,7 +695,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	dbCommitments := make([]db.ProjectCommitment, len(commitmentIDs))
 	commitmentUUIDs := make([]liquid.CommitmentUUID, len(commitmentIDs))
 	for i, commitmentID := range commitmentIDs {
-		err := p.DB.SelectOne(&dbCommitments[i], findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+		var err error
+		dbCommitments[i], err = db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no such commitment", http.StatusNotFound)
 			return
@@ -790,7 +794,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	dbMergedCommitment.CreationContextJSON = json.RawMessage(buf)
 
 	// Insert into database
-	err = tx.Insert(&dbMergedCommitment)
+	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbMergedCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -810,7 +814,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.Status = liquid.CommitmentStatusSuperseded
-		_, err = tx.Update(&dbCommitment)
+		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -890,6 +894,7 @@ const commitmentRenewalPeriod = 90 * 24 * time.Hour
 // RenewProjectCommitments handles POST /v1/domains/:domain_id/projects/:project_id/commitments/:id/renew.
 func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/renew")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -904,8 +909,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Load commitment
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -987,7 +991,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		CreationContextJSON: json.RawMessage(buf),
 	}
 
-	err = tx.Insert(&dbRenewedCommitment)
+	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbRenewedCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1003,7 +1007,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	dbCommitment.UpdatedAt = now
 	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
-	_, err = tx.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1070,6 +1074,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 // DeleteProjectCommitment handles DELETE /v1/domains/:domain_id/projects/:project_id/commitments/:id.
 func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") { // NOTE: There is a more specific AuthZ check further down below.
 		return
@@ -1084,8 +1089,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// load commitment
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -1171,7 +1175,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	dbCommitment.TransferStatus = limesresources.CommitmentTransferStatusNone
 	dbCommitment.TransferToken = None[string]()
 	dbCommitment.TransferStartedAt = None[time.Time]()
-	_, err = p.DB.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, p.DB, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1194,6 +1198,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 // StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
 func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -1235,8 +1240,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	// load commitment
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -1346,7 +1350,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment.TransferToken = transferToken
 		dbCommitment.TransferStartedAt = transferStartedAt
 		dbCommitment.UpdatedAt = p.timeNow()
-		_, err = tx.Update(&dbCommitment)
+		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1365,11 +1369,11 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
-		err = tx.Insert(&transferCommitment)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &transferCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
-		err = tx.Insert(&remainingCommitment)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1427,7 +1431,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		dbCommitment.SupersededAt = Some(now)
 		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 		dbCommitment.UpdatedAt = now
-		_, err = tx.Update(&dbCommitment)
+		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -1489,6 +1493,7 @@ func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment,
 // GetCommitmentByTransferToken handles GET /v1/commitments/{token}
 func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
@@ -1496,8 +1501,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	transferToken := mux.Vars(r)["token"]
 
 	// The token column is a unique key, so we expect only one result.
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findCommitmentByTransferToken, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found.", http.StatusNotFound)
 		return
@@ -1532,6 +1536,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 // TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
 func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -1556,8 +1561,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// find commitment by transfer_token
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, commitmentID, transferToken)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, getCommitmentWithMatchingTransferTokenQuery, commitmentID, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found", http.StatusNotFound)
 		return
@@ -1589,13 +1593,11 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
 	// get old project additionally
-	var sourceProject db.Project
-	err = p.DB.SelectOne(&sourceProject, `SELECT * FROM projects WHERE id = $1`, dbCommitment.ProjectID)
+	sourceProject, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `id = $1`, dbCommitment.ProjectID)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	var sourceDomain db.Domain
-	err = p.DB.SelectOne(&sourceDomain, `SELECT * FROM domains WHERE id = $1`, sourceProject.DomainID)
+	sourceDomain, err := db.DomainStore.SelectOneWhere(ctx, p.DB, `id = $1`, sourceProject.DomainID)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1703,7 +1705,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	dbCommitment.TransferToken = None[string]()
 	dbCommitment.ProjectID = targetProject.ID
 	dbCommitment.UpdatedAt = p.timeNow()
-	_, err = tx.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1814,6 +1816,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 // ConvertCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert
 func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -1833,8 +1836,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// section: sourceBehavior
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -2049,7 +2051,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if remainingAmount > 0 {
 		relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
 		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
-		err = tx.Insert(&remainingCommitment)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -2057,7 +2059,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
 	relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, convertedCommitment.UUID)
-	err = tx.Insert(&convertedCommitment)
+	err = db.ProjectCommitmentStore.Insert(ctx, tx, &convertedCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2077,7 +2079,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	dbCommitment.SupersededAt = Some(now)
 	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
 	dbCommitment.UpdatedAt = now
-	_, err = tx.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2108,6 +2110,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 // UpdateCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
 func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -2133,8 +2136,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+	dbCommitment, err := db.ProjectCommitmentStore.SelectOne(ctx, p.DB, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -2231,7 +2233,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	_, err = p.DB.Update(&dbCommitment)
+	err = db.ProjectCommitmentStore.Update(ctx, p.DB, dbCommitment)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2287,6 +2289,7 @@ func (p *v1Provider) StartCommitmentTransferAsCloudAdmin(w http.ResponseWriter, 
 }
 
 func (p *v1Provider) prepareClusterAdminCommitmentEditRequest(w http.ResponseWriter, r *http.Request) bool {
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:edit") {
 		return false
@@ -2296,11 +2299,11 @@ func (p *v1Provider) prepareClusterAdminCommitmentEditRequest(w http.ResponseWri
 		http.Error(w, "commitment ID missing", http.StatusBadRequest)
 		return false
 	}
-	var request struct {
-		ProjectUUID liquid.ProjectUUID `db:"projectUUID"`
-		DomainUUID  string             `db:"domainUUID"`
-	}
-	err := p.DB.SelectOne(&request, `SELECT p.uuid projectUUID, d.uuid domainUUID FROM project_commitments pc JOIN projects p ON p.id = pc.project_id JOIN domains d ON d.id = p.domain_id where pc.id = $1`, commitmentID)
+	store := oblast.MustNewStore[struct {
+		ProjectUUID liquid.ProjectUUID `db:"project_uuid"`
+		DomainUUID  string             `db:"domain_uuid"`
+	}](oblast.PostgresDialect())
+	request, err := store.SelectOne(ctx, p.DB, `SELECT p.uuid AS project_uuid, d.uuid AS domain_uuid FROM project_commitments pc JOIN projects p ON p.id = pc.project_id JOIN domains d ON d.id = p.domain_id where pc.id = $1`, commitmentID)
 	if err != nil {
 		http.Error(w, "unable to resolve the requested commitment", http.StatusBadRequest)
 		return false

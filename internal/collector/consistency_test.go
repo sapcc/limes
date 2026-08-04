@@ -21,7 +21,7 @@ func Test_Consistency(t *testing.T) {
 
 	// run ScanDomains once to establish a baseline
 	_ = must.ReturnT(s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{}))(t)
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualToFile("fixtures/checkconsistency0.sql")
 
 	// check that CheckConsistency() is satisfied with the

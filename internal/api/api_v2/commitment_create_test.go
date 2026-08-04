@@ -158,7 +158,7 @@ func TestCommitmentCreateBasic(t *testing.T) {
 			)
 			s.Clock.StepBy(time.Hour) // to detect later that services.next_scrape_at was moved to NOW() after adding a confirmed commitment
 
-			tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+			tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 			tr0.Ignore()
 
 			// it is always possible to create "pending" commitments, regardless of capacity
@@ -389,7 +389,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	s.TokenValidator.Enforcer.AllowCommitmentCreate = false

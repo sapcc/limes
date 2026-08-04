@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -26,6 +25,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/assert"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api/api_v2"
@@ -852,7 +852,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
 
-func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, pairs ...string) {
+func expectStaleProjectServices(t *testing.T, dbm *gsql.DB, pairs ...string) {
 	t.Helper()
 
 	queryStr := sqlext.SimplifyWhitespace(`
@@ -1074,7 +1074,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	makeRequest := func(serviceType limes.ServiceType, resources ...any) oldassert.JSONObject {
@@ -1155,7 +1155,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("shared"))))
 	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
@@ -1202,7 +1202,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	makeRequest := func(serviceType limes.ServiceType, resources ...any) oldassert.JSONObject {
@@ -1303,7 +1303,7 @@ func Test_PutQuotaAutogrowth(t *testing.T) {
 
 	// error case: resource does not track quota
 	s.MustDBExec("UPDATE resources SET has_quota = FALSE WHERE path = $1", "shared/capacity")
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("shared"))))
 	oldassert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/forbid-autogrowth",

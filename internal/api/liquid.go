@@ -57,6 +57,7 @@ var getServiceUsageRequestAttributesQuery = sqlext.SimplifyWhitespace(`
 // GetServiceUsageRequest handles GET /admin/liquid/service-usage-request?service_type=:type&project_id=:id.
 func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/admin/liquid/service-usage-request")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show") {
 		return
@@ -68,8 +69,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var dbProject db.Project
-	err := p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
+	dbProject, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "project not found", http.StatusNotFound)
 		return
@@ -77,8 +77,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var dbDomain db.Domain
-	err = p.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+	dbDomain, err := db.DomainStore.SelectOneWhere(ctx, p.DB, `id = $1`, dbProject.DomainID)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

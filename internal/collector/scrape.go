@@ -107,7 +107,7 @@ type projectScrapeTask struct {
 	Err error
 }
 
-func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labels) (task projectScrapeTask, err error) {
+func (c *Collector) discoverScrapeTask(ctx context.Context, labels prometheus.Labels) (task projectScrapeTask, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 	task.Timing.StartedAt = c.MeasureTime()
 
@@ -123,20 +123,17 @@ func (c *Collector) discoverScrapeTask(_ context.Context, labels prometheus.Labe
 		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
-	err = c.DB.SelectOne(&task.ProjectService, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
-	if err != nil {
-		return projectScrapeTask{}, err
-	}
+	task.ProjectService, err = db.ProjectServiceStore.SelectOne(ctx, c.DB, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
 	return task, err
 }
 
-func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject, err error) {
-	err = c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
+func (c *Collector) identifyProjectBeingScraped(ctx context.Context, srv db.ProjectService) (dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject, err error) {
+	dbProject, err = db.ProjectStore.SelectOneWhere(ctx, c.DB, `id = $1`, srv.ProjectID)
 	if err != nil {
 		err = fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
 		return
 	}
-	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+	dbDomain, err = db.DomainStore.SelectOneWhere(ctx, c.DB, `id = $1`, dbProject.DomainID)
 	if err != nil {
 		err = fmt.Errorf("while reading the DB record for domain %d: %w", dbProject.DomainID, err)
 		return
@@ -152,7 +149,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	connection := c.Cluster.LiquidConnections[serviceType] // NOTE: discoverScrapeTask already verified that this exists
 
 	// collect additional DB records
-	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(projectService)
+	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(ctx, projectService)
 	if err != nil {
 		return err
 	}
@@ -163,20 +160,20 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err != nil {
 		task.Err = gophercloudext.UnpackError(err)
-		return c.recordScrapeError(task, serviceType, dbProject, dbDomain, project)
+		return c.recordScrapeError(ctx, task, serviceType, dbProject, dbDomain, project)
 	}
 	rateData, serializedScrapeState := extractRateData(report)
 
 	// collect additional DB records (it is important to do this step after the
 	// scrape, because the scrape might observe a new ServiceInfo version)
 	// write resource results
-	err = c.writeResourceScrapeResult(task, serviceType, dbProject, report, sis)
+	err = c.writeResourceScrapeResult(ctx, task, serviceType, dbProject, report, sis)
 	if err != nil {
 		return fmt.Errorf("while writing resource results into DB: %w", err)
 	}
 
 	// write rate results
-	err = c.writeRateScrapeResult(task, serviceType, rateData, sis)
+	err = c.writeRateScrapeResult(ctx, task, serviceType, rateData, sis)
 	if err != nil {
 		return fmt.Errorf("while writing rate results into DB: %w", err)
 	}
@@ -193,7 +190,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 	return nil
 }
 
-func (c *Collector) recordScrapeError(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
+func (c *Collector) recordScrapeError(ctx context.Context, task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
 	_, err := c.DB.Exec(
 		writeScrapeErrorQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(RecheckInterval)),
@@ -207,7 +204,7 @@ func (c *Collector) recordScrapeError(task projectScrapeTask, serviceType db.Ser
 
 	if task.ProjectService.ScrapedAt.IsNone() {
 		// see explanation inside the called function's body
-		err := c.writeDummyResources(dbProject, serviceType)
+		err := c.writeDummyResources(ctx, dbProject, serviceType)
 		if err != nil {
 			c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
 				serviceType, project.UUID, err.Error(),
@@ -255,7 +252,7 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 	return result, string(report.SerializedState)
 }
 
-func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
+func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
 	service, sExists := sis.GetServiceForType(serviceType)
 	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
 	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
@@ -323,7 +320,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, sis, serviceType)
+	}.Run(ctx, tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -331,13 +328,15 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	// For inserting the project_az_resources, we need to find the project_az_resources availabilityZone
 	azResourcesByID := make(map[db.AZResourceID]db.AZResource)
 	for _, azResourcesByAZ := range azResources {
-		maps.Copy(azResourcesByID, db.BuildIndexOfArray(slices.Collect(maps.Values(azResourcesByAZ)), func(azRes db.AZResource) db.AZResourceID { return azRes.ID }))
+		for _, azr := range azResourcesByAZ {
+			azResourcesByID[azr.ID] = azr
+		}
 	}
-	projectAZResourcesByAZResourceID, err := db.BuildIndexOfDBResult(
-		tx,
-		func(pAZRes db.ProjectAZResource) db.AZResourceID { return pAZRes.AZResourceID },
-		`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
-		service.ID, dbProject.ID,
+	projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceIDIndex.IndexFrom(
+		db.ProjectAZResourceStore.Select(ctx, tx,
+			`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
+			service.ID, dbProject.ID,
+		),
 	)
 	if err != nil {
 		return err
@@ -440,7 +439,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 				return nil
 			},
 		}
-		_, err := setUpdate.Execute(tx)
+		_, err := setUpdate.Execute(ctx, tx, db.ProjectAZResourceStore)
 		if err != nil {
 			return err
 		}
@@ -465,7 +464,7 @@ func (c *Collector) writeResourceScrapeResult(task projectScrapeTask, serviceTyp
 	return nil
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int, sis core.ServiceInfoSnapshot) error {
+func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrapeTask, serviceType db.ServiceType, rateData map[liquid.RateName]*big.Int, sis core.ServiceInfoSnapshot) error {
 	projectService := task.ProjectService
 	service, sExists := sis.GetServiceForType(serviceType)
 	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
@@ -480,12 +479,14 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// For updating project_rates, we need to find the project_rates' rate_name
-	ratesByID := db.BuildIndexOfArray(slices.Collect(maps.Values(rates)), func(rate db.Rate) db.RateID { return rate.ID })
+	ratesByID := db.RateByIDIndex.Index(slices.Collect(maps.Values(rates)))
 
 	// update existing project_rates entries
 	rateExists := make(map[liquid.RateName]bool)
-	var projectRates []db.ProjectRate
-	_, err = tx.Select(&projectRates, `SELECT pra.* FROM project_rates pra JOIN rates ra ON pra.rate_id = ra.id WHERE ra.service_id = $1 AND pra.project_id = $2 ORDER BY ra.name`, service.ID, projectService.ProjectID)
+	projectRates, err := db.ProjectRateStore.Select(ctx, tx,
+		`SELECT pra.* FROM project_rates pra JOIN rates ra ON pra.rate_id = ra.id WHERE ra.service_id = $1 AND pra.project_id = $2 ORDER BY ra.name`,
+		service.ID, projectService.ProjectID,
+	).Collect()
 	if err != nil {
 		return err
 	}
@@ -526,7 +527,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db
 			usageAsBigint = usage.String()
 		}
 
-		err = tx.Insert(&db.ProjectRate{
+		err = db.ProjectRateStore.Insert(ctx, tx, &db.ProjectRate{
 			ProjectID:     projectService.ProjectID,
 			RateID:        rate.ID,
 			UsageAsBigint: usageAsBigint,
@@ -539,7 +540,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, serviceType db
 	return tx.Commit()
 }
 
-func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.ServiceType) error {
+func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Project, serviceType db.ServiceType) error {
 	// Rationale: This is called when we first try to scrape a project service,
 	// and the scraping fails (most likely due to some internal error in the
 	// backend service). We used to just not touch the database at this point,
@@ -576,7 +577,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 			}
 			return nil
 		},
-	}.Run(tx, dbProject, sis, serviceType)
+	}.Run(ctx, tx, dbProject, sis, serviceType)
 	if err != nil {
 		return err
 	}
@@ -599,7 +600,7 @@ func (c *Collector) writeDummyResources(dbProject db.Project, serviceType db.Ser
 			if resource.HasQuota && datamodel.AZHasQuotaForTopology(resource.Topology, az) {
 				quota = Some[uint64](0)
 			}
-			err := tx.Insert(&db.ProjectAZResource{
+			err := db.ProjectAZResourceStore.Insert(ctx, tx, &db.ProjectAZResource{
 				ProjectID:    dbProject.ID,
 				AZResourceID: azResource.ID,
 				Usage:        0,

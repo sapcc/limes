@@ -217,7 +217,7 @@ func DelegateChangeCommitments(ctx context.Context, cluster *core.Cluster, req l
 
 	// check local
 	if len(localCommitmentChanges.ByProject) != 0 {
-		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(localCommitmentChanges, service.Type, cluster, dbi)
+		canAcceptLocally, err := CanAcceptCommitmentChangeRequest(ctx, localCommitmentChanges, service.Type, cluster, dbi)
 		if err != nil {
 			return result, fmt.Errorf("failed to check local ChangeCommitment: %w", err)
 		}

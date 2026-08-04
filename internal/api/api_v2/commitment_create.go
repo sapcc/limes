@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
@@ -19,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
@@ -56,7 +56,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	now := p.timeNow()
 
 	// validate request contents
-	dbDomain, dbProject, err := p.checkProjectAccess(token, req.ProjectUUID, "v2:project:commitment_create")
+	dbDomain, dbProject, err := p.checkProjectAccess(ctx, token, req.ProjectUUID, "v2:project:commitment_create")
 	if err != nil {
 		return none, err
 	}
@@ -116,7 +116,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			return err
 		}
 
-		err = tx.Insert(&c)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &c)
 		if err != nil {
 			return err
 		}
@@ -131,7 +131,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists && !req.DryRun {
 				mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
 			}
-			tcc, err := datamodel.NewTransferableCommitmentCache(tx, p.Cluster, sis, path, now, datamodel.GenerateProjectCommitmentUUID, datamodel.GenerateTransferToken, mailTemplate)
+			tcc, err := datamodel.NewTransferableCommitmentCache(ctx, tx, p.Cluster, sis, path, now, datamodel.GenerateProjectCommitmentUUID, datamodel.GenerateTransferToken, mailTemplate)
 			if err != nil {
 				return err
 			}
@@ -146,7 +146,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			if !req.DryRun {
 				auditEvents = append(auditEvents, tcc.RetrieveAuditEvents()...)
 			}
-			err = tcc.GenerateTransferMails(p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
+			err = tcc.GenerateTransferMails(ctx, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
 			if err != nil {
 				return err
 			}
@@ -154,7 +154,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			// update status (as mentioned before, we had to insert this as "pending" initially to avoid confusing the TCC)
 			c.Status = liquid.CommitmentStatusConfirmed
 			c.ConfirmedAt = Some(now)
-			_, err = tx.Update(&c)
+			err = db.ProjectCommitmentStore.Update(ctx, tx, c)
 			if err != nil {
 				return err
 			}
@@ -240,7 +240,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 
 // withinDryRunnableTx starts a transaction such that the type system helps enforce that a dry run is not accidentally committed:
 // Within `action`, `tx` is only a generic interface handle that does not allow calling `tx.Commit()` directly.
-func withinDryRunnableTx(dbm *gorp.DbMap, dryRun bool, action func(tx db.Interface) error) error {
+func withinDryRunnableTx(dbm *gsql.DB, dryRun bool, action func(tx db.Interface) error) error {
 	tx, err := dbm.Begin()
 	if err != nil {
 		return err

@@ -32,6 +32,7 @@ import (
 // ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:list") {
 		return
@@ -52,12 +53,13 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("project_list", filter)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, sis, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(ctx, p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, sis, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -74,7 +76,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("project_show", filter)
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, sis)
+	project, err := GetProjectResourceReport(ctx, p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -94,7 +96,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := collector.NewCollector(p.Cluster, p.auditor)
-	newProjectUUIDs, err := c.ScanProjects(r.Context(), dbDomain)
+	newProjectUUIDs, err := c.ScanProjects(r.Context(), *dbDomain)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -129,7 +131,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	// check if project needs to be discovered
 	if dbProject == nil {
 		c := collector.NewCollector(p.Cluster, p.auditor)
-		newProjectUUIDs, err := c.ScanProjects(r.Context(), dbDomain)
+		newProjectUUIDs, err := c.ScanProjects(r.Context(), *dbDomain)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -171,6 +173,7 @@ func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) 
 // PutProjectMaxQuota handles PUT /v1/domains/:domain_id/projects/:project_id/max-quota.
 func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/max-quota")
+	ctx := r.Context()
 	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit_as_outside_admin") {
@@ -275,7 +278,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, sis, serviceType)
+		}.Run(ctx, tx, *dbProject, sis, serviceType)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -317,6 +320,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 // PutQuotaAutogrowth handles PUT /v1/domains/:domain_id/projects/:project_id/forbid-autogrowth.
 func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/forbid-autogrowth")
+	ctx := r.Context()
 	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
@@ -414,7 +418,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 				}
 				return nil
 			},
-		}.Run(tx, *dbProject, sis, serviceType)
+		}.Run(ctx, tx, *dbProject, sis, serviceType)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

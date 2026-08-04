@@ -78,12 +78,11 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// and their respective project resources created
 	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	must.SucceedT(t, err)
-	projectCount, err := s.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
-	must.SucceedT(t, err)
+	projectCount := must.ReturnT(db.SelectOneValue[int](s.DB, `SELECT COUNT(*) FROM projects`))(t)
 	scrapeJob := s.Collector.ScrapeJob(s.Registry)
-	must.SucceedT(t, jobloop.ProcessMany(scrapeJob, s.Ctx, int(projectCount), jobloop.WithLabel("service_type", "unittest")))
+	must.SucceedT(t, jobloop.ProcessMany(scrapeJob, s.Ctx, projectCount, jobloop.WithLabel("service_type", "unittest")))
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	job := s.Collector.CleanupOldCommitmentsJob(s.Registry)
@@ -100,8 +99,8 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err := json.Marshal(creationContext)
 	must.SucceedT(t, err)
 	s.MustDBInsert(&db.ProjectCommitment{
+		// ID = 1 (will be filled by Store.Insert())
 		UUID:                "00000000-0000-0000-0000-000000000001",
-		ID:                  1,
 		ProjectID:           1,
 		AZResourceID:        1,
 		Amount:              10,
@@ -116,8 +115,8 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// test 1: create an expired commitment
 	s.Clock.StepBy(30 * oneDay)
 	s.MustDBInsert(&db.ProjectCommitment{
+		// ID = 2
 		UUID:                "00000000-0000-0000-0000-000000000002",
-		ID:                  2,
 		ProjectID:           1,
 		AZResourceID:        1,
 		Amount:              10,
@@ -160,7 +159,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	supersedeBuf, err := json.Marshal(supersedeContext)
 	must.SucceedT(t, err)
 	s.MustDBInsert(&db.ProjectCommitment{
-		ID:                   3,
+		// ID = 3
 		UUID:                 "00000000-0000-0000-0000-000000000003",
 		ProjectID:            1,
 		AZResourceID:         1,
@@ -182,7 +181,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err = json.Marshal(creationContext)
 	must.SucceedT(t, err)
 	s.MustDBInsert(&db.ProjectCommitment{
-		ID:                  4,
+		// ID = 4
 		UUID:                "00000000-0000-0000-0000-000000000004",
 		ProjectID:           1,
 		AZResourceID:        2,
@@ -220,7 +219,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err = json.Marshal(creationContext)
 	must.SucceedT(t, err)
 	commitment5 := db.ProjectCommitment{
-		ID:                  5,
+		// ID = 5
 		UUID:                "00000000-0000-0000-0000-000000000005",
 		ProjectID:           1,
 		AZResourceID:        1,
@@ -235,7 +234,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	}
 	s.MustDBInsert(&commitment5)
 	commitment6 := db.ProjectCommitment{
-		ID:                  6,
+		// ID = 6
 		UUID:                "00000000-0000-0000-0000-000000000006",
 		ProjectID:           1,
 		AZResourceID:        1,
@@ -257,7 +256,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	buf, err = json.Marshal(creationContext)
 	must.SucceedT(t, err)
 	s.MustDBInsert(&db.ProjectCommitment{
-		ID:                  7,
+		// ID = 7
 		UUID:                "00000000-0000-0000-0000-000000000007",
 		ProjectID:           1,
 		AZResourceID:        1,
@@ -290,7 +289,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// lastly, we test the hard-delete of soft deleted commitments after 6 months
 	s.MustDBInsert(&db.ProjectCommitment{
-		ID:                  8,
+		// ID = 8
 		UUID:                "00000000-0000-0000-0000-000000000008",
 		ProjectID:           1,
 		AZResourceID:        1,

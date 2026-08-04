@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -29,6 +28,7 @@ import (
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api"
@@ -159,7 +159,7 @@ func WithInitialDiscovery(params *setupParams) {
 type Setup struct {
 	// fields that are always set
 	Ctx                        context.Context //nolint:containedctx // only used in tests
-	DB                         *gorp.DbMap
+	DB                         *gsql.DB
 	Cluster                    *core.Cluster
 	Clock                      *mock.Clock
 	Registry                   *prometheus.Registry
@@ -225,7 +225,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	s.t = t
 
-	s.DB = db.InitORM(easypg.ConnectForTest(t, db.Configuration(),
+	s.DB = gsql.NewDB(easypg.ConnectForTest(t, db.Configuration(),
 		easypg.ClearTables("project_commitments", "services", "domains", "categories"),
 		easypg.ResetPrimaryKeys(
 			"services", "resources", "rates", "az_resources",
@@ -259,7 +259,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		if exists {
 			rateLimits = liquidConfig.RateLimits
 		}
-		must.SucceedT(t, core.SaveServiceInfoToDB(serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))
+		must.SucceedT(t, core.SaveServiceInfoToDB(s.Ctx, serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))
 	}
 	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
 	failIfErrs(t, errs)
@@ -459,7 +459,30 @@ func (s Setup) MustDBExec(query string, args ...any) {
 // MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.
 func (s Setup) MustDBInsert(pointerToRecord any) {
 	s.t.Helper()
-	must.SucceedT(s.t, s.DB.Insert(pointerToRecord))
+	switch r := pointerToRecord.(type) {
+	case *db.AZResource:
+		must.SucceedT(s.t, db.AZResourceStore.Insert(s.Ctx, s.DB, r))
+	case *db.MailNotification:
+		must.SucceedT(s.t, db.MailNotificationStore.Insert(s.Ctx, s.DB, r))
+	case *db.ProjectAZResource:
+		must.SucceedT(s.t, db.ProjectAZResourceStore.Insert(s.Ctx, s.DB, r))
+	case *db.ProjectCommitment:
+		must.SucceedT(s.t, db.ProjectCommitmentStore.Insert(s.Ctx, s.DB, r))
+	case *db.ProjectRate:
+		must.SucceedT(s.t, db.ProjectRateStore.Insert(s.Ctx, s.DB, r))
+	case *db.ProjectResource:
+		must.SucceedT(s.t, db.ProjectResourceStore.Insert(s.Ctx, s.DB, r))
+	case *db.ProjectService:
+		must.SucceedT(s.t, db.ProjectServiceStore.Insert(s.Ctx, s.DB, r))
+	case *db.Rate:
+		must.SucceedT(s.t, db.RateStore.Insert(s.Ctx, s.DB, r))
+	case *db.Resource:
+		must.SucceedT(s.t, db.ResourceStore.Insert(s.Ctx, s.DB, r))
+	case *db.Service:
+		must.SucceedT(s.t, db.ServiceStore.Insert(s.Ctx, s.DB, r))
+	default:
+		panic(fmt.Sprintf("please extend the implementation of test.Setup.MustDBInsert() to support type %T", r))
+	}
 }
 
 func failIfErrs(t *testing.T, errs errext.ErrorSet) {

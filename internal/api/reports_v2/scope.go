@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/sapcc/limes/internal/util"
 
 	"github.com/gorilla/mux"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 )
 
@@ -35,7 +35,8 @@ type Scope struct {
 // When forProject=true, this should be called before evaluating the tokens authorization
 // so that the project-->domain relation of domain admins is checked properly.
 // It returns the validated scope information or an error.
-func NewScope(forProject bool, r *http.Request, queryDomainUUID Option[string], token *gopherpolicy.Token, dbm *gorp.DbMap) (s Scope, err error) {
+func NewScope(forProject bool, r *http.Request, queryDomainUUID Option[string], token *gopherpolicy.Token, dbm *gsql.DB) (s Scope, err error) {
+	ctx := r.Context()
 	urlDomainUUID := mux.Vars(r)["domain_uuid"]
 	urlProjectUUID := mux.Vars(r)["project_uuid"]
 
@@ -58,8 +59,7 @@ func NewScope(forProject bool, r *http.Request, queryDomainUUID Option[string], 
 	// queryDomainUUID.IsSome() gets rejected by option parsing for domain and cluster.
 
 	if urlProjectUUID != "" {
-		var project db.Project
-		err := dbm.SelectOne(&project, "SELECT * FROM projects WHERE uuid = $1", urlProjectUUID)
+		project, err := db.ProjectStore.SelectOneWhere(ctx, dbm, `uuid = $1`, urlProjectUUID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			return s, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such project (UUID = %s)", urlProjectUUID))
@@ -87,8 +87,7 @@ func NewScope(forProject bool, r *http.Request, queryDomainUUID Option[string], 
 	default:
 		return s, nil
 	}
-	var domain db.Domain
-	err = dbm.SelectOne(&domain, "SELECT * FROM domains WHERE "+filter, arg)
+	domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, filter, arg)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

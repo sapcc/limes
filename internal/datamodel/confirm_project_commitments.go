@@ -50,7 +50,7 @@ const ConsumeAction cadf.Action = "consume"
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
-func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanAcceptCommitmentChangeRequest(ctx context.Context, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	var distinctResources = make(map[liquid.ResourceName]struct{})
 	for _, projectCommitmentChangeset := range req.ByProject {
 		for resourceName := range projectCommitmentChangeset.ByResource {
@@ -58,11 +58,10 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 		}
 	}
 	// internally, we only work with projectIDs, so we have to have a conversion ready
-	projectByUUID, err := db.BuildIndexOfDBResult(
-		dbi,
-		func(project db.Project) liquid.ProjectUUID { return project.UUID },
-		`SELECT * FROM projects WHERE uuid = ANY($1)`,
-		pq.Array(slices.Collect(maps.Keys(req.ByProject))))
+	projectByUUID, err := db.ProjectByUUIDIndex.IndexFrom(
+		db.ProjectStore.SelectWhere(ctx, dbi, `uuid = ANY($1)`,
+			pq.Array(slices.Collect(maps.Keys(req.ByProject)))),
+	)
 	if err != nil {
 		return false, fmt.Errorf("while building project index: %w", err)
 	}
@@ -118,8 +117,7 @@ func CanAcceptCommitmentChangeRequest(req liquid.CommitmentChangeRequest, servic
 // releases transferable commitments that can be used to satisfy the pending ones.
 func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, cluster *core.Cluster, dbi db.Interface, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, auditContext audit.Context) (auditEvents []audittools.Event, err error) {
 	// load confirmable commitments
-	var confirmableCommitments []db.ProjectCommitment
-	_, err = dbi.Select(&confirmableCommitments, getConfirmableCommitmentsQuery, path)
+	confirmableCommitments, err := db.ProjectCommitmentStore.Select(ctx, dbi, getConfirmableCommitmentsQuery, path).Collect()
 	if err != nil {
 		return nil, fmt.Errorf("while enumerating confirmable commitments for %s: %w", path, err)
 	}
@@ -145,11 +143,19 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	for _, c := range confirmableCommitments {
 		affectedProjectIDs[c.ProjectID] = struct{}{}
 	}
-	affectedProjectsByID, err := db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * FROM projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	affectedProjectsByID, err := db.ProjectByIDIndex.IndexFrom(
+		db.ProjectStore.SelectWhere(ctx, dbi, `id = ANY($1)`,
+			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
+		),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("while loading affected projects for %s: %w", path, err)
 	}
-	affectedDomainsByID, err := db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * FROM domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	affectedDomainsByID, err := db.DomainByIDIndex.IndexFrom(
+		db.DomainStore.SelectWhere(ctx, dbi, `id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`,
+			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
+		),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("while loading affected domains for %s: %w", path, err)
 	}
@@ -163,7 +169,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	}
 
 	// initiate cache of transferable commitments
-	transferableCommitmentCache, err := NewTransferableCommitmentCache(dbi, cluster, sis, path, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
+	transferableCommitmentCache, err := NewTransferableCommitmentCache(ctx, dbi, cluster, sis, path, now, generateProjectCommitmentUUID, generateTransferToken, transferTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +202,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 		cc.ConfirmedAt = Some(now)
 		cc.Status = liquid.CommitmentStatusConfirmed
 		cc.UpdatedAt = now
-		_, err = dbi.Update(&cc)
+		err = db.ProjectCommitmentStore.Update(ctx, dbi, cc)
 		if err != nil {
 			return nil, fmt.Errorf("while confirming commitment ID=%d for %s: %w", cc.ID, path, err)
 		}
@@ -206,7 +212,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 
 	// generate mail notifications for commitment transfers
 	apiIdentity := cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API
-	err = transferableCommitmentCache.GenerateTransferMails(apiIdentity)
+	err = transferableCommitmentCache.GenerateTransferMails(ctx, apiIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +232,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 
 		affectedProject := affectedProjectsByID[projectID]
 		affectedDomain := affectedDomainsByID[affectedProject.DomainID]
-		err = generateConfirmationMails(confirmationTemplate, dbi, path, apiIdentity, affectedProject, affectedDomain, confirmedCommitments, now)
+		err = generateConfirmationMails(ctx, confirmationTemplate, dbi, path, apiIdentity, affectedProject, affectedDomain, confirmedCommitments, now)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +241,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	return auditEvents, nil
 }
 
-func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.Interface, path db.AZResourcePath, apiIdentity core.ResourceRef, project db.Project, domain db.Domain, confirmedCommitments []*db.ProjectCommitment, now time.Time) error {
+func generateConfirmationMails(ctx context.Context, mailTemplate Option[core.MailTemplate], dbi db.Interface, path db.AZResourcePath, apiIdentity core.ResourceRef, project db.Project, domain db.Domain, confirmedCommitments []*db.ProjectCommitment, now time.Time) error {
 	// The system can be configured to not send mails (e.g. for test systems).
 	tpl, tplExists := mailTemplate.Unpack()
 	if !tplExists {
@@ -272,7 +278,7 @@ func generateConfirmationMails(mailTemplate Option[core.MailTemplate], dbi db.In
 		if err != nil {
 			return err
 		}
-		err = dbi.Insert(&mail)
+		err = db.MailNotificationStore.Insert(ctx, dbi, &mail)
 		if err != nil {
 			return err
 		}
