@@ -4,7 +4,7 @@
 package reports_v2
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -54,12 +55,19 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		)
 	}}
 	SELECT
-		d.uuid, d.name, p.uuid, p.name, p.parent_uuid, azr.id, pazr.usage, pazr.quota,
+		d.uuid AS domain_uuid, d.name AS domain_name,
+		p.uuid AS project_uuid, p.name AS project_name, p.parent_uuid,
+		azr.id AS az_resource_id, pazr.usage, pazr.quota,
 		$with_timing{{ps.scraped_at,}}
-		$with_commitment_stats{{COALESCE(pcps.committed, '{}') as committed,}}
+		$without_timing{{NULL AS scraped_at,}}
+		$with_commitment_stats{{COALESCE(pcps.committed, '{}') AS committed,}}
+		$without_commitment_stats{{'' AS committed,}}
 		$with_historical_usage{{pazr.historical_usage,}}
+		$without_historical_usage{{'' AS historical_usage,}}
 		$with_subresources{{pazr.subresources,}}
+		$without_subresources{{'' AS subresources,}}
 		$with_constraints{{pr.forbid_autogrowth, pr.max_quota_from_outside_admin,}}
+		$without_constraints{{NULL AS forbid_autogrowth, NULL AS max_quota_from_outside_admin,}}
 		pazr.physical_usage
 	FROM services s
 	JOIN resources r ON r.service_id = s.id
@@ -82,12 +90,12 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 `))
 
 type projectConstraints struct {
-	forbidAutogrowth         Option[bool]
-	maxQuotaFromOutsideAdmin Option[uint64]
+	ForbidAutogrowth         Option[bool]   `db:"forbid_autogrowth"`
+	MaxQuotaFromOutsideAdmin Option[uint64] `db:"max_quota_from_outside_admin"`
 }
 
 // GetProjectResources returns a resourcesv2.ProjectGetResponse.
-func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
+func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
 	var result resourcesv2.ProjectGetResponse
 
 	// fill info report
@@ -99,50 +107,28 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		result.InfoReport = Some(infoReport)
 	}
 
+	type record struct {
+		DomainUUID          string            `db:"domain_uuid"`
+		DomainName          string            `db:"domain_name"`
+		ProjectUUID         string            `db:"project_uuid"`
+		ProjectName         string            `db:"project_name"`
+		ProjectParentUUID   string            `db:"parent_uuid"`
+		AZResourceID        db.AZResourceID   `db:"az_resource_id"`
+		Usage               uint64            `db:"usage"`
+		Quota               Option[uint64]    `db:"quota"`
+		ScrapedAt           Option[time.Time] `db:"scraped_at"`
+		CommittedJSON       string            `db:"committed"`
+		HistoricalUsageJSON string            `db:"historical_usage"`
+		Subresources        string            `db:"subresources"`
+		projectConstraints                    // contains nested subfields with `db:"..."`
+		PhysicalUsage       Option[uint64]    `db:"physical_usage"`
+	}
 	query := EvalProjectResourceExtraProps(projectResourceReportQuery, opts)
 	query, args := filter.ExpandServiceFilters(query)
 	query, args = scope.ExpandScopeFilters(query, args...)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			domainUUID          string
-			domainName          string
-			projectUUID         string
-			projectName         string
-			projectParentUUID   string
-			azResourceID        db.AZResourceID
-			usage               uint64
-			quota               Option[uint64]
-			scrapedAt           Option[time.Time]
-			committedJSON       string
-			historicalUsageJSON string
-			subresources        string
-			constraints         projectConstraints
-			physicalUsage       Option[uint64]
-		)
-		columns := []any{&domainUUID, &domainName, &projectUUID, &projectName, &projectParentUUID, &azResourceID, &usage, &quota}
-		if opts.WithTiming {
-			columns = append(columns, &scrapedAt)
-		}
-		if opts.WithCommitmentStats {
-			columns = append(columns, &committedJSON)
-		}
-		if opts.WithHistoricalUsage {
-			columns = append(columns, &historicalUsageJSON)
-		}
-		if opts.WithSubresources {
-			columns = append(columns, &subresources)
-		}
-		if opts.WithUserSpecifiedConstraints {
-			columns = append(columns, &constraints.forbidAutogrowth, &constraints.maxQuotaFromOutsideAdmin)
-		}
-		columns = append(columns, &physicalUsage)
-		err := rows.Scan(columns...)
-		if err != nil {
-			return err
-		}
-
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
 		// do some computations on the resulting values
-		azResource, aExists := filter.GetAZResourceForID(azResourceID)
+		azResource, aExists := filter.GetAZResourceForID(r.AZResourceID)
 		if !aExists {
 			// defense in depth: an az_resource was deleted in between, so we ignore the data
 			return nil
@@ -151,9 +137,9 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		quotaDistConfig := cluster.QuotaDistributionConfigForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
 		if opts.WithHistoricalUsage && quotaDistConfig.Model == limesresources.AutogrowQuotaDistribution {
 			autogrowConfig := must.BeOK(quotaDistConfig.Autogrow.Unpack()) // safe because model=autogrow
-			ts, err := util.ParseTimeSeries[uint64](historicalUsageJSON)
+			ts, err := util.ParseTimeSeries[uint64](r.HistoricalUsageJSON)
 			if err != nil {
-				return fmt.Errorf("while parsing historical_usage for project %s: %w", projectName, err)
+				return fmt.Errorf("while parsing historical_usage for project %s: %w", r.ProjectName, err)
 			}
 			historicalUsage = Some(resourcesv2.ProjectHistoricalReport{
 				MinUsage: ts.MinOr(0),
@@ -164,7 +150,7 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 		var committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64
 		if opts.WithCommitmentStats {
-			err = json.Unmarshal([]byte(committedJSON), &committed)
+			err := json.Unmarshal([]byte(r.CommittedJSON), &committed)
 			if err != nil {
 				return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 			}
@@ -172,28 +158,28 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			// do not report commitment stats if the resource does not allow new commitments in this domain
 			// (however, if there are pre-existing commitments, report those in the usual way until they all expire or are deleted)
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
-			if len(commitmentBehavior.ForDomain(domainName).Durations) == 0 && len(committed) == 0 {
+			if len(commitmentBehavior.ForDomain(r.DomainName).Durations) == 0 && len(committed) == 0 {
 				committed = nil
 			}
 		}
 
-		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
+		scrapedAtUnix := options.Map(r.ScrapedAt, util.IntoUnixEncodedTime)
 
-		setInProjectResourceReport(filter, cluster, &result, azResourceID, scrapedAtUnix, constraints, common.ProjectMetadata{
-			UUID:       projectUUID,
-			Name:       projectName,
-			ParentUUID: projectParentUUID,
+		setInProjectResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtUnix, r.projectConstraints, common.ProjectMetadata{
+			UUID:       r.ProjectUUID,
+			Name:       r.ProjectName,
+			ParentUUID: r.ProjectParentUUID,
 			DomainInfo: common.DomainMetadata{
-				UUID: domainUUID,
-				Name: domainName,
+				UUID: r.DomainUUID,
+				Name: r.DomainName,
 			},
 		}, resourcesv2.ProjectAvailabilityZoneReport{
-			Usage:           usage,
-			Quota:           quota,
+			Usage:           r.Usage,
+			Quota:           r.Quota,
 			Committed:       committed,
-			PhysicalUsage:   physicalUsage,
+			PhysicalUsage:   r.PhysicalUsage,
 			HistoricalUsage: historicalUsage,
-			Subresources:    json.RawMessage(subresources),
+			Subresources:    json.RawMessage(r.Subresources),
 		})
 		return nil
 	})
@@ -268,8 +254,8 @@ func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *re
 	if _, exists := categoryReport.Resources[resource.Name]; !exists {
 		categoryReport.Resources[resource.Name] = resourcesv2.ProjectResourceReport{
 			AvailabilityZones: make(map[limes.AvailabilityZone]resourcesv2.ProjectAvailabilityZoneReport),
-			MaxQuota:          constraints.maxQuotaFromOutsideAdmin,
-			ForbidAutogrowth:  constraints.forbidAutogrowth,
+			MaxQuota:          constraints.MaxQuotaFromOutsideAdmin,
+			ForbidAutogrowth:  constraints.ForbidAutogrowth,
 		}
 	}
 	azReport := categoryReport.Resources[resource.Name]
@@ -279,7 +265,10 @@ func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *re
 }
 
 var projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, p.parent_uuid, pra.rate_id, pra.usage_as_bigint, pra.rate_limit, pra.window_ns
+	SELECT
+		d.uuid AS domain_uuid, d.name AS domain_name,
+		p.uuid AS project_uuid, p.name AS project_name, p.parent_uuid,
+		pra.rate_id, pra.usage_as_bigint, pra.rate_limit, pra.window_ns
 	FROM project_rates pra
 	JOIN projects p
 	ON p.id = pra.project_id
@@ -291,7 +280,7 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
-func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
+func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
 	var result ratesv2.ProjectGetResponse
 
 	// fill info report
@@ -303,38 +292,33 @@ func GetProjectRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 		result.InfoReport = Some(infoReport)
 	}
 
+	type record struct {
+		DomainUUID        string                    `db:"domain_uuid"`
+		DomainName        string                    `db:"domain_name"`
+		ProjectUUID       string                    `db:"project_uuid"`
+		ProjectName       string                    `db:"project_name"`
+		ProjectParentUUID string                    `db:"parent_uuid"`
+		RateID            db.RateID                 `db:"rate_id"`
+		UsageAsBigint     string                    `db:"usage_as_bigint"`
+		ProjectLimit      Option[uint64]            `db:"rate_limit"`
+		ProjectWindow     Option[limesrates.Window] `db:"window_ns"`
+	}
 	// the result will have all rates without usage --> we will filter later
 	query, args := filter.ExpandServiceFilters(projectRateReportQuery)
 	query, args = scope.ExpandScopeFilters(query, args...)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			domainUUID        string
-			domainName        string
-			projectUUID       string
-			projectName       string
-			projectParentUUID string
-			rateID            db.RateID
-			usageAsBigint     string
-			projectLimit      Option[uint64]
-			projectWindow     Option[limesrates.Window]
-		)
-		err := rows.Scan(&domainUUID, &domainName, &projectUUID, &projectName, &projectParentUUID,
-			&rateID, &usageAsBigint, &projectLimit, &projectWindow)
-		if err != nil {
-			return err
-		}
-		setInProjectRateReport(filter, cluster, &result, rateID, common.ProjectMetadata{
-			UUID:       projectUUID,
-			Name:       projectName,
-			ParentUUID: projectParentUUID,
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
+		setInProjectRateReport(filter, cluster, &result, r.RateID, common.ProjectMetadata{
+			UUID:       r.ProjectUUID,
+			Name:       r.ProjectName,
+			ParentUUID: r.ProjectParentUUID,
 			DomainInfo: common.DomainMetadata{
-				UUID: domainUUID,
-				Name: domainName,
+				UUID: r.DomainUUID,
+				Name: r.DomainName,
 			},
 		}, ratesv2.ProjectRateReport{
-			UsageAsBigint: Some(usageAsBigint), // note: the database has a non-null constraint here, make None when setting
-			ProjectLimit:  projectLimit,
-			ProjectWindow: projectWindow,
+			UsageAsBigint: Some(r.UsageAsBigint), // note: the database has a non-null constraint here, make None when setting
+			ProjectLimit:  r.ProjectLimit,
+			ProjectWindow: r.ProjectWindow,
 		})
 		return nil
 	})

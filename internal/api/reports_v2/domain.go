@@ -4,7 +4,7 @@
 package reports_v2
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
@@ -78,11 +79,16 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 		GROUP BY pazr.az_resource_id, domain_id
 	)
 	SELECT
-		d.uuid, d.name, azr.id, ds.usage,
+		d.uuid AS domain_uuid, d.name AS domain_name, azr.id AS az_resource_id, ds.usage,
 		$with_commitment_stats{{
-			COALESCE(pcds.committed, '{}') as committed,
+			COALESCE(pcds.committed, '{}') AS committed,
 			ds.committed_confirmed_unutilized,
-			ds.usage - (ds.committed_confirmed - ds.committed_confirmed_unutilized) as usage_uncommitted,
+			ds.usage - (ds.committed_confirmed - ds.committed_confirmed_unutilized) AS usage_uncommitted,
+		}}
+		$without_commitment_stats{{
+			'' AS committed,
+			NULL AS committed_confirmed_unutilized,
+			NULL AS usage_uncommitted,
 		}}
 		ds.physical_usage
 	FROM services s
@@ -97,7 +103,7 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 `))
 
 // GetDomainResources returns a resourcesv2.DomainGetResponse.
-func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
+func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
 	var result resourcesv2.DomainGetResponse
 
 	// fill info report
@@ -109,39 +115,29 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 		result.InfoReport = Some(infoReport)
 	}
 
+	type record struct {
+		DomainUUID                   string          `db:"domain_uuid"`
+		DomainName                   string          `db:"domain_name"`
+		AZResourceID                 db.AZResourceID `db:"az_resource_id"`
+		Usage                        uint64          `db:"usage"`
+		CommittedJSON                string          `db:"committed"`
+		CommittedConfirmedUnutilized Option[uint64]  `db:"committed_confirmed_unutilized"`
+		UsageUncommitted             Option[uint64]  `db:"usage_uncommitted"`
+		PhysicalUsage                Option[uint64]  `db:"physical_usage"`
+	}
 	query := EvalDomainResourceExtraProps(domainResourceReportQuery, opts)
 	query, args := filter.ExpandServiceFilters(query)
 	query, args = scope.ExpandScopeFilters(query, args...)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			domainUUID                   string
-			domainName                   string
-			azResourceID                 db.AZResourceID
-			usage                        uint64
-			committedJSON                string
-			committedConfirmedUnutilized Option[uint64]
-			usageUncommitted             Option[uint64]
-			physicalUsage                Option[uint64]
-		)
-		columns := []any{&domainUUID, &domainName, &azResourceID, &usage}
-		if opts.WithCommitmentStats {
-			columns = append(columns, &committedJSON, &committedConfirmedUnutilized, &usageUncommitted)
-		}
-		columns = append(columns, &physicalUsage)
-		err := rows.Scan(columns...)
-		if err != nil {
-			return err
-		}
-
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
 		// do some computations on the resulting values
-		azResource, aExists := filter.GetAZResourceForID(azResourceID)
+		azResource, aExists := filter.GetAZResourceForID(r.AZResourceID)
 		if !aExists {
 			// defense in depth: an az_resource was deleted in between, so we ignore the data
 			return nil
 		}
 		var committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64
 		if opts.WithCommitmentStats {
-			err = json.Unmarshal([]byte(committedJSON), &committed)
+			err := json.Unmarshal([]byte(r.CommittedJSON), &committed)
 			if err != nil {
 				return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 			}
@@ -149,22 +145,22 @@ func GetDomainResources(cluster *core.Cluster, token *gopherpolicy.Token, filter
 			// do not report commitment stats if the resource does not allow new commitments in this domain
 			// (however, if there are pre-existing commitments, report those in the usual way until they all expire or are deleted)
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
-			if len(commitmentBehavior.ForDomain(domainName).Durations) == 0 && len(committed) == 0 {
+			if len(commitmentBehavior.ForDomain(r.DomainName).Durations) == 0 && len(committed) == 0 {
 				committed = nil
-				usageUncommitted = None[uint64]()
-				committedConfirmedUnutilized = None[uint64]()
+				r.UsageUncommitted = None[uint64]()
+				r.CommittedConfirmedUnutilized = None[uint64]()
 			}
 		}
 
-		setInDomainResourceReport(filter, cluster, &result, azResourceID, common.DomainMetadata{
-			UUID: domainUUID,
-			Name: domainName,
+		setInDomainResourceReport(filter, cluster, &result, r.AZResourceID, common.DomainMetadata{
+			UUID: r.DomainUUID,
+			Name: r.DomainName,
 		}, resourcesv2.DomainAvailabilityZoneReport{
-			Usage:                        usage,
+			Usage:                        r.Usage,
 			Committed:                    committed,
-			CommittedConfirmedUnutilized: committedConfirmedUnutilized,
-			UsageUncommitted:             usageUncommitted,
-			PhysicalUsage:                physicalUsage,
+			CommittedConfirmedUnutilized: r.CommittedConfirmedUnutilized,
+			UsageUncommitted:             r.UsageUncommitted,
+			PhysicalUsage:                r.PhysicalUsage,
 		})
 		return nil
 	})
@@ -237,7 +233,7 @@ func setInDomainResourceReport(filter Filter, cluster *core.Cluster, report *res
 }
 
 var domainRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, pra.rate_id, SUM(pra.usage_as_bigint::BIGINT)::TEXT AS usage_as_bigint
+	SELECT d.uuid AS domain_uuid, d.name AS domain_name, pra.rate_id, SUM(pra.usage_as_bigint::BIGINT)::TEXT AS usage_as_bigint
 	FROM project_rates pra
 	JOIN projects p
 	ON p.id = pra.project_id
@@ -249,7 +245,7 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetDomainRates returns a ratesv2.DomainGetResponse.
-func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
+func GetDomainRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
 	var result ratesv2.DomainGetResponse
 
 	// fill info report
@@ -262,24 +258,20 @@ func GetDomainRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fil
 	}
 
 	// the result will have all rates without usage --> we will filter later
+	type record struct {
+		DomainUUID    string    `db:"domain_uuid"`
+		DomainName    string    `db:"domain_name"`
+		RateID        db.RateID `db:"rate_id"`
+		UsageAsBigint string    `db:"usage_as_bigint"`
+	}
 	query, args := filter.ExpandServiceFilters(domainRateReportQuery)
 	query, args = scope.ExpandScopeFilters(query, args...)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			domainUUID    string
-			domainName    string
-			rateID        db.RateID
-			usageAsBigint string
-		)
-		err := rows.Scan(&domainUUID, &domainName, &rateID, &usageAsBigint)
-		if err != nil {
-			return err
-		}
-		setInDomainRateReport(filter, cluster, &result, rateID, common.DomainMetadata{
-			UUID: domainUUID,
-			Name: domainName,
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
+		setInDomainRateReport(filter, cluster, &result, r.RateID, common.DomainMetadata{
+			UUID: r.DomainUUID,
+			Name: r.DomainName,
 		}, ratesv2.DomainRateReport{
-			UsageAsBigint: usageAsBigint,
+			UsageAsBigint: r.UsageAsBigint,
 		})
 		return nil
 	})

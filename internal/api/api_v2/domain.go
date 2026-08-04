@@ -33,6 +33,7 @@ func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpoli
 // commonHandleGetResourcesDomain handles single- and multi-domain resource calls.
 func (p *v2Provider) commonHandleGetResourcesDomain(r *http.Request, token *gopherpolicy.Token, rule string) (_ resourcesv2.DomainGetResponse, err error) {
 	none := resourcesv2.DomainGetResponse{}
+	ctx := r.Context()
 
 	err = token.Enforce(rule)
 	if err != nil {
@@ -50,7 +51,7 @@ func (p *v2Provider) commonHandleGetResourcesDomain(r *http.Request, token *goph
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetDomainResources(p.Cluster, token, filter, options, scope, p.timeNow())
+	result, err := reports_v2.GetDomainResources(ctx, p.Cluster, token, filter, options, scope, p.timeNow())
 	if err != nil {
 		return none, err
 	}
@@ -72,6 +73,7 @@ func (p *v2Provider) handleGetRatesDomain(r *http.Request, token *gopherpolicy.T
 // commonHandleGetRatesDomain handles single- and multi-domain rate calls.
 func (p *v2Provider) commonHandleGetRatesDomain(r *http.Request, token *gopherpolicy.Token, rule string) (_ ratesv2.DomainGetResponse, err error) {
 	none := ratesv2.DomainGetResponse{}
+	ctx := r.Context()
 
 	err = token.Enforce(rule)
 	if err != nil {
@@ -89,7 +91,7 @@ func (p *v2Provider) commonHandleGetRatesDomain(r *http.Request, token *gopherpo
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetDomainRates(p.Cluster, token, filter, options, scope)
+	result, err := reports_v2.GetDomainRates(ctx, p.Cluster, token, filter, options, scope)
 	if err != nil {
 		return none, err
 	}

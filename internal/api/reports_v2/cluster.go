@@ -4,7 +4,7 @@
 package reports_v2
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-bits/gopherpolicy"
 
@@ -72,14 +73,21 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		GROUP BY pazr.az_resource_id
 	)
 	SELECT
-		azr.id, azr.raw_capacity, azr.usage as overall_usage, ps.usage,
+		azr.id, azr.raw_capacity, azr.usage AS overall_usage, ps.usage,
 		$with_timing{{s.scraped_at,}}
+		$without_timing{{NULL AS scraped_at,}}
 		$with_commitment_stats{{
-			COALESCE(pcs.committed, '{}') as committed,
+			COALESCE(pcs.committed, '{}') AS committed,
 			ps.committed_confirmed_unutilized,
-			ps.usage - (ps.committed_confirmed - ps.committed_confirmed_unutilized) as usage_uncommitted,
+			ps.usage - (ps.committed_confirmed - ps.committed_confirmed_unutilized) AS usage_uncommitted,
+		}}
+		$without_commitment_stats{{
+			'' AS committed,
+			NULL AS committed_confirmed_unutilized,
+			NULL AS usage_uncommitted,
 		}}
 		$with_subcapacities{{azr.subcapacities,}}
+		$without_subcapacities{{'' AS subcapacities,}}
 		ps.physical_usage
 	FROM services s
 	JOIN resources r ON r.service_id = s.id
@@ -92,7 +100,7 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 `))
 
 // GetClusterResources returns a resourcesv2.ClusterGetResponse.
-func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
+func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
 	var result resourcesv2.ClusterGetResponse
 
 	// fill info report
@@ -104,48 +112,32 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 		result.InfoReport = Some(infoReport)
 	}
 
+	type record struct {
+		AZResourceID                 db.AZResourceID   `db:"id"`
+		RawCapacity                  uint64            `db:"raw_capacity"`
+		OverallUsage                 Option[uint64]    `db:"overall_usage"`
+		Usage                        uint64            `db:"usage"`
+		ScrapedAt                    Option[time.Time] `db:"scraped_at"`
+		CommittedJSON                string            `db:"committed"`
+		CommittedConfirmedUnutilized Option[uint64]    `db:"committed_confirmed_unutilized"`
+		UsageUncommitted             Option[uint64]    `db:"usage_uncommitted"`
+		Subcapacities                string            `db:"subcapacities"`
+		PhysicalUsage                Option[uint64]    `db:"physical_usage"`
+	}
 	query := EvalClusterResourceExtraProps(clusterResourceReportQuery, opts)
 	query, args := filter.ExpandServiceFilters(query)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			azResourceID                 db.AZResourceID
-			rawCapacity                  uint64
-			overallUsage                 Option[uint64]
-			usage                        uint64
-			scrapedAt                    Option[time.Time]
-			committedJSON                string
-			committedConfirmedUnutilized Option[uint64]
-			usageUncommitted             Option[uint64]
-			subcapacities                string
-			physicalUsage                Option[uint64]
-		)
-		columns := []any{&azResourceID, &rawCapacity, &overallUsage, &usage}
-		if opts.WithTiming {
-			columns = append(columns, &scrapedAt)
-		}
-		if opts.WithCommitmentStats {
-			columns = append(columns, &committedJSON, &committedConfirmedUnutilized, &usageUncommitted)
-		}
-		if opts.WithSubcapacities {
-			columns = append(columns, &subcapacities)
-		}
-		columns = append(columns, &physicalUsage)
-		err := rows.Scan(columns...)
-		if err != nil {
-			return err
-		}
-
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
 		// do some computations on the resulting values
-		azResource, aExists := filter.GetAZResourceForID(azResourceID)
+		azResource, aExists := filter.GetAZResourceForID(r.AZResourceID)
 		if !aExists {
 			// defense in depth: an az_resource was deleted in between, so we ignore the data
 			return nil
 		}
 		overcommitFactor := cluster.BehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName).OvercommitFactor
-		capacity := overcommitFactor.ApplyTo(rawCapacity)
+		capacity := overcommitFactor.ApplyTo(r.RawCapacity)
 		var committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64
 		if opts.WithCommitmentStats {
-			err = json.Unmarshal([]byte(committedJSON), &committed)
+			err := json.Unmarshal([]byte(r.CommittedJSON), &committed)
 			if err != nil {
 				return fmt.Errorf("while parsing DB commitment stats for %s: %w", azResource.Path, err)
 			}
@@ -155,23 +147,23 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
 			if len(commitmentBehavior.ForCluster().Durations) == 0 && len(committed) == 0 {
 				committed = nil
-				usageUncommitted = None[uint64]()
-				committedConfirmedUnutilized = None[uint64]()
+				r.UsageUncommitted = None[uint64]()
+				r.CommittedConfirmedUnutilized = None[uint64]()
 			}
 		}
 
-		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
+		scrapedAtUnix := options.Map(r.ScrapedAt, util.IntoUnixEncodedTime)
 
-		setInClusterResourceReport(filter, cluster, &result, azResourceID, scrapedAtUnix, resourcesv2.ClusterAvailabilityZoneReport{
+		setInClusterResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtUnix, resourcesv2.ClusterAvailabilityZoneReport{
 			Capacity:                     capacity,
-			RawCapacity:                  rawCapacity,
-			OverallUsage:                 overallUsage,
-			Usage:                        usage,
+			RawCapacity:                  r.RawCapacity,
+			OverallUsage:                 r.OverallUsage,
+			Usage:                        r.Usage,
 			Committed:                    committed,
-			CommittedConfirmedUnutilized: committedConfirmedUnutilized,
-			UsageUncommitted:             usageUncommitted,
-			PhysicalUsage:                physicalUsage,
-			Subcapacities:                json.RawMessage(subcapacities),
+			CommittedConfirmedUnutilized: r.CommittedConfirmedUnutilized,
+			UsageUncommitted:             r.UsageUncommitted,
+			PhysicalUsage:                r.PhysicalUsage,
+			Subcapacities:                json.RawMessage(r.Subcapacities),
 		})
 		return nil
 	})
@@ -244,7 +236,7 @@ var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterRates returns a ratesv2.ClusterGetResponse.
-func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
+func GetClusterRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
 	var result ratesv2.ClusterGetResponse
 
 	// fill info report
@@ -257,17 +249,13 @@ func GetClusterRates(cluster *core.Cluster, token *gopherpolicy.Token, filter Fi
 	}
 
 	// the result will have all rates without usage --> we will filter later
+	type record struct {
+		RateID        db.RateID `db:"rate_id"`
+		UsageAsBigint string    `db:"usage_as_bigint"`
+	}
 	query, args := filter.ExpandServiceFilters(clusterRateReportQuery)
-	err := sqlext.ForeachRow(cluster.DB, query, args, func(rows *sql.Rows) error {
-		var (
-			rateID        db.RateID
-			usageAsBigint string
-		)
-		err := rows.Scan(&rateID, &usageAsBigint)
-		if err != nil {
-			return err
-		}
-		setInClusterRateReport(filter, cluster, &result, rateID, ratesv2.ClusterRateReport{UsageAsBigint: usageAsBigint})
+	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
+		setInClusterRateReport(filter, cluster, &result, r.RateID, ratesv2.ClusterRateReport{UsageAsBigint: r.UsageAsBigint})
 		return nil
 	})
 	return result, err

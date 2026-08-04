@@ -20,6 +20,7 @@ import (
 func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ClusterGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/cluster")
 	none := resourcesv2.ClusterGetResponse{}
+	ctx := r.Context()
 
 	err = token.Enforce("v2:cluster:report_single")
 	if err != nil {
@@ -33,7 +34,7 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetClusterResources(p.Cluster, token, filter, options, p.timeNow())
+	result, err := reports_v2.GetClusterResources(ctx, p.Cluster, token, filter, options, p.timeNow())
 	if err != nil {
 		return none, err
 	}
@@ -44,6 +45,7 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ClusterGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/cluster")
 	none := ratesv2.ClusterGetResponse{}
+	ctx := r.Context()
 
 	err = token.Enforce("v2:cluster:report_single")
 	if err != nil {
@@ -57,7 +59,7 @@ func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetClusterRates(p.Cluster, token, filter, options)
+	result, err := reports_v2.GetClusterRates(ctx, p.Cluster, token, filter, options)
 	if err != nil {
 		return none, err
 	}

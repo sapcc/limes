@@ -31,6 +31,7 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 // commonHandleGetResourcesProject handles single- and multi-project rate calls.
 func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gopherpolicy.Token, rule string) (_ resourcesv2.ProjectGetResponse, err error) {
 	none := resourcesv2.ProjectGetResponse{}
+	ctx := r.Context()
 
 	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
 	options, err := opts.ParseQueryString[common.ProjectResourceReportOpts](r.URL.Query())
@@ -71,7 +72,7 @@ func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gop
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetProjectResources(p.Cluster, token, filter, options, scope, p.timeNow())
+	result, err := reports_v2.GetProjectResources(ctx, p.Cluster, token, filter, options, scope, p.timeNow())
 	if err != nil {
 		return none, err
 	}
@@ -93,6 +94,7 @@ func (p *v2Provider) handleGetRatesProject(r *http.Request, token *gopherpolicy.
 // commonHandleGetRatesProject handles single- and multi-project rate calls.
 func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, token *gopherpolicy.Token, rule string) (_ ratesv2.ProjectGetResponse, err error) {
 	none := ratesv2.ProjectGetResponse{}
+	ctx := r.Context()
 
 	// important: validate scope before token.Enforce, so that projects domain_uuid is written back to token scope
 	options, err := opts.ParseQueryString[common.ProjectRateReportOpts](r.URL.Query())
@@ -111,7 +113,7 @@ func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, token *gopherp
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetProjectRates(p.Cluster, token, filter, options, scope)
+	result, err := reports_v2.GetProjectRates(ctx, p.Cluster, token, filter, options, scope)
 	if err != nil {
 		return none, err
 	}
