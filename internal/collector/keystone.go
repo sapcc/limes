@@ -101,7 +101,9 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 			continue
 		}
 
-		logg.Info("discovered new Keystone domain: %s", domain.Name)
+		if !core.ReduceLogSpam {
+			logg.Info("discovered new Keystone domain: %s", domain.Name)
+		}
 		dbDomain = &db.Domain{
 			Name: domain.Name,
 			UUID: domain.UUID,
@@ -197,7 +199,9 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 			continue
 		}
 
-		logg.Info("discovered new Keystone project: %s/%s", domain.Name, project.Name)
+		if !core.ReduceLogSpam {
+			logg.Info("discovered new Keystone project: %s/%s", domain.Name, project.Name)
+		}
 		err := c.initProject(domain, project)
 		if err != nil {
 			return result, err

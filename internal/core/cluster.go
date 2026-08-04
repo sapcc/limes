@@ -320,7 +320,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return service.Type
 		},
 		Create: func(serviceType db.ServiceType) (db.Service, error) {
-			logg.Info("SaveServiceInfoToDB: creating Service %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
+			if !ReduceLogSpam {
+				logg.Info("SaveServiceInfoToDB: creating Service %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
+			}
 			return db.Service{
 				NextScrapeAt:                           timeNow,
 				Type:                                   serviceType,
@@ -334,7 +336,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			}, nil
 		},
 		Update: func(service *db.Service) (err error) {
-			if service.LiquidVersion != serviceInfo.Version {
+			if !ReduceLogSpam && service.LiquidVersion != serviceInfo.Version {
 				logg.Info("SaveServiceInfoToDB: updating Service %s from LiquidVersion = %d to %d", service.Type, service.LiquidVersion, serviceInfo.Version)
 			}
 			service.LiquidVersion = serviceInfo.Version
@@ -393,7 +395,9 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			return resource.Name
 		},
 		Create: func(resourceName liquid.ResourceName) (db.Resource, error) {
-			logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
+			if !ReduceLogSpam {
+				logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
+			}
 			categoryID := options.Map(serviceInfo.Resources[resourceName].Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
@@ -414,7 +418,7 @@ func SaveServiceInfoToDB(serviceType db.ServiceType, serviceInfo liquid.ServiceI
 			}, nil
 		},
 		Update: func(res *db.Resource) (err error) {
-			if res.LiquidVersion != serviceInfo.Version {
+			if !ReduceLogSpam && res.LiquidVersion != serviceInfo.Version {
 				logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
 			}
 			res.LiquidVersion = serviceInfo.Version
