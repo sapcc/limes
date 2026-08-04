@@ -162,7 +162,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
 
-		setInClusterResourceReport(filter, cluster, &result, azResourceID, resourcesv2.ClusterAvailabilityZoneReport{
+		setInClusterResourceReport(filter, cluster, &result, azResourceID, scrapedAtUnix, resourcesv2.ClusterAvailabilityZoneReport{
 			Capacity:                     capacity,
 			RawCapacity:                  rawCapacity,
 			OverallUsage:                 overallUsage,
@@ -172,7 +172,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			UsageUncommitted:             usageUncommitted,
 			PhysicalUsage:                physicalUsage,
 			Subcapacities:                json.RawMessage(subcapacities),
-		}, scrapedAtUnix)
+		})
 		return nil
 	})
 
@@ -181,7 +181,7 @@ func GetClusterResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 // setInClusterResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ClusterAvailabilityZoneReport.
-func setInClusterResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, value resourcesv2.ClusterAvailabilityZoneReport, scrapedAt Option[limes.UnixEncodedTime]) {
+func setInClusterResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], value resourcesv2.ClusterAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data

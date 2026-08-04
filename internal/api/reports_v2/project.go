@@ -81,6 +81,11 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 	AND azr.az != {{liquid.AvailabilityZoneTotal}}
 `))
 
+type projectConstraints struct {
+	forbidAutogrowth         Option[bool]
+	maxQuotaFromOutsideAdmin Option[uint64]
+}
+
 // GetProjectResources returns a resourcesv2.ProjectGetResponse.
 func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
 	var result resourcesv2.ProjectGetResponse
@@ -111,11 +116,8 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			committedJSON       string
 			historicalUsageJSON string
 			subresources        string
-			constraints         struct {
-				forbidAutogrowth         Option[bool]
-				maxQuotaFromOutsideAdmin Option[uint64]
-			}
-			physicalUsage Option[uint64]
+			constraints         projectConstraints
+			physicalUsage       Option[uint64]
 		)
 		columns := []any{&domainUUID, &domainName, &projectUUID, &projectName, &projectParentUUID, &azResourceID, &usage, &quota}
 		if opts.WithTiming {
@@ -177,7 +179,7 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 		scrapedAtUnix := options.Map(scrapedAt, util.IntoUnixEncodedTime)
 
-		setInProjectResourceReport(filter, cluster, &result, azResourceID, common.ProjectMetadata{
+		setInProjectResourceReport(filter, cluster, &result, azResourceID, scrapedAtUnix, constraints, common.ProjectMetadata{
 			UUID:       projectUUID,
 			Name:       projectName,
 			ParentUUID: projectParentUUID,
@@ -192,7 +194,7 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 			PhysicalUsage:   physicalUsage,
 			HistoricalUsage: historicalUsage,
 			Subresources:    json.RawMessage(subresources),
-		}, scrapedAtUnix, constraints)
+		})
 		return nil
 	})
 	return result, err
@@ -200,11 +202,7 @@ func GetProjectResources(cluster *core.Cluster, token *gopherpolicy.Token, filte
 
 // setInProjectResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ProjectAvailabilityZoneReport.
-func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport, scrapedAt Option[limes.UnixEncodedTime], constraints struct {
-	forbidAutogrowth         Option[bool]
-	maxQuotaFromOutsideAdmin Option[uint64]
-}) {
-
+func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], constraints projectConstraints, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data
