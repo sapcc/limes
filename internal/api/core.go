@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gorilla/mux"
@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api/api_v2"
@@ -37,7 +38,7 @@ import (
 
 type v1Provider struct {
 	Cluster        *core.Cluster
-	DB             *gorp.DbMap
+	DB             *gsql.DB
 	DomainNames    Option[api_v2.DomainNames]
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
@@ -185,8 +186,8 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 		return nil
 	}
 
-	var domain db.Domain
-	err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
+	ctx := r.Context()
+	domain, err := db.DomainStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, domainUUID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)
@@ -216,15 +217,15 @@ func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Reque
 // FindProjectFromRequestIfExists works like FindProjectFromRequest, but returns
 // a nil project instead of producing an error if the project does not exist in
 // the local DB yet.
-func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
+func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (_ *db.Project, ok bool) {
 	projectUUID := mux.Vars(r)["project_id"]
 	if projectUUID == "" {
 		http.Error(w, "project ID missing", http.StatusBadRequest)
 		return nil, false
 	}
 
-	project = &db.Project{}
-	err := p.DB.SelectOne(project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	ctx := r.Context()
+	project, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, projectUUID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, true
@@ -234,7 +235,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	case respondwith.ObfuscatedErrorText(w, err):
 		return nil, false
 	default:
-		return project, true
+		return &project, true
 	}
 }
 
@@ -251,9 +252,9 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, now time.Time, d
 }
 
 // GetProjectResourceReport is a convenience wrapper around reports.GetProjectResources() for getting a single project resource report.
-func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, now time.Time, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesresources.ProjectReport, error) {
+func GetProjectResourceReport(ctx context.Context, cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, now time.Time, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesresources.ProjectReport, error) {
 	var result *limesresources.ProjectReport
-	err := reports.GetProjectResources(cluster, dbDomain, &dbProject, now, dbi, filter, sis, func(r *limesresources.ProjectReport) error {
+	err := reports.GetProjectResources(ctx, cluster, dbDomain, &dbProject, now, dbi, filter, sis, func(r *limesresources.ProjectReport) error {
 		result = r
 		return nil
 	})
@@ -267,9 +268,9 @@ func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProje
 }
 
 // GetProjectRateReport is a convenience wrapper around reports.GetProjectRates() for getting a single project rate report.
-func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesrates.ProjectReport, error) {
+func GetProjectRateReport(ctx context.Context, cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesrates.ProjectReport, error) {
 	var result *limesrates.ProjectReport
-	err := reports.GetProjectRates(cluster, dbDomain, &dbProject, dbi, filter, sis, func(r *limesrates.ProjectReport) error {
+	err := reports.GetProjectRates(ctx, cluster, dbDomain, &dbProject, dbi, filter, sis, func(r *limesrates.ProjectReport) error {
 		result = r
 		return nil
 	})

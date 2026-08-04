@@ -6,6 +6,7 @@ package api_v2
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,13 +15,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
@@ -29,7 +30,7 @@ import (
 
 type v2Provider struct {
 	Cluster        *core.Cluster
-	DB             *gorp.DbMap
+	DB             *gsql.DB
 	DomainNames    Option[DomainNames]
 	tokenValidator gopherpolicy.Validator
 	auditor        audittools.Auditor
@@ -163,13 +164,12 @@ func parseRequestBodyAs[T any](r *http.Request) (T, error) {
 
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
+func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
 	// find the domain belonging to this project
-	var domain db.Domain
-	err = p.DB.SelectOne(&domain,
+	domain, err := db.DomainStore.SelectOne(ctx, p.DB,
 		`SELECT d.* FROM domains d JOIN projects p ON d.id = p.domain_id WHERE p.uuid = $1`,
 		projectUUID,
 	)
@@ -198,8 +198,7 @@ func (p *v2Provider) checkProjectAccess(t *gopherpolicy.Token, projectUUID liqui
 		return
 	}
 
-	var project db.Project
-	err = p.DB.SelectOne(&project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	project, err := db.ProjectStore.SelectOne(ctx, p.DB, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this branch should not be reachable if the first database query found a result
 		err = fmt.Errorf("no such project (UUID = %s)", projectUUID)

@@ -83,8 +83,11 @@ type TransferableCommitmentCache struct {
 }
 
 // NewTransferableCommitmentCache builds a TransferableCommitmentCache and fills it.
-func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, sis core.ServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
-	_, err = dbi.Select(&t.transferableCommitments, getTransferableCommitmentsQuery, path)
+func NewTransferableCommitmentCache(ctx context.Context, dbi db.Interface, cluster *core.Cluster, sis core.ServiceInfoSnapshot, path db.AZResourcePath, now time.Time, generateProjectCommitmentUUID func() liquid.CommitmentUUID, generateTransferToken func() string, mailTemplate Option[core.MailTemplate]) (t TransferableCommitmentCache, err error) {
+	err = db.ProjectCommitmentStore.Select(ctx, dbi, getTransferableCommitmentsQuery, path).Foreach(func(c db.ProjectCommitment) error {
+		t.transferableCommitments = append(t.transferableCommitments, &c)
+		return nil
+	})
 	if err != nil {
 		return t, fmt.Errorf("while enumerating transferable commitments for %s: %w", path, err)
 	}
@@ -97,7 +100,11 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, sis
 	t.transferredCommitmentIDs = make(map[db.ProjectID]map[db.ProjectCommitmentID]commitmentTransferLeftover)
 
 	// project and domain structures
-	t.affectedProjectsByID, err = db.BuildIndexOfDBResult(dbi, func(p db.Project) db.ProjectID { return p.ID }, `SELECT * from projects WHERE id = ANY($1)`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	t.affectedProjectsByID, err = db.ProjectByIDIndex.IndexFrom(
+		db.ProjectStore.SelectWhere(ctx, dbi, `id = ANY($1)`,
+			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
+		),
+	)
 	if err != nil {
 		return t, fmt.Errorf("while loading projects with transferable commitments for %s: %w", path, err)
 	}
@@ -105,7 +112,11 @@ func NewTransferableCommitmentCache(dbi db.Interface, cluster *core.Cluster, sis
 	for _, project := range t.affectedProjectsByID {
 		t.affectedProjectsByUUID[project.UUID] = project
 	}
-	t.affectedDomainsByID, err = db.BuildIndexOfDBResult(dbi, func(d db.Domain) db.DomainID { return d.ID }, `SELECT * from domains WHERE id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`, pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))))
+	t.affectedDomainsByID, err = db.DomainByIDIndex.IndexFrom(
+		db.DomainStore.SelectWhere(ctx, dbi, `id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`,
+			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
+		),
+	)
 	if err != nil {
 		return t, fmt.Errorf("while loading domains with projects with transferable commitments for %s: %w", path, err)
 	}
@@ -331,7 +342,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 
 		// Insert the leftover commitment, if exists.
 		if lc, ok := leftoverCommitment.Unpack(); ok && parentOfLeftoverCommitment == tc.ID {
-			err = t.dbi.Insert(&lc)
+			err = db.ProjectCommitmentStore.Insert(ctx, t.dbi, &lc)
 			if err != nil {
 				return result, err
 			}
@@ -363,7 +374,7 @@ func (t *TransferableCommitmentCache) CanConfirmWithTransfers(ctx context.Contex
 			return result, err
 		}
 		tc.SupersedeContextJSON = Some(json.RawMessage(buf))
-		_, err = t.dbi.Update(tc)
+		err = db.ProjectCommitmentStore.Update(ctx, t.dbi, *tc)
 		if err != nil {
 			return result, err
 		}
@@ -400,7 +411,7 @@ func (t *TransferableCommitmentCache) getTransferredCommitmentsForProject(projec
 // GenerateTransferMails generates the mail notifications for all transferred commitments
 // that were processed via CanConfirmWithTransfers. For that, it collates multiple consecutive partial
 // transfers to only generate a mail from the initial to the latest state.
-func (t *TransferableCommitmentCache) GenerateTransferMails(apiIdentity core.ResourceRef) error {
+func (t *TransferableCommitmentCache) GenerateTransferMails(ctx context.Context, apiIdentity core.ResourceRef) error {
 	// The system can be configured to not send mails (e.g. for test systems).
 	tpl, tplExists := t.mailTemplate.Unpack()
 	if !tplExists {
@@ -463,7 +474,7 @@ func (t *TransferableCommitmentCache) GenerateTransferMails(apiIdentity core.Res
 			if err != nil {
 				return err
 			}
-			err = t.dbi.Insert(&mail)
+			err = db.MailNotificationStore.Insert(ctx, t.dbi, &mail)
 			if err != nil {
 				return err
 			}

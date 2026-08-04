@@ -53,7 +53,7 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	LIMIT 1
 `)
 
-func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
+func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
 	serviceType := db.ServiceType(labels["service_type"])
 
 	// Defense in depth: Verify that we have a LiquidConnection for the serviceType of this task.
@@ -65,14 +65,13 @@ func (c *Collector) discoverQuotaSyncTask(_ context.Context, labels prometheus.L
 	}
 	labels["service_name"] = labels["service_type"] // for backwards compatibility only (TODO: remove usage from alert definitions, then remove this label)
 
-	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery, serviceType)
-	return
+	return db.ProjectServiceStore.SelectOne(ctx, c.DB, quotaSyncDiscoverQuery, serviceType)
 }
 
 func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectService, labels prometheus.Labels) error {
 	serviceType := db.ServiceType(labels["service_type"])
 
-	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
+	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(ctx, srv)
 	if err != nil {
 		return err
 	}

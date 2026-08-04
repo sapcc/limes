@@ -4,6 +4,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/lib/pq"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -20,6 +20,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 )
 
@@ -565,7 +566,7 @@ const serviceNotifyChannel = "limitas_service_update"
 // during runtime.
 type ServiceInfoCache struct {
 	// state
-	DB       *gorp.DbMap
+	DB       *gsql.DB
 	listener *pq.Listener
 	config   ClusterConfiguration
 	data     ServiceInfoSnapshot
@@ -581,7 +582,7 @@ type ServiceInfoCache struct {
 }
 
 // NewServiceInfoCache generates a ServiceInfoCache and fills all services' data.
-func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
+func NewServiceInfoCache(ctx context.Context, dbm *gsql.DB, config ClusterConfiguration, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
 	sic := &ServiceInfoCache{
 		DB:     dbm,
 		config: config,
@@ -589,7 +590,7 @@ func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Opt
 	}
 
 	// populate all data from the DB on startup
-	err := sic.InvalidateService(None[db.ServiceType]())
+	err := sic.InvalidateService(ctx, None[db.ServiceType]())
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +613,7 @@ func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Opt
 		if err := sic.listener.Listen(serviceNotifyChannel); err != nil {
 			return nil, err
 		}
-		go sic.listenForInvalidations()
+		go sic.listenForInvalidations(ctx)
 	}
 
 	return sic, nil
@@ -621,12 +622,12 @@ func NewServiceInfoCache(dbm *gorp.DbMap, config ClusterConfiguration, dbURL Opt
 // listenForInvalidations waits for NOTIFY messages on serviceNotifyChannel.
 // The payload is expected to be the service type string. On reconnect, a nil
 // notification is sent by pq — in that case we invalidate all services to be safe.
-func (s *ServiceInfoCache) listenForInvalidations() {
+func (s *ServiceInfoCache) listenForInvalidations(ctx context.Context) {
 	for notification := range s.listener.Notify {
 		if notification == nil {
 			// connection was re-established; we may have missed notifications, so we invalidate all
 			logg.Info("SIC pg listener reconnected, reloading all services")
-			err := s.InvalidateService(None[db.ServiceType]())
+			err := s.InvalidateService(ctx, None[db.ServiceType]())
 			if err != nil {
 				logg.Fatal("SIC failed to reload all services after reconnect: %s", err.Error())
 			}
@@ -636,7 +637,7 @@ func (s *ServiceInfoCache) listenForInvalidations() {
 
 		serviceType := db.ServiceType(notification.Extra)
 		logg.Info("SIC invalidating service %q due to pg NOTIFY", serviceType)
-		err := s.InvalidateService(Some(serviceType))
+		err := s.InvalidateService(ctx, Some(serviceType))
 		if err != nil {
 			logg.Fatal("SIC failed to reload service %q: %s", serviceType, err.Error())
 		}
@@ -666,7 +667,7 @@ func (s *ServiceInfoCache) signalInvalidation() {
 
 // InvalidateService will make the ServiceInfoCache reload one service (if
 // serviceType is provided) or all services (if no serviceType is provided).
-func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType]) error {
+func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Option[db.ServiceType]) error {
 	s.dataMutex.Lock()
 	defer s.dataMutex.Unlock()
 
@@ -677,7 +678,7 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 	}
 
 	// now we fill the cache for the invalidated services again
-	servicesByType, err := db.BuildIndexOfDBResult(s.DB, func(s db.Service) db.ServiceType { return s.Type }, "SELECT * FROM services WHERE type = $1 OR $1 IS NULL", serviceType)
+	servicesByType, err := db.ServiceByTypeIndex.IndexFrom(db.ServiceStore.SelectWhere(ctx, s.DB, `type = $1 OR $1 IS NULL`, serviceType))
 	if err != nil {
 		return fmt.Errorf("while reading services for type(s) %v: %w", serviceType, err)
 	}
@@ -686,11 +687,8 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		s.data.servicesByID[svc.ID] = svc
 	}
 
-	resourcesByPath, err := db.BuildIndexOfDBResult(
-		s.DB,
-		func(r db.Resource) db.ResourcePath { return r.Path },
-		"SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
-		serviceType,
+	resourcesByPath, err := db.ResourceByPathIndex.IndexFrom(
+		db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType),
 	)
 	if err != nil {
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
@@ -703,11 +701,8 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		s.data.resourcesByID[resource.ID] = resource
 	}
 
-	azResourcesByPath, err := db.BuildIndexOfDBResult(
-		s.DB,
-		func(a db.AZResource) db.AZResourcePath { return a.Path },
-		"SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
-		serviceType,
+	azResourcesByPath, err := db.AZResourceByPathIndex.IndexFrom(
+		db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType),
 	)
 	if err != nil {
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
@@ -723,11 +718,8 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		s.data.azResourcesByID[azResource.ID] = azResource
 	}
 
-	ratesByPath, err := db.BuildIndexOfDBResult(
-		s.DB,
-		func(r db.Rate) db.RatePath { return r.Path },
-		"SELECT ra.* FROM rates ra JOIN services s ON ra.service_id = s.id WHERE s.type = $1 OR $1 IS NULL",
-		serviceType,
+	ratesByPath, err := db.RateByPathIndex.IndexFrom(
+		db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra JOIN services s ON ra.service_id = s.id WHERE s.type = $1 OR $1 IS NULL", serviceType),
 	)
 	if err != nil {
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
@@ -740,11 +732,7 @@ func (s *ServiceInfoCache) InvalidateService(serviceType Option[db.ServiceType])
 		s.data.ratesByID[rate.ID] = rate
 	}
 
-	s.data.categories, err = db.BuildIndexOfDBResult(
-		s.DB,
-		func(c db.Category) db.CategoryID { return c.ID },
-		"SELECT * FROM categories",
-	)
+	s.data.categories, err = db.CategoryByIDIndex.IndexFrom(db.CategoryStore.Select(ctx, s.DB, `SELECT * FROM categories`))
 	if err != nil {
 		return fmt.Errorf("while reading categories: %w", err)
 	}

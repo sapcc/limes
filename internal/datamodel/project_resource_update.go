@@ -4,6 +4,7 @@
 package datamodel
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"reflect"
@@ -28,7 +29,7 @@ type ProjectResourceUpdate struct {
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) error {
+func (u ProjectResourceUpdate) Run(ctx context.Context, dbi db.Interface, project db.Project, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) error {
 	service := must.BeOK(sis.GetServiceForType(serviceType)) // should have been checked to exist before, else no update makes sense
 	resources, _ := sis.GetResourcesForType(service.Type)
 	// We will first collect all existing data into one of these structs for each
@@ -39,7 +40,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, sis cor
 		CorrespondingResource *db.Resource
 	}
 
-	resourcesByID := db.BuildIndexOfArray(slices.Collect(maps.Values(resources)), func(r db.Resource) db.ResourceID { return r.ID })
+	resourcesByID := db.ResourceByIDIndex.Index(slices.Collect(maps.Values(resources)))
 	allResourceNames := slices.Sorted(maps.Keys(resources))
 	// collect allResources instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
@@ -51,17 +52,17 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, sis cor
 	}
 
 	// collect existing project_resources for this service
-	var projectResources []db.ProjectResource
-	_, err := dbi.Select(&projectResources, `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`, service.ID, project.ID)
-	if err != nil {
-		return fmt.Errorf("while loading %s project resources: %w", service.Type, err)
-	}
-	for _, res := range projectResources {
+	const getResourcesQuery = `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`
+	err := db.ProjectResourceStore.Select(ctx, dbi, getResourcesQuery, service.ID, project.ID).Foreach(func(res db.ProjectResource) error {
 		correspondingResource := resourcesByID[res.ResourceID]
 		allResources[correspondingResource.Name] = resourceState{
 			Original:              &res,
 			CorrespondingResource: &correspondingResource,
 		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("while loading %s project resources: %w", service.Type, err)
 	}
 
 	// go through resources in a defined order (to ensure deterministic test behavior)
@@ -87,12 +88,12 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, project db.Project, sis cor
 
 		// insert or update resource if changes have been made
 		if state.Original == nil {
-			err := dbi.Insert(&res)
+			err := db.ProjectResourceStore.Insert(ctx, dbi, &res)
 			if err != nil {
 				return fmt.Errorf("while inserting %s/%s resource in the DB: %w", service.Type, resName, err)
 			}
 		} else if !reflect.DeepEqual(*state.Original, res) {
-			_, err := dbi.Update(&res)
+			err := db.ProjectResourceStore.Update(ctx, dbi, res)
 			if err != nil {
 				return fmt.Errorf("while updating %s/%s resource in the DB: %w", service.Type, resName, err)
 			}

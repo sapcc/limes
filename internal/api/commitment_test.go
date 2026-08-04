@@ -459,8 +459,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 			},
 		},
 	})
-	var deletedCommitment db.ProjectCommitment
-	must.SucceedT(t, s.DB.SelectOne(&deletedCommitment, `SELECT * FROM project_commitments where ID = 2`))
+	deletedCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 2`))(t)
 	assert.Equal(t, deletedCommitment.Status, util.CommitmentStatusDeleted)
 	assert.Equal(t, deletedCommitment.DeletedAt.IsSome(), true)
 	// a delete on the soft-deleted commitment returns 404
@@ -469,7 +468,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	must.ReturnT(s.DB.Delete(&deletedCommitment))
+	must.SucceedT(t, db.ProjectCommitmentStore.Delete(s.Ctx, s.DB, deletedCommitment))
 
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	oldassert.HTTPRequest{
@@ -703,7 +702,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 			},
 		},
 	}
-	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
 	oldassert.HTTPRequest{
@@ -720,7 +719,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
@@ -739,7 +738,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = committedCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = false
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
@@ -759,7 +758,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
 	commitmentChangeRequest.DryRun = true
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
 	oldassert.HTTPRequest{
@@ -775,7 +774,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.Commitments[0].UUID = "00000000-0000-0000-0000-000000000006"
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity + 1
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough capacity available"})
 
@@ -797,7 +796,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	capacityResourceCommitmentChangeset.TotalConfirmedBefore = 0
 	capacityResourceCommitmentChangeset.TotalConfirmedAfter = maxCommittableCapacity
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity"] = capacityResourceCommitmentChangeset
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "first", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["first"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
@@ -835,7 +834,7 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	s := setupCommitmentTest(t, string(must.Return(testCommitmentsJSON.MarshalJSON())))
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
 
@@ -863,13 +862,14 @@ func TestAutomaticCommitmentTransfer(t *testing.T) {
 	}
 	s.MustDBInsert(c)
 
+	c.ID = 0
 	c.UUID = s.Collector.GenerateProjectCommitmentUUID()
 	c.Status = liquid.CommitmentStatusConfirmed
 	c.ConfirmedAt = Some(s.Clock.Now())
 	c.TransferToken = Some(s.Collector.GenerateTransferToken())
 	s.MustDBInsert(c)
 
-	tr, _ := easypg.NewTracker(t, s.DB.Db)
+	tr, _ := easypg.NewTracker(t, s.DB.DB)
 	tr.DBChanges().Ignore()
 
 	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
@@ -959,7 +959,7 @@ func TestCommitmentDelegationToDB(t *testing.T) {
 
 	// We modify the database so that the commitments for "first/capacity" go to the database for approval.
 	s.MustDBExec(`UPDATE resources SET handles_commitments = FALSE;`)
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	s.Clock.StepBy(10 * 24 * time.Hour)
 	req := oldassert.JSONObject{
 		"commitment": oldassert.JSONObject{
@@ -1830,12 +1830,10 @@ func Test_TransferCommitment(t *testing.T) {
 		},
 	})
 
-	var supersededCommitment db.ProjectCommitment
-	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
+	supersededCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 1`))(t)
 	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 
-	var splitCommitment db.ProjectCommitment
-	must.SucceedT(t, s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`))
+	splitCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 2`))(t)
 	assert.Equal(t, splitCommitment.Status, liquid.CommitmentStatusConfirmed)
 
 	// wrong token
@@ -1953,7 +1951,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 			},
 		},
 	}
-	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "second", s.Cluster, s.DB))(t)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "second", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["second"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "not enough committable capacity on the receiving side"})
 
@@ -2151,7 +2149,7 @@ func Test_ConvertCommitments(t *testing.T) {
 			},
 		},
 	}
-	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
+	dbResult := must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, false)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{RejectionReason: "liquid says: not enough capacity!"})
 
@@ -2188,7 +2186,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	capacityACommitmentChangeset.Commitments[0].UUID = test.GenerateDummyCommitmentUUID(3)
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 	s.LiquidClients["fourth"].CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{})
 
@@ -2201,12 +2199,11 @@ func Test_ConvertCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 	assert.Equal(t, s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
-	var commitmentToCheck db.ProjectCommitment
 	// original
-	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 1`))
+	commitmentToCheck := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 1`))(t)
 	assert.Equal(t, commitmentToCheck.Status, liquid.CommitmentStatusSuperseded)
 	// remainder
-	must.SucceedT(t, s.DB.SelectOne(&commitmentToCheck, `SELECT * FROM project_commitments where ID = 2`))
+	commitmentToCheck = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 2`))(t)
 	assert.Equal(t, commitmentToCheck.Amount, 18)
 
 	// Reject conversion attempt to a different project.
@@ -2277,7 +2274,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_a"] = capacityACommitmentChangeset
 	commitmentChangeRequest.ByProject["uuid-for-berlin"].ByResource["capacity_b"] = capacityBCommitmentChangeset
-	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
+	dbResult = must.ReturnT(datamodel.CanAcceptCommitmentChangeRequest(s.Ctx, commitmentChangeRequest, "fourth", s.Cluster, s.DB))(t)
 	assert.Equal(t, dbResult, true)
 
 	oldassert.HTTPRequest{
@@ -2755,8 +2752,7 @@ func Test_MergeCommitments(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 	// Validate that commitments that were merged are now superseded and have the correct context
-	var supersededCommitment db.ProjectCommitment
-	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`))
+	supersededCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 1`))(t)
 	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	expectedContext := db.CommitmentWorkflowContext{
 		Reason:                 db.CommitmentReasonMerge,
@@ -2766,7 +2762,7 @@ func Test_MergeCommitments(t *testing.T) {
 	var supersedeContext db.CommitmentWorkflowContext
 	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.Equal(t, supersedeContext, expectedContext)
-	must.SucceedT(t, s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 2`))
+	supersededCommitment = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 2`))(t)
 	assert.Equal(t, supersededCommitment.Status, liquid.CommitmentStatusSuperseded)
 	must.SucceedT(t, json.Unmarshal(supersededCommitment.SupersedeContextJSON.UnwrapOr(nil), &supersedeContext))
 	assert.Equal(t, supersedeContext, expectedContext)

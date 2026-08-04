@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-gorp/gorp/v3"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
@@ -45,6 +45,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 // ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:list") {
 		return
@@ -65,12 +66,13 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster, sis)
 	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, sis, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectRates(ctx, p.Cluster, *dbDomain, nil, p.DB, filter, sis, stream.WriteItem))
 }
 
 // GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -93,7 +95,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	// not work for rates. Would be better to use a dedicated filter for that which is fed with "rates".
 	sis := p.Cluster.SIC.GetSnapshot()
 
-	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, sis), sis)
+	project, err := GetProjectRateReport(ctx, p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster, sis), sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -121,6 +123,8 @@ func (p *v1Provider) SimulatePutProjectRates(w http.ResponseWriter, r *http.Requ
 }
 
 func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http.Request, simulate bool) {
+	ctx := r.Context()
+
 	// parse request body
 	var parseTarget struct {
 		Project struct {
@@ -156,7 +160,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 
 	// start a transaction for the rate limit updates
-	var tx *gorp.Transaction
+	var tx *gsql.Tx
 	var dbi db.Interface
 	if simulate {
 		dbi = p.DB
@@ -172,7 +176,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 
 	// validate inputs (within the DB transaction, to ensure that we do not apply
 	// inconsistent values later)
-	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
+	err := updater.ValidateInput(ctx, parseTarget.Project.Services, dbi)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -190,19 +194,15 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	}
 
 	// get all project_rates and make them accessible quickly by ID
-	var projectRates []db.ProjectRate
-	_, err = tx.Select(&projectRates, `SELECT * FROM project_rates WHERE project_id = $1`, updater.Project.ID)
-	projectRateByClusterRateID := make(map[db.RateID]db.ProjectRate)
+	projectRateByClusterRateID, err := db.ProjectRateByRateIDIndex.IndexFrom(
+		db.ProjectRateStore.SelectWhere(ctx, tx, `project_id = $1`, updater.Project.ID),
+	)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	for _, rate := range projectRates {
-		projectRateByClusterRateID[rate.RateID] = rate
-	}
 
 	// check all services for resources to update
-	var services []db.Service
-	_, err = tx.Select(&services, `SELECT * FROM services ORDER BY type`)
+	services, err := db.ServiceStore.Select(ctx, tx, `SELECT * FROM services ORDER BY type`).Collect()
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -221,8 +221,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		if !exists {
 			continue // no rate limits for this service
 		}
-		var rates []db.Rate
-		_, err = tx.Select(&rates, `SELECT * FROM rates ORDER BY NAME`)
+		rates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1 ORDER BY NAME`, srv.ID).Collect()
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}

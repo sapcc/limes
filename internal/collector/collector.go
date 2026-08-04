@@ -7,10 +7,10 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/logg"
+	"go.xyrillian.de/gg/gsql"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -24,7 +24,7 @@ import (
 // the collector's unit tests.
 type Collector struct {
 	Cluster *core.Cluster
-	DB      *gorp.DbMap
+	DB      *gsql.DB
 	Auditor audittools.Auditor
 	// Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...any)

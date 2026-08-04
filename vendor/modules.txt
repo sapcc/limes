@@ -10,9 +10,6 @@ github.com/databus23/goslo.policy
 # github.com/dlmiddlecote/sqlstats v1.0.2
 ## explicit; go 1.11
 github.com/dlmiddlecote/sqlstats
-# github.com/go-gorp/gorp/v3 v3.1.0
-## explicit; go 1.18
-github.com/go-gorp/gorp/v3
 # github.com/gofrs/uuid/v5 v5.5.0
 ## explicit; go 1.25
 github.com/gofrs/uuid/v5

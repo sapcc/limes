@@ -29,7 +29,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
-	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api"
@@ -149,11 +148,10 @@ func main() {
 	must.Succeed(err)
 
 	// load configuration and connect to cluster
-	dbConn, dbURL, err := db.Init()
+	dbm, dbURL, err := db.Init()
 	if err != nil {
 		logg.Fatal(err.Error())
 	}
-	dbm := db.InitORM(dbConn)
 	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect") // #nosec G703 -- configPath is from command-line argument, controlled by operator
 	errs.LogFatalIfError()
 	maybeDBURL := None[url.URL]()
@@ -268,7 +266,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string, prov
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return cluster.DB.Db.PingContext(ctx)
+				return cluster.DB.PingContext(ctx)
 			},
 		},
 	))
@@ -304,7 +302,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return cluster.DB.Db.PingContext(ctx)
+				return cluster.DB.PingContext(ctx)
 			},
 		},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
@@ -339,7 +337,7 @@ func taskServeDataMetricsV1(ctx context.Context, cluster *core.Cluster, args []s
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return cluster.DB.Db.PingContext(ctx)
+				return cluster.DB.PingContext(ctx)
 			},
 		},
 	))
@@ -357,7 +355,7 @@ func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []s
 	// serve data metrics
 	dmr := collector.DataMetricsV2Reporter{
 		Cluster: cluster,
-		DB:      gsql.NewDB(cluster.DB.Db),
+		DB:      cluster.DB,
 		TimeNow: time.Now,
 	}
 
@@ -367,7 +365,7 @@ func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []s
 		httpapi.HealthCheckAPI{
 			SkipRequestLog: true,
 			Check: func() error {
-				return cluster.DB.Db.PingContext(ctx)
+				return cluster.DB.PingContext(ctx)
 			},
 		},
 	))

@@ -97,7 +97,7 @@ func Test_MailDelivery(t *testing.T) {
 	mailer := &MockMail{}
 	job := s.Collector.MailDeliveryJob(nil, mailer)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 	// day 1: successfully send a mail
 	must.SucceedT(t, job.ProcessOne(s.Ctx))

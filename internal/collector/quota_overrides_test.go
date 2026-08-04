@@ -57,7 +57,7 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel))
 	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 	job := s.Collector.ApplyQuotaOverridesJob(s.Registry)
 

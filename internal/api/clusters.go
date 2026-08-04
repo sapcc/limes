@@ -6,11 +6,11 @@ package api
 import (
 	"net/http"
 
-	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	"go.xyrillian.de/gg/gsql"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
@@ -37,8 +37,8 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cluster *limesresources.ClusterReport
-	err := db.RunOLAPQueries(p.DB, func(tx *gorp.Transaction) (err error) {
-		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter, sis)
+	err := db.RunOLAPQueries(p.DB, func(tx *gsql.Tx) (err error) {
+		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), tx, filter, sis)
 		return err
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {

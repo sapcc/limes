@@ -22,7 +22,6 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
-	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
@@ -114,7 +113,7 @@ func Test_ScanCapacity(t *testing.T) {
 	})
 
 	// check baseline
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'total', 0, 'shared/things/total');
@@ -165,7 +164,7 @@ func Test_ScanCapacity(t *testing.T) {
 		`DELETE FROM resources WHERE service_id = $1 AND name = $2`,
 		serviceShared, "things",
 	)
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("shared"))))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("shared"))))
 	s.LiquidClients["shared"].CapacityReport.Modify(func(report *liquid.ServiceCapacityReport) {
 		report.Resources["things"].PerAZ["any"].Capacity = 23
 		report.Resources["things"].PerAZ["any"].Usage = Some[uint64](4)
@@ -219,7 +218,7 @@ func Test_ScanCapacity(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: gsql.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
@@ -253,7 +252,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'total', 0, 'shared/things/total');
@@ -331,7 +330,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: gsql.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single_v2.prom")
@@ -361,7 +360,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'shared/things/az-one');
@@ -422,7 +421,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: gsql.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")
@@ -453,7 +452,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// when the capacity report shows zero capacity and usage...
@@ -543,7 +542,7 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// we setup a capacity report with an AZ "unknown" which will later vanish
@@ -617,7 +616,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
 	`,
@@ -686,7 +685,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
 	// check baseline
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'shared/capacity/az-one');
@@ -858,7 +857,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.MustDBExec(query, 23, 4, "second/things/any")
 	s.MustDBExec(query, 23, 4, "second/things/total")
 	// we fiddled with the cluster values manually, update the cache.
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(None[db.ServiceType]()))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 
 	// fill `project_az_resources` with some usage data
 	// (we want to see how commitment confirmation reacts to existing usage)
@@ -982,7 +981,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		Duration:     committedForTenDays,
 	})
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
@@ -1300,7 +1299,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 
 	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
@@ -1870,7 +1869,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 
 	// we will not fill the az_resources or project_az_resources with usage and just trigger the scrape once to take the values from the configuration
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
@@ -2019,7 +2018,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s, add := commonScanCapacityWithCommitmentsSetup(t, string(config), false)
 	job := s.Collector.CapacityScrapeJob(s.Registry)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
@@ -2293,7 +2292,7 @@ func TestCommitmentConfirmationTakesOverMultipleSmallCommitments(t *testing.T) {
 	// we will not fill the az_resources or project_az_resources with usage
 	// and just trigger the scrape once to take the values from the configuration
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// in each of the test steps below, the timestamp updates on services will always be the same

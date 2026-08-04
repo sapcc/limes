@@ -4,6 +4,7 @@
 package reports
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -74,7 +75,7 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot, submit func(*limesresources.ProjectReport) error) error {
+func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot, submit func(*limesresources.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
@@ -87,8 +88,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	// but will yield no results at all in the other queries)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
 	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
-	var allProjects []db.Project
-	_, err := dbi.Select(&allProjects, queryStr, whereArgs...)
+	allProjects, err := db.ProjectStore.Select(ctx, dbi, queryStr, whereArgs...).Collect()
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
-func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot, submit func(*limesrates.ProjectReport) error) error {
+func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot, submit func(*limesrates.ProjectReport) error) error {
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
@@ -422,8 +422,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	// but will yield no results at all in the other queries)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
 	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
-	var allProjects []db.Project
-	_, err := dbi.Select(&allProjects, queryStr, whereArgs...)
+	allProjects, err := db.ProjectStore.Select(ctx, dbi, queryStr, whereArgs...).Collect()
 	if err != nil {
 		return err
 	}

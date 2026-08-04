@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -60,10 +61,10 @@ type RateValidationError struct {
 // ValidateInput reads the given input and validates the quotas contained therein.
 // Results are collected into u.Requests. The return value is only set for unexpected
 // errors, not for validation errors.
-func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.Interface) error {
+func (u *RateLimitUpdater) ValidateInput(ctx context.Context, input limesrates.RateRequest, dbi db.Interface) error {
 	sis := u.Cluster.SIC.GetSnapshot()
 
-	projectReport, err := GetProjectRateReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{}, sis)
+	projectReport, err := GetProjectRateReport(ctx, u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{}, sis)
 	if err != nil {
 		return err
 	}

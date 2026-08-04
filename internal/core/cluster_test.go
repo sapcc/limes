@@ -90,7 +90,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 
 	// We now have a situation where one service is persisted into the database.
 	// First, check that on a new cluster with LiquidConnections (collect task) the second service is saved correctly.
-	tr, _ := easypg.NewTracker(t, s.DB.Db)
+	tr, _ := easypg.NewTracker(t, s.DB.DB)
 	generateNewClusterWithPersistingServiceInfo(t, s, true)
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (10, 3, 'az-two', 0, 'unshared/capacity/az-two');
@@ -217,7 +217,7 @@ func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
 		test.WithMockLiquidClient("unshared", srvInfoUnshared),
 		test.WithInitialDiscovery,
 	)
-	tr, _ := easypg.NewTracker(t, s.DB.Db)
+	tr, _ := easypg.NewTracker(t, s.DB.DB)
 
 	// we try to do an impossible change now: unitNone to unitMebibytes
 	resThings := srvInfoShared.Resources["things"]

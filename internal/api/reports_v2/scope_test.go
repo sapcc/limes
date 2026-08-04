@@ -67,16 +67,16 @@ func executeSingleScopeTest(t *testing.T, i singleScopeTestInput, e singleScopeT
 }
 
 func TestV2ScopeCreation(t *testing.T) {
+	ctx := t.Context()
+
 	s := test.NewSetup(t,
 		test.WithConfig(scopeConfigJSON),
 		test.WithInitialDiscovery,
 	)
 	var (
-		domainFrance db.Domain
-		projectParis db.Project
+		domainFrance = must.ReturnT(db.DomainStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-france"))(t)
+		projectParis = must.ReturnT(db.ProjectStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-paris"))(t)
 	)
-	must.SucceedT(t, s.DB.SelectOne(&domainFrance, "SELECT * FROM domains WHERE uuid = 'uuid-for-france'"))
-	must.SucceedT(t, s.DB.SelectOne(&projectParis, "SELECT * FROM projects WHERE uuid = 'uuid-for-paris'"))
 
 	// cluster level is only possible for cloud_admin, so nothing happens
 	r := nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
@@ -202,16 +202,16 @@ func TestV2ScopeCreation(t *testing.T) {
 }
 
 func TestV2ExpandScopeFilters(t *testing.T) {
+	ctx := t.Context()
+
 	s := test.NewSetup(t,
 		test.WithConfig(scopeConfigJSON),
 		test.WithInitialDiscovery,
 	)
 	var (
-		domainFrance db.Domain
-		projectParis db.Project
+		domainFrance = must.ReturnT(db.DomainStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-france"))(t)
+		projectParis = must.ReturnT(db.ProjectStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-paris"))(t)
 	)
-	must.SucceedT(t, s.DB.SelectOne(&domainFrance, "SELECT * FROM domains WHERE uuid = 'uuid-for-france'"))
-	must.SucceedT(t, s.DB.SelectOne(&projectParis, "SELECT * FROM projects WHERE uuid = 'uuid-for-paris'"))
 
 	// empty scope: all placeholders become TRUE = TRUE
 	emptyScope := reports_v2.Scope{}

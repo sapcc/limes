@@ -66,16 +66,15 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 	// when a domain has been deleted in Keystone, remove it from our database,
 	// too (the deletion from the `domains` table includes all projects in that
 	// domain and to all related resource records through `ON DELETE CASCADE`)
-	existingDomainsByUUID := make(map[string]*db.Domain)
-	var dbDomains []*db.Domain
-	_, err = c.DB.Select(&dbDomains, `SELECT * FROM domains`)
+	existingDomainsByUUID := make(map[string]db.Domain)
+	dbDomains, err := db.DomainStore.SelectWhere(ctx, c.DB, `TRUE`).Collect()
 	if err != nil {
 		return nil, err
 	}
 	for _, dbDomain := range dbDomains {
 		if !isDomainUUID[dbDomain.UUID] {
 			logg.Info("removing deleted Keystone domain from our database: %s", dbDomain.Name)
-			_, err := c.DB.Delete(dbDomain)
+			err := db.DomainStore.Delete(ctx, c.DB, dbDomain)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +92,7 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 			if dbDomain.Name != domain.Name {
 				logg.Info("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
 				dbDomain.Name = domain.Name
-				_, err := c.DB.Update(dbDomain)
+				err := db.DomainStore.Update(ctx, c.DB, dbDomain)
 				if err != nil {
 					return result, err
 				}
@@ -104,11 +103,11 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 		if !core.ReduceLogSpam {
 			logg.Info("discovered new Keystone domain: %s", domain.Name)
 		}
-		dbDomain = &db.Domain{
+		dbDomain = db.Domain{
 			Name: domain.Name,
 			UUID: domain.UUID,
 		}
-		err = c.DB.Insert(dbDomain)
+		err = db.DomainStore.Insert(ctx, c.DB, &dbDomain)
 		if err != nil {
 			return result, err
 		}
@@ -139,9 +138,9 @@ func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (resu
 }
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
-func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result []string, resultErr error) {
+func (c *Collector) ScanProjects(ctx context.Context, domain db.Domain) (result []string, resultErr error) {
 	// list projects in Keystone
-	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(ctx, core.KeystoneDomainFromDB(*domain))
+	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(ctx, core.KeystoneDomainFromDB(domain))
 	if err != nil {
 		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, gophercloudext.UnpackError(err))
 	}
@@ -153,22 +152,21 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 	// when a project has been deleted in Keystone, remove it from our database,
 	// too (the deletion from the `projects` table includes the projects' resource
 	// records through `ON DELETE CASCADE`)
-	existingProjectsByUUID := make(map[liquid.ProjectUUID]*db.Project)
-	var dbProjects []*db.Project
-	_, err = c.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
+	existingProjectsByUUID := make(map[liquid.ProjectUUID]db.Project)
+	err = db.ProjectStore.SelectWhere(ctx, c.DB, `domain_id = $1`, domain.ID).Foreach(func(p db.Project) error {
+		if isProjectUUID[p.UUID] {
+			existingProjectsByUUID[p.UUID] = p
+		} else {
+			logg.Info("removing deleted Keystone project from our database: %s/%s", domain.Name, p.Name)
+			err = c.deleteProject(ctx, p)
+			if err != nil {
+				return fmt.Errorf("while removing deleted Keystone project %s/%s from our database: %w", domain.Name, p.Name, err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	for _, dbProject := range dbProjects {
-		if !isProjectUUID[dbProject.UUID] {
-			logg.Info("removing deleted Keystone project from our database: %s/%s", domain.Name, dbProject.Name)
-			err = c.deleteProject(dbProject)
-			if err != nil {
-				return nil, fmt.Errorf("while removing deleted Keystone project %s/%s from our database: %w", domain.Name, dbProject.Name, err)
-			}
-			continue
-		}
-		existingProjectsByUUID[dbProject.UUID] = dbProject
 	}
 
 	// when a project has been created in Keystone, create the corresponding
@@ -191,7 +189,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 				needToSave = true
 			}
 			if needToSave {
-				_, err := c.DB.Update(dbProject)
+				err := db.ProjectStore.Update(ctx, c.DB, dbProject)
 				if err != nil {
 					return result, err
 				}
@@ -202,7 +200,7 @@ func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result
 		if !core.ReduceLogSpam {
 			logg.Info("discovered new Keystone project: %s/%s", domain.Name, project.Name)
 		}
-		err := c.initProject(domain, project)
+		err := c.initProject(ctx, domain, project)
 		if err != nil {
 			return result, err
 		}
@@ -228,7 +226,7 @@ var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
 
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
-func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject) error {
+func (c *Collector) initProject(ctx context.Context, domain db.Domain, project core.KeystoneProject) error {
 	// do this in a transaction to avoid half-initialized projects
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -243,7 +241,7 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 		UUID:       project.UUID,
 		ParentUUID: project.ParentUUID,
 	}
-	err = tx.Insert(&dbProject)
+	err = db.ProjectStore.Insert(ctx, tx, &dbProject)
 	if err != nil {
 		return err
 	}
@@ -271,7 +269,7 @@ var (
 
 // Deletes a project from the DB after it was deleted in Keystone.
 // This requires special care because some constraints are "ON DELETE RESTRICT".
-func (c *Collector) deleteProject(project *db.Project) error {
+func (c *Collector) deleteProject(ctx context.Context, project db.Project) error {
 	// do this in a transaction to avoid commitment deletions going through unless actually necessary
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -279,7 +277,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	result, err := tx.SelectInt(deleteProjectCheckBlockingCommitmentsQuery, project.ID)
+	result, err := db.SelectOneValue[int64](tx, deleteProjectCheckBlockingCommitmentsQuery, project.ID)
 	if err != nil {
 		return err
 	}
@@ -295,7 +293,7 @@ func (c *Collector) deleteProject(project *db.Project) error {
 		return err
 	}
 
-	_, err = tx.Delete(project)
+	err = db.ProjectStore.Delete(ctx, tx, project)
 	if err != nil {
 		return err
 	}

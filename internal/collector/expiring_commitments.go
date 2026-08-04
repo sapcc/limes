@@ -55,10 +55,10 @@ var (
 	updateCommitmentAsNotifiedQuery = `UPDATE project_commitments SET notified_for_expiration = TRUE, updated_at = $1 WHERE id = ANY($2)`
 )
 
-func (c *Collector) discoverExpiringCommitments(_ context.Context, _ prometheus.Labels) (result []db.ProjectCommitment, err error) {
+func (c *Collector) discoverExpiringCommitments(ctx context.Context, _ prometheus.Labels) ([]db.ProjectCommitment, error) {
 	now := c.MeasureTime()
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
-	_, err = c.DB.Select(&result, discoverExpiringCommitmentsQuery, cutoff)
+	result, err := db.ProjectCommitmentStore.Select(ctx, c.DB, discoverExpiringCommitmentsQuery, cutoff).Collect()
 	switch {
 	case err != nil:
 		return nil, err
@@ -141,7 +141,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 			return err
 		}
 
-		err = tx.Insert(&mail)
+		err = db.MailNotificationStore.Insert(ctx, tx, &mail)
 		if err != nil {
 			return err
 		}

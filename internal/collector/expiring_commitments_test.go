@@ -162,7 +162,7 @@ func Test_ExpiringCommitmentNotification(t *testing.T) {
 	})
 
 	job := s.Collector.ExpiringCommitmentNotificationJob(nil)
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
 	// successfully queue two projects with 2 commitments each. Ignore short-term commitments and mark them as notified.

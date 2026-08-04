@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
-	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
@@ -131,7 +130,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
 	})
-	must.SucceedT(t, s.Cluster.SIC.InvalidateService(Some(db.ServiceType("unittest"))))
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("unittest"))))
 	s.MustDBInsert(&db.ProjectRate{
 		ProjectID: s.GetProjectID("dresden"),
 		RateID:    s.GetRateID("unittest", "rateWithClusterLimit"),
@@ -200,7 +199,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	s, job, withLabel, syncJob := commonComplexScrapeTestSetup(t)
 
 	// check that ScanDomains created the domain, project and their services
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// first Scrape should create the entries in `project_resources` with the
@@ -537,7 +536,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics_skipzero.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: gsql.NewDB(s.DB.Db), TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics_v2.prom")
@@ -550,7 +549,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	expectedErrorRx := regexp.MustCompile(`^during scrape of project germany/(berlin|dresden): GetUsageReport failed as requested$`)
 
 	// check that ScanDomains created the domain, project and their services
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// failing Scrape should create dummy records to ensure that the API finds
@@ -725,7 +724,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx, withLabel))
 
 	scrapedAt := s.Clock.Now()
-	_, tr0 := easypg.NewTracker(t, s.DB.Db)
+	_, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, scrape_duration_secs, serialized_metrics, checked_at, next_scrape_at) VALUES (1, 1, 1, %[2]d, 5, '{}', %[2]d, %[3]d);
@@ -767,7 +766,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	assert.ErrEqual(t, job.ProcessOne(s.Ctx, withLabel), `during scrape of project germany/berlin: received ServiceUsageReport is invalid: missing value for .Resources["things"]`)
 
 	scrapedAt := s.Clock.Now()
-	_, tr0 := easypg.NewTracker(t, s.DB.Db)
+	_, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualf(`
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'noop/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'az-one', 0, 'noop/things/az-one');
@@ -792,7 +791,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 func Test_TopologyScrapes(t *testing.T) {
 	s, job, withLabel, syncJob := commonComplexScrapeTestSetup(t)
 
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// use AZSeparatedTopology and adjust quota reporting accordingly

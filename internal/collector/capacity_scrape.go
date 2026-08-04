@@ -110,7 +110,7 @@ func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.L
 	// CheckConsistencyJob will ensure that all services are present in the DB. Before it runs,
 	// we might have a service entry without a corresponding LiquidConnection or vise versa.
 
-	str, err := c.DB.SelectStr(findServiceForScrapeQuery, task.Timing.StartedAt)
+	str, err := db.SelectOneValue[string](c.DB, findServiceForScrapeQuery, task.Timing.StartedAt)
 	if err != nil {
 		return task, err
 	}
@@ -149,7 +149,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 		service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType)
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
-		_, err := c.DB.Update(&service)
+		err := db.ServiceStore.Update(ctx, c.DB, service)
 		if err != nil {
 			err = fmt.Errorf("error while skipping scrape for %s: %w", service.Type, err)
 			return err
@@ -181,7 +181,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
 		service.ScrapeErrorMessage = err.Error()
 
-		_, updateErr := c.DB.Update(&service)
+		updateErr := db.ServiceStore.Update(ctx, c.DB, service)
 		if updateErr != nil {
 			err = fmt.Errorf("%w (additional error while updating DB: %s", err, updateErr.Error())
 		}
@@ -233,14 +233,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 			if err != nil {
 				return err
 			}
-			_, err := tx.Update(&azRes)
+			err := db.AZResourceStore.Update(ctx, tx, azRes)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	_, err = tx.Update(&service)
+	err = db.ServiceStore.Update(ctx, tx, service)
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		return err
 	}
 	// the cluster level entities have been updated, we need to refresh the cache now
-	err = c.Cluster.SIC.InvalidateService(Some(serviceType))
+	err = c.Cluster.SIC.InvalidateService(ctx, Some(serviceType))
 	if err != nil {
 		return err
 	}

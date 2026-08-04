@@ -59,15 +59,13 @@ var (
 	`)
 )
 
-func (c *Collector) discoverMailDeliveryTask(_ context.Context, _ prometheus.Labels) (task db.MailNotification, err error) {
+func (c *Collector) discoverMailDeliveryTask(ctx context.Context, _ prometheus.Labels) (db.MailNotification, error) {
 	startTime := c.MeasureTime()
-	err = c.DB.SelectOne(&task, findMailsToProcessQuery, startTime)
-	return task, err
+	return db.MailNotificationStore.SelectOne(ctx, c.DB, findMailsToProcessQuery, startTime)
 }
 
 func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailClient, _ prometheus.Labels) error {
-	var projectUUID string
-	err := c.DB.SelectOne(&projectUUID, "SELECT uuid FROM projects WHERE id = $1", task.ProjectID)
+	projectUUID, err := db.SelectOneValue[string](c.DB, `SELECT uuid FROM projects WHERE id = $1`, task.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -83,7 +81,7 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 		// remove the mail queue for (sub)projects with no maintained metadata
 		if uerr, ok := errext.As[UndeliverableMailError](mailErr); ok {
 			logg.Error("Mail delivery detected a project with no managed metadata. ProjectID: %v with Error: %s", task.ProjectID, uerr)
-			_, err := c.DB.Delete(&task)
+			err := db.MailNotificationStore.Delete(ctx, c.DB, task)
 			if err != nil {
 				return fmt.Errorf("%w (additional error while trying to remove mail from DB queue: %s)", mailErr, err.Error())
 			}
@@ -93,13 +91,13 @@ func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNot
 		}
 		task.NextSubmissionAt = c.MeasureTime().Add(c.AddJitter(mailDeliveryErrorInterval))
 		task.FailedSubmissions++
-		_, queueErr := c.DB.Update(&task)
+		queueErr := db.MailNotificationStore.Update(ctx, c.DB, task)
 		if queueErr != nil {
 			return fmt.Errorf("%w (additional error while trying to update the DB mail queue: %s)", mailErr, queueErr.Error())
 		}
 		return mailErr
 	}
-	_, err = c.DB.Delete(&task)
+	err = db.MailNotificationStore.Delete(ctx, c.DB, task)
 	if err != nil {
 		return err
 	}

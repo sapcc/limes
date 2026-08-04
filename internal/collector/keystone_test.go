@@ -59,7 +59,7 @@ func Test_ScanDomains(t *testing.T) {
 	sort.Strings(expectedNewDomains) // order does not matter
 	sort.Strings(actualNewDomains)
 	assert.Equal(t, actualNewDomains, expectedNewDomains)
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
 	// second ScanDomains should not discover anything new

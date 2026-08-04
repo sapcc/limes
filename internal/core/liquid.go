@@ -11,7 +11,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -21,6 +20,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/promquery"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
@@ -40,14 +40,14 @@ type LiquidConnection struct {
 	// state
 	sic          *ServiceInfoCache
 	LiquidClient LiquidClient
-	DB           *gorp.DbMap
+	DB           *gsql.DB
 
 	// slots for test doubles
 	timeNow func() time.Time
 }
 
 // MakeLiquidConnection is a factory to fill all necessary configuration fields
-func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow func() time.Time, dbm *gorp.DbMap) LiquidConnection {
+func MakeLiquidConnection(lc LiquidConfiguration, serviceType db.ServiceType, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow func() time.Time, dbm *gsql.DB) LiquidConnection {
 	return LiquidConnection{
 		ServiceType:                     serviceType,
 		FixedCapacityConfiguration:      lc.FixedCapacityConfiguration,
@@ -70,13 +70,13 @@ func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient, servic
 		return nil
 	}
 
-	err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
+	err = SaveServiceInfoToDB(ctx, l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
 		return fmt.Errorf("saving ServiceInfo: %w", err)
 	}
 
 	// do reload of the SIC after successful database update
-	err = l.sic.InvalidateService(Some(l.ServiceType))
+	err = l.sic.InvalidateService(ctx, Some(l.ServiceType))
 	if err != nil {
 		return fmt.Errorf("invalidating ServiceInfoCache: %w", err)
 	}
@@ -106,13 +106,13 @@ func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoV
 	if infoVersion != newVersion {
 		return sis, fmt.Errorf("ServiceInfo version mismatch for %s after update: GetResourcesInfo %d, report %d", l.ServiceType, newVersion, infoVersion)
 	}
-	err = SaveServiceInfoToDB(l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
+	err = SaveServiceInfoToDB(ctx, l.ServiceType, serviceInfo, l.AvailabilityZones, l.RateLimits, l.timeNow(), l.DB)
 	if err != nil {
 		return sis, fmt.Errorf("saving ServiceInfo: %w", err)
 	}
 
 	// do reload of the SIC after successful database update
-	err = l.sic.InvalidateService(Some(l.ServiceType))
+	err = l.sic.InvalidateService(ctx, Some(l.ServiceType))
 	if err != nil {
 		return sis, fmt.Errorf("invalidating ServiceInfoCache: %w", err)
 	}
