@@ -33,9 +33,9 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		WITH
 		project_commitment_project_sums AS (
 			SELECT az_resource_id, project_id,
-		  	json_object_agg(status, by_status) AS committed
+			json_object_agg(status, by_status) AS committed
 			FROM (
-		  		SELECT az_resource_id, project_id, status,
+				SELECT az_resource_id, project_id, status,
 				json_object_agg(duration, total_amount) AS by_status
 				FROM (
 					SELECT az_resource_id, project_id, status, duration, SUM(amount) AS total_amount
@@ -47,13 +47,13 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 					AND {{p.id = ANY($project_id)}}
 					AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 					GROUP BY az_resource_id, project_id, status, duration
-		 		) inner_agg
-		  		GROUP BY az_resource_id, project_id, status
+				) inner_agg
+				GROUP BY az_resource_id, project_id, status
 			) outer_agg
 			GROUP BY az_resource_id, project_id
 		)
 	}}
-	SELECT 
+	SELECT
 		d.uuid, d.name, p.uuid, p.name, p.parent_uuid, azr.id, pazr.usage, pazr.quota,
 		$with_timing{{ps.scraped_at,}}
 		$with_commitment_stats{{COALESCE(pcps.committed, '{}') as committed,}}

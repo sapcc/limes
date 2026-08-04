@@ -25,32 +25,32 @@ import (
 )
 
 var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	WITH 
+	WITH
 	$with_commitment_stats{{
 		project_commitment_domain_sums AS (
 			SELECT az_resource_id, domain_id,
-		  	json_object_agg(status, by_status) AS committed
+			json_object_agg(status, by_status) AS committed
 			FROM (
-		  		SELECT az_resource_id, domain_id, status,
+				SELECT az_resource_id, domain_id, status,
 				json_object_agg(duration, total_amount) AS by_status
 				FROM (
 					SELECT az_resource_id, domain_id, status, duration, SUM(amount) AS total_amount
 					FROM project_commitments pc
-					JOIN projects p 
-					ON pc.project_id = p.id 
+					JOIN projects p
+					ON pc.project_id = p.id
 					WHERE {{az_resource_id = ANY($az_resource_id)}}
 					AND {{p.domain_id = ANY($domain_id)}}
 					AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 					GROUP BY az_resource_id, domain_id, status, duration
-		 		) inner_agg
-		  		GROUP BY az_resource_id, domain_id, status
+				) inner_agg
+				GROUP BY az_resource_id, domain_id, status
 			) outer_agg
 			GROUP BY az_resource_id, domain_id
 		),
 		project_commitment_project_sums_confirmed AS (
 			SELECT az_resource_id, project_id, SUM(amount) as amount
 			FROM project_commitments pc
-			JOIN projects p 
+			JOIN projects p
 			ON pc.project_id = p.id
 			WHERE {{az_resource_id = ANY($az_resource_id)}}
 			AND {{p.domain_id = ANY($domain_id)}}
@@ -67,7 +67,7 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 		SUM(pazr.usage) as usage,
 		SUM(pazr.physical_usage) as physical_usage
 		FROM project_az_resources pazr
-		JOIN projects p 
+		JOIN projects p
 		ON pazr.project_id = p.id
 		$with_commitment_stats{{
 			LEFT JOIN project_commitment_project_sums_confirmed pcpsc
@@ -77,12 +77,12 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 		AND {{p.domain_id = ANY($domain_id)}}
 		GROUP BY pazr.az_resource_id, domain_id
 	)
-	SELECT 
+	SELECT
 		d.uuid, d.name, azr.id, ds.usage,
 		$with_commitment_stats{{
 			COALESCE(pcds.committed, '{}') as committed,
 			ds.committed_confirmed_unutilized,
-			ds.usage - (ds.committed_confirmed - ds.committed_confirmed_unutilized) as usage_uncommitted, 
+			ds.usage - (ds.committed_confirmed - ds.committed_confirmed_unutilized) as usage_uncommitted,
 		}}
 		ds.physical_usage
 	FROM services s

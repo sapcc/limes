@@ -11,18 +11,18 @@ import (
 
 func TestRemoveCommentsFromJSON(t *testing.T) {
 	jsonStr := `{
-    "name": "test", // This is an inline comment
-    // This is a single line comment
-    "value": 42, // Another inline comment
-    /* This is a multiline
-      comment that spans
-      multiple lines */
-    "enabled": true, // Final inline comment
-    // Another single line comment
-    "config": {
-      "debug": false /* inline multiline comment */
-    }
-  }`
+		"name": "test", // This is an inline comment
+		// This is a single line comment
+		"value": 42, // Another inline comment
+		/* This is a multiline
+			comment that spans
+			multiple lines */
+		"enabled": true, // Final inline comment
+		// Another single line comment
+		"config": {
+			"debug": false /* inline multiline comment */
+		}
+	}`
 
 	expected := jsonmatch.Object{
 		"name":    "test",

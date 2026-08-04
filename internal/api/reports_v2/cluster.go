@@ -28,13 +28,13 @@ import (
 )
 
 var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	WITH 
+	WITH
 	$with_commitment_stats{{
 		project_commitment_sums AS (
 			SELECT az_resource_id,
-		  	json_object_agg(status, by_status) AS committed
+			json_object_agg(status, by_status) AS committed
 			FROM (
-		  		SELECT az_resource_id, status,
+				SELECT az_resource_id, status,
 				json_object_agg(duration, total_amount) AS by_status
 				FROM (
 					SELECT az_resource_id, status, duration, SUM(amount) AS total_amount
@@ -42,8 +42,8 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 					WHERE {{az_resource_id = ANY($az_resource_id)}}
 					AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
 					GROUP BY az_resource_id, status, duration
-		 		) inner_agg
-		  		GROUP BY az_resource_id, status
+				) inner_agg
+				GROUP BY az_resource_id, status
 			) outer_agg
 			GROUP BY az_resource_id
 		),
@@ -56,7 +56,7 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		),
 	}}
 	project_sums AS (
-		SELECT pazr.az_resource_id, 
+		SELECT pazr.az_resource_id,
 		$with_commitment_stats{{
 			SUM(COALESCE(pcpsc.amount, 0)) as committed_confirmed,
 			SUM(GREATEST(COALESCE(pcpsc.AMOUNT-pazr.usage, 0), 0)) AS committed_confirmed_unutilized,
@@ -71,13 +71,13 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		WHERE {{az_resource_id = ANY($az_resource_id)}}
 		GROUP BY pazr.az_resource_id
 	)
-	SELECT 
+	SELECT
 		azr.id, azr.raw_capacity, azr.usage as overall_usage, ps.usage,
-		$with_timing{{s.scraped_at,}} 
+		$with_timing{{s.scraped_at,}}
 		$with_commitment_stats{{
 			COALESCE(pcs.committed, '{}') as committed,
 			ps.committed_confirmed_unutilized,
-			ps.usage - (ps.committed_confirmed - ps.committed_confirmed_unutilized) as usage_uncommitted, 
+			ps.usage - (ps.committed_confirmed - ps.committed_confirmed_unutilized) as usage_uncommitted,
 		}}
 		$with_subcapacities{{azr.subcapacities,}}
 		ps.physical_usage
