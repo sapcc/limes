@@ -56,14 +56,6 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
-  "vendor/github.com/go-gorp/gorp/v3/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
   "vendor/github.com/gofrs/uuid/v5/**",
 ]
 precedence = "override"
@@ -288,14 +280,6 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
-  "vendor/github.com/go-sql-driver/mysql/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MPL-2.0"
-
-[[annotations]]
-path = [
   "vendor/github.com/gogo/protobuf/**",
 ]
 precedence = "override"
@@ -493,14 +477,6 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "BSD-3-Clause"
-
-[[annotations]]
-path = [
-  "vendor/github.com/poy/onpar/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
