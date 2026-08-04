@@ -38,7 +38,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 	var cluster *limesresources.ClusterReport
 	err := db.RunOLAPQueries(p.DB, func(tx *gsql.Tx) (err error) {
-		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter, sis)
+		cluster, err = reports.GetClusterResources(p.Cluster, p.timeNow(), tx, filter, sis)
 		return err
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {

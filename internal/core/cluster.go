@@ -249,7 +249,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 var ErrLeftoverCommitment = errors.New("ErrLeftoverCommitment")
 
 var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-			SELECT count(*)
+			SELECT COUNT(*) > 0
 			FROM project_commitments pc
 			JOIN az_resources azr
 			ON pc.az_resource_id = azr.id 
@@ -258,11 +258,11 @@ var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 func generateDeleteFunc[T any](dbm *gsql.DB, getAZResourcePathPattern func(o T) string) func(T) error {
 	return func(o T) error {
-		count, err := db.SelectOneValue[int](dbm, deleteFuncCheckQuery, getAZResourcePathPattern(o))
+		hasLeftovers, err := db.SelectOneValue[bool](dbm, deleteFuncCheckQuery, getAZResourcePathPattern(o))
 		if err != nil {
 			return fmt.Errorf("cannot get project commitments count: %w", err)
 		}
-		if count > 0 {
+		if hasLeftovers {
 			return ErrLeftoverCommitment
 		}
 		return nil

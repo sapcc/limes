@@ -114,7 +114,7 @@ func enumValueToSQLLiteral[S ~string](value S) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(string(value), "'", "''"))
 }
 
-// SelectOneValue is a convenience wrapper around db.QueryRowContext() in situations where only a single value is returned.
+// SelectOneValue is a convenience wrapper around db.QueryRow() in situations where only a single value is returned.
 func SelectOneValue[T any](db Interface, query string, args ...any) (T, error) {
 	var result T
 	err := db.QueryRow(query, args...).Scan(&result)
