@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/api/api_v2"
@@ -148,18 +148,18 @@ func main() {
 	must.Succeed(err)
 
 	// load configuration and connect to cluster
-	dbm, dbURL, err := db.Init()
+	dbm, connTarget, err := db.Init(ctx)
 	if err != nil {
 		logg.Fatal(err.Error())
 	}
 	cluster, errs := core.NewClusterFromJSON(must.Return(os.ReadFile(configPath)), time.Now, dbm, taskName == "collect") // #nosec G703 -- configPath is from command-line argument, controlled by operator
 	errs.LogFatalIfError()
-	maybeDBURL := None[url.URL]()
+	maybeConnTarget := None[pgruntime.ConnectionTarget]()
 	if taskName != "collect" {
 		// background: the collector task explicitly updates the SIC after writing
-		maybeDBURL = Some(dbURL)
+		maybeConnTarget = Some(connTarget)
 	}
-	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo), maybeDBURL)
+	errs = cluster.Connect(ctx, provider, eo, core.LiquidClientFactory(provider, eo), maybeConnTarget)
 	errs.LogFatalIfError()
 	if cluster.SIC != nil {
 		defer cluster.SIC.Close()

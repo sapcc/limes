@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -19,7 +19,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	easypg.WithTestDB(m, func() int { return m.Run() })
+	pgruntime.WithTestDB(m, m.Run)
 }
 
 var testQuotaOverridesNoRenamingConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "testQuotaOverridesNoRenamingConfigJSON").

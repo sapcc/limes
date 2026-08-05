@@ -5,7 +5,6 @@ package core_test
 
 import (
 	"encoding/json"
-	"net/url"
 	"testing"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -58,7 +58,7 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 	for _, err := range errs {
 		t.Fatal(err)
 	}
-	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
+	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[pgruntime.ConnectionTarget]())
 	if failOnConnectError {
 		for _, err := range errs {
 			t.Fatal(err)
@@ -68,7 +68,7 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 }
 
 func TestMain(m *testing.M) {
-	easypg.WithTestDB(m, func() int { return m.Run() })
+	pgruntime.WithTestDB(m, m.Run)
 }
 
 func Test_ClusterSaveServiceInfo(t *testing.T) {

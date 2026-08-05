@@ -4,59 +4,49 @@
 package db
 
 import (
+	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/pgruntime"
 
-	"github.com/sapcc/go-api-declarations/bininfo"
-	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
 	"github.com/sapcc/go-bits/syncext"
+
+	// import DB driver
+	_ "github.com/lib/pq"
 )
 
-// Configuration returns the easypg.Configuration object that func Init() needs to initialize the DB connection.
-func Configuration() easypg.Configuration {
-	return easypg.Configuration{
+// Configuration returns the [pgruntime.ConnectionBehavior] object that func Init() needs to initialize the DB connection.
+func Configuration() pgruntime.ConnectionBehavior {
+	return pgruntime.ConnectionBehavior{
 		Migrations: sqlMigrations,
 	}
 }
 
 // Init initializes the connection to the database.
-func Init() (dbConn *gsql.DB, dbURL url.URL, err error) {
-	extraConnectionOptions := make(map[string]string)
-	if bininfo.Component() == "limes-serve" {
-		// the API seems to have issues with connections getting stuck in "idle in transaction" during high load, not sure yet why
-		extraConnectionOptions["idle_in_transaction_session_timeout"] = "10000" // 10000 ms = 10 seconds
-	}
-
-	dbName := osext.GetenvOrDefault("LIMES_DB_NAME", "limes")
-	dbURL, err = easypg.URLFrom(easypg.URLParts{
+func Init(ctx context.Context) (*gsql.DB, pgruntime.ConnectionTarget, error) {
+	target := pgruntime.ConnectionTarget{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
 		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
 		UserName:          osext.GetenvOrDefault("LIMES_DB_USERNAME", "postgres"),
 		Password:          os.Getenv("LIMES_DB_PASSWORD"),
 		ConnectionOptions: os.Getenv("LIMES_DB_CONNECTION_OPTIONS"),
-		DatabaseName:      dbName,
-	})
-	if err != nil {
-		return nil, dbURL, err
+		DatabaseName:      osext.GetenvOrDefault("LIMES_DB_NAME", "limes"),
 	}
-	dbConnRaw, err := easypg.Connect(dbURL, Configuration())
-	if err != nil {
-		return nil, dbURL, err
-	}
-	prometheus.MustRegister(sqlstats.NewStatsCollector(dbName, dbConnRaw))
+	dbConn := must.Return(pgruntime.StdConnector("postgres").Connect(ctx, target, Configuration()))
+	prometheus.MustRegister(sqlstats.NewStatsCollector(target.DatabaseName, dbConn))
 
 	// ensure that this process does not starve other Limes processes for DB connections
-	dbConnRaw.SetMaxOpenConns(16)
+	dbConn.SetMaxOpenConns(16)
 
-	return gsql.NewDB(dbConnRaw), dbURL, nil
+	return dbConn, target, nil
 }
 
 // Interface is implemented by both [*gsql.DB] and [*gsql.Tx].

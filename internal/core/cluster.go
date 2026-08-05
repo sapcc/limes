@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"slices"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
@@ -103,8 +103,8 @@ func NewCluster(config ClusterConfiguration, timeNow func() time.Time, dbm *gsql
 // We cannot do any of this earlier because we only know all resources after calling Init() on all LiquidConnections.
 //
 // The ServiceInfoCache is assembled here, because we need to use the Config in the test setup before Connect.
-// A dbURL needs to be provided when c.LiquidConnections is empty, to ensure ServiceInfo stays up to date.
-func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error), dbURL Option[url.URL]) (errs errext.ErrorSet) {
+// A [pgruntime.ConnectionTarget] needs to be provided when c.LiquidConnections is empty, to ensure ServiceInfo stays up to date.
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, liquidClientFactory func(db.ServiceType) (LiquidClient, error), connTarget Option[pgruntime.ConnectionTarget]) (errs errext.ErrorSet) {
 	// save factory for possible later use
 	c.LiquidClientFactory = liquidClientFactory
 
@@ -115,7 +115,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// initialize SIC
-	c.SIC, err = NewServiceInfoCache(ctx, c.DB, c.Config, dbURL)
+	c.SIC, err = NewServiceInfoCache(ctx, c.DB, c.Config, connTarget)
 	if err != nil {
 		errs.Addf("could not create service info cache: %w", err)
 		return errs

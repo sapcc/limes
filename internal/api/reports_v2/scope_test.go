@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/db"
@@ -23,7 +23,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	easypg.WithTestDB(m, func() int { return m.Run() })
+	pgruntime.WithTestDB(m, m.Run)
 }
 
 var scopeConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}", "scopeConfigJSON").

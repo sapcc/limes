@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,7 +19,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httptest"
@@ -30,6 +28,7 @@ import (
 	"github.com/sapcc/go-bits/osext"
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/api/api_v2"
@@ -160,6 +159,7 @@ type Setup struct {
 	// fields that are always set
 	Ctx                        context.Context //nolint:containedctx // only used in tests
 	DB                         *gsql.DB
+	DBConnectionTarget         pgruntime.ConnectionTarget
 	Cluster                    *core.Cluster
 	Clock                      *mock.Clock
 	Registry                   *prometheus.Registry
@@ -225,15 +225,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	s.t = t
 
-	s.DB = gsql.NewDB(easypg.ConnectForTest(t, db.Configuration(),
-		easypg.ClearTables("project_commitments", "services", "domains", "categories"),
-		easypg.ResetPrimaryKeys(
-			"services", "resources", "rates", "az_resources",
-			"domains", "projects", "project_commitments", "project_mail_notifications",
-			"project_services", "project_resources", "project_az_resources", "project_rates",
-			"categories",
-		),
-	))
+	s.DB, s.DBConnectionTarget = pgruntime.StdConnector("postgres").ConnectForTest(t, db.Configuration())
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
 	s.LiquidClients = params.LiquidClients
@@ -261,7 +253,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		}
 		must.SucceedT(t, core.SaveServiceInfoToDB(s.Ctx, serviceType, serviceInfo, s.Cluster.Config.AvailabilityZones, rateLimits, s.Clock.Now(), s.DB))
 	}
-	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[url.URL]())
+	errs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[pgruntime.ConnectionTarget]())
 	failIfErrs(t, errs)
 
 	s.Registry = prometheus.NewPedanticRegistry()

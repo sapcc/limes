@@ -9,17 +9,17 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/test/common_fixtures"
 )
 
 func TestMain(m *testing.M) {
-	easypg.WithTestDB(m, func() int { return m.Run() })
+	pgruntime.WithTestDB(m, m.Run)
 }
 
 var infoConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net/url"
 	"sync"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 )
 
 ///////////////////////////////////////////////////////////////////////
@@ -582,7 +582,7 @@ type ServiceInfoCache struct {
 }
 
 // NewServiceInfoCache generates a ServiceInfoCache and fills all services' data.
-func NewServiceInfoCache(ctx context.Context, dbm *gsql.DB, config ClusterConfiguration, dbURL Option[url.URL]) (*ServiceInfoCache, error) {
+func NewServiceInfoCache(ctx context.Context, dbm *gsql.DB, config ClusterConfiguration, connTarget Option[pgruntime.ConnectionTarget]) (*ServiceInfoCache, error) {
 	sic := &ServiceInfoCache{
 		DB:     dbm,
 		config: config,
@@ -596,7 +596,11 @@ func NewServiceInfoCache(ctx context.Context, dbm *gsql.DB, config ClusterConfig
 	}
 
 	// set up NOTIFY listener if a DB URL was provided (disabled in tests)
-	if u, ok := dbURL.Unpack(); ok {
+	if t, ok := connTarget.Unpack(); ok {
+		u, err := t.IntoURL()
+		if err != nil {
+			return nil, err
+		}
 		ch := make(chan struct{}, 1)
 		sic.OnInvalidate = ch
 		sic.sendInvalidate = ch

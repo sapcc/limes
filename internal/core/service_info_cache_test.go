@@ -8,12 +8,10 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -43,7 +41,7 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 		test.WithPersistedServiceInfo("first", serviceInfoFirst),
 		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
 	)
-	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, Some(s.DBConnectionTarget))
 	t.Cleanup(func() { s.Cluster.SIC.Close() })
 
 	sis := s.Cluster.SIC.GetSnapshot()
@@ -155,7 +153,7 @@ func TestServiceInfoCache(t *testing.T) {
 	secondCapacity := s.GetResourceID("second", "capacity")
 	firstObjectsCreate := s.GetRateID("first", "objects:create")
 	// by calling connect with a DB-URL, we register the service info listeners
-	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, Some(s.DBConnectionTarget))
 	t.Cleanup(func() { s.Cluster.SIC.Close() })
 
 	sis := s.Cluster.SIC.GetSnapshot()
@@ -217,7 +215,7 @@ func TestServiceInfoCacheGetByID(t *testing.T) {
 		test.WithPersistedServiceInfo("first", serviceInfoFirst),
 		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
 	)
-	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, options.FromPointer(easypg.BuildDBURL(t)))
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, Some(s.DBConnectionTarget))
 	t.Cleanup(func() { s.Cluster.SIC.Close() })
 
 	sis := s.Cluster.SIC.GetSnapshot()
