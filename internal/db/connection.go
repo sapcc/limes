@@ -14,6 +14,7 @@ import (
 	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/pgruntime"
 
+	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
@@ -39,6 +40,7 @@ func Init(ctx context.Context) (*gsql.DB, pgruntime.ConnectionTarget, error) {
 		Password:          os.Getenv("LIMES_DB_PASSWORD"),
 		ConnectionOptions: os.Getenv("LIMES_DB_CONNECTION_OPTIONS"),
 		DatabaseName:      osext.GetenvOrDefault("LIMES_DB_NAME", "limes"),
+		ApplicationName:   bininfo.Component(),
 	}
 	dbConn := must.Return(pgruntime.StdConnector("postgres").Connect(ctx, target, Configuration()))
 	prometheus.MustRegister(sqlstats.NewStatsCollector(target.DatabaseName, dbConn))
