@@ -27,6 +27,7 @@ import (
 	"go.xyrillian.de/gg/assert"
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api/api_v2"
 	"github.com/sapcc/limes/internal/collector"
@@ -38,7 +39,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	easypg.WithTestDB(m, func() int { return m.Run() })
+	pgruntime.WithTestDB(m, m.Run)
 }
 
 // NOTE: MiB makes no sense for a deletion rate, but I want to test as many
