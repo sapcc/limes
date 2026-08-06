@@ -35,35 +35,35 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 				SELECT az_resource_id, domain_id, status,
 				json_object_agg(duration, total_amount) AS by_status
 				FROM (
-					SELECT az_resource_id, domain_id, status, duration, SUM(amount) AS total_amount
+					SELECT pc.az_resource_id, p.domain_id, pc.status, pc.duration, SUM(pc.amount) AS total_amount
 					FROM project_commitments pc
 					JOIN projects p
 					ON pc.project_id = p.id
-					WHERE {{az_resource_id = ANY($az_resource_id)}}
+					WHERE {{pc.az_resource_id = ANY($az_resource_id)}}
 					AND {{p.domain_id = ANY($domain_id)}}
-					AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
-					GROUP BY az_resource_id, domain_id, status, duration
+					AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
+					GROUP BY pc.az_resource_id, p.domain_id, pc.status, pc.duration
 				) inner_agg
 				GROUP BY az_resource_id, domain_id, status
 			) outer_agg
 			GROUP BY az_resource_id, domain_id
 		),
 		project_commitment_project_sums_confirmed AS (
-			SELECT az_resource_id, project_id, SUM(amount) as amount
+			SELECT pc.az_resource_id, pc.project_id, SUM(pc.amount) as amount
 			FROM project_commitments pc
 			JOIN projects p
 			ON pc.project_id = p.id
-			WHERE {{az_resource_id = ANY($az_resource_id)}}
+			WHERE {{pc.az_resource_id = ANY($az_resource_id)}}
 			AND {{p.domain_id = ANY($domain_id)}}
-			AND status = {{liquid.CommitmentStatusConfirmed}}
-			GROUP BY az_resource_id, project_id
+			AND pc.status = {{liquid.CommitmentStatusConfirmed}}
+			GROUP BY pc.az_resource_id, pc.project_id
 		),
 	}}
 	domain_sums AS (
-		SELECT pazr.az_resource_id, domain_id,
+		SELECT pazr.az_resource_id, p.domain_id,
 		$with_commitment_stats{{
 			SUM(COALESCE(pcpsc.amount, 0)) as committed_confirmed,
-			SUM(GREATEST(COALESCE(pcpsc.AMOUNT-pazr.usage, 0), 0)) AS committed_confirmed_unutilized,
+			SUM(GREATEST(COALESCE(pcpsc.amount - pazr.usage, 0), 0)) AS committed_confirmed_unutilized,
 		}}
 		SUM(pazr.usage) as usage,
 		SUM(pazr.physical_usage) as physical_usage
@@ -76,7 +76,7 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 		}}
 		WHERE {{pazr.az_resource_id = ANY($az_resource_id)}}
 		AND {{p.domain_id = ANY($domain_id)}}
-		GROUP BY pazr.az_resource_id, domain_id
+		GROUP BY pazr.az_resource_id, p.domain_id
 	)
 	SELECT
 		d.uuid AS domain_uuid, d.name AS domain_name, azr.id AS az_resource_id, ds.usage,
