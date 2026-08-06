@@ -10,7 +10,7 @@ github.com/databus23/goslo.policy
 # github.com/dlmiddlecote/sqlstats v1.0.2
 ## explicit; go 1.11
 github.com/dlmiddlecote/sqlstats
-# github.com/gofrs/uuid/v5 v5.5.0
+# github.com/gofrs/uuid/v5 v5.5.1
 ## explicit; go 1.25
 github.com/gofrs/uuid/v5
 # github.com/golang-migrate/migrate/v4 v4.19.1
@@ -151,7 +151,7 @@ github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
 github.com/sapcc/go-api-declarations/opts
-# github.com/sapcc/go-bits v0.0.0-20260730170321-f6f727520601
+# github.com/sapcc/go-bits v0.0.0-20260806072527-32381c36b909
 ## explicit; go 1.26
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
@@ -178,7 +178,7 @@ github.com/sapcc/go-bits/syncext
 # github.com/sergi/go-diff v1.4.0
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
-# go.xyrillian.de/gg v1.12.0
+# go.xyrillian.de/gg v1.13.3
 ## explicit; go 1.26
 go.xyrillian.de/gg/assert
 go.xyrillian.de/gg/errext
