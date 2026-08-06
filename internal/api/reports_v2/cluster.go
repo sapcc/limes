@@ -60,7 +60,7 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 		SELECT pazr.az_resource_id,
 		$with_commitment_stats{{
 			SUM(COALESCE(pcpsc.amount, 0)) as committed_confirmed,
-			SUM(GREATEST(COALESCE(pcpsc.AMOUNT-pazr.usage, 0), 0)) AS committed_confirmed_unutilized,
+			SUM(GREATEST(COALESCE(pcpsc.amount - pazr.usage, 0), 0)) AS committed_confirmed_unutilized,
 		}}
 		SUM(pazr.usage) as usage,
 		SUM(pazr.physical_usage) as physical_usage
@@ -69,7 +69,7 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 			LEFT JOIN project_commitment_project_sums_confirmed pcpsc
 			ON pcpsc.project_id = pazr.project_id AND pcpsc.az_resource_id = pazr.az_resource_id
 		}}
-		WHERE {{az_resource_id = ANY($az_resource_id)}}
+		WHERE {{pazr.az_resource_id = ANY($az_resource_id)}}
 		GROUP BY pazr.az_resource_id
 	)
 	SELECT

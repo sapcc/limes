@@ -39,15 +39,15 @@ var projectResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 				SELECT az_resource_id, project_id, status,
 				json_object_agg(duration, total_amount) AS by_status
 				FROM (
-					SELECT az_resource_id, project_id, status, duration, SUM(amount) AS total_amount
+					SELECT pc.az_resource_id, pc.project_id, pc.status, pc.duration, SUM(pc.amount) AS total_amount
 					FROM project_commitments pc
 					JOIN projects p
 					ON pc.project_id = p.id
-					WHERE {{az_resource_id = ANY($az_resource_id)}}
+					WHERE {{pc.az_resource_id = ANY($az_resource_id)}}
 					AND {{p.domain_id = ANY($domain_id)}}
 					AND {{p.id = ANY($project_id)}}
-					AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
-					GROUP BY az_resource_id, project_id, status, duration
+					AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
+					GROUP BY pc.az_resource_id, pc.project_id, pc.status, pc.duration
 				) inner_agg
 				GROUP BY az_resource_id, project_id, status
 			) outer_agg

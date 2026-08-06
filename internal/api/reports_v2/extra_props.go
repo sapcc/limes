@@ -4,6 +4,7 @@
 package reports_v2
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
@@ -48,7 +49,7 @@ func EvalProjectResourceExtraProps(sql string, opts common.ProjectResourceReport
 
 // handleProps is the generic, unexported function which takes an array of
 // optStrings and does the replacement according to the chosen options.
-// It panics when $with_[opt]{{...}} or $without_[opt]{{...} is found in the sql string, but not in the optSettings array.
+// It panics when $with_[opt]{{...}} or $without_[opt]{{...}} is found in the sql string, but not in the optSettings map.
 // It counts nested {{ and }} to find the correct matching closing delimiter.
 func handleProps(sql string, optSettings map[string]bool) string {
 	for {
@@ -93,7 +94,7 @@ func handleProps(sql string, optSettings map[string]bool) string {
 
 		checked, ok := optSettings[optName]
 		if !ok {
-			panic("unknown $with_ option: " + optName)
+			panic(fmt.Sprintf("unknown %s option: %s", operation, optName))
 		}
 		if checked == (operation == "$with_") {
 			sql = sql[:idx] + sql[contentStart:pos-2] + sql[pos:]
