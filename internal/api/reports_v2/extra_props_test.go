@@ -10,24 +10,28 @@ import (
 )
 
 func TestHandleProps_AllEnabled(t *testing.T) {
-	input := `SELECT col1, $with_timing{{col2,}} $with_stats{{col3,}} col4 FROM table`
+	input := `SELECT col1, $with_timing{{col2,}} $without_stats{{col3,}} col4 FROM table`
 	opts := map[string]bool{"timing": true, "stats": true}
 	result := handleProps(input, opts)
-	assert.Equal(t, result, `SELECT col1, col2, col3, col4 FROM table`)
+	assert.Equal(t, result, `SELECT col1, col2,  col4 FROM table`)
 }
 
 func TestHandleProps_AllDisabled(t *testing.T) {
-	input := `SELECT col1, $with_timing{{col2,}} $with_stats{{col3,}} col4 FROM table`
+	input := `SELECT col1, $with_timing{{col2,}} $without_stats{{col3,}} col4 FROM table`
 	opts := map[string]bool{"timing": false, "stats": false}
 	result := handleProps(input, opts)
-	assert.Equal(t, result, `SELECT col1,   col4 FROM table`)
+	assert.Equal(t, result, `SELECT col1,  col3, col4 FROM table`)
 }
 
 func TestHandleProps_Mixed(t *testing.T) {
-	input := `SELECT col1, $with_timing{{col2,}} $with_stats{{col3,}} col4 FROM table`
+	input := `SELECT col1, $with_timing{{col2,}} $without_stats{{col3,}} col4 FROM table`
 	opts := map[string]bool{"timing": true, "stats": false}
 	result := handleProps(input, opts)
-	assert.Equal(t, result, `SELECT col1, col2,  col4 FROM table`)
+	assert.Equal(t, result, `SELECT col1, col2, col3, col4 FROM table`)
+
+	opts = map[string]bool{"timing": false, "stats": true}
+	result = handleProps(input, opts)
+	assert.Equal(t, result, `SELECT col1,   col4 FROM table`)
 }
 
 func TestHandleProps_NestedBraces(t *testing.T) {

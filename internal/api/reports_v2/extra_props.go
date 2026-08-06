@@ -48,16 +48,32 @@ func EvalProjectResourceExtraProps(sql string, opts common.ProjectResourceReport
 
 // handleProps is the generic, unexported function which takes an array of
 // optStrings and does the replacement according to the chosen options.
-// It panics when $with_[opt]{{...}} is found in the sql string, but not in the optSettings array.
+// It panics when $with_[opt]{{...}} or $without_[opt]{{...} is found in the sql string, but not in the optSettings array.
 // It counts nested {{ and }} to find the correct matching closing delimiter.
 func handleProps(sql string, optSettings map[string]bool) string {
 	for {
-		idx := strings.Index(sql, "$with_")
-		if idx == -1 {
+		// find start of next $with_foo{{...}} or $without_foo{{...}} block
+		var (
+			idx1      = strings.Index(sql, "$with_")
+			idx2      = strings.Index(sql, "$without_")
+			idx       int
+			operation string
+		)
+		switch {
+		case idx1 == -1 && idx2 == -1:
+			// no more replacements need to be performed
 			return sql
+		case idx2 == -1 || (idx1 != -1 && idx1 < idx2):
+			idx = idx1
+			operation = "$with_"
+		default:
+			idx = idx2
+			operation = "$without_"
 		}
+
+		// find option name after "$with_" or "$without_"
 		nameEnd := strings.Index(sql[idx:], "{{")
-		optName := sql[idx+len("$with_") : idx+nameEnd]
+		optName := sql[idx+len(operation) : idx+nameEnd]
 		contentStart := idx + nameEnd + 2
 
 		// find matching }} by counting nested braces
@@ -79,7 +95,7 @@ func handleProps(sql string, optSettings map[string]bool) string {
 		if !ok {
 			panic("unknown $with_ option: " + optName)
 		}
-		if checked {
+		if checked == (operation == "$with_") {
 			sql = sql[:idx] + sql[contentStart:pos-2] + sql[pos:]
 		} else {
 			sql = sql[:idx] + sql[pos:]

@@ -32,7 +32,7 @@ func TestRenderMailTemplate(t *testing.T) {
 						"subject": "Transferred Commitments",
 						"body": "<!DOCTYPE html><html><body>Transferred</body></html>"
 					}
-				}	
+				}
 			}
 		}`, "TestRenderMailTemplate").
 			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
@@ -75,7 +75,7 @@ func TestRenderMailTemplateInvalidHTML(t *testing.T) {
 						"subject": "subject",
 						"body": "<!DOCTYPE html><html><body>Test</body></html>"
 					}
-				}	
+				}
 			}
 		}`, "TestRenderMailTemplateInvalidHTML").
 			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
@@ -121,7 +121,7 @@ func TestRenderMailTemplateOverEscaped(t *testing.T) {
 						"subject": "subject",
 						"body": "<!DOCTYPE html><html><body>Test</body></html>"
 					}
-				}	
+				}
 			}
 		}`, "TestRenderMailTemplateOverEscaped").
 			ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).

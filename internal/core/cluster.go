@@ -252,7 +252,7 @@ var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 			SELECT COUNT(*) > 0
 			FROM project_commitments pc
 			JOIN az_resources azr
-			ON pc.az_resource_id = azr.id 
+			ON pc.az_resource_id = azr.id
 			WHERE path LIKE $1
 			AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`))
 

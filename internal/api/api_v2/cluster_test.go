@@ -39,7 +39,7 @@ var resourceReportConfigJSON = string(must.Return(httptest.NewJQModifiableJSONSt
 			}
 		},
 		"resource_behavior": [
-			{"resource": "first/capacity", "overcommit_factor": 2}	
+			{"resource": "first/capacity", "overcommit_factor": 2}
 		],
 		"quota_distribution_configs": [
 			{
