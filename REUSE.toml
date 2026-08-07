@@ -162,22 +162,6 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
-  "vendor/github.com/Azure/go-ansiterm/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
-  "vendor/github.com/Microsoft/go-winio/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
   "vendor/github.com/beorn7/perks/**",
 ]
 precedence = "override"
@@ -194,22 +178,6 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
-  "vendor/github.com/containerd/errdefs/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/containerd/errdefs/pkg/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
   "vendor/github.com/davecgh/go-spew/**",
 ]
 precedence = "override"
@@ -218,87 +186,7 @@ SPDX-License-Identifier = "ISC"
 
 [[annotations]]
 path = [
-  "vendor/github.com/dhui/dktest/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/distribution/reference/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/docker/docker/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/docker/go-connections/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/docker/go-units/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/felixge/httpsnoop/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
-  "vendor/github.com/go-logr/logr/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/go-logr/stdr/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/gogo/protobuf/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "BSD-3-Clause"
-
-[[annotations]]
-path = [
   "vendor/github.com/golang-jwt/jwt/v5/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
-  "vendor/github.com/golang-migrate/migrate/v4/**",
 ]
 precedence = "override"
 SPDX-FileCopyrightText = "Other"
@@ -394,22 +282,6 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
-  "vendor/github.com/moby/docker-image-spec/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/moby/term/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
   "vendor/github.com/modern-go/concurrent/**",
 ]
 precedence = "override"
@@ -426,14 +298,6 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
-  "vendor/github.com/morikuni/aec/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
   "vendor/github.com/munnerz/goautoneg/**",
 ]
 precedence = "override"
@@ -447,30 +311,6 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/opencontainers/go-digest/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/opencontainers/image-spec/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/github.com/pkg/errors/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "BSD-2-Clause"
 
 [[annotations]]
 path = [
@@ -511,46 +351,6 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = "Other"
 SPDX-License-Identifier = "MIT"
-
-[[annotations]]
-path = [
-  "vendor/go.opentelemetry.io/auto/sdk/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/go.opentelemetry.io/otel/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/go.opentelemetry.io/otel/metric/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  "vendor/go.opentelemetry.io/otel/trace/**",
-]
-precedence = "override"
-SPDX-FileCopyrightText = "Other"
-SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [

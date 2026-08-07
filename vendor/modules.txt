@@ -13,15 +13,6 @@ github.com/dlmiddlecote/sqlstats
 # github.com/gofrs/uuid/v5 v5.5.1
 ## explicit; go 1.25
 github.com/gofrs/uuid/v5
-# github.com/golang-migrate/migrate/v4 v4.19.1
-## explicit; go 1.24.0
-github.com/golang-migrate/migrate/v4
-github.com/golang-migrate/migrate/v4/database
-github.com/golang-migrate/migrate/v4/database/multistmt
-github.com/golang-migrate/migrate/v4/database/postgres
-github.com/golang-migrate/migrate/v4/internal/url
-github.com/golang-migrate/migrate/v4/source
-github.com/golang-migrate/migrate/v4/source/go_bindata
 # github.com/google/go-cmp v0.7.0
 ## explicit; go 1.21
 github.com/google/go-cmp/cmp
@@ -100,6 +91,8 @@ github.com/lib/pq/internal/proto
 github.com/lib/pq/oid
 github.com/lib/pq/pqerror
 github.com/lib/pq/scram
+# github.com/mattn/go-sqlite3 v1.14.22
+## explicit; go 1.19
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
@@ -151,7 +144,7 @@ github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
 github.com/sapcc/go-api-declarations/opts
-# github.com/sapcc/go-bits v0.0.0-20260806170240-4bbc84d224db
+# github.com/sapcc/go-bits v0.0.0-20260807114049-ed453da227d5
 ## explicit; go 1.26
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
