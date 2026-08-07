@@ -355,19 +355,37 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	}
 	srv := dbServices[0]
 
-	// The categories don't have a reference to the service, so we just add all categories which are new
-	// and delete the one's which are unused after the resources for this service were reconciled.
-	categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.Select(ctx, tx, `SELECT * FROM categories`))
-	for name, categoryInfo := range serviceInfo.Categories {
-		if _, exists := categoryByName[name]; !exists {
-			newCategory := db.Category{Name: name, DisplayName: categoryInfo.DisplayName}
-			err = db.CategoryStore.Insert(ctx, tx, &newCategory)
-			if err != nil {
-				return fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
-			}
-			categoryByName[name] = newCategory
-		}
+	// collect existing and wanted categories
+	dbCategories, err := db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
 	}
+	wantedCategories := slices.Collect(maps.Keys(serviceInfo.Categories))
+	dbCategories, err = db.SetUpdate[db.Category, liquid.CategoryName]{
+		ExistingRecords: dbCategories,
+		WantedKeys:      wantedCategories,
+		KeyForRecord:    func(c db.Category) liquid.CategoryName { return c.Name },
+		Create: func(categoryName liquid.CategoryName) (db.Category, error) {
+			if !ReduceLogSpam {
+				logg.Info("SaveServiceInfoToDB: creating Category %s/%s with LiquidVersion = %d", serviceType, categoryName, serviceInfo.Version)
+			}
+			categoryInfo := serviceInfo.Categories[categoryName]
+			return db.Category{
+				ServiceID:   srv.ID,
+				Name:        categoryName,
+				DisplayName: categoryInfo.DisplayName,
+			}, nil
+		},
+		Update: func(category *db.Category) error {
+			categoryInfo := serviceInfo.Categories[category.Name]
+			category.DisplayName = categoryInfo.DisplayName
+			return nil
+		},
+	}.Execute(ctx, tx, db.CategoryStore)
+	if err != nil {
+		return fmt.Errorf("update categories failed for %s: %w", serviceType, err)
+	}
+	categoryByName := db.CategoryByNameIndex.Index(dbCategories)
 
 	// collect existing resources and the wanted resources
 	dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
@@ -446,12 +464,6 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
 	if err != nil {
 		return err
-	}
-
-	// remove unused categories (categories which are not referenced by any resource anymore)
-	_, err = tx.Exec(`DELETE FROM categories WHERE id NOT IN (SELECT DISTINCT category_id FROM resources)`)
-	if err != nil {
-		return fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
 	}
 
 	// do resource unit updates if applicable

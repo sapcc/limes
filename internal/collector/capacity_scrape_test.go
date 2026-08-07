@@ -694,7 +694,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 1, 'unknown', 0, 'shared/capacity/unknown');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (6, 2, 'any', 0, 'shared/things/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 2, 'total', 0, 'shared/things/total');
-		INSERT INTO categories (id, name, display_name) VALUES (1, 'foo_category', 'Foo Category');
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (1, 'foo_category', 'Foo Category', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity', 'Capacity', 1);
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'piece', 'flat', TRUE, 'shared/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');

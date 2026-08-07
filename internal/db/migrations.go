@@ -87,4 +87,31 @@ var sqlMigrations = map[int64]string{
 		UPDATE resources SET unit = 'piece' WHERE unit = '';
 		UPDATE rates SET unit = 'piece' WHERE unit = '';
 	`,
+
+	// NOTE: This will fail if there are categories that belong to multiple services.
+	//       (The `INSERT INTO category_affinities` part will complain about its uniqueness constraint being violated.)
+	//       This is currently not the case in any of our real deployments, so this restriction ought to be acceptable;
+	//       but it fails for some test databases, so an `rm -rf .testdb` may be required if this migration fails.
+	//
+	// NOTE: The table `category_affinities` is set up as a materialized temporary table,
+	//       instead of just being a table expression within UPDATE,
+	//       to ensure the explicit error on uniqueness violation as described above.
+	83: `
+		ALTER TABLE categories ADD COLUMN service_id BIGINT REFERENCES services ON DELETE CASCADE;
+		ALTER TABLE categories DROP CONSTRAINT categories_name_key;
+		ALTER TABLE categories ADD UNIQUE (service_id, name);
+
+		CREATE TEMP TABLE category_affinities (category_id BIGINT UNIQUE, service_id BIGINT);
+		INSERT INTO category_affinities
+			SELECT DISTINCT category_id, service_id FROM (
+				SELECT category_id, service_id FROM resources WHERE category_id IS NOT NULL
+				UNION
+				SELECT category_id, service_id FROM rates WHERE category_id IS NOT NULL
+			);
+
+		UPDATE categories c SET service_id = ca.service_id FROM category_affinities ca WHERE ca.category_id = c.id;
+		DROP TABLE category_affinities;
+
+		ALTER TABLE categories ALTER COLUMN service_id SET NOT NULL;
+	`,
 }

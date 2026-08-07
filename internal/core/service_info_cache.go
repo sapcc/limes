@@ -22,6 +22,7 @@ import (
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
+	"go.xyrillian.de/oblast"
 )
 
 ///////////////////////////////////////////////////////////////////////
@@ -80,8 +81,8 @@ type ServiceInfoReader interface {
 	GetRateForPath(path db.RatePath) (db.Rate, bool)
 	// GetRateForID returns the rate for the given rate ID.
 	GetRateForID(id db.RateID) (db.Rate, bool)
-	// GetCategories returns all categories.
-	GetCategories() map[db.CategoryID]db.Category
+	// GetCategories returns all categories for the given service type.
+	GetCategoriesForType(serviceType db.ServiceType) map[db.CategoryID]db.Category
 	// GetCategoryForID returns the category for the given ID.
 	GetCategoryForID(categoryID db.CategoryID) (db.Category, bool)
 }
@@ -110,12 +111,13 @@ type (
 		resources   resourcesByNameType
 		azResources azResourcesByAZNameType
 		rates       ratesByNameType
-		categories  categoriesByID
+		categories  categoriesByIDType
 		// ID-based indexes for O(1) lookup by primary key
 		servicesByID    servicesByIDIndex
 		resourcesByID   resourcesByIDIndex
 		azResourcesByID azResourcesByIDIndex
 		ratesByID       ratesByIDIndex
+		categoriesByID  categoriesByID
 		// necessary for constructing filters by area
 		areaMapping map[db.ServiceType]string
 	}
@@ -129,16 +131,17 @@ type (
 	azResourcesByAZ         = map[limes.AvailabilityZone]db.AZResource
 	ratesByNameType         = map[db.ServiceType]ratesByName
 	ratesByName             = map[liquid.RateName]db.Rate
+	categoriesByIDType      = map[db.ServiceType]categoriesByID
 	categoriesByID          = map[db.CategoryID]db.Category
-	servicesByIDIndex       = map[db.ServiceID]db.Service
-	resourcesByIDIndex      = map[db.ResourceID]db.Resource
-	azResourcesByIDIndex    = map[db.AZResourceID]db.AZResource
-	ratesByIDIndex          = map[db.RateID]db.Rate
+
+	servicesByIDIndex    = map[db.ServiceID]db.Service
+	resourcesByIDIndex   = map[db.ResourceID]db.Resource
+	azResourcesByIDIndex = map[db.AZResourceID]db.AZResource
+	ratesByIDIndex       = map[db.RateID]db.Rate
 )
 
 // removeDataForType removes all data of a given serviceType, making the cache ready
-// for populating this serviceType from scratch. Categories are always flushed
-// completely.
+// for populating this serviceType from scratch.
 func (s ServiceInfoSnapshot) removeDataForType(serviceType db.ServiceType) ServiceInfoSnapshot {
 	// remove ID index entries for this service type
 	if svc, ok := s.services[serviceType]; ok {
@@ -155,11 +158,14 @@ func (s ServiceInfoSnapshot) removeDataForType(serviceType db.ServiceType) Servi
 	for _, rate := range s.rates[serviceType] {
 		delete(s.ratesByID, rate.ID)
 	}
+	for _, category := range s.categories[serviceType] {
+		delete(s.categoriesByID, category.ID)
+	}
 	delete(s.services, serviceType)
 	delete(s.resources, serviceType)
 	delete(s.azResources, serviceType)
 	delete(s.rates, serviceType)
-	s.categories = make(map[db.CategoryID]db.Category)
+	delete(s.categories, serviceType)
 	return s
 }
 
@@ -175,10 +181,11 @@ func (s ServiceInfoSnapshot) deepClone() ServiceInfoSnapshot {
 			return deepCloneMap(inner, maps.Clone)
 		}),
 		rates:           deepCloneMap(s.rates, maps.Clone),
-		categories:      maps.Clone(s.categories),
+		categories:      deepCloneMap(s.categories, maps.Clone),
 		servicesByID:    maps.Clone(s.servicesByID),
 		resourcesByID:   maps.Clone(s.resourcesByID),
 		azResourcesByID: maps.Clone(s.azResourcesByID),
+		categoriesByID:  maps.Clone(s.categoriesByID),
 		ratesByID:       maps.Clone(s.ratesByID),
 		areaMapping:     s.areaMapping, // should never get modified
 	}
@@ -202,6 +209,7 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 			delete(f.snapshot.resources, serviceType)
 			delete(f.snapshot.azResources, serviceType)
 			delete(f.snapshot.rates, serviceType)
+			delete(f.snapshot.categories, serviceType)
 		}
 	}
 	// filter services by type
@@ -214,16 +222,20 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 			delete(f.snapshot.azResources, serviceType)
 			delete(f.snapshot.resources, serviceType)
 			delete(f.snapshot.rates, serviceType)
+			delete(f.snapshot.categories, serviceType)
 		}
 	}
 	categoriesToRemove := make(map[db.CategoryID]struct{})
 	// find categories to remove
 	categoryFilter, categoryFilterExists := f.filter.Category.Unpack()
 	if categoryFilterExists {
-		for categoryID, info := range f.snapshot.categories {
-			if info.Name != categoryFilter {
-				delete(f.snapshot.categories, categoryID)
-				categoriesToRemove[categoryID] = struct{}{}
+		for serviceType, categories := range f.snapshot.categories {
+			_ = serviceType
+			for categoryID, info := range categories {
+				if info.Name != categoryFilter {
+					delete(categories, categoryID)
+					categoriesToRemove[categoryID] = struct{}{}
+				}
 			}
 		}
 	}
@@ -246,6 +258,7 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 						delete(f.snapshot.resources, serviceType)
 						delete(f.snapshot.azResources, serviceType)
 						delete(f.snapshot.rates, serviceType)
+						delete(f.snapshot.categories, serviceType)
 					}
 				} else {
 					seenCategories[categoryID] = struct{}{}
@@ -270,6 +283,7 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 						delete(f.snapshot.resources, serviceType)
 						delete(f.snapshot.azResources, serviceType)
 						delete(f.snapshot.rates, serviceType)
+						delete(f.snapshot.categories, serviceType)
 					}
 				} else {
 					seenCategories[categoryID] = struct{}{}
@@ -280,9 +294,14 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 
 	// if we filtered by rate or service name, we must thin out the categories
 	if resourceFilterExists || rateFilterExists {
-		for categoryID := range f.snapshot.categories {
-			if _, ok := seenCategories[categoryID]; !ok {
-				delete(f.snapshot.categories, categoryID)
+		for serviceType, categories := range f.snapshot.categories {
+			for categoryID := range categories {
+				if _, ok := seenCategories[categoryID]; !ok {
+					delete(categories, categoryID)
+				}
+			}
+			if len(categories) == 0 {
+				delete(f.snapshot.categories, serviceType)
 			}
 		}
 	}
@@ -310,6 +329,12 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	for _, rates := range f.snapshot.rates {
 		for _, rate := range rates {
 			f.snapshot.ratesByID[rate.ID] = rate
+		}
+	}
+	f.snapshot.categoriesByID = make(categoriesByID, len(f.snapshot.categories))
+	for _, categories := range f.snapshot.categories {
+		for _, category := range categories {
+			f.snapshot.categoriesByID[category.ID] = category
 		}
 	}
 
@@ -410,14 +435,14 @@ func (s ServiceInfoSnapshot) GetRateForID(id db.RateID) (db.Rate, bool) {
 	return val, ok
 }
 
-// GetCategories implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetCategories() categoriesByID {
-	return maps.Clone(s.categories)
+// GetCategoriesForType implements the [ServiceInfoReader] interface.
+func (s ServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) categoriesByID {
+	return maps.Clone(s.categories[serviceType])
 }
 
 // GetCategoryForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetCategoryForID(categoryID db.CategoryID) (db.Category, bool) {
-	val, ok := s.categories[categoryID]
+	val, ok := s.categoriesByID[categoryID]
 	return val, ok
 }
 
@@ -433,11 +458,12 @@ func newEmptyServiceInfoSnapshot(config ClusterConfiguration) ServiceInfoSnapsho
 		resources:       make(resourcesByNameType),
 		azResources:     make(azResourcesByAZNameType),
 		rates:           make(ratesByNameType),
-		categories:      make(categoriesByID),
+		categories:      make(categoriesByIDType),
 		servicesByID:    make(servicesByIDIndex),
 		resourcesByID:   make(resourcesByIDIndex),
 		azResourcesByID: make(azResourcesByIDIndex),
 		ratesByID:       make(ratesByIDIndex),
+		categoriesByID:  make(categoriesByID),
 		areaMapping:     areaMapping,
 	}
 }
@@ -539,9 +565,9 @@ func (f FilteredServiceInfoSnapshot) GetRateForID(id db.RateID) (db.Rate, bool) 
 	return f.snapshot.GetRateForID(id)
 }
 
-// GetCategories implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetCategories() categoriesByID {
-	return f.snapshot.GetCategories()
+// GetCategoriesForType implements the [ServiceInfoReader] interface.
+func (f FilteredServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) categoriesByID {
+	return f.snapshot.GetCategoriesForType(serviceType)
 }
 
 // GetCategoryForID implements the [ServiceInfoReader] interface.
@@ -691,6 +717,8 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		s.data.servicesByID[svc.ID] = svc
 	}
 
+	// TODO: simplify queries below by using the ServiceID from the record that we just pulled
+
 	resourcesByPath, err := db.ResourceByPathIndex.IndexFrom(
 		db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType),
 	)
@@ -736,10 +764,24 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		s.data.ratesByID[rate.ID] = rate
 	}
 
-	s.data.categories, err = db.CategoryByIDIndex.IndexFrom(db.CategoryStore.Select(ctx, s.DB, `SELECT * FROM categories`))
-	if err != nil {
-		return fmt.Errorf("while reading categories: %w", err)
+	type categoryRecord struct {
+		db.Category
+		ServiceType db.ServiceType `db:"service_type"`
 	}
+	categoryRecords, err := oblast.MustNewStore[categoryRecord](oblast.PostgresDialect()).Select(ctx, s.DB,
+		`SELECT c.*, s.type AS service_type FROM categories c JOIN services s ON c.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType,
+	).Collect()
+	if err != nil {
+		return fmt.Errorf("while reading categories for type(s) %v: %w", serviceType, err)
+	}
+	for _, record := range categoryRecords {
+		if _, ok := s.data.categories[record.ServiceType]; !ok {
+			s.data.categories[record.ServiceType] = make(categoriesByID)
+		}
+		s.data.categories[record.ServiceType][record.ID] = record.Category
+		s.data.categoriesByID[record.ID] = record.Category
+	}
+
 	return nil
 }
 
@@ -760,7 +802,7 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 	service := s.data.services[serviceType]
 	resources := s.data.resources[serviceType]
 	rates := s.data.rates[serviceType]
-	categories := s.data.categories
+	categories := s.data.categoriesByID
 
 	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 	if err != nil {

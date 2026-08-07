@@ -100,10 +100,11 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (14, 4, 'total', 0, 'unshared/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
-		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (1, 2, 'only_usage', 1, 'MiB', 'flat', TRUE, 'unshared/only_usage', 1);
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (2, 'foo_category', 'Foo Category', 2);
+		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, category_id) VALUES (1, 2, 'only_usage', 1, 'MiB', 'flat', TRUE, 'unshared/only_usage', 2);
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path) VALUES (2, 2, 'with_global_limit', 1, 'MiB', 'flat', 'unshared/with_global_limit');
 		INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path) VALUES (3, 2, 'with_project_limit', 1, 'piece', 'flat', 'unshared/with_project_limit');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 2);
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'piece', 'flat', TRUE, 'unshared/things', 'Things');
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 1, 'Unshared');
 	`)
@@ -162,9 +163,9 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
 	generateNewClusterWithPersistingServiceInfo(t, s, true)
 	tr.DBChanges().AssertEqual(`
-		INSERT INTO categories (id, name, display_name) VALUES (2, 'bar_category', 'Foo Category');
-		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 1 AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
-		UPDATE rates SET liquid_version = 2, category_id = 1 WHERE id = 2 AND service_id = 2 AND name = 'with_global_limit' AND path = 'unshared/with_global_limit';
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (3, 'bar_category', 'Foo Category', 2);
+		UPDATE rates SET liquid_version = 2, category_id = 3 WHERE id = 1 AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
+		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 2 AND service_id = 2 AND name = 'with_global_limit' AND path = 'unshared/with_global_limit';
 		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'with_project_limit' AND path = 'unshared/with_project_limit';
 		UPDATE resources SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'unshared/things';
