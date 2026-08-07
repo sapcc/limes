@@ -396,23 +396,24 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			if !ReduceLogSpam {
 				logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
 			}
-			categoryID := options.Map(serviceInfo.Resources[resourceName].Category,
+			resInfo := serviceInfo.Resources[resourceName]
+			categoryID := options.Map(resInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
 				ServiceID:   srv.ID,
 				Name:        resourceName,
-				DisplayName: serviceInfo.Resources[resourceName].DisplayName,
+				DisplayName: resInfo.DisplayName,
 				// TODO: consider serializing empty categories as serviceType here, instead at the consumers
 				CategoryID:          categoryID,
 				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
-				Unit:                serviceInfo.Resources[resourceName].Unit,
-				Topology:            serviceInfo.Resources[resourceName].Topology,
-				HasCapacity:         serviceInfo.Resources[resourceName].HasCapacity,
-				NeedsResourceDemand: serviceInfo.Resources[resourceName].NeedsResourceDemand,
-				HasQuota:            serviceInfo.Resources[resourceName].HasQuota,
-				AttributesJSON:      string(serviceInfo.Resources[resourceName].Attributes),
-				HandlesCommitments:  serviceInfo.Resources[resourceName].HandlesCommitments,
+				Unit:                resInfo.Unit,
+				Topology:            resInfo.Topology,
+				HasCapacity:         resInfo.HasCapacity,
+				NeedsResourceDemand: resInfo.NeedsResourceDemand,
+				HasQuota:            resInfo.HasQuota,
+				AttributesJSON:      string(resInfo.Attributes),
+				HandlesCommitments:  resInfo.HandlesCommitments,
 			}, nil
 		},
 		Update: func(res *db.Resource) (err error) {
@@ -420,23 +421,24 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
 			}
 			res.LiquidVersion = serviceInfo.Version
-			if res.Unit != serviceInfo.Resources[res.Name].Unit {
+			resInfo := serviceInfo.Resources[res.Name]
+			if res.Unit != resInfo.Unit {
 				unitChangesByResourceID[res.ID] = unitChange{
 					oldUnit: res.Unit,
-					newUnit: serviceInfo.Resources[res.Name].Unit,
+					newUnit: resInfo.Unit,
 				}
 			}
-			res.DisplayName = serviceInfo.Resources[res.Name].DisplayName
+			res.DisplayName = resInfo.DisplayName
 			// TODO: consider serializing empty categories as serviceType here, instead at the consumers
-			res.CategoryID = options.Map(serviceInfo.Resources[res.Name].Category,
+			res.CategoryID = options.Map(resInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
-			res.Unit = serviceInfo.Resources[res.Name].Unit
-			res.Topology = serviceInfo.Resources[res.Name].Topology
-			res.HasCapacity = serviceInfo.Resources[res.Name].HasCapacity
-			res.NeedsResourceDemand = serviceInfo.Resources[res.Name].NeedsResourceDemand
-			res.HasQuota = serviceInfo.Resources[res.Name].HasQuota
-			res.AttributesJSON = string(serviceInfo.Resources[res.Name].Attributes)
-			res.HandlesCommitments = serviceInfo.Resources[res.Name].HandlesCommitments
+			res.Unit = resInfo.Unit
+			res.Topology = resInfo.Topology
+			res.HasCapacity = resInfo.HasCapacity
+			res.NeedsResourceDemand = resInfo.NeedsResourceDemand
+			res.HasQuota = resInfo.HasQuota
+			res.AttributesJSON = string(resInfo.Attributes)
+			res.HandlesCommitments = resInfo.HandlesCommitments
 			return nil
 		},
 		PreDelete: Some(generateDeleteFunc(dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
