@@ -89,10 +89,10 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 		Areas:  make(map[string]resourcesv2.AreaInfoReport),
 	}
 	services := sis.GetServices()
-	categories := sis.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
+		categories := sis.GetCategoriesForType(serviceType)
 		resources, _ := sis.GetResourcesForType(serviceType) // can have no resources
 		// skip non-allowed resources for this user, if any
 		allowedResources, serviceTypeOK := allowedResourcesByService[serviceType]
@@ -179,10 +179,10 @@ func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.Ser
 		Areas:  make(map[string]ratesv2.AreaInfoReport),
 	}
 	services := sis.GetServices()
-	categories := sis.GetCategories()
 
 	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
 		service := services[serviceType]
+		categories := sis.GetCategoriesForType(serviceType)
 		rates, _ := sis.GetRatesForType(serviceType) // can have no rates
 		config := cluster.Config.Liquids[serviceType]
 		area := config.Area

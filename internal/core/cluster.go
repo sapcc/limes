@@ -355,19 +355,37 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	}
 	srv := dbServices[0]
 
-	// The categories don't have a reference to the service, so we just add all categories which are new
-	// and delete the one's which are unused after the resources for this service were reconciled.
-	categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.Select(ctx, tx, `SELECT * FROM categories`))
-	for name, categoryInfo := range serviceInfo.Categories {
-		if _, exists := categoryByName[name]; !exists {
-			newCategory := db.Category{Name: name, DisplayName: categoryInfo.DisplayName}
-			err = db.CategoryStore.Insert(ctx, tx, &newCategory)
-			if err != nil {
-				return fmt.Errorf("cannot insert category %s for %s: %w", name, serviceType, err)
-			}
-			categoryByName[name] = newCategory
-		}
+	// collect existing and wanted categories
+	dbCategories, err := db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
 	}
+	wantedCategories := slices.Collect(maps.Keys(serviceInfo.Categories))
+	dbCategories, err = db.SetUpdate[db.Category, liquid.CategoryName]{
+		ExistingRecords: dbCategories,
+		WantedKeys:      wantedCategories,
+		KeyForRecord:    func(c db.Category) liquid.CategoryName { return c.Name },
+		Create: func(categoryName liquid.CategoryName) (db.Category, error) {
+			if !ReduceLogSpam {
+				logg.Info("SaveServiceInfoToDB: creating Category %s/%s with LiquidVersion = %d", serviceType, categoryName, serviceInfo.Version)
+			}
+			categoryInfo := serviceInfo.Categories[categoryName]
+			return db.Category{
+				ServiceID:   srv.ID,
+				Name:        categoryName,
+				DisplayName: categoryInfo.DisplayName,
+			}, nil
+		},
+		Update: func(category *db.Category) error {
+			categoryInfo := serviceInfo.Categories[category.Name]
+			category.DisplayName = categoryInfo.DisplayName
+			return nil
+		},
+	}.Execute(ctx, tx, db.CategoryStore)
+	if err != nil {
+		return fmt.Errorf("update categories failed for %s: %w", serviceType, err)
+	}
+	categoryByName := db.CategoryByNameIndex.Index(dbCategories)
 
 	// collect existing resources and the wanted resources
 	dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
@@ -396,23 +414,24 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			if !ReduceLogSpam {
 				logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
 			}
-			categoryID := options.Map(serviceInfo.Resources[resourceName].Category,
+			resInfo := serviceInfo.Resources[resourceName]
+			categoryID := options.Map(resInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
 				ServiceID:   srv.ID,
 				Name:        resourceName,
-				DisplayName: serviceInfo.Resources[resourceName].DisplayName,
+				DisplayName: resInfo.DisplayName,
 				// TODO: consider serializing empty categories as serviceType here, instead at the consumers
 				CategoryID:          categoryID,
 				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
-				Unit:                serviceInfo.Resources[resourceName].Unit,
-				Topology:            serviceInfo.Resources[resourceName].Topology,
-				HasCapacity:         serviceInfo.Resources[resourceName].HasCapacity,
-				NeedsResourceDemand: serviceInfo.Resources[resourceName].NeedsResourceDemand,
-				HasQuota:            serviceInfo.Resources[resourceName].HasQuota,
-				AttributesJSON:      string(serviceInfo.Resources[resourceName].Attributes),
-				HandlesCommitments:  serviceInfo.Resources[resourceName].HandlesCommitments,
+				Unit:                resInfo.Unit,
+				Topology:            resInfo.Topology,
+				HasCapacity:         resInfo.HasCapacity,
+				NeedsResourceDemand: resInfo.NeedsResourceDemand,
+				HasQuota:            resInfo.HasQuota,
+				AttributesJSON:      string(resInfo.Attributes),
+				HandlesCommitments:  resInfo.HandlesCommitments,
 			}, nil
 		},
 		Update: func(res *db.Resource) (err error) {
@@ -420,23 +439,24 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
 			}
 			res.LiquidVersion = serviceInfo.Version
-			if res.Unit != serviceInfo.Resources[res.Name].Unit {
+			resInfo := serviceInfo.Resources[res.Name]
+			if res.Unit != resInfo.Unit {
 				unitChangesByResourceID[res.ID] = unitChange{
 					oldUnit: res.Unit,
-					newUnit: serviceInfo.Resources[res.Name].Unit,
+					newUnit: resInfo.Unit,
 				}
 			}
-			res.DisplayName = serviceInfo.Resources[res.Name].DisplayName
+			res.DisplayName = resInfo.DisplayName
 			// TODO: consider serializing empty categories as serviceType here, instead at the consumers
-			res.CategoryID = options.Map(serviceInfo.Resources[res.Name].Category,
+			res.CategoryID = options.Map(resInfo.Category,
 				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
-			res.Unit = serviceInfo.Resources[res.Name].Unit
-			res.Topology = serviceInfo.Resources[res.Name].Topology
-			res.HasCapacity = serviceInfo.Resources[res.Name].HasCapacity
-			res.NeedsResourceDemand = serviceInfo.Resources[res.Name].NeedsResourceDemand
-			res.HasQuota = serviceInfo.Resources[res.Name].HasQuota
-			res.AttributesJSON = string(serviceInfo.Resources[res.Name].Attributes)
-			res.HandlesCommitments = serviceInfo.Resources[res.Name].HandlesCommitments
+			res.Unit = resInfo.Unit
+			res.Topology = resInfo.Topology
+			res.HasCapacity = resInfo.HasCapacity
+			res.NeedsResourceDemand = resInfo.NeedsResourceDemand
+			res.HasQuota = resInfo.HasQuota
+			res.AttributesJSON = string(resInfo.Attributes)
+			res.HandlesCommitments = resInfo.HandlesCommitments
 			return nil
 		},
 		PreDelete: Some(generateDeleteFunc(dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
@@ -444,12 +464,6 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
 	if err != nil {
 		return err
-	}
-
-	// remove unused categories (categories which are not referenced by any resource anymore)
-	_, err = tx.Exec(`DELETE FROM categories WHERE id NOT IN (SELECT DISTINCT category_id FROM resources)`)
-	if err != nil {
-		return fmt.Errorf("cannot delete unused categories for %s: %w", serviceType, err)
 	}
 
 	// do resource unit updates if applicable

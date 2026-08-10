@@ -13,7 +13,8 @@ INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (7, 2,
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (8, 3, 'any', 0, 'unshared/capacity/any');
 INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (9, 3, 'az-one', 0, 'unshared/capacity/az-one');
 
-INSERT INTO categories (id, name, display_name) VALUES (1, 'foo_category', 'Foo Category');
+INSERT INTO categories (id, name, display_name, service_id) VALUES (1, 'foo_category', 'Foo Category', 1);
+INSERT INTO categories (id, name, display_name, service_id) VALUES (2, 'foo_category', 'Foo Category', 2);
 
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
@@ -31,7 +32,7 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (3, 2, 'par
 
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'shared/capacity', 'Capacity', 1);
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (2, 1, 'things', 1, 'piece', 'flat', TRUE, 'shared/things', 'Things');
-INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 1);
+INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (3, 2, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unshared/capacity', 'Capacity', 2);
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (4, 2, 'things', 1, 'piece', 'flat', TRUE, 'unshared/things', 'Things');
 
 INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', 0, 1, 'Shared');

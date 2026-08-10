@@ -365,6 +365,7 @@ var MailNotificationStore = oblast.MustNewStore[MailNotification](oblast.Postgre
 // Category contains a record from the `categories` table.
 type Category struct {
 	ID          CategoryID          `db:"id,auto"`
+	ServiceID   ServiceID           `db:"service_id"`
 	Name        liquid.CategoryName `db:"name"`
 	DisplayName string              `db:"display_name"`
 }
