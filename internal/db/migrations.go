@@ -114,4 +114,44 @@ var sqlMigrations = map[int64]string{
 
 		ALTER TABLE categories ALTER COLUMN service_id SET NOT NULL;
 	`,
+	84: `
+		CREATE OR REPLACE FUNCTION notify_service_update()
+			RETURNS trigger AS $$
+			DECLARE
+				service_type TEXT;
+			BEGIN
+				IF TG_TABLE_NAME = 'services' THEN
+					FOR service_type IN
+						SELECT s.type FROM services s
+							WHERE s.type = ANY(ARRAY[NEW.type, OLD.type])
+					LOOP
+						PERFORM pg_notify('limitas_service_update', service_type);
+					END LOOP;
+
+				ELSIF TG_TABLE_NAME = 'resources' OR TG_TABLE_NAME = 'rates' OR TG_TABLE_NAME = 'categories' THEN
+					FOR service_type IN
+						SELECT s.type FROM services s
+							WHERE s.id = ANY(ARRAY[NEW.service_id, OLD.service_id])
+					LOOP
+						PERFORM pg_notify('limitas_service_update', service_type);
+					END LOOP;
+
+				ELSIF TG_TABLE_NAME = 'az_resources' THEN
+					FOR service_type IN
+						SELECT DISTINCT s.type FROM services s
+							JOIN resources r ON r.service_id = s.id
+							WHERE r.id = ANY(ARRAY[NEW.resource_id, OLD.resource_id])
+					LOOP
+						PERFORM pg_notify('limitas_service_update', service_type);
+					END LOOP;
+				END IF;
+
+				RETURN COALESCE(NEW, OLD);
+			END;
+			$$ LANGUAGE plpgsql;
+
+		CREATE TRIGGER categories_notify_update
+			AFTER INSERT OR UPDATE OR DELETE ON categories
+			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
+	`,
 }
