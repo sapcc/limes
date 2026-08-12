@@ -4,7 +4,9 @@
 package core
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -355,37 +357,31 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	}
 	srv := dbServices[0]
 
-	// collect existing and wanted categories
-	dbCategories, err := db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
+	// create or update wanted categories (cannot delete unnecessary categories yet,
+	// we need to update `resources.category_id` or `rates.category_id` first)
+	categoryMergeQuery := sqlext.SimplifyWhitespace(`
+		MERGE INTO categories AS c
+		USING json_each($1::json) AS src
+		   ON c.name = src.key AND c.service_id = $2
+		 WHEN NOT MATCHED BY TARGET THEN INSERT (name, display_name, service_id)
+		      VALUES (src.key, src.value ->> 'displayName', $2)
+		 WHEN MATCHED THEN UPDATE set display_name = src.value ->> 'displayName';
+	`)
+	categoriesJSON, err := json.Marshal(serviceInfo.Categories)
+	if err != nil {
+		return fmt.Errorf("cannot serialize serviceInfo.Categories for %s to JSON: %w", serviceType, err)
+	}
+	if bytes.Equal(categoriesJSON, []byte(`null`)) {
+		categoriesJSON = []byte(`{}`)
+	}
+	_, err = tx.ExecContext(ctx, categoryMergeQuery, categoriesJSON, srv.ID)
+	if err != nil {
+		return fmt.Errorf("cannot create/update categories for %s: %w", serviceType, err)
+	}
+	categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID))
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
 	}
-	wantedCategories := slices.Collect(maps.Keys(serviceInfo.Categories))
-	dbCategories, err = db.SetUpdate[db.Category, liquid.CategoryName]{
-		ExistingRecords: dbCategories,
-		WantedKeys:      wantedCategories,
-		KeyForRecord:    func(c db.Category) liquid.CategoryName { return c.Name },
-		Create: func(categoryName liquid.CategoryName) (db.Category, error) {
-			if !ReduceLogSpam {
-				logg.Info("SaveServiceInfoToDB: creating Category %s/%s with LiquidVersion = %d", serviceType, categoryName, serviceInfo.Version)
-			}
-			categoryInfo := serviceInfo.Categories[categoryName]
-			return db.Category{
-				ServiceID:   srv.ID,
-				Name:        categoryName,
-				DisplayName: categoryInfo.DisplayName,
-			}, nil
-		},
-		Update: func(category *db.Category) error {
-			categoryInfo := serviceInfo.Categories[category.Name]
-			category.DisplayName = categoryInfo.DisplayName
-			return nil
-		},
-	}.Execute(ctx, tx, db.CategoryStore)
-	if err != nil {
-		return fmt.Errorf("update categories failed for %s: %w", serviceType, err)
-	}
-	categoryByName := db.CategoryByNameIndex.Index(dbCategories)
 
 	// collect existing resources and the wanted resources
 	dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
@@ -673,6 +669,19 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		if err != nil {
 			return fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
 		}
+	}
+
+	// remove unneeded categories (could not be done earlier because of `resources.category_id` and `rates.category_id` foreign keys)
+	// TODO: remove the `AND category_id IS NOT NULL` part once we add NOT NULL constraints on these columns
+	_, err = tx.ExecContext(ctx, sqlext.SimplifyWhitespace(`
+		DELETE FROM categories WHERE service_id = $1 AND id NOT IN (
+			SELECT DISTINCT category_id FROM resources WHERE service_id = $1 AND category_id IS NOT NULL
+			UNION
+			SELECT DISTINCT category_id FROM rates WHERE service_id = $1 AND category_id IS NOT NULL
+		)
+	`), srv.ID)
+	if err != nil {
+		return fmt.Errorf("while cleaning up unneeded categories for %s: %w", serviceType, err)
 	}
 
 	return tx.Commit()

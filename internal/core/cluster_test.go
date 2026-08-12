@@ -60,7 +60,7 @@ func generateNewClusterWithPersistingServiceInfo(t *testing.T, s test.Setup, fai
 	}
 	connectErrs = s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, liquidClientFactory, None[pgruntime.ConnectionTarget]())
 	if failOnConnectError {
-		for _, err := range errs {
+		for _, err := range connectErrs {
 			t.Fatal(err)
 		}
 	}
@@ -152,18 +152,17 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	`)
 
 	// now we want to do an update of some categories:
-	newCategories := srvInfoUnshared.Categories
-	newCategories["bar_category"] = liquid.CategoryInfo{
-		DisplayName: "Foo Category",
-	}
-	srvInfoUnshared.Categories = newCategories
-	srvInfoUnshared.Rates["only_usage"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("bar_category"))}
-	srvInfoUnshared.Rates["with_global_limit"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false, Category: Some(liquid.CategoryName("foo_category"))}
-	srvInfoUnshared.Version = 2
-	s.LiquidClients["unshared"].ServiceInfo.Set(srvInfoUnshared)
+	s.LiquidClients["unshared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		info.Categories["bar_category"] = liquid.CategoryInfo{
+			DisplayName: "Bar Category",
+		}
+		info.Rates["only_usage"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("bar_category"))}
+		info.Rates["with_global_limit"] = liquid.RateInfo{Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false, Category: Some(liquid.CategoryName("foo_category"))}
+		info.Version = 2
+	})
 	generateNewClusterWithPersistingServiceInfo(t, s, true)
 	tr.DBChanges().AssertEqual(`
-		INSERT INTO categories (id, name, display_name, service_id) VALUES (3, 'bar_category', 'Foo Category', 2);
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (3, 'bar_category', 'Bar Category', 2);
 		UPDATE rates SET liquid_version = 2, category_id = 3 WHERE id = 1 AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
 		UPDATE rates SET liquid_version = 2, category_id = 2 WHERE id = 2 AND service_id = 2 AND name = 'with_global_limit' AND path = 'unshared/with_global_limit';
 		UPDATE rates SET liquid_version = 2 WHERE id = 3 AND service_id = 2 AND name = 'with_project_limit' AND path = 'unshared/with_project_limit';
@@ -171,6 +170,32 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 		UPDATE resources SET liquid_version = 2 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'unshared/things';
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 2, 'Unshared');
+	`)
+
+	// rename a category: this will check that deleting the old category and inserting the new category works without conflict
+	// (this used to break because we would first delete the old category, which would leave the resource dangling without a valid category;
+	// this fails even if the foreign-key constraint from resources -> categories is DEFERRABLE INITIALLY DEFERRED)
+	s.LiquidClients["unshared"].ServiceInfo.Modify(func(info *liquid.ServiceInfo) {
+		info.Categories["bar_category_renamed"] = liquid.CategoryInfo{
+			DisplayName: "Bar Category",
+		}
+		delete(info.Categories, "bar_category")
+		rateInfo := info.Rates["only_usage"]
+		rateInfo.Category = Some(liquid.CategoryName("bar_category_renamed"))
+		info.Rates["only_usage"] = rateInfo
+		info.Version = 3
+	})
+	generateNewClusterWithPersistingServiceInfo(t, s, true)
+	tr.DBChanges().AssertEqual(`
+		DELETE FROM categories WHERE id = 3 AND name = 'bar_category' AND service_id = 2;
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (4, 'bar_category_renamed', 'Bar Category', 2);
+		UPDATE rates SET liquid_version = 3, category_id = 4 WHERE id = 1 AND service_id = 2 AND name = 'only_usage' AND path = 'unshared/only_usage';
+		UPDATE rates SET liquid_version = 3 WHERE id = 2 AND service_id = 2 AND name = 'with_global_limit' AND path = 'unshared/with_global_limit';
+		UPDATE rates SET liquid_version = 3 WHERE id = 3 AND service_id = 2 AND name = 'with_project_limit' AND path = 'unshared/with_project_limit';
+		UPDATE resources SET liquid_version = 3 WHERE id = 3 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
+		UPDATE resources SET liquid_version = 3 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'unshared/things';
+		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 2;
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', 0, 3, 'Unshared');
 	`)
 
 	// When we remove a resource for which commitments exist, we want to fail
@@ -198,7 +223,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	})
 	tr.DBChanges().Ignore()
 	generateNewClusterWithPersistingServiceInfo(t, s, true)
-	tr.DBChanges().AssertEqual("")
+	tr.DBChanges().AssertEmpty()
 }
 
 func Test_ClusterServiceInfoUnitsChange(t *testing.T) {
