@@ -162,8 +162,8 @@ func TestServiceInfoCache(t *testing.T) {
 	assert.Equal(t, len(must.BeOKT(sis.GetResourcesForType("second"))(t)), 2)
 	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).Name, "capacity")
 	must.NotBeOKT(sis.GetRatesForType("second"))(t)
-	assert.Equal(t, len(sis.GetCategoriesForType("first")), 0)
-	assert.Equal(t, len(sis.GetCategoriesForType("second")), 1)
+	assert.Equal(t, len(sis.GetCategoriesForType("first")), 1)  // just default category
+	assert.Equal(t, len(sis.GetCategoriesForType("second")), 2) // default + "foo_category"
 
 	// check service update
 	assert.Equal(t, must.BeOKT(sis.GetServiceForType("first"))(t).DisplayName, "First")
