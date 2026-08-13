@@ -49,8 +49,7 @@ type Resource struct {
 	ServiceID   ServiceID           `db:"service_id"`
 	Name        liquid.ResourceName `db:"name"`
 	DisplayName string              `db:"display_name"`
-	// TODO: change type to plain CategoryID and add "NOT NULL" constraint once prod has the materialized default categories
-	CategoryID Option[CategoryID] `db:"category_id"`
+	CategoryID  CategoryID          `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/resourcename"; mostly intended for manual lookup
 	Path ResourcePath `db:"path"`
 
@@ -115,8 +114,7 @@ type Rate struct {
 	ServiceID   ServiceID       `db:"service_id"`
 	Name        liquid.RateName `db:"name"`
 	DisplayName string          `db:"display_name"`
-	// TODO: change type to plain CategoryID and add "NOT NULL" constraint once prod has the materialized default categories
-	CategoryID Option[CategoryID] `db:"category_id"`
+	CategoryID  CategoryID      `db:"category_id"`
 	// a unique identifier for this record in the form "servicetype/ratename"; mostly intended for manual lookup
 	Path RatePath `db:"path"`
 	// following fields get filled from liquid.ServiceInfo

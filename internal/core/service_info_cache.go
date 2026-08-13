@@ -245,11 +245,9 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	if categoryFilterExists || resourceFilterExists {
 		for serviceType, resources := range f.snapshot.resources {
 			for resourceName, resource := range resources {
-				categoryID, cExists := resource.CategoryID.Unpack()
-				_, inRemoveSet := categoriesToRemove[categoryID]
+				_, inRemoveSet := categoriesToRemove[resource.CategoryID]
 				shouldRemove := (resourceFilterExists && resourceName != resourceNameFilter) ||
-					(categoryFilterExists && cExists && inRemoveSet) ||
-					(categoryFilterExists && !cExists && string(categoryFilter) != string(serviceType))
+					(categoryFilterExists && inRemoveSet)
 				if shouldRemove {
 					delete(f.snapshot.resources[serviceType], resourceName)
 					delete(f.snapshot.azResources[serviceType], resourceName)
@@ -261,7 +259,7 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 						delete(f.snapshot.categories, serviceType)
 					}
 				} else {
-					seenCategories[categoryID] = struct{}{}
+					seenCategories[resource.CategoryID] = struct{}{}
 				}
 			}
 		}
@@ -271,11 +269,9 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 	if categoryFilterExists || rateFilterExists {
 		for serviceType, rates := range f.snapshot.rates {
 			for rateName, rate := range rates {
-				categoryID, cExists := rate.CategoryID.Unpack()
-				_, inRemoveSet := categoriesToRemove[categoryID]
+				_, inRemoveSet := categoriesToRemove[rate.CategoryID]
 				shouldRemove := (rateFilterExists && rateName != rateNameFilter) ||
-					(categoryFilterExists && cExists && inRemoveSet) ||
-					(categoryFilterExists && !cExists && string(categoryFilter) != string(serviceType))
+					(categoryFilterExists && inRemoveSet)
 				if shouldRemove {
 					delete(f.snapshot.rates[serviceType], rateName)
 					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
@@ -286,7 +282,7 @@ func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInf
 						delete(f.snapshot.categories, serviceType)
 					}
 				} else {
-					seenCategories[categoryID] = struct{}{}
+					seenCategories[rate.CategoryID] = struct{}{}
 				}
 			}
 		}
@@ -839,12 +835,10 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 		if res.AttributesJSON != "" {
 			resInfo.Attributes = json.RawMessage(res.AttributesJSON)
 		}
-		if categoryID, ok := res.CategoryID.Unpack(); ok {
-			if cat, exists := categories[categoryID]; exists {
-				resInfo.Category = Some(cat.Name)
-				info.Categories[cat.Name] = liquid.CategoryInfo{
-					DisplayName: cat.DisplayName,
-				}
+		if cat, exists := categories[res.CategoryID]; exists {
+			resInfo.Category = Some(cat.Name)
+			info.Categories[cat.Name] = liquid.CategoryInfo{
+				DisplayName: cat.DisplayName,
 			}
 		}
 		info.Resources[name] = resInfo
@@ -857,12 +851,10 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 			Topology:    rate.Topology,
 			HasUsage:    rate.HasUsage,
 		}
-		if categoryID, ok := rate.CategoryID.Unpack(); ok {
-			if cat, exists := categories[categoryID]; exists {
-				rateInfo.Category = Some(cat.Name)
-				info.Categories[cat.Name] = liquid.CategoryInfo{
-					DisplayName: cat.DisplayName,
-				}
+		if cat, exists := categories[rate.CategoryID]; exists {
+			rateInfo.Category = Some(cat.Name)
+			info.Categories[cat.Name] = liquid.CategoryInfo{
+				DisplayName: cat.DisplayName,
 			}
 		}
 		info.Rates[name] = rateInfo

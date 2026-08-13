@@ -130,15 +130,10 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 			if !slices.Contains(allowedResources, resourceName) {
 				continue
 			}
-			category := liquid.CategoryName(serviceType)
-			categoryDisplayName := service.DisplayName
-			if categoryID, exists := resource.CategoryID.Unpack(); exists {
-				category = categories[categoryID].Name
-				categoryDisplayName = categories[categoryID].DisplayName
-			}
-			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = resourcesv2.CategoryInfoReport{
-					DisplayName: categoryDisplayName,
+			category := categories[resource.CategoryID]
+			if _, exists := serviceReport.Categories[category.Name]; !exists {
+				serviceReport.Categories[category.Name] = resourcesv2.CategoryInfoReport{
+					DisplayName: category.DisplayName,
 					Resources:   make(map[liquid.ResourceName]resourcesv2.ResourceInfoReport),
 				}
 			}
@@ -150,7 +145,7 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 			} else {
 				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
 			}
-			serviceReport.Categories[category].Resources[resourceName] = resourcesv2.ResourceInfoReport{
+			serviceReport.Categories[category.Name].Resources[resourceName] = resourcesv2.ResourceInfoReport{
 				DisplayName:      resource.DisplayName,
 				Unit:             resource.Unit,
 				Topology:         resource.Topology,
@@ -221,19 +216,14 @@ func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.Ser
 				rir.ProjectDefaultLimit = rateConfig.Limit
 				rir.ProjectDefaultWindow = Some(rateConfig.Window)
 			}
-			category := liquid.CategoryName(serviceType)
-			categoryDisplayName := service.DisplayName
-			if categoryID, exists := rate.CategoryID.Unpack(); exists {
-				category = categories[categoryID].Name
-				categoryDisplayName = categories[categoryID].DisplayName
-			}
-			if _, exists := serviceReport.Categories[category]; !exists {
-				serviceReport.Categories[category] = ratesv2.CategoryInfoReport{
-					DisplayName: categoryDisplayName,
+			category := categories[rate.CategoryID]
+			if _, exists := serviceReport.Categories[category.Name]; !exists {
+				serviceReport.Categories[category.Name] = ratesv2.CategoryInfoReport{
+					DisplayName: category.DisplayName,
 					Rates:       make(map[liquid.RateName]ratesv2.RateInfoReport),
 				}
 			}
-			serviceReport.Categories[category].Rates[rateName] = rir
+			serviceReport.Categories[category.Name].Rates[rateName] = rir
 		}
 	}
 	return report, nil

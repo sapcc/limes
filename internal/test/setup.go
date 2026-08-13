@@ -389,6 +389,16 @@ func (s Setup) GetServiceID(srvType db.ServiceType) (result db.ServiceID) {
 	return result
 }
 
+// GetCategoryID is a helper function for finding the ID of a db.Category record.
+func (s Setup) GetCategoryID(srvType db.ServiceType, name liquid.CategoryName) (result db.CategoryID) {
+	s.t.Helper()
+	err := s.DB.QueryRow(`SELECT id FROM categories WHERE service_id = $1 AND name = $2`, s.GetServiceID(srvType), name).Scan(&result)
+	if err != nil {
+		s.t.Fatalf("could not find categories.id for service_type = %q and name = %q: %s", srvType, name, err.Error())
+	}
+	return result
+}
+
 // GetResourceID is a helper function for finding the ID of a db.Resource record.
 func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName) (result db.ResourceID) {
 	s.t.Helper()

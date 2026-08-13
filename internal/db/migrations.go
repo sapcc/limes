@@ -154,4 +154,8 @@ var sqlMigrations = map[int64]string{
 			AFTER INSERT OR UPDATE OR DELETE ON categories
 			FOR EACH ROW EXECUTE FUNCTION notify_service_update();
 	`,
+	85: `
+		ALTER TABLE resources ALTER COLUMN category_id SET NOT NULL;
+		ALTER TABLE rates     ALTER COLUMN category_id SET NOT NULL;
+	`,
 }
