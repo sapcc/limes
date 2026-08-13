@@ -26,7 +26,7 @@ INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usa
 INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path, display_name, category_id) VALUES (2, 1, 'rateWithClusterLimit', 1, 'piece', 'flat', 'unittest/rateWithClusterLimit', 'Cluster-Limited Rate', 1);
 INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path, display_name, category_id) VALUES (3, 1, 'rateWithProjectLimit', 1, 'piece', 'flat', 'unittest/rateWithProjectLimit', 'Project-Limited Rate', 1);
 INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, has_usage, path, display_name, category_id) VALUES (4, 1, 'secondrate', 1, 'KiB', 'flat', TRUE, 'unittest/secondrate', 'Second Rate', 1);
-INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path, display_name) VALUES (5, 1, 'xAnotherRate', 1, 'piece', 'flat', 'unittest/xAnotherRate', 'X Another Rate');
+INSERT INTO rates (id, service_id, name, liquid_version, unit, topology, path, display_name, category_id) VALUES (5, 1, 'xAnotherRate', 1, 'piece', 'flat', 'unittest/xAnotherRate', 'X Another Rate', 1);
 
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, needs_resource_demand, has_quota, path, display_name, category_id) VALUES (1, 1, 'capacity', 1, 'B', 'az-aware', TRUE, TRUE, TRUE, 'unittest/capacity', 'Capacity', 1);
 INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name, category_id) VALUES (2, 1, 'things', 1, 'piece', 'az-aware', TRUE, 'unittest/things', 'Things', 1);
