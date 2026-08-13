@@ -153,7 +153,7 @@ func Test_ScanCapacity(t *testing.T) {
 		Path:          db.ResourcePath{ServiceType: "unshared", ResourceName: "unknown"},
 		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
-		CategoryID:    Some(s.GetCategoryID("unshared", "unshared")),
+		CategoryID:    s.GetCategoryID("unshared", "unshared"),
 	}
 	s.MustDBInsert(unknownRes)
 	s.MustDBInsert(&db.AZResource{

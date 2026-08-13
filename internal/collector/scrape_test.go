@@ -129,7 +129,7 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 		Unit:          liquid.UnitPiece,
 		Topology:      liquid.FlatTopology,
 		LiquidVersion: 1,
-		CategoryID:    Some(s.GetCategoryID("unittest", "unittest")),
+		CategoryID:    s.GetCategoryID("unittest", "unittest"),
 	})
 	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("unittest"))))
 	s.MustDBInsert(&db.ProjectRate{

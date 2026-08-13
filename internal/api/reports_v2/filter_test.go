@@ -102,20 +102,16 @@ func TestV2FilterCreation(t *testing.T) {
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 2)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetResourcesForType("first")))["capacity"].CategoryID.IsSome(), true)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 1)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetRatesForType("first")))["objects:create"].CategoryID.IsSome(), true)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("foo_category"))}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 2)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetResourcesForType("first")))["capacity"].CategoryID.IsSome(), true)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 1)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetRatesForType("first")))["objects:create"].CategoryID.IsSome(), true)
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// category filter: using serviceType value as category to get resources/rates without explicit category
@@ -123,20 +119,16 @@ func TestV2FilterCreation(t *testing.T) {
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 1)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetResourcesForType("first")))["things"].CategoryID.IsSome(), true) // not false anymore, refers to the materialized default category
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("second"))), 0)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(resourceFilter.GetRatesForType("first")))["objects:update"].CategoryID.IsSome(), true) // not false anymore, refers to the materialized default category
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("first"))}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 1)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(rateFilter.GetResourcesForType("first")))["things"].CategoryID.IsSome(), true) // not false anymore, refers to the materialized default category
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("second"))), 0)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, (must.BeOK(rateFilter.GetRatesForType("first")))["objects:update"].CategoryID.IsSome(), true) // not false anymore, refers to the materialized default category
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// resource filter

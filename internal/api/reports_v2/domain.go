@@ -213,14 +213,11 @@ func setInDomainResourceReport(filter Filter, cluster *core.Cluster, report *res
 	serviceReport := areaReport.Services[service.Type]
 
 	// check category level
-	category := liquid.CategoryName(service.Type)
-	if categoryID, exists := resource.CategoryID.Unpack(); exists {
-		category = must.BeOK(filter.GetCategoryForID(categoryID)).Name
+	categoryName := must.BeOK(filter.GetCategoryForID(resource.CategoryID)).Name
+	if _, exists := serviceReport.Categories[categoryName]; !exists {
+		serviceReport.Categories[categoryName] = resourcesv2.DomainCategoryReport{Resources: make(map[liquid.ResourceName]resourcesv2.DomainResourceReport)}
 	}
-	if _, exists := serviceReport.Categories[category]; !exists {
-		serviceReport.Categories[category] = resourcesv2.DomainCategoryReport{Resources: make(map[liquid.ResourceName]resourcesv2.DomainResourceReport)}
-	}
-	categoryReport := serviceReport.Categories[category]
+	categoryReport := serviceReport.Categories[categoryName]
 
 	// check resource level
 	if _, exists := categoryReport.Resources[resource.Name]; !exists {
@@ -325,14 +322,11 @@ func setInDomainRateReport(filter Filter, cluster *core.Cluster, report *ratesv2
 	serviceReport := areaReport.Services[service.Type]
 
 	// check category level
-	category := liquid.CategoryName(service.Type)
-	if categoryID, exists := rate.CategoryID.Unpack(); exists {
-		category = must.BeOK(filter.GetCategoryForID(categoryID)).Name
+	categoryName := must.BeOK(filter.GetCategoryForID(rate.CategoryID)).Name
+	if _, exists := serviceReport.Categories[categoryName]; !exists {
+		serviceReport.Categories[categoryName] = ratesv2.DomainCategoryReport{Rates: make(map[liquid.RateName]ratesv2.DomainRateReport)}
 	}
-	if _, exists := serviceReport.Categories[category]; !exists {
-		serviceReport.Categories[category] = ratesv2.DomainCategoryReport{Rates: make(map[liquid.RateName]ratesv2.DomainRateReport)}
-	}
-	categoryReport := serviceReport.Categories[category]
+	categoryReport := serviceReport.Categories[categoryName]
 
 	// check rate level
 	categoryReport.Rates[rate.Name] = value

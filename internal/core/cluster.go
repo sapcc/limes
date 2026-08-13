@@ -439,7 +439,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				ServiceID:           srv.ID,
 				Name:                resourceName,
 				DisplayName:         resInfo.DisplayName,
-				CategoryID:          Some(categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID),
+				CategoryID:          categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID,
 				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                resInfo.Unit,
@@ -464,7 +464,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				}
 			}
 			res.DisplayName = resInfo.DisplayName
-			res.CategoryID = Some(categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID)
+			res.CategoryID = categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID
 			res.Unit = resInfo.Unit
 			res.Topology = resInfo.Topology
 			res.HasCapacity = resInfo.HasCapacity
@@ -635,7 +635,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
 				DisplayName:   rateInfo.DisplayName,
-				CategoryID:    Some(categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID),
+				CategoryID:    categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID,
 				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
 				LiquidVersion: serviceInfo.Version,
 				Unit:          rateInfo.Unit,
@@ -648,7 +648,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 
 			rate.LiquidVersion = serviceInfo.Version
 			rate.DisplayName = rateInfo.DisplayName
-			rate.CategoryID = Some(categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID)
+			rate.CategoryID = categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID
 			rate.Topology = rateInfo.Topology
 			rate.HasUsage = rateInfo.HasUsage
 
