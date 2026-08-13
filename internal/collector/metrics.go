@@ -585,8 +585,9 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 				// We have them in the DB for completeness, but the metrics are of no use in this case.
 				continue
 			}
-			azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
-				az, apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+			azLabels := BuildLabels(
+				[]string{"availability_zone", "resource", "service", "service_name"},
+				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
 			metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
 			result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
@@ -598,8 +599,9 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 			}
 		}
 
-		labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+		labels := BuildLabels(
+			[]string{"resource", "service", "service_name"},
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
 		metric := dataMetric{Labels: labels, Value: float64(behavior.OvercommitFactor.ApplyTo(totalCapacity))}
 		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -626,8 +628,9 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 			}
 			apiIdentity := behaviorCache.Get(serviceType, resName).IdentityInV1API
 
-			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceType,
+			labels := BuildLabels(
+				[]string{"resource", "service", "service_name"},
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 			)
 			metric := dataMetric{Labels: labels, Value: 0}
 			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -650,10 +653,10 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
 		if quota != nil {
-			labels := fmt.Sprintf(
-				`domain=%q,domain_id=%q,resource=%q,service=%q,service_name=%q`,
+			labels := BuildLabels(
+				[]string{"domain", "domain_id", "resource", "service", "service_name"},
 				domainName, domainUUID,
-				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
 			metric := dataMetric{Labels: labels, Value: float64(*quota)}
 			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
@@ -688,10 +691,10 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
-		labels := fmt.Sprintf(
-			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
+		labels := BuildLabels(
+			[]string{"domain", "domain_id", "project", "project_id", "resource", "service", "service_name"},
 			domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
 
 		if quota != nil {
@@ -750,10 +753,10 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
-		labels := fmt.Sprintf(
-			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
-			az, domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+		labels := BuildLabels(
+			[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "resource", "service", "service_name"},
+			string(az), domainName, domainUUID, projectName, projectUUID,
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
 
 		if d.ReportZeroes || usage != 0 {
@@ -793,8 +796,9 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		for dbResourceName, resourceInfo := range resources[serviceType] {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
-			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.Name, apiIdentity.ServiceType, serviceType,
+			labels := BuildLabels(
+				[]string{"resource", "service", "service_name"},
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
@@ -811,8 +815,9 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 			}
 
 			for _, duration := range behaviorCache.GetCommitmentBehavior(serviceType, dbResourceName).Durations {
-				labels := fmt.Sprintf(`duration=%q,resource=%q,service=%q,service_name=%q`,
-					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, serviceType,
+				labels := BuildLabels(
+					[]string{"duration", "resource", "service", "service_name"},
+					duration.String(), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 				)
 				metric := dataMetric{Labels: labels, Value: 1.0}
 				result["limes_available_commitment_duration"] = append(result["limes_available_commitment_duration"], metric)
@@ -844,10 +849,10 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		if d.ReportZeroes || usageAsFloat != 0 {
 			behavior := behaviorCache.GetForRate(dbServiceType, dbRateName)
 			apiIdentity := behavior.IdentityInV1API
-			labels := fmt.Sprintf(
-				`domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q,service_name=%q`,
+			labels := BuildLabels(
+				[]string{"domain", "domain_id", "project", "project_id", "rate", "service", "service_name"},
 				domainName, domainUUID, projectName, projectUUID,
-				apiIdentity.Name, apiIdentity.ServiceType, dbServiceType,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
 			metric := dataMetric{Labels: labels, Value: usageAsFloat}
 			result["limes_project_rate_usage"] = append(result["limes_project_rate_usage"], metric)
@@ -1012,21 +1017,25 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 
 		// emit limitas_resource_info
 		qdConfig := d.Cluster.QuotaDistributionConfigForResource(srvType, res.Name)
-		qdmLabel := qdConfig.Model
+		qdmLabel := string(qdConfig.Model)
 		if !res.HasQuota {
 			qdmLabel = ""
 		}
-		labels := fmt.Sprintf(`category=%q,display_name=%q,has_quota=%q,qdm=%q,resource=%q,service=%q,topology=%q,unit=%q`,
-			record.CategoryName.UnwrapOr(liquid.CategoryName(srvType)),
+		labels := BuildLabels(
+			[]string{"category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit"},
+			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
 			res.DisplayName, strconv.FormatBool(res.HasQuota),
-			qdmLabel, res.Name, srvType, res.Topology, res.Unit.String(),
+			qdmLabel, string(res.Name), string(srvType), string(res.Topology), res.Unit.String(),
 		)
 		metric := dataMetric{Labels: labels, Value: 1}
 		result["limitas_resource_info"] = append(result["limitas_resource_info"], metric)
 
 		// emit limitas_resource_overcommit_factor and limitas_resource_autogrow_*
 		// (those metrics are batched together here because they share the same `labels`)
-		labels = fmt.Sprintf(`resource=%q,service=%q`, res.Name, srvType)
+		labels = BuildLabels(
+			[]string{"resource", "service"},
+			string(res.Name), string(srvType),
+		)
 		metric = dataMetric{Labels: labels, Value: float64(overcommitFactor)}
 		result["limitas_resource_overcommit_factor"] = append(result["limitas_resource_overcommit_factor"], metric)
 
@@ -1041,7 +1050,10 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 
 		// emit limitas_resource_unit_multiplier
 		baseUnit, multiplier := res.Unit.Base()
-		labels = fmt.Sprintf(`base_unit=%q,resource=%q,service=%q`, baseUnit.String(), res.Name, srvType)
+		labels = BuildLabels(
+			[]string{"base_unit", "resource", "service"},
+			baseUnit.String(), string(res.Name), string(srvType),
+		)
 		metric = dataMetric{Labels: labels, Value: float64(multiplier)}
 		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
 		return nil
@@ -1086,7 +1098,10 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		}
 
 		// emit limitas_cluster_resource_raw_capacity
-		labels := fmt.Sprintf(`az=%q,resource=%q,service=%q`, crr.AvailabilityZone, crr.ResourceName, crr.ServiceType)
+		labels := BuildLabels(
+			[]string{"az", "resource", "service"},
+			string(crr.AvailabilityZone), string(crr.ResourceName), string(crr.ServiceType),
+		)
 		metric := dataMetric{Labels: labels, Value: float64(crr.RawCapacity)}
 		result["limitas_cluster_resource_raw_capacity"] = append(result["limitas_cluster_resource_raw_capacity"], metric)
 
@@ -1117,7 +1132,10 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		if !ok {
 			return fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
 		}
-		labels := fmt.Sprintf(`rate=%q,service=%q`, rate.Name, srvType)
+		labels := BuildLabels(
+			[]string{"rate", "service"},
+			string(rate.Name), string(srvType),
+		)
 
 		if cfg, ok := lcfg.RateLimits.GetGlobalRateLimit(rate.Name).Unpack(); ok {
 			// emit limitas_cluster_rate_global_limit
@@ -1141,10 +1159,11 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		}
 
 		// emit limitas_rate_info
-		labels = fmt.Sprintf(`category=%q,display_name=%q,has_limit=%q,has_usage=%q,rate=%q,service=%q,topology=%q,unit=%q`,
-			record.CategoryName.UnwrapOr(liquid.CategoryName(srvType)),
+		labels = BuildLabels(
+			[]string{"category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit"},
+			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
 			rate.DisplayName, strconv.FormatBool(projectDefault.IsSome()), strconv.FormatBool(rate.HasUsage),
-			rate.Name, srvType, rate.Topology, rate.Unit.String(),
+			string(rate.Name), string(srvType), string(rate.Topology), rate.Unit.String(),
 		)
 		metric := dataMetric{Labels: labels, Value: 1}
 		result["limitas_rate_info"] = append(result["limitas_rate_info"], metric)
@@ -1211,12 +1230,12 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			return nil
 		}
 
-		labels := fmt.Sprintf(
-			`az=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,status=%q,transfer_status=%q,uuid=%q`,
-			crr.AvailabilityZone,
+		labels := BuildLabels(
+			[]string{"az", "domain", "domain_id", "project", "project_id", "resource", "service", "status", "transfer_status", "uuid"},
+			string(crr.AvailabilityZone),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
-			crr.ResourceName, crr.ServiceType,
-			pcr.Status, pcr.TransferStatus, pcr.UUID,
+			string(crr.ResourceName), string(crr.ServiceType),
+			string(pcr.Status), string(pcr.TransferStatus), string(pcr.UUID),
 		)
 
 		// emit limitas_project_resource_commitment_amount
@@ -1262,11 +1281,11 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			return nil
 		}
 
-		labels := fmt.Sprintf(
-			`az=%q,committable=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q`,
-			crr.AvailabilityZone, strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
+		labels := BuildLabels(
+			[]string{"az", "committable", "domain", "domain_id", "project", "project_id", "resource", "service"},
+			string(crr.AvailabilityZone), strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
-			crr.ResourceName, crr.ServiceType,
+			string(crr.ResourceName), string(crr.ServiceType),
 		)
 
 		if datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
@@ -1316,11 +1335,11 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			// we will just ignore it until the next scrape
 			return nil
 		}
-		labels := fmt.Sprintf(
-			`az=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q`,
-			liquid.AvailabilityZoneAny, // currently hardcoded for forwards-compatibility; TODO: introduce proper support for AZ-aware rates
+		labels := BuildLabels(
+			[]string{"az", "domain", "domain_id", "project", "project_id", "rate", "service"},
+			string(liquid.AvailabilityZoneAny), // currently hardcoded for forwards-compatibility; TODO: introduce proper support for AZ-aware rates
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
-			ri.Path.RateName, ri.Path.ServiceType,
+			string(ri.Path.RateName), string(ri.Path.ServiceType),
 		)
 
 		if cfg, ok := ri.ProjectDefault.Unpack(); ok {
@@ -1417,4 +1436,54 @@ func (c resourceAndRateBehaviorCache) GetCommitmentBehavior(srvType db.ServiceTy
 		c.cbCache[srvType][resName] = behavior
 	}
 	return behavior
+}
+
+// BuildLabels serializes a Prometheus labelset into the string format used in Prometheus text expositions.
+// For example:
+//
+//	labels := BuildLabels([]string{"foo", "hello"}, "bar", "world")
+//	assert.Equal(t, labels, `foo="bar",hello="world"`)
+//
+// The caller must ensure that the label names do not contain invalid characters.
+// (This should be easy, since label names are usually hardcoded.)
+// Label values will be escaped if required.
+func BuildLabels(names []string, values ...string) string {
+	if len(names) != len(values) {
+		panic("arguments are not of equal length")
+	}
+	if len(names) == 0 {
+		return ""
+	}
+
+	// estimate the perfect number of bytes for the result string to avoid reallocations
+	capacity := len(names) - 1 // number of "," between pairs
+	needsEscaping := make([]bool, len(names))
+	for idx, value := range values {
+		// base length for an encoding in the form `label="value"`
+		capacity += len(names[idx]) + len(value) + 3
+		// some characters within `value` need escaping
+		toEscape := strings.Count(value, "\n") + strings.Count(value, "\"") + strings.Count(value, "\\")
+		needsEscaping[idx] = toEscape > 0
+		capacity += toEscape
+	}
+
+	var b strings.Builder
+	b.Grow(capacity)
+	for idx, value := range values {
+		if idx > 0 {
+			_ = b.WriteByte(',')
+		}
+		_, _ = b.WriteString(names[idx])
+		_ = b.WriteByte('=')
+		_ = b.WriteByte('"')
+		if needsEscaping[idx] {
+			// TODO: this could be optimized further, but since this branch is unlikely in practice, I did not bother yet
+			value = strings.ReplaceAll(value, "\\", "\\\\")
+			value = strings.ReplaceAll(value, "\"", "\\\"")
+			value = strings.ReplaceAll(value, "\n", "\\n")
+		}
+		_, _ = b.WriteString(value)
+		_ = b.WriteByte('"')
+	}
+	return b.String()
 }
