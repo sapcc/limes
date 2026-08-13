@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/gg/options"
 	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/db"
@@ -291,6 +290,31 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		}
 	}
 
+	// make the implicitly defined default category explicit if needed
+	defaultCategoryName := liquid.CategoryName(serviceType)
+	if usesDefaultCategory(serviceInfo) {
+		if _, exists := serviceInfo.Categories[defaultCategoryName]; !exists {
+			if serviceInfo.Categories == nil {
+				serviceInfo.Categories = make(map[liquid.CategoryName]liquid.CategoryInfo)
+			}
+			serviceInfo.Categories[defaultCategoryName] = liquid.CategoryInfo{
+				DisplayName: serviceInfo.DisplayName,
+			}
+		}
+		for resName, resInfo := range serviceInfo.Resources {
+			if resInfo.Category.IsNone() {
+				resInfo.Category = Some(defaultCategoryName)
+				serviceInfo.Resources[resName] = resInfo
+			}
+		}
+		for rateName, rateInfo := range serviceInfo.Rates {
+			if rateInfo.Category.IsNone() {
+				rateInfo.Category = Some(defaultCategoryName)
+				serviceInfo.Rates[rateName] = rateInfo
+			}
+		}
+	}
+
 	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
 	tx, err := dbm.Begin()
 	if err != nil {
@@ -411,14 +435,11 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
 			}
 			resInfo := serviceInfo.Resources[resourceName]
-			categoryID := options.Map(resInfo.Category,
-				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Resource{
-				ServiceID:   srv.ID,
-				Name:        resourceName,
-				DisplayName: resInfo.DisplayName,
-				// TODO: consider serializing empty categories as serviceType here, instead at the consumers
-				CategoryID:          categoryID,
+				ServiceID:           srv.ID,
+				Name:                resourceName,
+				DisplayName:         resInfo.DisplayName,
+				CategoryID:          Some(categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID),
 				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
 				LiquidVersion:       serviceInfo.Version,
 				Unit:                resInfo.Unit,
@@ -443,9 +464,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				}
 			}
 			res.DisplayName = resInfo.DisplayName
-			// TODO: consider serializing empty categories as serviceType here, instead at the consumers
-			res.CategoryID = options.Map(resInfo.Category,
-				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
+			res.CategoryID = Some(categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID)
 			res.Unit = resInfo.Unit
 			res.Topology = resInfo.Topology
 			res.HasCapacity = resInfo.HasCapacity
@@ -612,13 +631,11 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		},
 		Create: func(rateName liquid.RateName) (db.Rate, error) {
 			rateInfo := serviceInfo.Rates[rateName]
-			categoryID := options.Map(rateInfo.Category,
-				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
 			return db.Rate{
 				ServiceID:     dbServices[0].ID,
 				Name:          rateName,
 				DisplayName:   rateInfo.DisplayName,
-				CategoryID:    categoryID,
+				CategoryID:    Some(categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID),
 				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
 				LiquidVersion: serviceInfo.Version,
 				Unit:          rateInfo.Unit,
@@ -631,8 +648,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 
 			rate.LiquidVersion = serviceInfo.Version
 			rate.DisplayName = rateInfo.DisplayName
-			rate.CategoryID = options.Map(rateInfo.Category,
-				func(cn liquid.CategoryName) db.CategoryID { return categoryByName[cn].ID })
+			rate.CategoryID = Some(categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID)
 			rate.Topology = rateInfo.Topology
 			rate.HasUsage = rateInfo.HasUsage
 
@@ -685,4 +701,18 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 	}
 
 	return tx.Commit()
+}
+
+func usesDefaultCategory(serviceInfo liquid.ServiceInfo) bool {
+	for _, resInfo := range serviceInfo.Resources {
+		if resInfo.Category.IsNone() {
+			return true
+		}
+	}
+	for _, rateInfo := range serviceInfo.Rates {
+		if rateInfo.Category.IsNone() {
+			return true
+		}
+	}
+	return false
 }

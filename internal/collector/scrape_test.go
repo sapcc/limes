@@ -773,6 +773,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (3, 1, 'az-two', 0, 'noop/things/az-two');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (4, 1, 'total', 0, 'noop/things/total');
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (5, 1, 'unknown', 0, 'noop/things/unknown');
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (1, 'noop', 'Noop', 1);
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (1, 1, 1, 0, 0);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage) VALUES (2, 1, 2, 0, 0);
@@ -781,7 +782,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO project_resources (id, project_id, resource_id, forbidden) VALUES (1, 1, 1, TRUE);
 		INSERT INTO project_services (id, project_id, service_id, scraped_at, checked_at, scrape_error_message, next_scrape_at) VALUES (1, 1, 1, 0, %[2]d, 'received ServiceUsageReport is invalid: missing value for .Resources["things"]', %[3]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name) VALUES (1, 1, 'things', 1, 'piece', 'az-aware', TRUE, 'noop/things', 'Things');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_quota, path, display_name, category_id) VALUES (1, 1, 'things', 1, 'piece', 'az-aware', TRUE, 'noop/things', 'Things', 1);
 		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'noop', %[1]d, 1, 'Noop');
 	`,
 		initialTime.Unix(), scrapedAt.Unix(), scrapedAt.Add(collector.RecheckInterval).Unix(),
