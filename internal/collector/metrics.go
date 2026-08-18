@@ -4,19 +4,16 @@
 package collector
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
 	"math/big"
 	"net/http"
-	"runtime"
 	"slices"
 	"strconv"
-	"strings"
+	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,10 +22,10 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/is"
+	"go.xyrillian.de/gg/microprom"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/oblast"
 
@@ -364,105 +361,31 @@ type DataMetricsV1Reporter struct {
 	ReportZeroes bool
 }
 
-// ContentTypeForPrometheusMetrics is the same Content-Type that promhttp's GET /metrics implementation reports.
-// If this changes because of a prometheus/client-go upgrade, we will know because our
-// test verifies that promhttp yields this Content-Type. In the case of a change,
-// the output format of promhttp should be carefully reviewed for changes, and then
-// our implementation should match those changes (including to the Content-Type).
-const ContentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=underscores"
-
-func reportHeapStats(moment string) {
-	var stats runtime.MemStats
-	runtime.ReadMemStats(&stats)
-	logg.Debug("heap stats %s: alloc = %g MiB, sys = %g MiB, idle = %g MiB, inuse = %g MiB",
-		moment,
-		float64(stats.HeapAlloc)/(1<<20),
-		float64(stats.HeapSys)/(1<<20),
-		float64(stats.HeapIdle)/(1<<20),
-		float64(stats.HeapInuse)/(1<<20),
-	)
-}
-
-// ServeHTTP implements the http.Handler interface.
-func (d *DataMetricsV1Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if logg.ShowDebug {
-		reportHeapStats("before collectMetrics()")
-	}
-	metricSet, err := d.collectMetrics()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	if logg.ShowDebug {
-		reportHeapStats("after collectMetrics()")
-		defer func() {
-			runtime.GC()
-			reportHeapStats("after end of ServeHTTP()")
-		}()
-	}
-
-	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
-	w.WriteHeader(http.StatusOK)
-
-	// NOTE: Keep metric families ordered by name!
-	bw := bufio.NewWriter(w)
-	printDataMetrics(bw, metricSet, "limes_autogrow_growth_multiplier", `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`)
-	printDataMetrics(bw, metricSet, "limes_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`)
-	printDataMetrics(bw, metricSet, "limes_available_commitment_duration", `Reports which commitment durations are available for new commitments on a Limes resource.`)
-	printDataMetrics(bw, metricSet, "limes_cluster_capacity", `Reported capacity of a Limes resource for an OpenStack cluster.`)
-	printDataMetrics(bw, metricSet, "limes_cluster_capacity_per_az", "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.")
-	printDataMetrics(bw, metricSet, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
-	printDataMetrics(bw, metricSet, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
-	printDataMetrics(bw, metricSet, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricSet, "limes_project_commitment_min_expires_at", `Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`)
-	printDataMetrics(bw, metricSet, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
-	printDataMetrics(bw, metricSet, "limes_project_override_quota_from_config", `Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`)
-	printDataMetrics(bw, metricSet, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricSet, "limes_project_quota", `Assigned quota of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricSet, "limes_project_rate_usage", `Usage of a Limes rate for an OpenStack project. These are counters that never reset.`)
-	printDataMetrics(bw, metricSet, "limes_project_usage", `Actual (logical) usage of a Limes resource for an OpenStack project.`)
-	printDataMetrics(bw, metricSet, "limes_project_usage_per_az", `Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`)
-	printDataMetrics(bw, metricSet, "limes_project_used_and_or_committed_per_az", `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`)
-	printDataMetrics(bw, metricSet, "limes_unit_multiplier", `Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`)
-
-	err = bw.Flush()
-	if err != nil {
-		logg.Error("in DataMetricsV1Reporter.ServeHTTP: " + err.Error())
-	}
-}
-
-type dataMetric struct {
-	Labels string // e.g. `bar="bar",foo="foo"`
-	Value  float64
-}
-
-type dataMetricSet struct {
-	ByFamily              map[string][]dataMetric
-	LastPrintedFamilyName string
-}
-
-func printDataMetrics(w io.Writer, metricSet *dataMetricSet, familyName, familyHelp string) {
-	// ensure that metric families are printed in alphabetical order as required by Prometheus
-	if metricSet.LastPrintedFamilyName != "" && metricSet.LastPrintedFamilyName > familyName {
-		panic(fmt.Sprintf("wrong ordering of printDataMetrics() calls: %q should be printed before %q",
-			familyName, metricSet.LastPrintedFamilyName))
-	}
-	metricSet.LastPrintedFamilyName = familyName
-
-	metrics := metricSet.ByFamily[familyName]
-	if len(metrics) == 0 {
-		return
-	}
-	metricType := "gauge"
-	if strings.HasSuffix(familyName, "_total") {
-		metricType = "counter"
-	}
-	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s %s\n", familyName, familyHelp, familyName, metricType)
-
-	slices.SortFunc(metrics, func(lhs, rhs dataMetric) int {
-		return strings.Compare(lhs.Labels, rhs.Labels)
-	})
-	for _, m := range metrics {
-		fmt.Fprintf(w, "%s{%s} %g\n", familyName, m.Labels, m.Value)
+// Handler builds a [http.Handler] for v1 data metrics.
+func (d *DataMetricsV1Reporter) Handler() http.Handler {
+	return microprom.Handler{
+		Collect:    d.collectMetrics,
+		SortOutput: testing.Testing(),
+		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
+			"limes_autogrow_growth_multiplier":                  gauge(`For resources with quota distribution model "autogrow", reports the configured growth multiplier.`),
+			"limes_autogrow_quota_overcommit_threshold_percent": gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`),
+			"limes_available_commitment_duration":               gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
+			"limes_cluster_capacity":                            gauge(`Reported capacity of a Limes resource for an OpenStack cluster.`),
+			"limes_cluster_capacity_per_az":                     gauge("Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone."),
+			"limes_cluster_usage_per_az":                        gauge("Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone."),
+			"limes_domain_quota":                                gauge(`Assigned quota of a Limes resource for an OpenStack domain.`),
+			"limes_project_backendquota":                        gauge(`Actual quota of a Limes resource for an OpenStack project.`),
+			"limes_project_commitment_min_expires_at":           gauge(`Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`),
+			"limes_project_committed_per_az":                    gauge(`Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`),
+			"limes_project_override_quota_from_config":          gauge(`Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`),
+			"limes_project_physical_usage":                      gauge(`Actual (physical) usage of a Limes resource for an OpenStack project.`),
+			"limes_project_quota":                               gauge(`Assigned quota of a Limes resource for an OpenStack project.`),
+			"limes_project_rate_usage":                          gauge(`Usage of a Limes rate for an OpenStack project. These are counters that never reset.`),
+			"limes_project_usage":                               gauge(`Actual (logical) usage of a Limes resource for an OpenStack project.`),
+			"limes_project_usage_per_az":                        gauge(`Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`),
+			"limes_project_used_and_or_committed_per_az":        gauge(`The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`),
+			"limes_unit_multiplier":                             gauge(`Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`),
+		},
 	}
 }
 
@@ -541,10 +464,22 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	 WHERE pra.usage_as_bigint != ''
 `)
 
-func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
+var (
+	// dmv1 = data metrics v1
+	dmv1ResourceLabelNames           = microprom.NewLabelNames("resource", "service", "service_name")
+	dmv1AZResourceLabelNames         = microprom.NewLabelNames("availability_zone", "resource", "service", "service_name")
+	dmv1CommitmentDurationLabelNames = microprom.NewLabelNames("duration", "resource", "service", "service_name")
+
+	dmv1DomainResourceLabelNames = microprom.NewLabelNames("domain", "domain_id", "resource", "service", "service_name")
+
+	dmv1ProjectResourceLabelNames   = microprom.NewLabelNames("domain", "domain_id", "project", "project_id", "resource", "service", "service_name")
+	dmv1ProjectAZResourceLabelNames = microprom.NewLabelNames("availability_zone", "domain", "domain_id", "project", "project_id", "resource", "service", "service_name")
+	dmv1ProjectRateLabelNames       = microprom.NewLabelNames("domain", "domain_id", "project", "project_id", "rate", "service", "service_name")
+)
+
+func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *microprom.MetricSet) error {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
 	resources := d.Cluster.SIC.GetSnapshot().GetResources()
-	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
@@ -585,26 +520,21 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 				// We have them in the DB for completeness, but the metrics are of no use in this case.
 				continue
 			}
-			azLabels := BuildLabels(
-				[]string{"availability_zone", "resource", "service", "service_name"},
+			azLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
 				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
-			metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
-			result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
+			ms.Add("limes_cluster_capacity_per_az", azLabels, float64(behavior.OvercommitFactor.ApplyTo(azCapacity)))
 
 			azUsage := usagePerAZ[az]
 			if azUsage != nil && *azUsage != 0 {
-				metric := dataMetric{Labels: azLabels, Value: float64(*azUsage)}
-				result["limes_cluster_usage_per_az"] = append(result["limes_cluster_usage_per_az"], metric)
+				ms.Add("limes_cluster_usage_per_az", azLabels, float64(*azUsage))
 			}
 		}
 
-		labels := BuildLabels(
-			[]string{"resource", "service", "service_name"},
+		labels := ms.FormatLabels(dmv1ResourceLabelNames,
 			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
-		metric := dataMetric{Labels: labels, Value: float64(behavior.OvercommitFactor.ApplyTo(totalCapacity))}
-		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
+		ms.Add("limes_cluster_capacity", labels, float64(behavior.OvercommitFactor.ApplyTo(totalCapacity)))
 
 		_, exists := capacityReported[dbServiceType]
 		if !exists {
@@ -615,7 +545,7 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in clusterMetricsQuery: %w", err)
+		return fmt.Errorf("in clusterMetricsQuery: %w", err)
 	}
 
 	// make sure that a cluster capacity value is reported for each resource (the
@@ -628,12 +558,10 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 			}
 			apiIdentity := behaviorCache.Get(serviceType, resName).IdentityInV1API
 
-			labels := BuildLabels(
-				[]string{"resource", "service", "service_name"},
+			labels := ms.FormatLabels(dmv1ResourceLabelNames,
 				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 			)
-			metric := dataMetric{Labels: labels, Value: 0}
-			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
+			ms.Add("limes_cluster_capacity", labels, 0)
 		}
 	}
 
@@ -653,18 +581,16 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
 		if quota != nil {
-			labels := BuildLabels(
-				[]string{"domain", "domain_id", "resource", "service", "service_name"},
+			labels := ms.FormatLabels(dmv1DomainResourceLabelNames,
 				domainName, domainUUID,
 				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
-			metric := dataMetric{Labels: labels, Value: float64(*quota)}
-			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
+			ms.Add("limes_domain_quota", labels, float64(*quota))
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("during domainMetricsQuery: %w", err)
+		return fmt.Errorf("during domainMetricsQuery: %w", err)
 	}
 
 	// fetch values for project level (quota/usage)
@@ -691,46 +617,39 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
-		labels := BuildLabels(
-			[]string{"domain", "domain_id", "project", "project_id", "resource", "service", "service_name"},
+		labels := ms.FormatLabels(dmv1ProjectResourceLabelNames,
 			domainName, domainUUID, projectName, projectUUID,
 			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
 
 		if quota != nil {
 			if d.ReportZeroes || *quota != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(*quota)}
-				result["limes_project_quota"] = append(result["limes_project_quota"], metric)
+				ms.Add("limes_project_quota", labels, float64(*quota))
 			}
 		}
 		if backendQuota != nil {
 			if d.ReportZeroes || *backendQuota != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(*backendQuota)}
-				result["limes_project_backendquota"] = append(result["limes_project_backendquota"], metric)
+				ms.Add("limes_project_backendquota", labels, float64(*backendQuota))
 			}
 		}
 		if overrideQuotaFromConfig != nil {
-			metric := dataMetric{Labels: labels, Value: float64(*overrideQuotaFromConfig)}
-			result["limes_project_override_quota_from_config"] = append(result["limes_project_override_quota_from_config"], metric)
+			ms.Add("limes_project_override_quota_from_config", labels, float64(*overrideQuotaFromConfig))
 		}
 		if d.ReportZeroes || usage != 0 {
-			metric := dataMetric{Labels: labels, Value: float64(usage)}
-			result["limes_project_usage"] = append(result["limes_project_usage"], metric)
+			ms.Add("limes_project_usage", labels, float64(usage))
 		}
 		if hasPhysicalUsage {
 			if d.ReportZeroes || physicalUsage != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(physicalUsage)}
-				result["limes_project_physical_usage"] = append(result["limes_project_physical_usage"], metric)
+				ms.Add("limes_project_physical_usage", labels, float64(physicalUsage))
 			}
 		}
 		if minExpiresAt != nil || d.ReportZeroes {
-			metric := dataMetric{Labels: labels, Value: timeAsUnixOrZero(minExpiresAt)}
-			result["limes_project_commitment_min_expires_at"] = append(result["limes_project_commitment_min_expires_at"], metric)
+			ms.Add("limes_project_commitment_min_expires_at", labels, timeAsUnixOrZero(minExpiresAt))
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("during projectMetricsQuery: %w", err)
+		return fmt.Errorf("during projectMetricsQuery: %w", err)
 	}
 
 	// fetch values for project AZ level (usage/commitments)
@@ -753,15 +672,13 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		}
 		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
-		labels := BuildLabels(
-			[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "resource", "service", "service_name"},
+		labels := ms.FormatLabels(dmv1ProjectAZResourceLabelNames,
 			string(az), domainName, domainUUID, projectName, projectUUID,
 			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 		)
 
 		if d.ReportZeroes || usage != 0 {
-			metric := dataMetric{Labels: labels, Value: float64(usage)}
-			result["limes_project_usage_per_az"] = append(result["limes_project_usage_per_az"], metric)
+			ms.Add("limes_project_usage_per_az", labels, float64(usage))
 		}
 		committed := uint64(0)
 		if amountByStatusJSON != nil {
@@ -776,19 +693,17 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 				if status == liquid.CommitmentStatusConfirmed {
 					state = "active" // backwards compatibility with old db.ProjectCommitmentState enum (TODO: use liquid.CommitmentStatus values in v2 metrics)
 				}
-				labelsWithState := fmt.Sprintf(`%s,state=%q`, labels, state)
-				metric := dataMetric{Labels: labelsWithState, Value: float64(amount)}
-				result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)
+				labelsWithState := microprom.Labels(fmt.Sprintf(`%s,state=%q`, labels, state))
+				ms.Add("limes_project_committed_per_az", labelsWithState, float64(amount))
 			}
 		}
 		if d.ReportZeroes || max(usage, committed) != 0 {
-			metric := dataMetric{Labels: labels, Value: float64(max(usage, committed))}
-			result["limes_project_used_and_or_committed_per_az"] = append(result["limes_project_used_and_or_committed_per_az"], metric)
+			ms.Add("limes_project_used_and_or_committed_per_az", labels, float64(max(usage, committed)))
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("during projectAZMetricsQuery: %w", err)
+		return fmt.Errorf("during projectAZMetricsQuery: %w", err)
 	}
 
 	// fetch metadata for services/resources
@@ -796,31 +711,24 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		for dbResourceName, resourceInfo := range resources[serviceType] {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
-			labels := BuildLabels(
-				[]string{"resource", "service", "service_name"},
+			labels := ms.FormatLabels(dmv1ResourceLabelNames,
 				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
-			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
-			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
+			ms.Add("limes_unit_multiplier", labels, float64(multiplier))
 
 			autogrowCfg, ok := d.Cluster.QuotaDistributionConfigForResource(serviceType, dbResourceName).Autogrow.Unpack()
 			if ok {
-				metric := dataMetric{Labels: labels, Value: autogrowCfg.GrowthMultiplier}
-				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
-
-				metric = dataMetric{Labels: labels, Value: autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent}
-				result["limes_autogrow_quota_overcommit_threshold_percent"] = append(result["limes_autogrow_quota_overcommit_threshold_percent"], metric)
+				ms.Add("limes_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
+				ms.Add("limes_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
 			}
 
 			for _, duration := range behaviorCache.GetCommitmentBehavior(serviceType, dbResourceName).Durations {
-				labels := BuildLabels(
-					[]string{"duration", "resource", "service", "service_name"},
+				labels := ms.FormatLabels(dmv1CommitmentDurationLabelNames,
 					duration.String(), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
 				)
-				metric := dataMetric{Labels: labels, Value: 1.0}
-				result["limes_available_commitment_duration"] = append(result["limes_available_commitment_duration"], metric)
+				ms.Add("limes_available_commitment_duration", labels, 1.0)
 			}
 		}
 	}
@@ -849,21 +757,19 @@ func (d *DataMetricsV1Reporter) collectMetrics() (*dataMetricSet, error) {
 		if d.ReportZeroes || usageAsFloat != 0 {
 			behavior := behaviorCache.GetForRate(dbServiceType, dbRateName)
 			apiIdentity := behavior.IdentityInV1API
-			labels := BuildLabels(
-				[]string{"domain", "domain_id", "project", "project_id", "rate", "service", "service_name"},
+			labels := ms.FormatLabels(dmv1ProjectRateLabelNames,
 				domainName, domainUUID, projectName, projectUUID,
 				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
 			)
-			metric := dataMetric{Labels: labels, Value: usageAsFloat}
-			result["limes_project_rate_usage"] = append(result["limes_project_rate_usage"], metric)
+			ms.Add("limes_project_rate_usage", labels, usageAsFloat)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("during projectRateMetricsQuery: %w", err)
+		return fmt.Errorf("during projectRateMetricsQuery: %w", err)
 	}
 
-	return &dataMetricSet{ByFamily: result}, nil
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -892,65 +798,45 @@ type DataMetricsV2Reporter struct {
 	TimeNow func() time.Time
 }
 
-// ServeHTTP implements the http.Handler interface.
-func (d *DataMetricsV2Reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if logg.ShowDebug {
-		reportHeapStats("before collectMetrics()")
-	}
-	metricSet, err := d.collectMetrics(r.Context())
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	if logg.ShowDebug {
-		reportHeapStats("after collectMetrics()")
-		defer func() {
-			runtime.GC()
-			reportHeapStats("after end of ServeHTTP()")
-		}()
-	}
-
-	w.Header().Set("Content-Type", ContentTypeForPrometheusMetrics)
-	w.WriteHeader(http.StatusOK)
-
-	// NOTE 1: The naming scheme for metrics is:
-	//         - `limitas_{rate,resource}_*` for metadata from LIQUID and configuration from limes.json config file
-	//         - `limitas_cluster_{rate,resource}_*` for cluster-level data (capacity)
-	//         - `limitas_project_{rate,resource}_*` for project-level data (quota, usage, commitments)
+// Handler builds a [http.Handler] for v2 data metrics.
+func (d *DataMetricsV2Reporter) Handler() http.Handler {
+	// NOTE: The naming scheme for metrics is:
+	//       - `limitas_{rate,resource}_*` for metadata from LIQUID and configuration from limes.json config file
+	//       - `limitas_cluster_{rate,resource}_*` for cluster-level data (capacity)
+	//       - `limitas_project_{rate,resource}_*` for project-level data (quota, usage, commitments)
 	//
-	//         This scheme is intended to make it easy to filter metrics by audience.
-	//         For example, a project admin should be allowed to have access to general metadata and config metrics,
-	//         as well as their own project data metrics, but not to cluster data metrics. In this scheme, this can be expressed as
+	//       This scheme is intended to make it easy to filter metrics by audience.
+	//       For example, a project admin should be allowed to have access to general metadata and config metrics,
+	//       as well as their own project data metrics, but not to cluster data metrics. In this scheme, this can be expressed as
 	//
-	//         - {__name__=~"limitas_(?:rate|resource)_.*"}
-	//         - {__name__=~"limitas_project_.*",project_id="$UUID"}
-	//
-	// NOTE 2: Keep metric families ordered by name! Otherwise printDataMetrics() will panic.
-	bw := bufio.NewWriter(w)
-	printDataMetrics(bw, metricSet, "limitas_cluster_rate_global_limit", `The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`)
-	printDataMetrics(bw, metricSet, "limitas_cluster_rate_global_window_seconds", `The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`)
-	printDataMetrics(bw, metricSet, "limitas_cluster_resource_capacity", `Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`)
-	printDataMetrics(bw, metricSet, "limitas_cluster_resource_raw_capacity", `Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`)
-	printDataMetrics(bw, metricSet, "limitas_project_rate_limit", `For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`)
-	printDataMetrics(bw, metricSet, "limitas_project_rate_usage_total", `For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`)
-	printDataMetrics(bw, metricSet, "limitas_project_rate_window_seconds", `For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_allocation", `For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_amount", `For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_commitment_expires_at", `For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_physical_usage", `For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_quota", `For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
-	printDataMetrics(bw, metricSet, "limitas_project_resource_usage", `For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`)
-	printDataMetrics(bw, metricSet, "limitas_rate_default_limit", `The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).`)
-	printDataMetrics(bw, metricSet, "limitas_rate_default_window_seconds", `The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.`)
-	printDataMetrics(bw, metricSet, "limitas_rate_info", `Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).`)
-	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_growth_multiplier", `For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`)
-	printDataMetrics(bw, metricSet, "limitas_resource_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`)
-	printDataMetrics(bw, metricSet, "limitas_resource_info", `Info metric for resources. The value is always 1, and information can be found in labels.`)
-	printDataMetrics(bw, metricSet, "limitas_resource_overcommit_factor", `Multiplier for converting this resource's raw capacity into reported capacity.`)
-	printDataMetrics(bw, metricSet, "limitas_resource_unit_multiplier", `Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`)
-
-	err = bw.Flush()
-	if err != nil {
-		logg.Error("in DataMetricsV1Reporter.ServeHTTP: " + err.Error())
+	//       - {__name__=~"limitas_(?:rate|resource)_.*"}
+	//       - {__name__=~"limitas_project_.*",project_id="$UUID"}
+	return microprom.Handler{
+		Collect:    d.collectMetrics,
+		SortOutput: testing.Testing(),
+		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
+			"limitas_cluster_rate_global_limit":                            gauge(`The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_cluster_rate_global_window_seconds":                   gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_cluster_resource_capacity":                            gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
+			"limitas_cluster_resource_raw_capacity":                        gauge(`Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`),
+			"limitas_project_rate_limit":                                   gauge(`For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_project_rate_usage":                                   counter(`For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`),
+			"limitas_project_rate_window_seconds":                          gauge(`For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_project_resource_allocation":                          gauge(`For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_commitment_amount":                   gauge(`For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`),
+			"limitas_project_resource_commitment_expires_at":               gauge(`For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`),
+			"limitas_project_resource_physical_usage":                      gauge(`For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_quota":                               gauge(`For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_usage":                               gauge(`For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_rate_default_limit":                                   gauge(`The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).`),
+			"limitas_rate_default_window_seconds":                          gauge(`The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.`),
+			"limitas_rate_info":                                            gauge(`Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).`),
+			"limitas_resource_autogrow_growth_multiplier":                  gauge(`For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`),
+			"limitas_resource_autogrow_quota_overcommit_threshold_percent": gauge(`For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`),
+			"limitas_resource_info":                                        gauge(`Info metric for resources. The value is always 1, and information can be found in labels.`),
+			"limitas_resource_overcommit_factor":                           gauge(`Multiplier for converting this resource's raw capacity into reported capacity.`),
+			"limitas_resource_unit_multiplier":                             gauge(`Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`),
+		},
 	}
 }
 
@@ -988,11 +874,21 @@ var (
 		SELECT project_id, az_resource_id, quota, usage, physical_usage
 		  FROM project_az_resources
 	`)
+
+	dmv2ResourceLabelNames     = microprom.NewLabelNames("resource", "service")
+	dmv2ResourceInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
+	dmv2ResourceUnitLabelNames = microprom.NewLabelNames("base_unit", "resource", "service")
+	dmv2AZResourceLabelNames   = microprom.NewLabelNames("az", "resource", "service")
+
+	dmv2RateLabelNames     = microprom.NewLabelNames("rate", "service")
+	dmv2RateInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit")
+
+	dmv2ProjectAZResourceLabelNames = microprom.NewLabelNames("az", "committable", "domain", "domain_id", "project", "project_id", "resource", "service")
+	dmv2ProjectCommitmentLabelNames = microprom.NewLabelNames("az", "domain", "domain_id", "project", "project_id", "resource", "service", "status", "transfer_status", "uuid")
+	dmv2ProjectRateLabelNames       = microprom.NewLabelNames("az", "domain", "domain_id", "project", "project_id", "rate", "service")
 )
 
-func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetricSet, error) {
-	result := make(map[string][]dataMetric)
-
+func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *microprom.MetricSet) error {
 	// fetch resource info
 	type resourceRecord struct {
 		ServiceType  db.ServiceType              `db:"service_type"`
@@ -1021,45 +917,37 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		if !res.HasQuota {
 			qdmLabel = ""
 		}
-		labels := BuildLabels(
-			[]string{"category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit"},
+		labels := ms.FormatLabels(dmv2ResourceInfoLabelNames,
 			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
 			res.DisplayName, strconv.FormatBool(res.HasQuota),
 			qdmLabel, string(res.Name), string(srvType), string(res.Topology), res.Unit.String(),
 		)
-		metric := dataMetric{Labels: labels, Value: 1}
-		result["limitas_resource_info"] = append(result["limitas_resource_info"], metric)
+		ms.Add("limitas_resource_info", labels, 1)
 
 		// emit limitas_resource_overcommit_factor and limitas_resource_autogrow_*
 		// (those metrics are batched together here because they share the same `labels`)
-		labels = BuildLabels(
-			[]string{"resource", "service"},
+		labels = ms.FormatLabels(dmv2ResourceLabelNames,
 			string(res.Name), string(srvType),
 		)
-		metric = dataMetric{Labels: labels, Value: float64(overcommitFactor)}
-		result["limitas_resource_overcommit_factor"] = append(result["limitas_resource_overcommit_factor"], metric)
+		ms.Add("limitas_resource_overcommit_factor", labels, float64(overcommitFactor))
 
 		autogrowCfg, ok := qdConfig.Autogrow.Unpack()
 		if ok {
-			metric = dataMetric{Labels: labels, Value: autogrowCfg.GrowthMultiplier}
-			result["limitas_resource_autogrow_growth_multiplier"] = append(result["limitas_resource_autogrow_growth_multiplier"], metric)
+			ms.Add("limitas_resource_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
 
-			metric = dataMetric{Labels: labels, Value: autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent}
-			result["limitas_resource_autogrow_quota_overcommit_threshold_percent"] = append(result["limitas_resource_autogrow_quota_overcommit_threshold_percent"], metric)
+			ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
 		}
 
 		// emit limitas_resource_unit_multiplier
 		baseUnit, multiplier := res.Unit.Base()
-		labels = BuildLabels(
-			[]string{"base_unit", "resource", "service"},
+		labels = ms.FormatLabels(dmv2ResourceUnitLabelNames,
 			baseUnit.String(), string(res.Name), string(srvType),
 		)
-		metric = dataMetric{Labels: labels, Value: float64(multiplier)}
-		result["limitas_resource_unit_multiplier"] = append(result["limitas_resource_unit_multiplier"], metric)
+		ms.Add("limitas_resource_unit_multiplier", labels, float64(multiplier))
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
+		return fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
 	}
 
 	// fetch cluster-scoped data (while also building a cached mapping of AZResourceID => ServiceType/ResourceName/AvailabilityZone for later)
@@ -1098,21 +986,18 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		}
 
 		// emit limitas_cluster_resource_raw_capacity
-		labels := BuildLabels(
-			[]string{"az", "resource", "service"},
+		labels := ms.FormatLabels(dmv2AZResourceLabelNames,
 			string(crr.AvailabilityZone), string(crr.ResourceName), string(crr.ServiceType),
 		)
-		metric := dataMetric{Labels: labels, Value: float64(crr.RawCapacity)}
-		result["limitas_cluster_resource_raw_capacity"] = append(result["limitas_cluster_resource_raw_capacity"], metric)
+		ms.Add("limitas_cluster_resource_raw_capacity", labels, float64(crr.RawCapacity))
 
 		// emit limitas_cluster_resource_capacity
 		capacity := overcommitFactors[crr.ServiceType][crr.ResourceName].ApplyTo(crr.RawCapacity)
-		metric = dataMetric{Labels: labels, Value: float64(capacity)}
-		result["limitas_cluster_resource_capacity"] = append(result["limitas_cluster_resource_capacity"], metric)
+		ms.Add("limitas_cluster_resource_capacity", labels, float64(capacity))
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
+		return fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
 	}
 
 	// fetch rate info
@@ -1132,47 +1017,40 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		if !ok {
 			return fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
 		}
-		labels := BuildLabels(
-			[]string{"rate", "service"},
+		labels := ms.FormatLabels(dmv2RateLabelNames,
 			string(rate.Name), string(srvType),
 		)
 
 		if cfg, ok := lcfg.RateLimits.GetGlobalRateLimit(rate.Name).Unpack(); ok {
 			// emit limitas_cluster_rate_global_limit
-			metric := dataMetric{Labels: labels, Value: float64(cfg.Limit)}
-			result["limitas_cluster_rate_global_limit"] = append(result["limitas_cluster_rate_global_limit"], metric)
+			ms.Add("limitas_cluster_rate_global_limit", labels, float64(cfg.Limit))
 
 			// emit limitas_cluster_rate_global_window_seconds
-			metric = dataMetric{Labels: labels, Value: float64(cfg.Window) / float64(limesrates.WindowSeconds)}
-			result["limitas_cluster_rate_global_window_seconds"] = append(result["limitas_cluster_rate_global_window_seconds"], metric)
+			ms.Add("limitas_cluster_rate_global_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
 		}
 
 		projectDefault := lcfg.RateLimits.GetProjectDefaultRateLimit(rate.Name)
 		if cfg, ok := projectDefault.Unpack(); ok {
 			// emit limitas_rate_default_limit
-			metric := dataMetric{Labels: labels, Value: float64(cfg.Limit)}
-			result["limitas_rate_default_limit"] = append(result["limitas_rate_default_limit"], metric)
+			ms.Add("limitas_rate_default_limit", labels, float64(cfg.Limit))
 
 			// emit limitas_rate_default_window_seconds
-			metric = dataMetric{Labels: labels, Value: float64(cfg.Window) / float64(limesrates.WindowSeconds)}
-			result["limitas_rate_default_window_seconds"] = append(result["limitas_rate_default_window_seconds"], metric)
+			ms.Add("limitas_rate_default_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
 		}
 
 		// emit limitas_rate_info
-		labels = BuildLabels(
-			[]string{"category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit"},
+		labels = ms.FormatLabels(dmv2RateInfoLabelNames,
 			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
 			rate.DisplayName, strconv.FormatBool(projectDefault.IsSome()), strconv.FormatBool(rate.HasUsage),
 			string(rate.Name), string(srvType), string(rate.Topology), rate.Unit.String(),
 		)
-		metric := dataMetric{Labels: labels, Value: 1}
-		result["limitas_rate_info"] = append(result["limitas_rate_info"], metric)
+		ms.Add("limitas_rate_info", labels, 1)
 
 		rateInfoByID[rate.ID] = rateInfo{Path: rate.Path, ProjectDefault: projectDefault}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2RateInfoQuery: %w", err)
+		return fmt.Errorf("in dmv2RateInfoQuery: %w", err)
 	}
 
 	// fetch project metadata:
@@ -1204,7 +1082,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
+		return fmt.Errorf("in dmv2ProjectInfoQuery: %w", err)
 	}
 
 	// fetch project-scoped commitment data (also take sums over commitments for the allocation metrics emitted later)
@@ -1230,8 +1108,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			return nil
 		}
 
-		labels := BuildLabels(
-			[]string{"az", "domain", "domain_id", "project", "project_id", "resource", "service", "status", "transfer_status", "uuid"},
+		labels := ms.FormatLabels(dmv2ProjectCommitmentLabelNames,
 			string(crr.AvailabilityZone),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
 			string(crr.ResourceName), string(crr.ServiceType),
@@ -1239,12 +1116,10 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		)
 
 		// emit limitas_project_resource_commitment_amount
-		metric := dataMetric{Labels: labels, Value: float64(pcr.Amount)}
-		result["limitas_project_resource_commitment_amount"] = append(result["limitas_project_resource_commitment_amount"], metric)
+		ms.Add("limitas_project_resource_commitment_amount", labels, float64(pcr.Amount))
 
 		// emit limitas_project_resource_commitment_expires_at
-		metric = dataMetric{Labels: labels, Value: float64(pcr.ExpiresAt.Unix())}
-		result["limitas_project_resource_commitment_expires_at"] = append(result["limitas_project_resource_commitment_expires_at"], metric)
+		ms.Add("limitas_project_resource_commitment_expires_at", labels, float64(pcr.ExpiresAt.Unix()))
 
 		// compute running totals for all confirmed commitments for the allocation metric below
 		if pcr.Status == liquid.CommitmentStatusConfirmed {
@@ -1258,7 +1133,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectCommitmentDataQuery: %w", err)
+		return fmt.Errorf("in dmv2ProjectCommitmentDataQuery: %w", err)
 	}
 
 	// fetch project-scoped resource utilization data
@@ -1281,8 +1156,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			return nil
 		}
 
-		labels := BuildLabels(
-			[]string{"az", "committable", "domain", "domain_id", "project", "project_id", "resource", "service"},
+		labels := ms.FormatLabels(dmv2ProjectAZResourceLabelNames,
 			string(crr.AvailabilityZone), strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
 			string(crr.ResourceName), string(crr.ServiceType),
@@ -1292,34 +1166,30 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			// emit limitas_project_resource_allocation
 			committed := confirmedCommitmentSums[prr.AZResourceID][prr.ProjectID]
 			if allocated := max(committed, prr.Usage); allocated != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(allocated)}
-				result["limitas_project_resource_allocation"] = append(result["limitas_project_resource_allocation"], metric)
+				ms.Add("limitas_project_resource_allocation", labels, float64(allocated))
 			}
 
 			// emit limitas_project_resource_physical_usage
 			if physicalUsage, ok := prr.PhysicalUsage.Unpack(); ok && physicalUsage != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(physicalUsage)}
-				result["limitas_project_resource_physical_usage"] = append(result["limitas_project_resource_physical_usage"], metric)
+				ms.Add("limitas_project_resource_physical_usage", labels, float64(physicalUsage))
 			}
 
 			// emit limitas_project_resource_usage
 			if prr.Usage != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(prr.Usage)}
-				result["limitas_project_resource_usage"] = append(result["limitas_project_resource_usage"], metric)
+				ms.Add("limitas_project_resource_usage", labels, float64(prr.Usage))
 			}
 		}
 
 		// emit limitas_project_resource_quota
 		if crr.AvailabilityZone != liquid.AvailabilityZoneTotal {
 			if quota, ok := prr.Quota.Unpack(); ok && quota != 0 {
-				metric := dataMetric{Labels: labels, Value: float64(quota)}
-				result["limitas_project_resource_quota"] = append(result["limitas_project_resource_quota"], metric)
+				ms.Add("limitas_project_resource_quota", labels, float64(quota))
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in dmv2ProjectResourceDataQuery: %w", err)
+		return fmt.Errorf("in dmv2ProjectResourceDataQuery: %w", err)
 	}
 
 	// fetch project-scoped rate data
@@ -1335,8 +1205,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 			// we will just ignore it until the next scrape
 			return nil
 		}
-		labels := BuildLabels(
-			[]string{"az", "domain", "domain_id", "project", "project_id", "rate", "service"},
+		labels := ms.FormatLabels(dmv2ProjectRateLabelNames,
 			string(liquid.AvailabilityZoneAny), // currently hardcoded for forwards-compatibility; TODO: introduce proper support for AZ-aware rates
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
 			string(ri.Path.RateName), string(ri.Path.ServiceType),
@@ -1345,13 +1214,11 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 		if cfg, ok := ri.ProjectDefault.Unpack(); ok {
 			// emit limitas_project_rate_limit
 			rateLimit := prr.Limit.UnwrapOr(cfg.Limit)
-			metric := dataMetric{Labels: labels, Value: float64(rateLimit)}
-			result["limitas_project_rate_limit"] = append(result["limitas_project_rate_limit"], metric)
+			ms.Add("limitas_project_rate_limit", labels, float64(rateLimit))
 
 			// emit limitas_project_rate_window_seconds
 			window := prr.Window.UnwrapOr(cfg.Window)
-			metric = dataMetric{Labels: labels, Value: float64(window) / float64(time.Second)}
-			result["limitas_project_rate_window_seconds"] = append(result["limitas_project_rate_window_seconds"], metric)
+			ms.Add("limitas_project_rate_window_seconds", labels, float64(window)/float64(time.Second))
 		}
 
 		// emit limitas_project_rate_usage_total
@@ -1361,16 +1228,15 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context) (*dataMetric
 				return fmt.Errorf("cannot parse usage_as_bigint for id = %d: %w", prr.ID, err)
 			}
 			usageAsFloat, _ := usageAsBigFloat.Float64()
-			metric := dataMetric{Labels: labels, Value: float64(usageAsFloat)}
-			result["limitas_project_rate_usage_total"] = append(result["limitas_project_rate_usage_total"], metric)
+			ms.Add("limitas_project_rate_usage", labels, float64(usageAsFloat))
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in project_rates query: %w", err)
+		return fmt.Errorf("in project_rates query: %w", err)
 	}
 
-	return &dataMetricSet{ByFamily: result}, nil
+	return nil
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1438,52 +1304,12 @@ func (c resourceAndRateBehaviorCache) GetCommitmentBehavior(srvType db.ServiceTy
 	return behavior
 }
 
-// BuildLabels serializes a Prometheus labelset into the string format used in Prometheus text expositions.
-// For example:
-//
-//	labels := BuildLabels([]string{"foo", "hello"}, "bar", "world")
-//	assert.Equal(t, labels, `foo="bar",hello="world"`)
-//
-// The caller must ensure that the label names do not contain invalid characters.
-// (This should be easy, since label names are usually hardcoded.)
-// Label values will be escaped if required.
-func BuildLabels(names []string, values ...string) string {
-	if len(names) != len(values) {
-		panic("arguments are not of equal length")
-	}
-	if len(names) == 0 {
-		return ""
-	}
+// gauge is a shorthand for declaring a gauge metric in microprom.
+func gauge(help string) microprom.MetricFamilyInfo {
+	return microprom.MetricFamilyInfo{Type: microprom.MetricTypeGauge, Help: help}
+}
 
-	// estimate the perfect number of bytes for the result string to avoid reallocations
-	capacity := len(names) - 1 // number of "," between pairs
-	needsEscaping := make([]bool, len(names))
-	for idx, value := range values {
-		// base length for an encoding in the form `label="value"`
-		capacity += len(names[idx]) + len(value) + 3
-		// some characters within `value` need escaping
-		toEscape := strings.Count(value, "\n") + strings.Count(value, "\"") + strings.Count(value, "\\")
-		needsEscaping[idx] = toEscape > 0
-		capacity += toEscape
-	}
-
-	var b strings.Builder
-	b.Grow(capacity)
-	for idx, value := range values {
-		if idx > 0 {
-			_ = b.WriteByte(',')
-		}
-		_, _ = b.WriteString(names[idx])
-		_ = b.WriteByte('=')
-		_ = b.WriteByte('"')
-		if needsEscaping[idx] {
-			// TODO: this could be optimized further, but since this branch is unlikely in practice, I did not bother yet
-			value = strings.ReplaceAll(value, "\\", "\\\\")
-			value = strings.ReplaceAll(value, "\"", "\\\"")
-			value = strings.ReplaceAll(value, "\n", "\\n")
-		}
-		_, _ = b.WriteString(value)
-		_ = b.WriteByte('"')
-	}
-	return b.String()
+// counter is a shorthand for declaring a counter metric in microprom.
+func counter(help string) microprom.MetricFamilyInfo {
+	return microprom.MetricFamilyInfo{Type: microprom.MetricTypeCounter, Help: help}
 }

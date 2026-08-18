@@ -216,15 +216,11 @@ func Test_ScanCapacity(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
-	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
-	resp := dmrV1.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
-	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
+	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
+	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
-	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
-	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
+	dmr := httptest.NewHandler((&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now}).Handler())
+	dmr.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_v2.prom")
 }
 
 func Test_ScanCapacityWithSubcapacities(t *testing.T) {
@@ -326,17 +322,17 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	s.Registry.MustRegister(&collector.CapacityCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB})
 	handler := httptest.NewHandler(promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 	resp := handler.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_metrics.prom")
+	expectedContentType := resp.Header().Get("Content-Type")
 
-	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
+	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	resp = dmrV1.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler((&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now}).Handler())
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_single_v2.prom")
 }
 
@@ -421,15 +417,11 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
-	dmrV1 := httptest.NewHandler(&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true})
-	resp := dmrV1.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
-	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
+	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
+	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
-	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
-	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")
+	dmr := httptest.NewHandler((&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now}).Handler())
+	dmr.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware_v2.prom")
 
 	// check that removing a LiquidConnection does nothing special (will be auto-removed later)
 	delete(s.Cluster.LiquidConnections, "unittest")

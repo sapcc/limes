@@ -523,23 +523,23 @@ func Test_ScrapeSuccess(t *testing.T) {
 	s.Registry.MustRegister(&collector.UsageCollectionMetricsCollector{Cluster: s.Cluster, DB: s.DB})
 	handler := httptest.NewHandler(promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 	resp := handler.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_metrics.prom")
+	expectedContentType := resp.Header().Get("Content-Type")
 
 	dmrV1 := &collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	resp = httptest.NewHandler(dmrV1).RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp = httptest.NewHandler(dmrV1.Handler()).RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics.prom")
 
 	// check data metrics with the skip_zero flag set
 	dmrV1.ReportZeroes = false
-	resp = httptest.NewHandler(dmrV1).RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	resp = httptest.NewHandler(dmrV1.Handler()).RespondTo(s.Ctx, "GET /metrics")
+	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics_skipzero.prom")
 
-	dmr := httptest.NewHandler(&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now})
+	dmr := httptest.NewHandler((&collector.DataMetricsV2Reporter{Cluster: s.Cluster, DB: s.DB, TimeNow: s.Clock.Now}).Handler())
 	resp = dmr.RespondTo(s.Ctx, "GET /metrics")
-	assert.Equal(t, resp.Header().Get("Content-Type"), collector.ContentTypeForPrometheusMetrics)
+	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/scrape_data_metrics_v2.prom")
 }
 

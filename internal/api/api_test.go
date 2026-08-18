@@ -30,7 +30,6 @@ import (
 	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api/api_v2"
-	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -347,6 +346,8 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
+const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=underscores"
+
 func Test_ClusterOperations(t *testing.T) {
 	s := setupTest(t)
 
@@ -428,7 +429,7 @@ func Test_ClusterOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/cluster_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -514,7 +515,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/domain_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -848,7 +849,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/project_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -912,7 +913,7 @@ func Test_EmptyProjectList(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/empty_project_list_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -1057,7 +1058,7 @@ func Test_LargeProjectList(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/large_project_list_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -1333,7 +1334,7 @@ func Test_Historical_Usage(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/historical_usage_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -1557,7 +1558,7 @@ func TestResourceRenaming(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/resource_renaming_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }
@@ -1685,7 +1686,7 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/metrics",
 		ExpectStatus: http.StatusOK,
-		ExpectHeader: map[string]string{"Content-Type": collector.ContentTypeForPrometheusMetrics},
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   oldassert.FixtureFile("fixtures/separated_topology_operations_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(s.Registry, promhttp.HandlerOpts{}))
 }

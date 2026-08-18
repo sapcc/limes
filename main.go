@@ -341,7 +341,7 @@ func taskServeDataMetricsV1(ctx context.Context, cluster *core.Cluster, args []s
 			},
 		},
 	))
-	mux.Handle("/metrics", &dmr)
+	mux.Handle("/metrics", dmr.Handler())
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
@@ -369,7 +369,7 @@ func taskServeDataMetricsV2(ctx context.Context, cluster *core.Cluster, args []s
 			},
 		},
 	))
-	mux.Handle("/metrics", &dmr)
+	mux.Handle("/metrics", dmr.Handler())
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
