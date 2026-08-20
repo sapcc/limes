@@ -118,8 +118,7 @@ func (c *Collector) discoverScrapeTask(ctx context.Context, labels prometheus.La
 	}
 	// if the above check succeeded, this should never fail because the SIC is updated after the
 	// LiquidConnection is initialized.
-	_, ok = c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType)
-	if !ok {
+	if !c.Cluster.SIC.HasService(serviceType) {
 		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
