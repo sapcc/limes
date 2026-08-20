@@ -278,10 +278,11 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	usageCollectionMetricsOkGauge.Describe(descCh)
 	collectionMetricsOkDesc := <-descCh
+	sis := c.Cluster.SIC.GetSnapshot()
 
 	if c.Override != nil {
 		for _, instance := range c.Override {
-			c.collectOneProjectService(ch, collectionMetricsOkDesc, instance)
+			c.collectOneProjectService(ch, collectionMetricsOkDesc, instance, sis)
 		}
 		return
 	}
@@ -293,7 +294,7 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
 			&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
-			c.collectOneProjectService(ch, collectionMetricsOkDesc, i)
+			c.collectOneProjectService(ch, collectionMetricsOkDesc, i, sis)
 		}
 		return err
 	})
@@ -302,9 +303,9 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance) {
+func (c *UsageCollectionMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, collectionMetricsOkDesc *prometheus.Desc, instance QuotaCollectionMetricsInstance, sis core.ServiceInfoSnapshot) {
 	// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-	service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(instance.ServiceType)
+	service, _ := sis.GetServiceForType(instance.ServiceType)
 	successAsFloat := 1.0
 	usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 	if err != nil {
