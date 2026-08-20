@@ -274,9 +274,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowReportSingle:     true,
 		AllowReportMultiple:   true,
 		AllowCommitmentCreate: true,
-		// v2:level:role
-		IsDomainRole:  false,
-		IsProjectRole: false,
 	}
 	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",

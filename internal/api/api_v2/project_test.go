@@ -247,11 +247,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...).
 			Modify(withoutConstraintsMods...))
 
-	// scope errors
-	s.TokenValidator.Enforcer.IsDomainRole = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").ExpectText(t, http.StatusBadRequest, "specify URL project_uuid or query domain_uuid\n")
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
-	s.TokenValidator.Enforcer.IsDomainRole = false
+	// cannot set both at the same time
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
 
 	// unknown domain/project
@@ -361,16 +357,7 @@ func TestV2ProjectRateReport(t *testing.T) {
 			Modify(`.domains[].projects[].service_areas.first.services.first.categories.first.rates["objects:delete"]={"usage_as_bigint":"5", "project_limit":10, "project_window":"5s"}`).
 			Modify(`.domains[].projects[].service_areas.first.services.first.categories.first.rates["objects:update"]={"project_limit":10, "project_window":"5s"}`))
 
-	// there are some error cases possible depending on the scope in this endpoint:
-	// a domain user needs to have one of the filters set
-	s.TokenValidator.Enforcer.IsDomainRole = true
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects").ExpectText(t, http.StatusBadRequest, "specify URL project_uuid or query domain_uuid\n")
-
 	// cannot set both at the same time
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
-
-	// same for cloud admin
-	s.TokenValidator.Enforcer.IsDomainRole = false
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
 
 	// unknown domain/ project

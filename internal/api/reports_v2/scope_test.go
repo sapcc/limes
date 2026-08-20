@@ -4,12 +4,8 @@
 package reports_v2_test
 
 import (
-	"maps"
-	"net/http"
-	nethttptest "net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
@@ -32,40 +28,6 @@ var scopeConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}"
 	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
 	MarshalJSON()))
 
-type singleScopeTestInput struct {
-	s               test.Setup
-	r               *http.Request
-	forProject      bool
-	queryDomainUUID Option[string]
-}
-
-type singleScopeTestExpectation struct {
-	err                Option[string]
-	project            Option[db.Project]
-	domain             Option[db.Domain]
-	requestProjectUUID Option[string]
-	requestDomainUUID  Option[string]
-}
-
-func executeSingleScopeTest(t *testing.T, i singleScopeTestInput, e singleScopeTestExpectation) {
-	t.Helper()
-
-	token := i.s.TokenValidator.CheckToken(i.r)
-	// the real validator fills the Request, so we have to emulate this here
-	maps.Copy(token.Context.Request, mux.Vars(i.r))
-	scope, err := reports_v2.NewScope(i.forProject, i.r, i.queryDomainUUID, token, i.s.DB)
-
-	if errMsg, ok := e.err.Unpack(); ok {
-		assert.ErrEqual(t, err, errMsg)
-	} else {
-		assert.ErrEqual(t, err, nil)
-	}
-	assert.Equal(t, scope.Project, e.project)
-	assert.Equal(t, scope.Domain, e.domain)
-	assert.Equal(t, token.Context.Request["project_uuid"], e.requestProjectUUID.UnwrapOr(""))
-	assert.Equal(t, token.Context.Request["domain_uuid"], e.requestDomainUUID.UnwrapOr(""))
-}
-
 func TestV2ScopeCreation(t *testing.T) {
 	ctx := t.Context()
 
@@ -78,127 +40,36 @@ func TestV2ScopeCreation(t *testing.T) {
 		projectParis = must.ReturnT(db.ProjectStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-paris"))(t)
 	)
 
-	// cluster level is only possible for cloud_admin, so nothing happens
-	r := nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: false,
-	}, singleScopeTestExpectation{})
+	// cluster-scoped case
+	scope, err := reports_v2.NewScope(ctx, None[string](), None[string](), s.DB)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, scope, reports_v2.Scope{
+			Domain:  None[db.Domain](),
+			Project: None[db.Project](),
+		})
+	}
 
-	// domain level is possible for domain tokens, does not alter the token
-	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-france", http.NoBody)
-	r = mux.SetURLVars(r, map[string]string{"domain_uuid": "uuid-for-france"})
-	s.TokenValidator.Enforcer.IsDomainRole = true
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: false,
-	}, singleScopeTestExpectation{
-		requestDomainUUID: Some("uuid-for-france"),
-		domain:            Some(domainFrance),
-	})
-	// domain level is possible for cloud_admin, does not alter the token
-	s.TokenValidator.Enforcer.IsDomainRole = false
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: false,
-	}, singleScopeTestExpectation{
-		requestDomainUUID: Some("uuid-for-france"),
-		domain:            Some(domainFrance),
-	})
+	// domain-scoped case
+	scope, err = reports_v2.NewScope(ctx, Some("uuid-for-france"), None[string](), s.DB)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, scope, reports_v2.Scope{
+			Domain:  Some(domainFrance),
+			Project: None[db.Project](),
+		})
+	}
 
-	// project level is possible for project tokens, will add domain to the token context
-	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
-	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
-	s.TokenValidator.Enforcer.IsProjectRole = true
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: true,
-	}, singleScopeTestExpectation{
-		requestProjectUUID: Some("uuid-for-paris"),
-		requestDomainUUID:  Some("uuid-for-france"),
-		domain:             Some(domainFrance),
-		project:            Some(projectParis),
-	})
+	// project-scoped case
+	scope, err = reports_v2.NewScope(ctx, Some("uuid-for-france"), Some("uuid-for-paris"), s.DB)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, scope, reports_v2.Scope{
+			Domain:  Some(domainFrance),
+			Project: Some(projectParis),
+		})
+	}
 
-	// project level is possible for domain token (specific project), will add domain to the token context
-	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
-	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
-	s.TokenValidator.Enforcer.IsDomainRole = true
-	s.TokenValidator.Enforcer.IsProjectRole = false
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: true,
-	}, singleScopeTestExpectation{
-		requestProjectUUID: Some("uuid-for-paris"),
-		requestDomainUUID:  Some("uuid-for-france"),
-		domain:             Some(domainFrance),
-		project:            Some(projectParis),
-	})
-	// project level is possible for domain token (whole domain), will add domain to the token context
-	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:               s,
-		r:               r,
-		forProject:      true,
-		queryDomainUUID: Some("uuid-for-france"),
-	}, singleScopeTestExpectation{
-		requestDomainUUID: Some("uuid-for-france"),
-		domain:            Some(domainFrance),
-	})
-
-	// project level is possible for cloud_admin (specific project), does not alter the token
-	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
-	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
-	s.TokenValidator.Enforcer.IsDomainRole = false
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: true,
-	}, singleScopeTestExpectation{
-		requestProjectUUID: Some("uuid-for-paris"),
-		domain:             Some(domainFrance),
-		project:            Some(projectParis),
-	})
-	// project level is possible for cloud_admin (whole domain), does not alter the token
-	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:               s,
-		r:               r,
-		forProject:      true,
-		queryDomainUUID: Some("uuid-for-france"),
-	}, singleScopeTestExpectation{
-		domain: Some(domainFrance),
-	})
-
-	// errors:
-	// project level with domain token but no identifier specified
-	r = nethttptest.NewRequest(http.MethodGet, "/some/unimportant/path", http.NoBody)
-	s.TokenValidator.Enforcer.IsDomainRole = true
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:          s,
-		r:          r,
-		forProject: true,
-	}, singleScopeTestExpectation{
-		err: Some("specify URL project_uuid or query domain_uuid"),
-	})
-
-	// both identifiers set at the same time
-	r = nethttptest.NewRequest(http.MethodGet, "/some/path/with/uuid-for-paris", http.NoBody)
-	r = mux.SetURLVars(r, map[string]string{"project_uuid": "uuid-for-paris"})
-	executeSingleScopeTest(t, singleScopeTestInput{
-		s:               s,
-		r:               r,
-		forProject:      true,
-		queryDomainUUID: Some("uuid-for-france"),
-	}, singleScopeTestExpectation{
-		err:                Some("query domain_uuid cannot be set, when URL project_uuid is set"),
-		requestProjectUUID: Some("uuid-for-paris"),
-	})
+	// error: inconsistent project-scoped request
+	_, err = reports_v2.NewScope(ctx, Some("uuid-for-germany"), Some("uuid-for-paris"), s.DB)
+	assert.ErrEqual(t, err, `inconsistent NewScope() invocation: got domainUUID = "uuid-for-germany" and projectUUID = "uuid-for-paris", but that project actually belongs to domain "france" with UUID = "uuid-for-france"`)
 }
 
 func TestV2ExpandScopeFilters(t *testing.T) {

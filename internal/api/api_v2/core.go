@@ -198,7 +198,7 @@ func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Tok
 		return
 	}
 
-	project, err := db.ProjectStore.SelectOne(ctx, p.DB, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	project, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, projectUUID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this branch should not be reachable if the first database query found a result
 		err = fmt.Errorf("no such project (UUID = %s)", projectUUID)

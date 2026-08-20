@@ -5,7 +5,9 @@ package reports_v2
 
 import (
 	"database/sql"
+	"errors"
 	"maps"
+	"net/http"
 	"slices"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
@@ -32,27 +35,45 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	AND pr.forbidden = false
 `)
 
-func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID, domainName string, err error) {
-	projectUUID = token.ProjectScopeUUID()
-	projectDomainUUID := token.ProjectScopeDomainUUID()
-	projectDomainName := token.ProjectScopeDomainName()
-	domainUUID = token.DomainScopeUUID()
-	domainName = token.DomainScopeName()
-
-	switch {
-	case token.Check("v2:cluster:info"):
+func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID, domainName string, _ error) {
+	// case 1: cloud admin
+	if token.Check("v2:cluster:info") {
 		return "", "", "", nil
-	case token.Check("v2:domain:info"):
-		return "", domainUUID, domainName, nil
-	default:
-		// the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors
-		err := token.Enforce("v2:project:info")
-		if err == nil {
-			return projectUUID, projectDomainUUID, projectDomainName, nil
-		} else {
-			return "", "", "", err
+	}
+
+	// manipulation of `token.Context.Request` inside this function should not break request-path-specific object attributes
+	originalRequest := token.Context.Request
+	defer func() {
+		token.Context.Request = originalRequest
+	}()
+
+	// case 2: domain admin (evaluated multiple times, see documentation on policy rules for details)
+	for _, domain := range []core.KeystoneDomain{
+		{Name: token.DomainScopeName(), UUID: token.DomainScopeUUID()},
+		{Name: token.ProjectScopeDomainName(), UUID: token.ProjectScopeDomainUUID()},
+		{Name: token.UserDomainName(), UUID: token.UserDomainUUID()},
+	} {
+		if domain.Name == "" || domain.UUID == "" {
+			continue // skip options that are not applicable to the current token
+		}
+		token.Context.Request = map[string]string{"domain_uuid": domain.UUID}
+		if token.Check("v2:domain:info") {
+			return "", domain.UUID, domain.Name, nil
 		}
 	}
+
+	// case 3: project admin (there is only one option for this: a project-scoped token)
+	// (the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors)
+	err := token.Enforce("v2:project:info")
+	if err != nil {
+		return "", "", "", err
+	}
+	projectUUID = token.ProjectScopeUUID()
+	if projectUUID == "" {
+		// safety check: v2:project:info should only be allowed with a project-scoped token
+		return "", "", "", respondwith.CustomStatus(http.StatusForbidden, errors.New("cannot retrieve InfoReport for project without a project-scoped token"))
+	}
+	return projectUUID, token.ProjectScopeDomainUUID(), token.ProjectScopeDomainName(), nil
 }
 
 // GetResourcesInfo returns a resourcesv2.InfoReport, which can be exposed via
