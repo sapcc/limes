@@ -788,6 +788,20 @@ func (s *ServiceInfoCache) GetSnapshot() ServiceInfoSnapshot {
 	return s.data.deepClone()
 }
 
+// HasService is the same as the second return value of s.GetSnapshot().GetServiceForType(serviceType),
+// but avoids a costly deep clone.
+//
+// Usually, we want all access to payload in ServiceInfoCache to go through [ServiceInfoSnapshot],
+// but this particular method allows us to reduce memory allocations in the collector by 30%.
+//
+// TODO: remove this method once we rework GetSnapshot into a cheap shallow copy
+func (s *ServiceInfoCache) HasService(serviceType db.ServiceType) bool {
+	s.dataMutex.RLock()
+	defer s.dataMutex.RUnlock()
+	_, ok := s.data.services[serviceType]
+	return ok
+}
+
 // GetServiceInfo should only be used when interacting with the liquid
 // where the data of ServiceInfoCache needs to be available in the form of
 // liquid.ServiceInfo!
