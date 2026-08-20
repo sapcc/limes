@@ -118,10 +118,10 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 
 	// with pre-existing args: arg positions continue from the highest existing index
 	query, args = projectScope.ExpandScopeFilters(
-		`SELECT * FROM t WHERE t.name = $14 AND {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
+		`SELECT * FROM t WHERE t.name = $1 AND {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 		"some-value",
 	)
-	assert.Equal(t, query, `SELECT * FROM t WHERE t.name = $14 AND d.id = $15 AND p.id = $16`)
+	assert.Equal(t, query, `SELECT * FROM t WHERE t.name = $1 AND d.id = $2 AND p.id = $3`)
 	assert.Equal(t, len(args), 3)
 	assert.Equal(t, args[0].(string), "some-value")
 	assert.Equal(t, args[1].(db.DomainID), domainFrance.ID)

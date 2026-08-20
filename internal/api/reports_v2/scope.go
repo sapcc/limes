@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/sapcc/go-bits/respondwith"
@@ -88,20 +89,7 @@ var scopeFilterReplaceRx = regexp.MustCompile(`{{(\S+?) = ANY\(\$(domain_id|proj
 // It supports domain_id and project_id.
 // On unknown keywords it will panic.
 func (s Scope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
-	// get current highest index
-	var err error
-	i := 0
-	queryVariables := regexp.MustCompile(`\$(\d+)`)
-	matches := queryVariables.FindAllString(originalQuery, -1)
-	if len(matches) > 0 {
-		last := matches[len(matches)-1]
-		i, err = strconv.Atoi(queryVariables.FindStringSubmatch(last)[1])
-		if err != nil {
-			panic("digits should be parseable integer")
-		}
-	}
-	args = append(args, originalArgs...)
-
+	args = slices.Clone(originalArgs)
 	query = scopeFilterReplaceRx.ReplaceAllStringFunc(originalQuery, func(matchStr string) string {
 		match := scopeFilterReplaceRx.FindStringSubmatch(matchStr)
 
@@ -121,8 +109,7 @@ func (s Scope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (qu
 		default:
 			panic("unreachable")
 		}
-		i++
-		return match[1] + " = $" + strconv.Itoa(i)
+		return match[1] + " = $" + strconv.Itoa(len(args))
 	})
 	return query, args
 }
