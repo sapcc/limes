@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/respondwith"
 	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/is"
@@ -22,87 +23,110 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
-// Scope describes the object Scope of a validated request.
-// Currently, there is no option to have a Scope with more than one domain or project.
-// If project.IsSome(), then domain.IsSome() too.
-type Scope struct {
-	Domain  Option[db.Domain]
-	Project Option[db.Project]
+// Scope describes the scope of a validated request.
+// The concrete types are [ClusterScope], [DomainScope] and [ProjectScope].
+type Scope interface {
+	// ExpandScopeFilters modifies an SQL query by replacing placeholders of the forms
+	//
+	//	{{some_field = ANY($domain_id)}}
+	//	{{some_field = ANY($project_id)}}
+	//
+	// with appropriate conditions that restrict matches to domains and projects within this scope.
+	// Returns the modified query and the appropriately extended argument list.
+	ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any)
 }
 
-// NewScope obtains the project and domain from the database.
-// If both domainUUID and projectUUID are given, then the requested project must be in the requested domain.
-func NewScope(ctx context.Context, domainUUID, projectUUID Option[string], dbm *gsql.DB) (s Scope, err error) {
-	var none Scope // only used in error returns
+// ClusterScope is a [Scope] for operations that are not restricted to a specific domain or project.
+type ClusterScope struct{}
 
-	// case 1: project UUID given -> scope is that project
-	if unpackedProjectUUID, ok := projectUUID.Unpack(); ok {
-		project, err := db.ProjectStore.SelectOneWhere(ctx, dbm, `uuid = $1`, unpackedProjectUUID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such project (UUID = %s)", unpackedProjectUUID))
-			}
-			return none, err
-		}
+// ExpandScopeFilters implements the [Scope] interface.
+func (ClusterScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
+	return expandScopeFilters(None[db.Domain](), None[db.Project](), originalQuery, originalArgs)
+}
 
-		domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `id = $1`, project.DomainID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return none, fmt.Errorf("referential integrity error: project %s references unknown domain with ID = %d", project.UUID, project.DomainID)
-			}
-			return none, err
-		}
+// DomainScope is a [Scope] for operations that are restricted to a single domain.
+type DomainScope struct {
+	Domain db.Domain
+}
 
-		if domainUUID.IsSomeAnd(is.DifferentFrom(domain.UUID)) {
-			return none, fmt.Errorf("inconsistent NewScope() invocation: got domainUUID = %q and projectUUID = %q, but that project actually belongs to domain %q with UUID = %q",
-				domainUUID, projectUUID, domain.Name, domain.UUID,
-			)
+// NewDomainScope builds a [DomainScope] by looking for the requested domain in the database.
+func NewDomainScope(ctx context.Context, domainUUID string, dbm *gsql.DB) (DomainScope, error) {
+	var none DomainScope // only used in error returns
+
+	domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `uuid = $1`, domainUUID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such domain (UUID = %s)", domainUUID))
 		}
-		return Scope{Some(domain), Some(project)}, nil
+		return none, err
 	}
 
-	// case 2: project UUID missing, but domain UUID given -> scope is that domain
-	if unpackedDomainUUID, ok := domainUUID.Unpack(); ok {
-		domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `uuid = $1`, unpackedDomainUUID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such domain (UUID = %s)", unpackedDomainUUID))
-			}
-			return none, err
-		}
+	return DomainScope{domain}, nil
+}
 
-		return Scope{Some(domain), None[db.Project]()}, nil
+// ExpandScopeFilters implements the [Scope] interface.
+func (s DomainScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
+	return expandScopeFilters(Some(s.Domain), None[db.Project](), originalQuery, originalArgs)
+}
+
+// ProjectScope is a [Scope] for operations that are restricted to a single domain.
+type ProjectScope struct {
+	Domain  db.Domain
+	Project db.Project
+}
+
+// NewProjectScope builds a [ProjectScope] by looking for the requested project in the database.
+// If a domainUUID is also given, returns an error if the project turns out not to be in that domain.
+func NewProjectScope(ctx context.Context, projectUUID liquid.ProjectUUID, domainUUID Option[string], dbm *gsql.DB) (ProjectScope, error) {
+	var none ProjectScope // only used in error returns
+
+	project, err := db.ProjectStore.SelectOneWhere(ctx, dbm, `uuid = $1`, projectUUID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such project (UUID = %s)", projectUUID))
+		}
+		return none, err
 	}
 
-	// case 3: project UUID and domain UUID missing -> scope is full cluster
-	return Scope{}, nil
+	domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `id = $1`, project.DomainID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return none, fmt.Errorf("referential integrity error: project %s references unknown domain with ID = %d", project.UUID, project.DomainID)
+		}
+		return none, err
+	}
+
+	if domainUUID.IsSomeAnd(is.DifferentFrom(domain.UUID)) {
+		return none, fmt.Errorf("inconsistent NewScope() invocation: got domainUUID = %q and projectUUID = %q, but that project actually belongs to domain %q with UUID = %q",
+			domainUUID, projectUUID, domain.Name, domain.UUID,
+		)
+	}
+	return ProjectScope{domain, project}, nil
+}
+
+// ExpandScopeFilters implements the [Scope] interface.
+func (s ProjectScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
+	return expandScopeFilters(Some(s.Domain), Some(s.Project), originalQuery, originalArgs)
 }
 
 var scopeFilterReplaceRx = regexp.MustCompile(`{{(\S+?) = ANY\(\$(domain_id|project_id)\)}}`)
 
-// ExpandScopeFilters takes an SQL query string with curly-bracketed
-// where-clauses and will replace each one with an arg position and return the
-// according SQL arg for this filter, namely a scope ID.
-// The expressions must be of the form "{{[filter-field] = $[id-field]}}"
-// where filter-field can be a primary key column or a foreign key and id-field
-// is the name of the scope entity whose ID-column values are used.
-// It supports domain_id and project_id.
-// On unknown keywords it will panic.
-func (s Scope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
+// Common implementation for ExpandScopeFilters of [Scope].
+func expandScopeFilters(domain Option[db.Domain], project Option[db.Project], originalQuery string, originalArgs []any) (query string, args []any) {
 	args = slices.Clone(originalArgs)
 	query = scopeFilterReplaceRx.ReplaceAllStringFunc(originalQuery, func(matchStr string) string {
 		match := scopeFilterReplaceRx.FindStringSubmatch(matchStr)
 
 		switch match[2] {
 		case "domain_id":
-			if domain, ok := s.Domain.Unpack(); ok {
-				args = append(args, domain.ID)
+			if unpackedDomain, ok := domain.Unpack(); ok {
+				args = append(args, unpackedDomain.ID)
 			} else {
 				return util.SQLFilterNoop
 			}
 		case "project_id":
-			if project, ok := s.Project.Unpack(); ok {
-				args = append(args, project.ID)
+			if unpackedProject, ok := project.Unpack(); ok {
+				args = append(args, unpackedProject.ID)
 			} else {
 				return util.SQLFilterNoop
 			}

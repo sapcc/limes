@@ -40,35 +40,29 @@ func TestV2ScopeCreation(t *testing.T) {
 		projectParis = must.ReturnT(db.ProjectStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-paris"))(t)
 	)
 
-	// cluster-scoped case
-	scope, err := reports_v2.NewScope(ctx, None[string](), None[string](), s.DB)
-	if assert.ErrEqual(t, err, nil) {
-		assert.Equal(t, scope, reports_v2.Scope{
-			Domain:  None[db.Domain](),
-			Project: None[db.Project](),
-		})
-	}
-
 	// domain-scoped case
-	scope, err = reports_v2.NewScope(ctx, Some("uuid-for-france"), None[string](), s.DB)
+	var (
+		scope reports_v2.Scope
+		err   error
+	)
+	scope, err = reports_v2.NewDomainScope(ctx, "uuid-for-france", s.DB)
 	if assert.ErrEqual(t, err, nil) {
-		assert.Equal(t, scope, reports_v2.Scope{
-			Domain:  Some(domainFrance),
-			Project: None[db.Project](),
-		})
+		assert.Equal(t, scope, reports_v2.Scope(reports_v2.DomainScope{
+			Domain: domainFrance,
+		}))
 	}
 
 	// project-scoped case
-	scope, err = reports_v2.NewScope(ctx, Some("uuid-for-france"), Some("uuid-for-paris"), s.DB)
+	scope, err = reports_v2.NewProjectScope(ctx, "uuid-for-paris", Some("uuid-for-france"), s.DB)
 	if assert.ErrEqual(t, err, nil) {
-		assert.Equal(t, scope, reports_v2.Scope{
-			Domain:  Some(domainFrance),
-			Project: Some(projectParis),
-		})
+		assert.Equal(t, scope, reports_v2.Scope(reports_v2.ProjectScope{
+			Domain:  domainFrance,
+			Project: projectParis,
+		}))
 	}
 
 	// error: inconsistent project-scoped request
-	_, err = reports_v2.NewScope(ctx, Some("uuid-for-germany"), Some("uuid-for-paris"), s.DB)
+	_, err = reports_v2.NewProjectScope(ctx, "uuid-for-paris", Some("uuid-for-germany"), s.DB)
 	assert.ErrEqual(t, err, `inconsistent NewScope() invocation: got domainUUID = "uuid-for-germany" and projectUUID = "uuid-for-paris", but that project actually belongs to domain "france" with UUID = "uuid-for-france"`)
 }
 
@@ -85,16 +79,16 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 	)
 
 	// empty scope: all placeholders become TRUE = TRUE
-	emptyScope := reports_v2.Scope{}
-	query, args := emptyScope.ExpandScopeFilters(
+	clusterScope := reports_v2.ClusterScope{}
+	query, args := clusterScope.ExpandScopeFilters(
 		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
 	)
 	assert.Equal(t, query, `SELECT * FROM t WHERE TRUE = TRUE AND TRUE = TRUE`)
 	assert.Equal(t, len(args), 0)
 
 	// domain-only scope: domain_id gets replaced, project_id becomes noop
-	domainScope := reports_v2.Scope{
-		Domain: Some(domainFrance),
+	domainScope := reports_v2.DomainScope{
+		Domain: domainFrance,
 	}
 	query, args = domainScope.ExpandScopeFilters(
 		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
@@ -104,9 +98,9 @@ func TestV2ExpandScopeFilters(t *testing.T) {
 	assert.Equal(t, args[0].(db.DomainID), domainFrance.ID)
 
 	// project scope (both domain and project set): both get replaced
-	projectScope := reports_v2.Scope{
-		Domain:  Some(domainFrance),
-		Project: Some(projectParis),
+	projectScope := reports_v2.ProjectScope{
+		Domain:  domainFrance,
+		Project: projectParis,
 	}
 	query, args = projectScope.ExpandScopeFilters(
 		`SELECT * FROM t WHERE {{d.id = ANY($domain_id)}} AND {{p.id = ANY($project_id)}}`,
