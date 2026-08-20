@@ -85,8 +85,12 @@ func (l *LiquidConnection) Init(ctx context.Context, client LiquidClient, servic
 
 // compareServiceInfoVersions compares a report version of the ServiceInfo with the saved version
 // and triggers the update and persisting if necessary.
-func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, infoVersion int64) (sis ServiceInfoSnapshot, err error) {
-	sis = l.sic.GetSnapshot()
+//
+// The existing ServiceInfoSnapshot is taken as an argument because the caller usually already has one,
+// and because taking a new snapshot is currently expensive it involves a deep clone.
+//
+// TODO: revert to the previous signature once we rework GetSnapshot into a cheap shallow copy
+func (l *LiquidConnection) compareServiceInfoVersions(ctx context.Context, sis ServiceInfoSnapshot, infoVersion int64) (ServiceInfoSnapshot, error) {
 	service, ok := sis.GetServiceForType(l.ServiceType)
 	if !ok {
 		service = db.Service{LiquidVersion: -1}
@@ -155,7 +159,7 @@ func (l *LiquidConnection) Scrape(ctx context.Context, project KeystoneProject, 
 		return result, sis, err
 	}
 
-	sis, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	sis, err = l.compareServiceInfoVersions(ctx, sis, result.InfoVersion)
 	if err != nil {
 		return result, sis, err
 	}
@@ -189,7 +193,7 @@ func (l *LiquidConnection) ScrapeCapacity(ctx context.Context, backchannel Capac
 		return result, sis, err
 	}
 
-	sis, err = l.compareServiceInfoVersions(ctx, result.InfoVersion)
+	sis, err = l.compareServiceInfoVersions(ctx, sis, result.InfoVersion)
 	if err != nil {
 		return result, sis, err
 	}
