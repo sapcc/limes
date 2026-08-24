@@ -21,8 +21,8 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	// setup enough to have fully populated project_services and project_resources
 	srvInfo := test.DefaultLiquidServiceInfo("Unit Test")
 	srvInfo.Rates = map[liquid.RateName]liquid.RateInfo{
-		"rateWithClusterLimit": {Topology: liquid.FlatTopology, HasUsage: false},
-		"rateWithProjectLimit": {Topology: liquid.FlatTopology, HasUsage: false},
+		"rateWithClusterLimit": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
+		"rateWithProjectLimit": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 	s := test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigJSON),

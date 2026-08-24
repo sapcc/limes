@@ -58,8 +58,8 @@ var infoConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
 func TestV2ResourcesInfoAPI(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")
 	srvInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
-		"objects:create": {Topology: liquid.FlatTopology, HasUsage: false},
-		"objects:update": {Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:create": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:update": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,
@@ -139,9 +139,9 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 func TestV2RatesInfoAPI(t *testing.T) {
 	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
 	serviceInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
-		"objects:create":    {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		"objects:create":    {DisplayName: "Object Creations", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 		"objects:delete":    {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"objects:update":    {DisplayName: "Object Updates", Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:update":    {DisplayName: "Object Updates", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:unlimited": {DisplayName: "Object Unlimited Operations", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	serviceInfoSecond := test.DefaultLiquidServiceInfo("Second")

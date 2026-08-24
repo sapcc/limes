@@ -35,7 +35,7 @@ func DefaultLiquidServiceInfo(displayName string) liquid.ServiceInfo {
 			},
 			"things": {
 				DisplayName: "Things",
-				Unit:        liquid.UnitNone, //nolint:staticcheck // intentionally using deprecated name UnitNone to validate the automatic rewrite into UnitPiece
+				Unit:        liquid.UnitPiece,
 				Topology:    liquid.FlatTopology,
 				HasCapacity: false,
 				HasQuota:    true,

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -98,10 +97,10 @@ func commonComplexScrapeTestSetup(t *testing.T) (s test.Setup, scrapeJob jobloop
 			},
 		},
 		Rates: map[liquid.RateName]liquid.RateInfo{
-			"firstrate":            {DisplayName: "First Rate", Topology: liquid.FlatTopology, HasUsage: true},
+			"firstrate":            {DisplayName: "First Rate", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
 			"secondrate":           {DisplayName: "Second Rate", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
-			"rateWithClusterLimit": {DisplayName: "Cluster-Limited Rate", Topology: liquid.FlatTopology, HasUsage: false},
-			"rateWithProjectLimit": {DisplayName: "Project-Limited Rate", Topology: liquid.FlatTopology, HasUsage: false},
+			"rateWithClusterLimit": {DisplayName: "Cluster-Limited Rate", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
+			"rateWithProjectLimit": {DisplayName: "Project-Limited Rate", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 		},
 		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
 			"limes_unittest_capacity_usage": {Type: liquid.MetricTypeGauge},
@@ -744,7 +743,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		Version:     1,
 		DisplayName: "Noop",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"things": {DisplayName: "Things", Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareTopology},
+			"things": {DisplayName: "Things", Unit: liquid.UnitPiece, HasQuota: true, Topology: liquid.AZAwareTopology},
 		},
 	}
 	s := test.NewSetup(t,
