@@ -4,6 +4,8 @@
 package common
 
 import (
+	"time"
+
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
 
@@ -94,4 +96,20 @@ type ProjectRateReportOpts struct {
 	WithTiming bool `q:"with,value:timing"`
 	// DomainUUID is a special entity filter which is only allowed for users with certain permissions
 	DomainUUID Option[string] `q:"domain_uuid"`
+}
+
+// CommitmentListOpts contains query parameters for GET /v2/commitments.
+type CommitmentListOpts struct {
+	// main filters; at least one of these must be given; the following are not compatible with each other
+	ProjectUUID Option[liquid.ProjectUUID] `q:"project_uuid"` // if given, must be below authenticated scope; if not given, shows all commitments within authenticated scope (except if OnlyPublic = true, see there)
+	OnlyPublic  bool                       `q:"public"`       // list all commitments in all projects that have transfer_status = "public" (for marketplace usecase)
+	DomainUUID  Option[string]             `q:"domain_uuid"`  // if given, must be below authenticated scope; if not given, shows all commitments within authenticated scope (except if OnlyPublic = true, see there)
+	// the service/resource related filters are also considered main filters; if category or resource are given, service is mandatory
+	ServiceType  Option[db.ServiceType]      `q:"service"`
+	Category     Option[liquid.CategoryName] `q:"category"`
+	ResourceName Option[liquid.ResourceName] `q:"resource"`
+
+	// extra filters
+	UpdatedAfter Option[time.Time] `q:"updated_after,format:RFC3339"` // any change on the commitment is considered an update
+	WithDeleted  bool              `q:"with,value:deleted"`           // only allowed for users with certain permissions
 }
