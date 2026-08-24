@@ -16,18 +16,18 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
-// Filter is a version of FilteredServiceInfoSnapshot which gets
+// PathFilter is a version of FilteredServiceInfoSnapshot which gets
 // constructed from API query options. It has a method for applying
 // the FilteredServiceInfoSnapshot values to sql strings, to allow
 // for less joins of service info related tables.
-type Filter struct {
+type PathFilter struct {
 	core.FilteredServiceInfoSnapshot
 }
 
-// FilterFromResourceOpts returns a Filter from apiv2.ResourceReportOpts.
-func FilterFromResourceOpts(cluster *core.Cluster, opts common.ResourceReportOpts) (f Filter, err error) {
+// FilterFromResourceOpts returns a PathFilter from apiv2.ResourceReportOpts.
+func FilterFromResourceOpts(cluster *core.Cluster, opts common.ResourceReportOpts) (f PathFilter, err error) {
 	sis := cluster.SIC.GetSnapshot()
-	f = Filter{sis.Filter(core.ServiceInfoFilter{
+	f = PathFilter{sis.Filter(core.ServiceInfoFilter{
 		ServiceArea:  opts.Area,
 		ServiceType:  opts.ServiceType,
 		Category:     opts.Category,
@@ -50,10 +50,32 @@ func FilterFromResourceOpts(cluster *core.Cluster, opts common.ResourceReportOpt
 	return f, nil
 }
 
-// FilterFromRateOpts returns a Filter from apiv2.RateReportOpts.
-func FilterFromRateOpts(cluster *core.Cluster, opts common.RateReportOpts) (f Filter, err error) {
+// FilterFromCommitmentListOpts returns a PathFilter from common.CommitmentListOpts.
+func FilterFromCommitmentListOpts(cluster *core.Cluster, opts common.CommitmentListOpts) (f PathFilter, err error) {
 	sis := cluster.SIC.GetSnapshot()
-	f = Filter{sis.Filter(core.ServiceInfoFilter{
+	f = PathFilter{sis.Filter(core.ServiceInfoFilter{
+		ServiceType:  opts.ServiceType,
+		Category:     opts.Category,
+		ResourceName: opts.ResourceName,
+	})}
+	services := f.GetServices()
+	if serviceType, ok := opts.ServiceType.Unpack(); ok && len(services) == 0 {
+		return f, fmt.Errorf(`no services found for type %q`, serviceType)
+	}
+	resources := f.GetResources()
+	if category, ok := opts.Category.Unpack(); ok && len(resources) == 0 {
+		return f, fmt.Errorf(`no resources found for category %q`, category)
+	}
+	if name, ok := opts.ResourceName.Unpack(); ok && len(resources) == 0 {
+		return f, fmt.Errorf(`no resources found for name %q`, name)
+	}
+	return f, nil
+}
+
+// FilterFromRateOpts returns a PathFilter from apiv2.RateReportOpts.
+func FilterFromRateOpts(cluster *core.Cluster, opts common.RateReportOpts) (f PathFilter, err error) {
+	sis := cluster.SIC.GetSnapshot()
+	f = PathFilter{sis.Filter(core.ServiceInfoFilter{
 		ServiceArea: opts.Area,
 		ServiceType: opts.ServiceType,
 		Category:    opts.Category,
@@ -86,7 +108,7 @@ var filterReplaceRx = regexp.MustCompile(`{{(\S+?) = ANY\(\$(service_id|resource
 // is the name of the entity whose ID-column values are used.
 // It supports service_id, resource_id, az_resource_id and rate_id.
 // On unknown keywords it will panic.
-func (f Filter) ExpandServiceFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
+func (f PathFilter) ExpandServiceFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
 	// get current highest index
 	var err error
 	i := 0
@@ -126,14 +148,14 @@ func (f Filter) ExpandServiceFilters(originalQuery string, originalArgs ...any) 
 	return query, args
 }
 
-func (f Filter) getServiceIDs() (ids []db.ServiceID) {
+func (f PathFilter) getServiceIDs() (ids []db.ServiceID) {
 	for _, service := range f.GetServices() {
 		ids = append(ids, service.ID)
 	}
 	return ids
 }
 
-func (f Filter) getResourceIDs() (ids []db.ResourceID) {
+func (f PathFilter) getResourceIDs() (ids []db.ResourceID) {
 	for _, resources := range f.GetResources() {
 		for _, resource := range resources {
 			ids = append(ids, resource.ID)
@@ -142,7 +164,7 @@ func (f Filter) getResourceIDs() (ids []db.ResourceID) {
 	return ids
 }
 
-func (f Filter) getAZResourceIDs() (ids []db.AZResourceID) {
+func (f PathFilter) getAZResourceIDs() (ids []db.AZResourceID) {
 	for _, azResources := range f.GetAZResources() {
 		for _, azResourcesByAZ := range azResources {
 			for _, azResource := range azResourcesByAZ {
@@ -153,7 +175,7 @@ func (f Filter) getAZResourceIDs() (ids []db.AZResourceID) {
 	return ids
 }
 
-func (f Filter) getRateIDs() (ids []db.RateID) {
+func (f PathFilter) getRateIDs() (ids []db.RateID) {
 	for _, rates := range f.GetRates() {
 		for _, rate := range rates {
 			ids = append(ids, rate.ID)
