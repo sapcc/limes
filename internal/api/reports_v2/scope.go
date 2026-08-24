@@ -97,9 +97,10 @@ func NewProjectScope(ctx context.Context, projectUUID liquid.ProjectUUID, domain
 	}
 
 	if domainUUID.IsSomeAnd(is.DifferentFrom(domain.UUID)) {
-		return none, fmt.Errorf("inconsistent NewScope() invocation: got domainUUID = %q and projectUUID = %q, but that project actually belongs to domain %q with UUID = %q",
+		err = fmt.Errorf("inconsistent NewScope() invocation: got domainUUID = %q and projectUUID = %q, but that project actually belongs to domain %q with UUID = %q",
 			domainUUID, projectUUID, domain.Name, domain.UUID,
 		)
+		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
 	}
 	return ProjectScope{domain, project}, nil
 }

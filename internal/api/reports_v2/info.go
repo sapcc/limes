@@ -51,7 +51,6 @@ func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID
 	for _, domain := range []core.KeystoneDomain{
 		{Name: token.DomainScopeName(), UUID: token.DomainScopeUUID()},
 		{Name: token.ProjectScopeDomainName(), UUID: token.ProjectScopeDomainUUID()},
-		{Name: token.UserDomainName(), UUID: token.UserDomainUUID()},
 	} {
 		if domain.Name == "" || domain.UUID == "" {
 			continue // skip options that are not applicable to the current token

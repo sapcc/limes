@@ -64,7 +64,7 @@ The v2 API uses the policy rules listed below.
 | --- | --- | --- |
 | `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
 | `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
-| `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (both based on token: either token's domain scope, or otherwise token's project scope's domain, or otherwise user's domain) |
+| `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
 | `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
 | `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
@@ -76,12 +76,6 @@ The v2 API uses the policy rules listed below.
 | `v2:project:with_subresources` | none | `?with=subresources` in resource reports |
 | `v2:project:with_timing` | none | `?with=timing` in resource reports |
 | `v2:meta:no_error_obfuscation` | none | see unobfuscated error messages in HTTP 5xx responses (usually restricted to cloud admins) |
-
-Note that:
-
-- The `v2:domain_info` rule may be evaluated multiple times if multiple `domain_uuid` options apply (based on the token presented by the requester).
-  This enables support for different representations of domain admin-ness: Besides the usual way of assigning roles on domain level and using domain-scoped tokens,
-  Keystone could also be set up to represent domain admins through project-level role assignments on special admin projects per domain.
 
 ## Environment variables for `limes collect` only
 
