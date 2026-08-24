@@ -100,7 +100,7 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 `))
 
 // GetClusterResources returns a resourcesv2.ClusterGetResponse.
-func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
+func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
 	var result resourcesv2.ClusterGetResponse
 
 	// fill info report
@@ -173,7 +173,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 // setInClusterResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ClusterAvailabilityZoneReport.
-func setInClusterResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], value resourcesv2.ClusterAvailabilityZoneReport) {
+func setInClusterResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], value resourcesv2.ClusterAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data
@@ -233,7 +233,7 @@ var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterRates returns a ratesv2.ClusterGetResponse.
-func GetClusterRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
+func GetClusterRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
 	var result ratesv2.ClusterGetResponse
 
 	// fill info report
@@ -261,7 +261,7 @@ func GetClusterRates(ctx context.Context, cluster *core.Cluster, token *gopherpo
 // setInClusterRateReport creates or iterates higher level structs on the way to the nested
 // location of the db.RateID in the report and assigns the value for ratesv2.ClusterRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
-func setInClusterRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ClusterGetResponse, rateID db.RateID, value ratesv2.ClusterRateReport) {
+func setInClusterRateReport(filter PathFilter, cluster *core.Cluster, report *ratesv2.ClusterGetResponse, rateID db.RateID, value ratesv2.ClusterRateReport) {
 	rate, rExists := filter.GetRateForID(rateID)
 	if !rExists {
 		// defense in depth: a rate was deleted in between, so we ignore the data

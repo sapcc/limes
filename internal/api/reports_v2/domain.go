@@ -103,7 +103,7 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 `))
 
 // GetDomainResources returns a resourcesv2.DomainGetResponse.
-func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
+func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
 	var result resourcesv2.DomainGetResponse
 
 	// fill info report
@@ -169,7 +169,7 @@ func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gophe
 
 // setInDomainResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.DomainAvailabilityZoneReport.
-func setInDomainResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.DomainGetResponse, azResourceID db.AZResourceID, domain common.DomainMetadata, value resourcesv2.DomainAvailabilityZoneReport) {
+func setInDomainResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.DomainGetResponse, azResourceID db.AZResourceID, domain common.DomainMetadata, value resourcesv2.DomainAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data
@@ -242,7 +242,7 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetDomainRates returns a ratesv2.DomainGetResponse.
-func GetDomainRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
+func GetDomainRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
 	var result ratesv2.DomainGetResponse
 
 	// fill info report
@@ -278,7 +278,7 @@ func GetDomainRates(ctx context.Context, cluster *core.Cluster, token *gopherpol
 // setInDomainReport creates or iterates higher level structs on the way to the nested
 // location of the db.RateID in the report and assigns the value for ratesv2.DomainRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
-func setInDomainRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.DomainGetResponse, rateID db.RateID, domain common.DomainMetadata, value ratesv2.DomainRateReport) {
+func setInDomainRateReport(filter PathFilter, cluster *core.Cluster, report *ratesv2.DomainGetResponse, rateID db.RateID, domain common.DomainMetadata, value ratesv2.DomainRateReport) {
 	rate, rExists := filter.GetRateForID(rateID)
 	if !rExists {
 		// defense in depth: a rate was deleted in between, so we ignore the data

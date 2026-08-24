@@ -95,7 +95,7 @@ type projectConstraints struct {
 }
 
 // GetProjectResources returns a resourcesv2.ProjectGetResponse.
-func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
+func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
 	var result resourcesv2.ProjectGetResponse
 
 	// fill info report
@@ -188,7 +188,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 // setInProjectResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ProjectAvailabilityZoneReport.
-func setInProjectResourceReport(filter Filter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], constraints projectConstraints, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport) {
+func setInProjectResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], constraints projectConstraints, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data
@@ -277,7 +277,7 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
-func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter Filter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
+func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
 	var result ratesv2.ProjectGetResponse
 
 	// fill info report
@@ -325,7 +325,7 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpo
 // setInProjectRateReport creates or iterates higher level structs on the way to the nested
 // location of the db.RateID in the report and assigns the value for ratesv2.ProjectRateReport.
 // If this rate should not get set because it does not have usage, this is a no-op.
-func setInProjectRateReport(filter Filter, cluster *core.Cluster, report *ratesv2.ProjectGetResponse, rateID db.RateID, project common.ProjectMetadata, value ratesv2.ProjectRateReport) {
+func setInProjectRateReport(filter PathFilter, cluster *core.Cluster, report *ratesv2.ProjectGetResponse, rateID db.RateID, project common.ProjectMetadata, value ratesv2.ProjectRateReport) {
 	rate, rExists := filter.GetRateForID(rateID)
 	if !rExists {
 		// defense in depth: a rate was deleted in between, so we ignore the data
