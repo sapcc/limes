@@ -21,6 +21,7 @@ import (
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
+	"github.com/sapcc/limes/internal/api/reports_v2"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -71,7 +72,7 @@ func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePa
 // validateCommittability checks that the AZ resource identified by `path`:
 //   - exists in the given project scope, and
 //   - allows commitments of the specified duration.
-func (p *v2Provider) validateCommittability(path db.AZResourcePath, dbDomain db.Domain, dbProject db.Project, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
+func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope reports_v2.ProjectScope, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
 	_, ok := sis.GetServiceForType(path.ServiceType)
 	if !ok {
 		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchService)
@@ -85,7 +86,7 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, dbDomain db.
 
 	var forbidden bool
 	err = p.DB.QueryRow(`SELECT forbidden FROM project_resources WHERE project_id = $1 AND resource_id = $2`,
-		dbProject.ID, resource.ID).Scan(&forbidden)
+		scope.Project.ID, resource.ID).Scan(&forbidden)
 	if err != nil {
 		return
 	}
@@ -94,7 +95,7 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, dbDomain db.
 		return
 	}
 
-	behavior := p.Cluster.CommitmentBehaviorForResourcePath(path.Resource()).ForDomain(dbDomain.Name)
+	behavior := p.Cluster.CommitmentBehaviorForResourcePath(path.Resource()).ForDomain(scope.Domain.Name)
 	if len(behavior.Durations) == 0 {
 		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errCommitmentsDisabled)
 		return

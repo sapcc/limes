@@ -33,7 +33,7 @@ on the top left corner of this document to get to a specific section of this gui
 | `LIMES_API_DOMAIN_NAME_V1` | *(required)* | Domain name of Limes v1 API as it appears in the Keystone service catalog for this cluster. The endpoint URL in the catalog entry for service type `resources` must be `https://THIS_VALUE`. Multiple values are allowed (separated by commas with optional whitespace inbetween) if multiple endpoints are maintained in the catalog for this service type. |
 | `LIMES_API_DOMAIN_NAME_V2` | *(required)* | Domain name of Limes v2 API as it appears in the Keystone service catalog for this cluster. The endpoint URLs in the catalog entries for service types `limitas-resources` and `limitas-rates` must be `https://THIS_VALUE/resources` and `https://THIS_VALUE/rates`, respectively. Multiple values are allowed (separated by commas with optional whitespace inbetween) if multiple endpoints are maintained in the catalog for these service types. |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
-| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.json` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.json` | Path to the oslo.policy file that describes authorization behavior for this service. [See below](#oslo-policy) for further details on authoring the `policy.json` file.  |
 
 ### Audit trail
 
@@ -47,6 +47,35 @@ These audit events can be sent to a RabbitMQ server which can then forward them 
 | `LIMES_AUDIT_RABBITMQ_PASSWORD` | `guest` | Password for the specified user. |
 | `LIMES_AUDIT_RABBITMQ_HOSTNAME` | `localhost` | Hostname of the RabbitMQ server. |
 | `LIMES_AUDIT_RABBITMQ_PORT` | `5672` | Port number to which the underlying connection is made. |
+
+### Oslo Policy
+
+Regarding the `policy.json` file for the `$LIMES_API_POLICY_PATH` variable, please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy](../example-policy.json) that can be used for development setups, or as a basis for writing your own policy. Please also refer to:
+
+- [the OpenStack documentation on policies](https://docs.openstack.org/security-guide/identity/policies.html)
+- [the list of available API attributes](https://github.com/sapcc/go-bits/blob/75bdd20c7867077b7fab59242c43bd93ffda6518/gopherpolicy/pkg.go#L232-L248)
+
+In the v1-API `:set_rate_limit` policies, the object attribute `%(service_type)s` can be used to restrict editing to certain service types.
+
+The v2 API uses the policy rules listed below.
+
+<!-- This table is sorted by the third section of the rule name first, then by the second section. This groups similar rules of different levels together. -->
+| Rule | Object attributes | Authorized access |
+| --- | --- | --- |
+| `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
+| `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
+| `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
+| `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
+| `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
+| `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
+| `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster` |
+| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid` |
+| `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid` |
+| `v2:cluster:validation` | none | `GET /admin/mail/render` |
+| `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |
+| `v2:project:with_subresources` | none | `?with=subresources` in resource reports |
+| `v2:project:with_timing` | none | `?with=timing` in resource reports |
+| `v2:meta:no_error_obfuscation` | none | see unobfuscated error messages in HTTP 5xx responses (usually restricted to cloud admins) |
 
 ## Environment variables for `limes collect` only
 
@@ -330,8 +359,6 @@ For example, the following configuration can be used with [swift-health-exporter
 
 [json]:   https://www.json.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
-[policy]: https://docs.openstack.org/security-guide/identity/policies.html
-[ex-pol]: ../example-policy.json
 [prom]:   https://prometheus.io
 [she]:    https://github.com/sapcc/swift-health-exporter
 

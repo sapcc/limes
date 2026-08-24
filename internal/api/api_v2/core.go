@@ -24,6 +24,7 @@ import (
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
@@ -164,7 +165,7 @@ func parseRequestBodyAs[T any](r *http.Request) (T, error) {
 
 // checkProjectAccess authenticates and authorizes a project-scoped request using the given policy rule.
 // On success, returns the database records for the project scope, its containing domain and the authenticated token.
-func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ db.Domain, _ db.Project, err error) {
+func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Token, projectUUID liquid.ProjectUUID, policyRule string) (_ reports_v2.ProjectScope, err error) {
 	// NOTE: This method is written in a way that obfuscates "domain not found"
 	// errors to users without successful authorization (including by timing side-channel).
 
@@ -198,11 +199,11 @@ func (p *v2Provider) checkProjectAccess(ctx context.Context, t *gopherpolicy.Tok
 		return
 	}
 
-	project, err := db.ProjectStore.SelectOne(ctx, p.DB, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	project, err := db.ProjectStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, projectUUID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this branch should not be reachable if the first database query found a result
 		err = fmt.Errorf("no such project (UUID = %s)", projectUUID)
 		err = respondwith.CustomStatus(http.StatusNotFound, err)
 	}
-	return domain, project, err
+	return reports_v2.ProjectScope{Domain: domain, Project: project}, err
 }

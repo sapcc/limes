@@ -56,11 +56,11 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	now := p.timeNow()
 
 	// validate request contents
-	dbDomain, dbProject, err := p.checkProjectAccess(ctx, token, req.ProjectUUID, "v2:project:commitment_create")
+	scope, err := p.checkProjectAccess(ctx, token, req.ProjectUUID, "v2:project:commitment_create")
 	if err != nil {
 		return none, err
 	}
-	azResource, behavior, err := p.validateCommittability(path, dbDomain, dbProject, req.Duration, sis)
+	azResource, behavior, err := p.validateCommittability(path, scope, req.Duration, sis)
 	if err != nil {
 		return none, err
 	}
@@ -80,7 +80,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	c := db.ProjectCommitment{
 		UUID:                datamodel.GenerateProjectCommitmentUUID(),
 		AZResourceID:        azResource.ID,
-		ProjectID:           dbProject.ID,
+		ProjectID:           scope.Project.ID,
 		Amount:              req.Amount,
 		Duration:            req.Duration,
 		CreatedAt:           now,
@@ -111,7 +111,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	// but we need to be able to revert this insertion if the CommitmentChangeRequest is rejected
 	var auditEvents []audittools.Event
 	err = withinDryRunnableTx(p.DB, req.DryRun, func(tx db.Interface) error {
-		stats, err := getCommitmentStats(tx, dbProject.ID, azResource.ID)
+		stats, err := getCommitmentStats(tx, scope.Project.ID, azResource.ID)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 			if err != nil {
 				return err
 			}
-			resp, err := tcc.CanConfirmWithTransfers(ctx, c, dbProject, dbDomain, true, req.DryRun, auditContext, cadf.CreateAction)
+			resp, err := tcc.CanConfirmWithTransfers(ctx, c, scope.Project, scope.Domain, true, req.DryRun, auditContext, cadf.CreateAction)
 			if err != nil {
 				return err
 			}
@@ -164,8 +164,8 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 				AZ:          path.AvailabilityZone,
 				InfoVersion: must.BeOK(sis.GetServiceForType(path.ServiceType)).LiquidVersion,
 				ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-					dbProject.UUID: {
-						ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(dbProject, dbDomain),
+					scope.Project.UUID: {
+						ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(scope.Project, scope.Domain),
 						ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 							path.ResourceName: {
 								TotalConfirmedBefore:  stats.TotalConfirmed,
@@ -231,7 +231,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	}
 
 	canBeDeleted := datamodel.CanDeleteCommitment(token, c, p.timeNow)
-	result := convertCommitmentToDisplayForm(c, path, dbProject, canBeDeleted)
+	result := convertCommitmentToDisplayForm(c, path, scope.Project, canBeDeleted)
 	if req.DryRun {
 		result.UUID = "00000000-0000-0000-0000-000000000000"
 	}
