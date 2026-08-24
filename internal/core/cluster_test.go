@@ -77,7 +77,7 @@ func Test_ClusterSaveServiceInfo(t *testing.T) {
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
 		"only_usage":         {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 		"with_global_limit":  {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: false},
-		"with_project_limit": {Unit: liquid.UnitNone, Topology: liquid.FlatTopology, HasUsage: false}, //nolint:staticcheck // intentionally using deprecated name UnitNone to validate the automatic rewrite into UnitPiece
+		"with_project_limit": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
 	s := test.NewSetup(t,

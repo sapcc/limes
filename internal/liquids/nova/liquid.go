@@ -317,8 +317,7 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 				}
 			}
 			sumConverted := sum
-			//nolint:staticcheck // intentionally using deprecated name UnitNone to ensure we catch all cases
-			if resInfo.Unit != liquid.UnitPiece && resInfo.Unit != liquid.UnitMebibytes && resInfo.Unit != liquid.UnitNone {
+			if resInfo.Unit != liquid.UnitPiece && resInfo.Unit != liquid.UnitMebibytes {
 				result, err := limes.ValueWithUnit{Value: sum, Unit: resInfo.Unit}.ConvertTo(liquid.UnitMebibytes)
 				if err != nil {
 					return fmt.Errorf("while converting quota for %s to MiB: %w", resName, err)

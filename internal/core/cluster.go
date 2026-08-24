@@ -275,21 +275,6 @@ func generateDeleteFunc[T any](dbm *gsql.DB, getAZResourcePathPattern func(o T) 
 // or ScrapeCapacity or on Init from the collect-task. It does not have the LiquidConnection as receiverType,
 // so that it can be reused from the testSetup to create DB entries.
 func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, serviceInfo liquid.ServiceInfo, availabilityZones []limes.AvailabilityZone, rateLimits ServiceRateLimitConfiguration, timeNow time.Time, dbm *gsql.DB) (err error) {
-	// TODO: remove this once the move from UnitNone to UnitPiece is finished
-	//       (i.e. when liquid.ValidateServiceInfo is updated to reject UnitNone)
-	for resName, resInfo := range serviceInfo.Resources {
-		if resInfo.Unit == liquid.UnitNone { //nolint:staticcheck // necessary use of deprecated symbol
-			resInfo.Unit = liquid.UnitPiece
-			serviceInfo.Resources[resName] = resInfo
-		}
-	}
-	for rateName, rateInfo := range serviceInfo.Rates {
-		if rateInfo.Unit == liquid.UnitNone { //nolint:staticcheck // necessary use of deprecated symbol
-			rateInfo.Unit = liquid.UnitPiece
-			serviceInfo.Rates[rateName] = rateInfo
-		}
-	}
-
 	// make the implicitly defined default category explicit if needed
 	defaultCategoryName := liquid.CategoryName(serviceType)
 	if usesDefaultCategory(serviceInfo) {

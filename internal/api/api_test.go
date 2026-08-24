@@ -101,17 +101,17 @@ func setupTest(t *testing.T) test.Setup {
 
 	srvInfoShared := test.DefaultLiquidServiceInfo("Shared")
 	srvInfoShared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"objects:create":    {Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:create":    {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
 		"objects:delete":    {Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"objects:update":    {Topology: liquid.FlatTopology, HasUsage: true},
-		"objects:read":      {Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:update":    {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:read":      {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 		"objects:unlimited": {Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	srvInfoUnshared := test.DefaultLiquidServiceInfo("Unshared")
 	srvInfoUnshared.Rates = map[liquid.RateName]liquid.RateInfo{
-		"instances:create": {Topology: liquid.FlatTopology, HasUsage: true},
-		"instances:delete": {Topology: liquid.FlatTopology, HasUsage: true},
-		"instances:update": {Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:create": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:delete": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
+		"instances:update": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 	s := test.NewSetup(t,
 		test.WithConfig(testConfigJSON),

@@ -258,9 +258,9 @@ func TestV2ProjectResourceReport(t *testing.T) {
 func TestV2ProjectRateReport(t *testing.T) {
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")
 	srvInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
-		"objects:create":    {DisplayName: "Object Creations", Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		"objects:create":    {DisplayName: "Object Creations", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
 		"objects:delete":    {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
-		"objects:update":    {DisplayName: "Object Updates", Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:update":    {DisplayName: "Object Updates", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 		"objects:unlimited": {DisplayName: "Object Unlimited Operations", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
 	}
 
