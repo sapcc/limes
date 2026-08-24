@@ -12,6 +12,11 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// CommitmentList is the response payload format for GET /v2/commitments and POST /v2/commitments/:uuid/split.
+type CommitmentList struct {
+	Commitments []Commitment `json:"commitments"`
+}
+
 // Commitment is the response payload format for GET /resources/v2/commitments/:uuid and several endpoints that create or modify commitments.
 type Commitment struct {
 	UUID liquid.CommitmentUUID `json:"uuid"`
