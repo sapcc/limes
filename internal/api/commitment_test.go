@@ -1255,7 +1255,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         oldassert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   oldassert.StringData("request body is not valid JSON: json: cannot unmarshal number -42 into Go struct field CommitmentRequest.commitment.amount of type uint64\n"),
+		ExpectBody:   oldassert.StringData("request body is not valid JSON: json: cannot unmarshal number -42 into Go struct field .commitment.amount of type uint64\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: amount may not be zero (this is caught by our logic)
