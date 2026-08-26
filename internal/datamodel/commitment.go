@@ -10,13 +10,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/core"
@@ -41,7 +40,7 @@ func GenerateTransferToken() string {
 func GenerateProjectCommitmentUUID() liquid.CommitmentUUID {
 	// UUID generation will only raise an error if reading from /dev/urandom fails,
 	// which is a wildly unexpected OS-level error and thus fine as a fatal error
-	return liquid.CommitmentUUID(must.Return(uuid.NewV4()).String())
+	return liquid.CommitmentUUID(uuid.NewV4().String())
 }
 
 // BuildSplitCommitment prepares a new commitment instance whose creation context

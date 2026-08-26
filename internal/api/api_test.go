@@ -13,8 +13,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -262,7 +262,7 @@ func setupTest(t *testing.T) test.Setup {
 	makeCommitment := func(projectID db.ProjectID, azResourceID db.AZResourceID, amount uint64, status liquid.CommitmentStatus, durationStr string) *db.ProjectCommitment {
 		duration := must.Return(limesresources.ParseCommitmentDuration(durationStr))
 		c := db.ProjectCommitment{
-			UUID:                liquid.CommitmentUUID(must.Return(uuid.NewV4()).String()),
+			UUID:                liquid.CommitmentUUID(uuid.NewV4().String()),
 			ProjectID:           projectID,
 			AZResourceID:        azResourceID,
 			Amount:              amount,
@@ -925,7 +925,7 @@ func Test_LargeProjectList(t *testing.T) {
 	projectUUIDs := make([]liquid.ProjectUUID, 100)
 	projectsAsConfigured := make([]core.KeystoneProject, len(projectUUIDs))
 	for idx := range projectUUIDs {
-		projectUUID := liquid.ProjectUUID(must.Return(uuid.NewV4()).String())
+		projectUUID := liquid.ProjectUUID(uuid.NewV4().String())
 		projectUUIDs[idx] = projectUUID
 		projectsAsConfigured[idx] = core.KeystoneProject{
 			Name:       fmt.Sprintf("test-project%04d", idx),
