@@ -231,7 +231,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	}
 
 	canBeDeleted := datamodel.CanDeleteCommitment(token, c, p.timeNow)
-	result := convertCommitmentToDisplayForm(c, path, scope.Project, canBeDeleted)
+	result := convertCommitmentToDisplayForm(c, path, scope.Project.UUID, canBeDeleted)
 	if req.DryRun {
 		result.UUID = "00000000-0000-0000-0000-000000000000"
 	}

@@ -48,12 +48,12 @@ var (
 	errResourceForbidden         = errors.New("resource is not enabled in this project")
 )
 
-func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, project db.Project, canBeDeleted bool) resourcesv2.Commitment {
+func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, canBeDeleted bool) resourcesv2.Commitment {
 	return resourcesv2.Commitment{
 		UUID:             c.UUID,
 		Amount:           c.Amount,
 		Duration:         c.Duration,
-		ProjectUUID:      project.UUID,
+		ProjectUUID:      projectUUID,
 		ServiceType:      path.ServiceType,
 		ResourceName:     path.ResourceName,
 		AvailabilityZone: path.AvailabilityZone,
