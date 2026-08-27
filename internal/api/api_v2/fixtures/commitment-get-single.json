@@ -1,0 +1,17 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000001",
+  "amount": 10,
+  "duration": "1 year",
+  "project_id": "uuid-for-paris",
+  "service_type": "first",
+  "resource_name": "capacity",
+  "availability_zone": "az-one",
+  "status": "confirmed",
+  "created_at": 0,
+  "creator_uuid": "dummy",
+  "creator_name": "dummy",
+  "can_be_deleted": true,
+  "confirmed_at": 0,
+  "expires_at": 31536000,
+  "updated_at": 0
+}

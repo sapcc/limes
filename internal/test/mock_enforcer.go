@@ -27,6 +27,9 @@ type PolicyEnforcer struct {
 	AllowCommitmentCreate      bool
 	AllowCommitmentDelete      bool
 	AllowCommitmentDeleteAdmin bool
+	AllowCommitmentGet         bool
+	AllowCommitmentGetAdmin    bool
+	AllowCommitmentGetPublic   bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
 	ForbidWithTiming          bool
 	ForbidWithSubresources    bool
@@ -88,6 +91,12 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowCommitmentDelete
 	case "commitment_delete_admin":
 		return e.AllowCommitmentDeleteAdmin
+	case "commitment_get":
+		return e.AllowCommitmentGet
+	case "commitment_get_admin":
+		return e.AllowCommitmentGetAdmin
+	case "commitment_get_public":
+		return e.AllowCommitmentGetPublic
 	case "with_timing":
 		return !e.ForbidWithTiming
 	case "with_subresources":
