@@ -263,3 +263,27 @@ func (p *v2Provider) checkProjectAccessByID(ctx context.Context, t *gopherpolicy
 
 	return reports_v2.ProjectScope{Domain: domain, Project: project}, nil
 }
+
+// checkDomainAccess authenticates and authorizes a domain-scoped request using the given policy rule.
+// On success, returns the database record for the domain scope and the authenticated token.
+func (p *v2Provider) checkDomainAccess(ctx context.Context, t *gopherpolicy.Token, domainUUID, policyRule string) (_ reports_v2.DomainScope, err error) {
+	// here, we can do auth first, as we don't need additional data for the check
+	t.Context.Request = map[string]string{
+		"domain_uuid": domainUUID,
+	}
+	err = t.Enforce(policyRule)
+	if err != nil {
+		return
+	}
+
+	// find the domain
+	domain, err := db.DomainStore.SelectOneWhere(ctx, p.DB, `uuid = $1`, domainUUID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		err = respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such domain (UUID = %s)", domainUUID))
+		return
+	case err != nil:
+		return
+	}
+	return reports_v2.DomainScope{Domain: domain}, nil
+}

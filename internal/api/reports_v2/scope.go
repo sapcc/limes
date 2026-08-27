@@ -4,19 +4,10 @@
 package reports_v2
 
 import (
-	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
 
-	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/respondwith"
-	"go.xyrillian.de/gg/gsql"
-	"go.xyrillian.de/gg/is"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
@@ -49,21 +40,6 @@ type DomainScope struct {
 	Domain db.Domain
 }
 
-// NewDomainScope builds a [DomainScope] by looking for the requested domain in the database.
-func NewDomainScope(ctx context.Context, domainUUID string, dbm *gsql.DB) (DomainScope, error) {
-	var none DomainScope // only used in error returns
-
-	domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `uuid = $1`, domainUUID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such domain (UUID = %s)", domainUUID))
-		}
-		return none, err
-	}
-
-	return DomainScope{domain}, nil
-}
-
 // ExpandScopeFilters implements the [Scope] interface.
 func (s DomainScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
 	return expandScopeFilters(Some(s.Domain), None[db.Project](), originalQuery, originalArgs)
@@ -73,36 +49,6 @@ func (s DomainScope) ExpandScopeFilters(originalQuery string, originalArgs ...an
 type ProjectScope struct {
 	Domain  db.Domain
 	Project db.Project
-}
-
-// NewProjectScope builds a [ProjectScope] by looking for the requested project in the database.
-// If a domainUUID is also given, returns an error if the project turns out not to be in that domain.
-func NewProjectScope(ctx context.Context, projectUUID liquid.ProjectUUID, domainUUID Option[string], dbm *gsql.DB) (ProjectScope, error) {
-	var none ProjectScope // only used in error returns
-
-	project, err := db.ProjectStore.SelectOneWhere(ctx, dbm, `uuid = $1`, projectUUID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return none, respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("no such project (UUID = %s)", projectUUID))
-		}
-		return none, err
-	}
-
-	domain, err := db.DomainStore.SelectOneWhere(ctx, dbm, `id = $1`, project.DomainID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return none, fmt.Errorf("referential integrity error: project %s references unknown domain with ID = %d", project.UUID, project.DomainID)
-		}
-		return none, err
-	}
-
-	if domainUUID.IsSomeAnd(is.DifferentFrom(domain.UUID)) {
-		err = fmt.Errorf("inconsistent NewScope() invocation: got domainUUID = %q and projectUUID = %q, but that project actually belongs to domain %q with UUID = %q",
-			domainUUID, projectUUID, domain.Name, domain.UUID,
-		)
-		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
-	}
-	return ProjectScope{domain, project}, nil
 }
 
 // ExpandScopeFilters implements the [Scope] interface.
