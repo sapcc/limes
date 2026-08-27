@@ -9,13 +9,13 @@
       "resource_name": "capacity",
       "availability_zone": "az-one",
       "status": "confirmed",
-      "created_at": 0,
+      "created_at": "1970-01-01T00:00:00Z",
       "creator_uuid": "dummy",
       "creator_name": "dummy",
       "can_be_deleted": true,
-      "confirmed_at": 0,
-      "expires_at": 31536000,
-      "updated_at": 0
+      "confirmed_at": "1970-01-01T00:00:00Z",
+      "expires_at": "1971-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
     },
     {
       "uuid": "00000000-0000-0000-0000-000000000002",
@@ -26,13 +26,13 @@
       "resource_name": "capacity",
       "availability_zone": "az-one",
       "status": "confirmed",
-      "created_at": 0,
+      "created_at": "1970-01-01T00:00:00Z",
       "creator_uuid": "dummy",
       "creator_name": "dummy",
       "can_be_deleted": true,
-      "confirmed_at": 0,
-      "expires_at": 31536000,
-      "updated_at": 0
+      "confirmed_at": "1970-01-01T00:00:00Z",
+      "expires_at": "1971-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
     },
     {
       "uuid": "00000000-0000-0000-0000-000000000003",
@@ -45,13 +45,13 @@
       "status": "confirmed",
       "transfer_status": "public",
       "transfer_token": "dummyToken-1",
-      "created_at": 3600,
+      "created_at": "1970-01-01T01:00:00Z",
       "creator_uuid": "dummy",
       "creator_name": "dummy",
       "can_be_deleted": true,
-      "confirmed_at": 0,
-      "expires_at": 31539600,
-      "updated_at": 3600
+      "confirmed_at": "1970-01-01T00:00:00Z",
+      "expires_at": "1971-01-01T01:00:00Z",
+      "updated_at": "1970-01-01T01:00:00Z"
     },
     {
       "uuid": "00000000-0000-0000-0000-000000000004",
@@ -62,13 +62,13 @@
       "resource_name": "capacity",
       "availability_zone": "az-one",
       "status": "deleted",
-      "created_at": 3600,
+      "created_at": "1970-01-01T01:00:00Z",
       "creator_uuid": "dummy",
       "creator_name": "dummy",
       "can_be_deleted": true,
-      "confirmed_at": 0,
-      "expires_at": 31539600,
-      "updated_at": 3600
+      "confirmed_at": "1970-01-01T00:00:00Z",
+      "expires_at": "1971-01-01T01:00:00Z",
+      "updated_at": "1970-01-01T01:00:00Z"
     }
   ]
 }

@@ -53,7 +53,7 @@ type ProjectServiceReport struct {
 	// ScrapedAt is the most recent time at which usage data for this service within this
 	// project was successfully collected from the backend, or None if no usage data has been collected yet.
 	// It is only returned when the respective query option with=timing is set.
-	ScrapedAt  Option[limes.UnixEncodedTime]                 `json:"scraped_at,omitzero"`
+	ScrapedAt  Option[common.RFC3339EncodedTime]             `json:"scraped_at,omitzero"`
 	Categories map[liquid.CategoryName]ProjectCategoryReport `json:"categories"`
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -34,7 +35,7 @@ type Commitment struct {
 	TransferStatus limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  Option[string]                          `json:"transfer_token,omitzero"`
 
-	CreatedAt limes.UnixEncodedTime `json:"created_at"`
+	CreatedAt common.RFC3339EncodedTime `json:"created_at"`
 	// CreatorUUID and CreatorName identify the user who created this commitment.
 	// CreatorName is in the format `fmt.Sprintf("%s@%s", userName, userDomainName)`and intended for informational displays only.
 	CreatorUUID string `json:"creator_uuid,omitempty"`
@@ -42,12 +43,12 @@ type Commitment struct {
 	// CanBeDeleted will be true if the commitment can be deleted by the same user who saw this object in response to a GET query.
 	CanBeDeleted bool `json:"can_be_deleted,omitempty"`
 	// ConfirmBy is unset if and only if the commitment was created in status "confirmed".
-	ConfirmBy Option[limes.UnixEncodedTime] `json:"confirm_by,omitzero"`
+	ConfirmBy Option[common.RFC3339EncodedTime] `json:"confirm_by,omitzero"`
 	// ConfirmedAt is only filled after the commitment was confirmed.
-	ConfirmedAt Option[limes.UnixEncodedTime] `json:"confirmed_at,omitzero"`
-	ExpiresAt   limes.UnixEncodedTime         `json:"expires_at"`
+	ConfirmedAt Option[common.RFC3339EncodedTime] `json:"confirmed_at,omitzero"`
+	ExpiresAt   common.RFC3339EncodedTime         `json:"expires_at"`
 	// UpdatedAt is updated at least every time any field of this type changes.
-	UpdatedAt limes.UnixEncodedTime `json:"updated_at"`
+	UpdatedAt common.RFC3339EncodedTime `json:"updated_at"`
 
 	// NotifyOnConfirm can only be set if ConfirmBy is filled.
 	// If true, a mail notification will be set to the project owners when the commitment is confirmed.
@@ -83,7 +84,17 @@ type CommitmentRequest struct {
 	Status liquid.CommitmentStatus `json:"status"`
 	// ConfirmBy must be set for statuses "planned" and "guaranteed", and may not be set otherwise.
 	// Commitments created in status "pending" will have a ConfirmBy value equal to the current time.
-	ConfirmBy Option[limes.UnixEncodedTime] `json:"confirm_by,omitzero"`
+	ConfirmBy Option[common.RFC3339EncodedTime] `json:"confirm_by,omitzero"`
 	// NotifyOnConfirm may not be set for commitments that are created in status "confirmed".
 	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`
+}
+
+// CommitmentConfiguration describes how commitments are configured for a given resource.
+//
+// This appears as a field on resource reports, if the respective resource allows commitments.
+type CommitmentConfiguration struct {
+	// Allowed durations for commitments on this resource.
+	Durations []limesresources.CommitmentDuration `json:"durations"`
+	// If shown, commitments must be created with `confirm_by` at or after this timestamp.
+	MinConfirmBy Option[common.RFC3339EncodedTime] `json:"min_confirm_by,omitzero"`
 }

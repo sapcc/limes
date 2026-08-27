@@ -104,7 +104,7 @@
             "first": {
               "services": {
                 "first": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "first": {
                       "resources": {
@@ -185,7 +185,7 @@
             "second": {
               "services": {
                 "second": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "foo_category": {
                       "resources": {
@@ -273,7 +273,7 @@
             "first": {
               "services": {
                 "first": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "first": {
                       "resources": {
@@ -365,7 +365,7 @@
             "second": {
               "services": {
                 "second": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "foo_category": {
                       "resources": {
@@ -449,7 +449,7 @@
             "first": {
               "services": {
                 "first": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "first": {
                       "resources": {
@@ -530,7 +530,7 @@
             "second": {
               "services": {
                 "second": {
-                  "scraped_at": 3600,
+                  "scraped_at": "1970-01-01T01:00:00Z",
                   "categories": {
                     "foo_category": {
                       "resources": {

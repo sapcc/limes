@@ -25,7 +25,6 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
@@ -152,9 +151,9 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 			}
 		}
 
-		scrapedAtUnix := options.Map(r.ScrapedAt, util.IntoUnixEncodedTime)
+		scrapedAtRFC := options.Map(r.ScrapedAt, common.IntoRFC3339EncodedTime)
 
-		setInClusterResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtUnix, resourcesv2.ClusterAvailabilityZoneReport{
+		setInClusterResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtRFC, resourcesv2.ClusterAvailabilityZoneReport{
 			Capacity:                     capacity,
 			RawCapacity:                  r.RawCapacity,
 			OverallUsage:                 r.OverallUsage,
@@ -173,7 +172,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 // setInClusterResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ClusterAvailabilityZoneReport.
-func setInClusterResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], value resourcesv2.ClusterAvailabilityZoneReport) {
+func setInClusterResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ClusterGetResponse, azResourceID db.AZResourceID, scrapedAt Option[common.RFC3339EncodedTime], value resourcesv2.ClusterAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data

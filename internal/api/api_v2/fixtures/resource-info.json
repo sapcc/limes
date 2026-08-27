@@ -72,7 +72,7 @@
                       "1 hour",
                       "2 hours"
                     ],
-                    "min_confirm_by": 604800
+                    "min_confirm_by": "1970-01-08T00:00:00Z"
                   }
                 }
               }
