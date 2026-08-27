@@ -50,11 +50,9 @@ func NewClient(client *gophercloud.ProviderClient, endpointOpts gophercloud.Endp
 		opts.ServiceType = "liquid"
 	}
 	return &Client{
-		ServiceClient: gophercloud.ServiceClient{
-			ProviderClient: client,
-			Endpoint:       endpoint,
-			Type:           opts.ServiceType,
-		},
+		ProviderClient: client,
+		Endpoint:       endpoint,
+		Type:           opts.ServiceType,
 	}, nil
 }
 

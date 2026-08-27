@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/common v0.70.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.25.0
-	github.com/sapcc/go-bits v0.0.0-20260818140528-75bdd20c7867
+	github.com/sapcc/go-bits v0.0.0-20260827091731-7669cbdb53fb
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.14.0
 	go.xyrillian.de/oblast v0.13.2
@@ -22,7 +22,6 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/gofrs/uuid/v5 v5.5.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/itchyny/gojq v0.12.19 // indirect
