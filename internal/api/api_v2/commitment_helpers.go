@@ -23,10 +23,10 @@ import (
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 var (
@@ -60,14 +60,14 @@ func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePa
 		Status:           c.Status,
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
-		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
-		UpdatedAt:        limes.UnixEncodedTime{Time: c.UpdatedAt},
+		CreatedAt:        common.RFC3339EncodedTime{Time: c.CreatedAt},
+		UpdatedAt:        common.RFC3339EncodedTime{Time: c.UpdatedAt},
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
 		CanBeDeleted:     canBeDeleted,
-		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime),
-		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
+		ConfirmBy:        options.Map(c.ConfirmBy, common.IntoRFC3339EncodedTime),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, common.IntoRFC3339EncodedTime),
+		ExpiresAt:        common.RFC3339EncodedTime{Time: c.ExpiresAt},
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}

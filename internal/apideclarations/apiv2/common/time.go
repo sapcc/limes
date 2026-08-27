@@ -15,7 +15,7 @@ type RFC3339EncodedTime struct {
 
 // MarshalJSON implements the json.Marshaler interface.
 func (t RFC3339EncodedTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Format(time.RFC3339))
+	return json.Marshal(t.UTC().Format(time.RFC3339))
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
@@ -34,9 +34,19 @@ type RFC3339NanoEncodedTime struct {
 	time.Time
 }
 
+// IntoRFC3339EncodedTime converts a time.Time to an RFC3339EncodedTime.
+func IntoRFC3339EncodedTime(t time.Time) RFC3339EncodedTime {
+	return RFC3339EncodedTime{Time: t}
+}
+
+// FromRFC3339EncodedTime converts an RFC3339EncodedTime to a time.Time.
+func FromRFC3339EncodedTime(t RFC3339EncodedTime) time.Time {
+	return t.Time
+}
+
 // MarshalJSON implements the json.Marshaler interface.
 func (t RFC3339NanoEncodedTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Format(time.RFC3339Nano))
+	return json.Marshal(t.UTC().Format(time.RFC3339Nano))
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.

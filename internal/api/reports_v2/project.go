@@ -163,9 +163,9 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *goph
 			}
 		}
 
-		scrapedAtUnix := options.Map(r.ScrapedAt, util.IntoUnixEncodedTime)
+		scrapedAtRFC := options.Map(r.ScrapedAt, common.IntoRFC3339EncodedTime)
 
-		setInProjectResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtUnix, r.projectConstraints, common.ProjectMetadata{
+		setInProjectResourceReport(filter, cluster, &result, r.AZResourceID, scrapedAtRFC, r.projectConstraints, common.ProjectMetadata{
 			UUID:       r.ProjectUUID,
 			Name:       r.ProjectName,
 			ParentUUID: r.ProjectParentUUID,
@@ -188,7 +188,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 // setInProjectResourceReport creates or iterates higher level structs on the way to the nested
 // location of the db.AZResourceID in the report and assigns the value for resourcesv2.ProjectAvailabilityZoneReport.
-func setInProjectResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, scrapedAt Option[limes.UnixEncodedTime], constraints projectConstraints, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport) {
+func setInProjectResourceReport(filter PathFilter, cluster *core.Cluster, report *resourcesv2.ProjectGetResponse, azResourceID db.AZResourceID, scrapedAt Option[common.RFC3339EncodedTime], constraints projectConstraints, project common.ProjectMetadata, value resourcesv2.ProjectAvailabilityZoneReport) {
 	azResource, aExists := filter.GetAZResourceForID(azResourceID)
 	if !aExists {
 		// defense in depth: an az_resource was deleted in between, so we ignore the data
