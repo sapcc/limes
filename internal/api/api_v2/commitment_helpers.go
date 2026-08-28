@@ -4,6 +4,8 @@
 package api_v2
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -227,4 +229,41 @@ func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow func
 
 	// admin exception
 	return token.Check("v2:project:commitment_delete_admin")
+}
+
+var findActiveCommitmentQuery = db.ProjectCommitmentStore.MustPrepareSelectQueryWhere(
+	sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		uuid = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`,
+	)),
+)
+
+func (p *v2Provider) selectCommitmentIfPermitted(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUID liquid.CommitmentUUID) (_ db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+	c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
+		return
+	case err != nil:
+		return
+	}
+
+	// obtain service ref
+	azRes, ok := sis.GetAZResourceForID(c.AZResourceID)
+	if !ok {
+		err = errInvalidResourceReference
+		// defense in depth, the referenced AZResource should exist
+		return
+	}
+
+	// check auth
+	scope, err := p.checkProjectAccessByID(ctx, token, c.ProjectID, policyRule)
+	if err != nil {
+		return
+	}
+	canBeDeleted := isDeletable(token, c, p.timeNow)
+	if !canBeDeleted {
+		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
+		return
+	}
+	return c, azRes, scope, nil
 }

@@ -94,7 +94,7 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 	if err != nil {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
 	}
-	err = checkOptions(token, options)
+	err = checkCommitmentListOpts(token, options)
 	if err != nil {
 		return none, err
 	}
@@ -151,7 +151,7 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 	return result, nil
 }
 
-func checkOptions(token *gopherpolicy.Token, options common.CommitmentListOpts) error {
+func checkCommitmentListOpts(token *gopherpolicy.Token, options common.CommitmentListOpts) error {
 	// check path filter
 	if (options.ResourceName.IsSome() || options.Category.IsSome()) && options.ServiceType.IsNone() {
 		return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`"category" or "resource" require "service" to be set`))
