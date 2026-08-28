@@ -21,6 +21,7 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpolicy.Token) (resourcesv2.Commitment, error) {
@@ -44,6 +45,12 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 	scope, err := p.checkProjectAccessByID(ctx, token, c.ProjectID, "v2:project:commitment_get")
 	if err != nil {
 		return none, err
+	}
+	if c.Status == util.CommitmentStatusDeleted {
+		err = token.Enforce("v2:project:commitment_get_admin")
+		if err != nil {
+			return none, err
+		}
 	}
 
 	// display form
