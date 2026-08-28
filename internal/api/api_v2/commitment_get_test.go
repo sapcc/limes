@@ -68,14 +68,14 @@ func TestCommitmentGetSingle(t *testing.T) {
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 
-	// error: permission denied as regular user for deleted commitment
-	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = false
+	// error: permission denied as regular user for inactive commitment
+	s.TokenValidator.Enforcer.ForbidWithInactive = true
 	s.MustDBExec(`UPDATE project_commitments SET status = 'deleted' WHERE uuid = $1`, uuidOne)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
-	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = true
+	s.TokenValidator.Enforcer.ForbidWithInactive = false
 
-	// success: admin user can see deleted commitment
+	// success: elevated user can see inactive commitment
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
@@ -155,9 +155,10 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		ExpectText(t, http.StatusBadRequest, "one of \"category\" or \"resource\" must be set\n")
 
 	// error: no main filter set (non-admin)
-	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = false
+	s.TokenValidator.Enforcer.AllowCommitmentGetUnscoped = false
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments").
 		ExpectText(t, http.StatusBadRequest, "one of \"public\", \"project_uuid\", \"domain_uuid\" must be set\n")
+	s.TokenValidator.Enforcer.AllowCommitmentGetUnscoped = true
 
 	// error: multiple main filters set
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true&project_uuid=uuid-for-paris").
@@ -171,9 +172,11 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&resource=capacity").
 		ExpectText(t, http.StatusBadRequest, "\"category\" or \"resource\" require \"service\" to be set\n")
 
-	// error: with=deleted without admin
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&with=deleted").
-		ExpectText(t, http.StatusForbidden, "\"with=deleted\" requires special permissions\n")
+	// error: with=inactive without permission
+	s.TokenValidator.Enforcer.ForbidWithInactive = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&with=inactive").
+		ExpectText(t, http.StatusForbidden, "\"with=inactive\" requires special permissions\n")
+	s.TokenValidator.Enforcer.ForbidWithInactive = false
 
 	// error: no permission at all
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
@@ -221,16 +224,15 @@ func TestCommitmentGetMultiple(t *testing.T) {
 				Modify(`del(.commitments.[] | select(.uuid != "00000000-0000-0000-0000-000000000003"))`))
 
 	// success: with service filter (admin scenario — switch to cluster-level token)
-	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = true
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first").
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 				Modify(deletedModification))
 
-	// success: deleted (and service filter, because it's always required)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=deleted&service=first").
+	// success: inactive (and service filter, because it's always required)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=inactive&service=first").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "deleted"))
+			httptest.NewJQModifiableJSONFixture(fixturePath, "inactive"))
 
 	// success: updated after
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first&updated_after="+s.Clock.Now().Add(-1*time.Hour).Format(time.RFC3339)).

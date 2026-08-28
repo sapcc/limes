@@ -277,8 +277,8 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowCommitmentDelete:      true,
 		AllowCommitmentDeleteAdmin: true,
 		AllowCommitmentGet:         true,
-		AllowCommitmentGetAdmin:    true,
 		AllowCommitmentGetPublic:   true,
+		AllowCommitmentGetUnscoped: true,
 	}
 	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",

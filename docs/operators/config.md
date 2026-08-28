@@ -64,10 +64,10 @@ The v2 API uses the policy rules listed below.
 | --- | --- | --- |
 | `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
 | `v2:project:commitment_delete` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as regular user |
-| `v2:project:commitment_delete_admin` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
+| `v2:project:commitment_delete_admin` | none | `DELETE /resources/v2/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
 | `v2:project:commitment_get` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` as regular user |
-| `v2:project:commitment_get_admin` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` with `?with=deleted` for the multiple entry case as admin, who can see deleted entries |
-| `v2:project:commitment_get_public` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments?only_public=true` |
+| `v2:project:commitment_get_public` | none | `GET /resources/v2/commitments?only_public=true` |
+| `v2:project:commitment_get_unscoped` | none | `GET /resources/v2/commitments` without `domain_uuid` and `project_uuid` filters |
 | `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
 | `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
@@ -78,6 +78,7 @@ The v2 API uses the policy rules listed below.
 | `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid` |
 | `v2:cluster:validation` | none | `GET /admin/mail/render` |
 | `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |
+| `v2:project:with_inactive` | none | `with=inactive` in commitment APIs |
 | `v2:project:with_subresources` | none | `?with=subresources` in resource reports |
 | `v2:project:with_timing` | none | `?with=timing` in resource reports |
 | `v2:meta:no_error_obfuscation` | none | see unobfuscated error messages in HTTP 5xx responses (usually restricted to cloud admins) |

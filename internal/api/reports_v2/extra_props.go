@@ -51,8 +51,8 @@ func EvalProjectResourceExtraProps(sql string, opts common.ProjectResourceReport
 // common.CommitmentListOpts.
 func EvalCommitmentListExtraProps(sql string, opts common.CommitmentListOpts) string {
 	optSettings := map[string]bool{
-		"deleted": opts.WithDeleted,
-		"public":  opts.OnlyPublic,
+		"inactive": opts.WithInactive,
+		"public":   opts.OnlyPublic,
 	}
 	return handleProps(sql, optSettings)
 }
