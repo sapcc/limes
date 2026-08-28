@@ -40,114 +40,114 @@ func TestV2FilterCreation(t *testing.T) {
 	)
 	// do some basic assertions to compare the filtered results against
 	sis := s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, len(sis.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(sis.GetResourcesForType("first"))), 2)
-	assert.Equal(t, len(must.BeOK(sis.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.BeOK(sis.GetRatesForType("first"))), 2)
-	assert.Equal(t, len(must.NotBeOK(sis.GetRatesForType("second"))), 0)
+	assert.Equal(t, sis.GetServices().Len(), 2)
+	assert.Equal(t, sis.GetResourcesForType("first").Len(), 2)
+	assert.Equal(t, sis.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, sis.GetRatesForType("first").Len(), 2)
+	assert.Equal(t, sis.GetRatesForType("second").Len(), 0)
 
 	// empty opts yields the same service info
 	resourceOpts := common.ResourceReportOpts{}
 	resourceFilter := must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 2)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 2)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 2)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 2)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 2)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	rateOpts := common.RateReportOpts{}
 	rateFilter := must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 2)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 2)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 2)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 2)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 
 	// area filter
 	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Area: Some("second")}}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 1)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("first"))), 0)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("first"))), 0)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Area: Some("second")}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("first"))), 0)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("first"))), 0)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 1)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 
 	// service filter
 	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("second"))}}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 1)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("first"))), 0)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("first"))), 0)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("second"))}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("first"))), 0)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("first"))), 0)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 1)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 
 	// category filter
 	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("foo_category"))}}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 1)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 2)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 1)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 1)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("foo_category"))}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 1)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 2)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 1)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 1)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 1)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 
 	// category filter: using serviceType value as category to get resources/rates without explicit category
 	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("first"))}}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 1)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("second"))), 0)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 0)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 1)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("first"))}}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 1)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("second"))), 0)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 1)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 1)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 0)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 1)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 
 	// resource filter
 	resourceOpts = common.ResourceReportOpts{ResourceName: Some(liquid.ResourceName("capacity"))}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
-	assert.Equal(t, len(resourceFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("second"))), 1)
-	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 2)
-	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, resourceFilter.GetServices().Len(), 2)
+	assert.Equal(t, resourceFilter.GetResourcesForType("first").Len(), 1)
+	assert.Equal(t, resourceFilter.GetResourcesForType("second").Len(), 1)
+	assert.Equal(t, resourceFilter.GetRatesForType("first").Len(), 2)
+	assert.Equal(t, resourceFilter.GetRatesForType("second").Len(), 0)
 
 	// rate filter
 	rateOpts = common.RateReportOpts{RateName: Some(liquid.RateName("objects:create"))}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
-	assert.Equal(t, len(rateFilter.GetServices()), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("second"))), 2)
-	assert.Equal(t, len(must.BeOK(rateFilter.GetRatesForType("first"))), 1)
-	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
+	assert.Equal(t, rateFilter.GetServices().Len(), 2)
+	assert.Equal(t, rateFilter.GetResourcesForType("first").Len(), 2)
+	assert.Equal(t, rateFilter.GetResourcesForType("second").Len(), 2)
+	assert.Equal(t, rateFilter.GetRatesForType("first").Len(), 1)
+	assert.Equal(t, rateFilter.GetRatesForType("second").Len(), 0)
 }
 
 func TestV2ExpandServiceFilters(t *testing.T) {
