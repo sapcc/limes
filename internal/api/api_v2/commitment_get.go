@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-api-declarations/opts"
@@ -46,8 +47,8 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 	if err != nil {
 		return none, err
 	}
-	if c.Status == util.CommitmentStatusDeleted {
-		err = token.Enforce("v2:project:commitment_get_admin")
+	if slices.Contains([]liquid.CommitmentStatus{util.CommitmentStatusDeleted, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, c.Status) {
+		err = token.Enforce("v2:project:with_inactive")
 		if err != nil {
 			return none, err
 		}
@@ -76,7 +77,7 @@ var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	AND {{p.id = ANY($project_id)}}
 	$with_public{{AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}}}
 	AND {{pc.updated_at >= $updated_after}}
-	AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}} $without_deleted{{, {{util.CommitmentStatusDeleted}}}})
+	$without_inactive{{AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})}}
 	ORDER BY pc.uuid
 `))
 
@@ -172,7 +173,7 @@ func checkCommitmentListOpts(token *gopherpolicy.Token, options common.Commitmen
 		return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`only one of "public", "project_uuid", "domain_uuid" may be set`))
 	}
 
-	isAdmin := token.Check("v2:project:commitment_get_admin")
+	isAdmin := token.Check(`v2:project:commitment_get_unscoped`)
 	// check too few main filters, admins still require a path-filter
 	if cnt == 0 {
 		if isAdmin && options.ServiceType.IsNone() {
@@ -191,8 +192,8 @@ func checkCommitmentListOpts(token *gopherpolicy.Token, options common.Commitmen
 			return err
 		}
 	}
-	if options.WithDeleted && !isAdmin {
-		return respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=deleted" requires special permissions`))
+	if options.WithInactive && !token.Check("v2:project:with_inactive") {
+		return respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=inactive" requires special permissions`))
 	}
 	return nil
 }

@@ -28,12 +28,13 @@ type PolicyEnforcer struct {
 	AllowCommitmentDelete      bool
 	AllowCommitmentDeleteAdmin bool
 	AllowCommitmentGet         bool
-	AllowCommitmentGetAdmin    bool
 	AllowCommitmentGetPublic   bool
+	AllowCommitmentGetUnscoped bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
-	ForbidWithTiming          bool
-	ForbidWithSubresources    bool
 	ForbidWithHistoricalUsage bool
+	ForbidWithInactive        bool
+	ForbidWithSubresources    bool
+	ForbidWithTiming          bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -93,16 +94,18 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowCommitmentDeleteAdmin
 	case "commitment_get":
 		return e.AllowCommitmentGet
-	case "commitment_get_admin":
-		return e.AllowCommitmentGetAdmin
 	case "commitment_get_public":
 		return e.AllowCommitmentGetPublic
-	case "with_timing":
-		return !e.ForbidWithTiming
-	case "with_subresources":
-		return !e.ForbidWithSubresources
+	case "commitment_get_unscoped":
+		return e.AllowCommitmentGetUnscoped
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
+	case "with_inactive":
+		return !e.ForbidWithInactive
+	case "with_subresources":
+		return !e.ForbidWithSubresources
+	case "with_timing":
+		return !e.ForbidWithTiming
 	case "block_commitments":
 		return false
 	default:
