@@ -25,7 +25,7 @@ type Commitment struct {
 	Amount   uint64                            `json:"amount"`
 	Duration limesresources.CommitmentDuration `json:"duration"`
 
-	ProjectUUID      liquid.ProjectUUID     `json:"project_id"`
+	ProjectUUID      liquid.ProjectUUID     `json:"project_id,omitempty"`
 	ServiceType      db.ServiceType         `json:"service_type"`
 	ResourceName     liquid.ResourceName    `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
