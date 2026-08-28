@@ -66,6 +66,20 @@ func TestCommitmentGetSingle(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowCommitmentGet = true
+
+	// error: permission denied as regular user for deleted commitment
+	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = false
+	s.MustDBExec(`UPDATE project_commitments SET status = 'deleted' WHERE uuid = $1`, uuidOne)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+		ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	s.TokenValidator.Enforcer.AllowCommitmentGetAdmin = true
+
+	// success: admin user can see deleted commitment
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+		ExpectJSON(t, http.StatusOK,
+			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
+				Modify(`.status = "deleted"`))
 }
 
 func TestCommitmentGetMultiple(t *testing.T) {
