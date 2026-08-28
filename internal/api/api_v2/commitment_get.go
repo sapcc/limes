@@ -4,6 +4,7 @@
 package api_v2
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -69,7 +70,7 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 // idea of this sql is that it contains all possible combinations and the code
 // will replace the dynamic parts with a combination that is semantically valid.
 var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT p.uuid as project_uuid, pc.* FROM project_commitments pc
+	SELECT p.uuid as project_uuid, d.uuid as domain_uuid, pc.* FROM project_commitments pc
 	JOIN projects p ON pc.project_id = p.id
 	JOIN domains d ON p.domain_id = d.id
 	WHERE {{pc.az_resource_id = ANY($az_resource_id)}} 
@@ -84,10 +85,9 @@ var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherpolicy.Token) (resourcesv2.CommitmentList, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments")
 	var (
-		none  resourcesv2.CommitmentList
-		scope reports_v2.Scope
-		ctx   = r.Context()
-		sis   = p.Cluster.SIC.GetSnapshot()
+		none resourcesv2.CommitmentList
+		ctx  = r.Context()
+		sis  = p.Cluster.SIC.GetSnapshot()
 	)
 
 	// parse string and basic option checks
@@ -95,24 +95,9 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 	if err != nil {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
 	}
-	err = checkCommitmentListOpts(token, options)
+	scope, err := p.checkCommitmentListOpts(token, ctx, options)
 	if err != nil {
 		return none, err
-	}
-
-	// handle rest of auth and scope - checkOptions made sure that this is consistent
-	if domainUUID, ok := options.DomainUUID.Unpack(); ok {
-		scope, err = p.checkDomainAccess(ctx, token, domainUUID, "v2:project:commitment_get")
-		if err != nil {
-			return none, err
-		}
-	} else if projectUUID, ok := options.ProjectUUID.Unpack(); ok {
-		scope, err = p.checkProjectAccess(ctx, token, projectUUID, "v2:project:commitment_get")
-		if err != nil {
-			return none, err
-		}
-	} else {
-		scope = reports_v2.ClusterScope{}
 	}
 
 	// get filter
@@ -129,8 +114,10 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 
 	// exec
 	result := resourcesv2.CommitmentList{}
+	authByProject := make(map[liquid.ProjectUUID]bool)
 	type record struct {
 		ProjectUUID liquid.ProjectUUID `db:"project_uuid"`
+		DomainUUID  string             `db:"domain_uuid"`
 		db.ProjectCommitment
 	}
 	err = oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, p.DB, query, args...).Foreach(func(c record) error {
@@ -143,6 +130,19 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 		}
 		canBeDeleted := datamodel.CanDeleteCommitment(token, c.ProjectCommitment, p.timeNow)
 		result.Commitments = append(result.Commitments, convertCommitmentToDisplayForm(c.ProjectCommitment, azRes.Path, c.ProjectUUID, canBeDeleted))
+
+		// redact project_uuids if the user is not allowed to see them
+		authorized, ok := authByProject[c.ProjectUUID]
+		if !ok {
+			token.Context.Request["domain_uuid"] = c.DomainUUID
+			token.Context.Request["project_uuid"] = string(c.ProjectUUID)
+			authorized = token.Check("v2:project:commitment_get")
+			authByProject[c.ProjectUUID] = authorized
+		}
+		if authorized {
+			return nil
+		}
+		c.ProjectUUID = ""
 		return nil
 	})
 
@@ -152,10 +152,10 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 	return result, nil
 }
 
-func checkCommitmentListOpts(token *gopherpolicy.Token, options common.CommitmentListOpts) error {
+func (p *v2Provider) checkCommitmentListOpts(token *gopherpolicy.Token, ctx context.Context, options common.CommitmentListOpts) (reports_v2.Scope, error) {
 	// check path filter
 	if (options.ResourceName.IsSome() || options.Category.IsSome()) && options.ServiceType.IsNone() {
-		return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`"category" or "resource" require "service" to be set`))
+		return nil, respondwith.CustomStatus(http.StatusBadRequest, errors.New(`"category" or "resource" require "service" to be set`))
 	}
 
 	// check too many main filters
@@ -170,30 +170,46 @@ func checkCommitmentListOpts(token *gopherpolicy.Token, options common.Commitmen
 		cnt++
 	}
 	if cnt > 1 {
-		return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`only one of "public", "project_uuid", "domain_uuid" may be set`))
+		return nil, respondwith.CustomStatus(http.StatusBadRequest, errors.New(`only one of "public", "project_uuid", "domain_uuid" may be set`))
 	}
 
 	isAdmin := token.Check(`v2:project:commitment_get_unscoped`)
 	// check too few main filters, admins still require a path-filter
 	if cnt == 0 {
 		if isAdmin && options.ServiceType.IsNone() {
-			return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`one of "category" or "resource" must be set`))
+			return nil, respondwith.CustomStatus(http.StatusBadRequest, errors.New(`one of "category" or "resource" must be set`))
 		}
 		if !isAdmin {
-			return respondwith.CustomStatus(http.StatusBadRequest, errors.New(`one of "public", "project_uuid", "domain_uuid" must be set`))
+			return nil, respondwith.CustomStatus(http.StatusBadRequest, errors.New(`one of "public", "project_uuid", "domain_uuid" must be set`))
 		}
 	}
 
 	// rest of the auth checks
-	// note: the domain/ project scope is checked where we assemble the scope later, not here
 	if options.OnlyPublic {
 		err := token.Enforce("v2:project:commitment_get_public")
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if options.WithInactive && !token.Check("v2:project:with_inactive") {
-		return respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=inactive" requires special permissions`))
+		return nil, respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=inactive" requires special permissions`))
 	}
-	return nil
+	var (
+		scope reports_v2.Scope
+		err   error
+	)
+	if domainUUID, ok := options.DomainUUID.Unpack(); ok {
+		scope, err = p.checkDomainAccess(ctx, token, domainUUID, "v2:project:commitment_get")
+		if err != nil {
+			return nil, err
+		}
+	} else if projectUUID, ok := options.ProjectUUID.Unpack(); ok {
+		scope, err = p.checkProjectAccess(ctx, token, projectUUID, "v2:project:commitment_get")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		scope = reports_v2.ClusterScope{}
+	}
+	return scope, nil
 }

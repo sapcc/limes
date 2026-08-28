@@ -216,7 +216,17 @@ func TestCommitmentGetMultiple(t *testing.T) {
 				Modify(deletedModification).
 				Modify(`del(.commitments.[] | select(.project_id == "uuid-for-paris"))`))
 
-	// success: filter by public
+	// success: filter by public (this token cannot see the project_uuid)
+	s.TokenValidator.Enforcer.AllowCommitmentGet = false
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
+		ExpectJSON(t, http.StatusOK,
+			httptest.NewJQModifiableJSONFixture(fixturePath, "public").
+				Modify(deletedModification).
+				Modify(`del(.commitments.[] | select(.uuid != "00000000-0000-0000-0000-000000000003"))`).
+				Modify(`del(.commitments.[].project_uuid)`))
+
+	// success: filter by public (this token can see the project_uuid)
+	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "public").
