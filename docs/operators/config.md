@@ -63,6 +63,11 @@ The v2 API uses the policy rules listed below.
 | Rule | Object attributes | Authorized access |
 | --- | --- | --- |
 | `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
+| `v2:project:commitment_delete` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as regular user |
+| `v2:project:commitment_delete_admin` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
+| `v2:project:commitment_get` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` as regular user |
+| `v2:project:commitment_get_admin` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` with `?with=deleted` for the multiple entry case as admin, who can see deleted entries |
+| `v2:project:commitment_get_public` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments?only_public=true` |
 | `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
 | `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
