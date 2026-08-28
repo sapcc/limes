@@ -6,7 +6,6 @@ package reports_v2
 import (
 	"database/sql"
 	"errors"
-	"maps"
 	"net/http"
 	"slices"
 	"time"
@@ -110,10 +109,10 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 	}
 	services := sis.GetServices()
 
-	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
-		service := services[serviceType]
+	for _, serviceType := range slices.Sorted(services.Keys()) {
+		service := services.GetOrZero(serviceType)
 		categories := sis.GetCategoriesForType(serviceType)
-		resources, _ := sis.GetResourcesForType(serviceType) // can have no resources
+		resources := sis.GetResourcesForType(serviceType) // can have no resources
 		// skip non-allowed resources for this user, if any
 		allowedResources, serviceTypeOK := allowedResourcesByService[serviceType]
 		if !serviceTypeOK {
@@ -144,13 +143,13 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
-		for _, resourceName := range slices.Sorted(maps.Keys(resources)) {
-			resource := resources[resourceName]
+		for _, resourceName := range slices.Sorted(resources.Keys()) {
+			resource := resources.GetOrZero(resourceName)
 			// skip non-allowed resources for this user, if any
 			if !slices.Contains(allowedResources, resourceName) {
 				continue
 			}
-			category := categories[resource.CategoryID]
+			category := categories.GetOrZero(resource.CategoryID)
 			if _, exists := serviceReport.Categories[category.Name]; !exists {
 				serviceReport.Categories[category.Name] = resourcesv2.CategoryInfoReport{
 					DisplayName: category.DisplayName,
@@ -195,10 +194,10 @@ func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.Ser
 	}
 	services := sis.GetServices()
 
-	for _, serviceType := range slices.Sorted(maps.Keys(services)) {
-		service := services[serviceType]
+	for _, serviceType := range slices.Sorted(services.Keys()) {
+		service := services.GetOrZero(serviceType)
 		categories := sis.GetCategoriesForType(serviceType)
-		rates, _ := sis.GetRatesForType(serviceType) // can have no rates
+		rates := sis.GetRatesForType(serviceType) // can have no rates
 		config := cluster.Config.Liquids[serviceType]
 		area := config.Area
 		// defense in depth: config should be in sync with serviceInfo
@@ -224,8 +223,8 @@ func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.Ser
 		}
 		serviceReport := report.Areas[area].Services[serviceType]
 
-		for _, rateName := range slices.Sorted(maps.Keys(rates)) {
-			rate := rates[rateName]
+		for _, rateName := range slices.Sorted(rates.Keys()) {
+			rate := rates.GetOrZero(rateName)
 			rir := ratesv2.RateInfoReport{
 				DisplayName: rate.DisplayName,
 				Topology:    rate.Topology,
@@ -236,7 +235,7 @@ func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.Ser
 				rir.ProjectDefaultLimit = rateConfig.Limit
 				rir.ProjectDefaultWindow = Some(rateConfig.Window)
 			}
-			category := categories[rate.CategoryID]
+			category := categories.GetOrZero(rate.CategoryID)
 			if _, exists := serviceReport.Categories[category.Name]; !exists {
 				serviceReport.Categories[category.Name] = ratesv2.CategoryInfoReport{
 					DisplayName: category.DisplayName,

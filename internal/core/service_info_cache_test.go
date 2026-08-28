@@ -48,90 +48,67 @@ func TestServiceInfoSnapshotFilter(t *testing.T) {
 
 	// filter by ServiceType
 	filtered := sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
-	assert.Equal(t, len(filtered.GetServices()), 1)
+	assert.Equal(t, filtered.GetServices().Len(), 1)
 	_, ok := filtered.GetServiceForType("second")
 	assert.Equal(t, ok, true)
 	_, ok = filtered.GetServiceForType("first")
 	assert.Equal(t, ok, false)
-	resources, ok := filtered.GetResourcesForType("second")
-	assert.Equal(t, ok, true)
-	assert.Equal(t, len(resources), 2)
-	_, ok = filtered.GetResourcesForType("first")
-	assert.Equal(t, ok, false)
-	_, ok = filtered.GetRatesForType("first")
-	assert.Equal(t, ok, false)
+	resources := filtered.GetResourcesForType("second")
+	assert.Equal(t, resources.Len(), 2)
+	resources = filtered.GetResourcesForType("first")
+	assert.Equal(t, resources.Len(), 0)
+	rates := filtered.GetRatesForType("first")
+	assert.Equal(t, rates.Len(), 0)
 
 	// filter by ServiceArea
 	filtered = sis.Filter(core.ServiceInfoFilter{ServiceArea: Some("first")})
-	assert.Equal(t, len(filtered.GetServices()), 1)
+	assert.Equal(t, filtered.GetServices().Len(), 1)
 	_, ok = filtered.GetServiceForType("first")
 	assert.Equal(t, ok, true)
 	_, ok = filtered.GetServiceForType("second")
 	assert.Equal(t, ok, false)
-	rates, ok := filtered.GetRatesForType("first")
-	assert.Equal(t, ok, true)
-	assert.Equal(t, len(rates), 4)
+	rates = filtered.GetRatesForType("first")
+	assert.Equal(t, rates.Len(), 4)
 
 	// filter by ResourceName
 	filtered = sis.Filter(core.ServiceInfoFilter{ResourceName: Some[liquid.ResourceName]("capacity")})
-	resources, ok = filtered.GetResourcesForType("second")
+	resources = filtered.GetResourcesForType("second")
+	assert.Equal(t, resources.Len(), 1)
+	_, ok = resources.Get("capacity")
 	assert.Equal(t, ok, true)
-	assert.Equal(t, len(resources), 1)
-	_, ok = resources["capacity"]
-	assert.Equal(t, ok, true)
-	_, ok = resources["things"]
+	_, ok = resources.Get("things")
 	assert.Equal(t, ok, false)
 
 	// filter by Category
 	filtered = sis.Filter(core.ServiceInfoFilter{Category: Some[liquid.CategoryName]("foo_category")})
-	resources, ok = filtered.GetResourcesForType("second")
+	resources = filtered.GetResourcesForType("second")
+	assert.Equal(t, resources.Len(), 1)
+	_, ok = resources.Get("capacity")
 	assert.Equal(t, ok, true)
-	_, ok = resources["capacity"]
-	assert.Equal(t, ok, true)
-	_, ok = resources["things"]
+	_, ok = resources.Get("things")
 	assert.Equal(t, ok, false)
 	_, ok = filtered.GetServiceForType("first")
 	assert.Equal(t, ok, false)
 
 	// filter by Category matching the serviceType yields entries which have no explicit category
 	filtered = sis.Filter(core.ServiceInfoFilter{Category: Some[liquid.CategoryName]("second")})
-	resources, ok = filtered.GetResourcesForType("second")
+	resources = filtered.GetResourcesForType("second")
+	assert.Equal(t, resources.Len(), 1)
+	_, ok = resources.Get("things")
 	assert.Equal(t, ok, true)
-	assert.Equal(t, len(resources), 1)
-	_, ok = resources["things"]
-	assert.Equal(t, ok, true)
-	_, ok = resources["capacity"]
+	_, ok = resources.Get("capacity")
 	assert.Equal(t, ok, false)
 
 	// filter by RateName
 	filtered = sis.Filter(core.ServiceInfoFilter{RateName: Some[liquid.RateName]("objects:create")})
-	rates, ok = filtered.GetRatesForType("first")
+	rates = filtered.GetRatesForType("first")
+	assert.Equal(t, rates.Len(), 1)
+	_, ok = rates.Get("objects:create")
 	assert.Equal(t, ok, true)
-	assert.Equal(t, len(rates), 1)
-	_, ok = rates["objects:create"]
-	assert.Equal(t, ok, true)
-
-	// snapshot immutability: mutations on returned maps don't affect snapshot
-	services := sis.GetServices()
-	services["injected"] = db.Service{DisplayName: "Injected"}
-	_, ok = sis.GetServiceForType("injected")
-	assert.Equal(t, ok, false)
-	resourcesClone := must.BeOKT(sis.GetResourcesForType("second"))(t)
-	resourcesClone["injected"] = db.Resource{DisplayName: "Injected"}
-	originalResources := must.BeOKT(sis.GetResourcesForType("second"))(t)
-	_, ok = originalResources["injected"]
-	assert.Equal(t, ok, false)
-
-	// FilteredServiceInfoSnapshot immutability
-	filtered = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
-	filteredServices := filtered.GetServices()
-	filteredServices["injected"] = db.Service{DisplayName: "Injected"}
-	_, ok = filtered.GetServiceForType("injected")
-	assert.Equal(t, ok, false)
 
 	// Filter does not affect original snapshot
 	_ = sis.Filter(core.ServiceInfoFilter{ServiceType: Some[db.ServiceType]("second")})
-	assert.Equal(t, len(sis.GetServices()), 2)
+	assert.Equal(t, sis.GetServices().Len(), 2)
 }
 
 func TestServiceInfoCache(t *testing.T) {
@@ -157,13 +134,13 @@ func TestServiceInfoCache(t *testing.T) {
 	t.Cleanup(func() { s.Cluster.SIC.Close() })
 
 	sis := s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, len(sis.GetServices()), 2)
-	must.NotBeOKT(sis.GetResourcesForType("first"))(t)
-	assert.Equal(t, len(must.BeOKT(sis.GetResourcesForType("second"))(t)), 2)
+	assert.Equal(t, sis.GetServices().Len(), 2)
+	assert.Equal(t, sis.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetResourcesForType("second").Len(), 2)
 	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t).Name, "capacity")
-	must.NotBeOKT(sis.GetRatesForType("second"))(t)
-	assert.Equal(t, len(sis.GetCategoriesForType("first")), 1)  // just default category
-	assert.Equal(t, len(sis.GetCategoriesForType("second")), 2) // default + "foo_category"
+	assert.Equal(t, sis.GetRatesForType("second").Len(), 0)
+	assert.Equal(t, sis.GetCategoriesForType("first").Len(), 1)  // just default category
+	assert.Equal(t, sis.GetCategoriesForType("second").Len(), 2) // default + "foo_category"
 
 	// check service update
 	assert.Equal(t, must.BeOKT(sis.GetServiceForType("first"))(t).DisplayName, "First")
@@ -184,7 +161,7 @@ func TestServiceInfoCache(t *testing.T) {
 	assert.Equal(t, must.BeOKT(sis.GetResourceForPath(db.ResourcePath{ServiceType: "second", ResourceName: "things"}))(t).DisplayName, "Things")
 
 	// check az_resource insert
-	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t)), 5) // gives out total, any and unknown, too
+	assert.Equal(t, sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}).Len(), 5) // gives out total, any and unknown, too
 	s.MustDBInsert(&db.AZResource{
 		ResourceID:       secondCapacity,
 		AvailabilityZone: "test",
@@ -193,14 +170,14 @@ func TestServiceInfoCache(t *testing.T) {
 	})
 	<-s.Cluster.SIC.OnInvalidate
 	sis = s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, len(must.BeOKT(sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}))(t)), 6)
+	assert.Equal(t, sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: "second", ResourceName: "capacity"}).Len(), 6)
 
 	// check rate deletion
-	assert.Equal(t, len(must.BeOKT(sis.GetRatesForType("first"))(t)), 4)
+	assert.Equal(t, sis.GetRatesForType("first").Len(), 4)
 	s.MustDBExec("DELETE FROM rates WHERE id = $1", firstObjectsCreate)
 	<-s.Cluster.SIC.OnInvalidate
 	sis = s.Cluster.SIC.GetSnapshot()
-	assert.Equal(t, len(must.BeOKT(sis.GetRatesForType("first"))(t)), 3)
+	assert.Equal(t, sis.GetRatesForType("first").Len(), 3)
 }
 
 func TestServiceInfoCacheGetByID(t *testing.T) {

@@ -118,8 +118,8 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	}
 	startedAt := c.MeasureTime()
 
-	resources, ok := c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType)
-	if !ok {
+	sis := c.Cluster.SIC.GetSnapshot()
+	if _, sExists := sis.GetServiceForType(serviceType); !sExists {
 		return fmt.Errorf("no data found in ServiceInfoCache for %s", serviceType)
 	}
 
@@ -142,7 +142,12 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 
-		resource := resources[resourceName]
+		resource, ok := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
+		if !ok {
+			// race condition: selected projectResource while the resource got deleted
+			// other projectResources/ resources might still exist, so we don't abort!
+			return nil
+		}
 		if !resource.HasQuota {
 			return nil
 		}
@@ -186,7 +191,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	if needsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
 		targetQuotasForBackend := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
-		for resName, resource := range resources {
+		for resName, resource := range sis.GetResourcesForType(serviceType).All() {
 			if !resource.HasQuota {
 				continue
 			}

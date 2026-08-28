@@ -6,7 +6,6 @@ package datamodel
 import (
 	"context"
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
 
@@ -31,7 +30,7 @@ type ProjectResourceUpdate struct {
 //     caller to update resource data as necessary.
 func (u ProjectResourceUpdate) Run(ctx context.Context, dbi db.Interface, project db.Project, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) error {
 	service := must.BeOK(sis.GetServiceForType(serviceType)) // should have been checked to exist before, else no update makes sense
-	resources, _ := sis.GetResourcesForType(service.Type)
+	resources := sis.GetResourcesForType(service.Type)
 	// We will first collect all existing data into one of these structs for each
 	// resource. Then we will compute the target state of the DB record. We only
 	// need to write into the DB if `.Target` ends up different from `.Original`.
@@ -40,11 +39,9 @@ func (u ProjectResourceUpdate) Run(ctx context.Context, dbi db.Interface, projec
 		CorrespondingResource *db.Resource
 	}
 
-	resourcesByID := db.ResourceByIDIndex.Index(slices.Collect(maps.Values(resources)))
-	allResourceNames := slices.Sorted(maps.Keys(resources))
 	// collect allResources instances for this service
 	allResources := make(map[liquid.ResourceName]resourceState)
-	for resName, res := range resources {
+	for resName, res := range resources.All() {
 		allResources[resName] = resourceState{
 			Original:              nil, // might be filled in the next loop below
 			CorrespondingResource: &res,
@@ -54,7 +51,12 @@ func (u ProjectResourceUpdate) Run(ctx context.Context, dbi db.Interface, projec
 	// collect existing project_resources for this service
 	const getResourcesQuery = `SELECT pr.* FROM project_resources pr JOIN resources r ON pr.resource_id = r.id WHERE r.service_id = $1 AND pr.project_id = $2`
 	err := db.ProjectResourceStore.Select(ctx, dbi, getResourcesQuery, service.ID, project.ID).Foreach(func(res db.ProjectResource) error {
-		correspondingResource := resourcesByID[res.ResourceID]
+		correspondingResource, ok := sis.GetResourceForID(res.ResourceID)
+		if !ok {
+			// race condition: selected projectResource while the resource got deleted
+			// other projectResources/ resources might still exist, so we don't abort!
+			return nil
+		}
 		allResources[correspondingResource.Name] = resourceState{
 			Original:              &res,
 			CorrespondingResource: &correspondingResource,
@@ -66,7 +68,7 @@ func (u ProjectResourceUpdate) Run(ctx context.Context, dbi db.Interface, projec
 	}
 
 	// go through resources in a defined order (to ensure deterministic test behavior)
-	for _, resName := range allResourceNames {
+	for _, resName := range slices.Sorted(resources.Keys()) {
 		state := allResources[resName]
 
 		// setup a copy of `state.Original` (or a new resource) that we can write into

@@ -308,14 +308,14 @@ func prometheusScrapeOneResource(p PrometheusCapacityConfiguration, ctx context.
 // request for admin purposes, it does not use the LiquidConnection as receiver type.
 func BuildServiceCapacityRequest(backchannel CapacityScrapeBackchannel, allAZs []limes.AvailabilityZone, sis ServiceInfoSnapshot, serviceType db.ServiceType) (liquid.ServiceCapacityRequest, error) {
 	service := must.BeOK(sis.GetServiceForType(serviceType)) // when we get here, this is already validated
-	resources, _ := sis.GetResourcesForType(service.Type)    // can have no resources
+	resources := sis.GetResourcesForType(service.Type)       // can have no resources
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
-		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(resources)),
+		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, resources.Len()),
 	}
 
 	var err error
-	for resName, resource := range resources {
+	for resName, resource := range resources.All() {
 		if !resource.HasCapacity {
 			continue
 		}
