@@ -5,7 +5,6 @@ package api_v2
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 
@@ -20,19 +19,12 @@ import (
 
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
-	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
-
-var findDeletableCommitmentQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT * FROM project_commitments
-	WHERE uuid = $1
-	AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})
-`))
 
 func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy.Token) (any, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid")
@@ -48,29 +40,9 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 		return nil, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	c, err := db.ProjectCommitmentStore.SelectOne(ctx, tx, findDeletableCommitmentQuery, cUUID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
-	case err != nil:
-		return nil, err
-	}
-
-	// obtain service ref
-	azRes, ok := sis.GetAZResourceForID(c.AZResourceID)
-	if !ok {
-		// defense in depth, the referenced AZResource should exist
-		return nil, errInvalidResourceReference
-	}
-
-	// check auth
-	scope, err := p.checkProjectAccessByID(ctx, token, c.ProjectID, "v2:project:commitment_delete")
+	c, azRes, scope, err := p.selectCommitmentIfPermitted(ctx, tx, sis, token, "v2:project:commitment_delete", liquid.CommitmentUUID(cUUID))
 	if err != nil {
 		return nil, err
-	}
-	canBeDeleted := isDeletable(token, c, p.timeNow)
-	if !canBeDeleted {
-		return nil, respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
 	}
 
 	// prep deletion
