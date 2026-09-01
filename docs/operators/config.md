@@ -266,8 +266,10 @@ Commitment behavior configuration is optional. If none is provided, commitments 
 | `commitment_behavior_per_resource[].value.durations_per_domain` | [ConfigSet](#configset) keyed on domain name | Commitments for matching resources can be created with any of the matching durations. Each value in this ConfigSet must be a list of duration strings in the same format as in the `commitments[].duration` attribute that appears on the resource API. If no value matches in this set, or if the matching value is explicitly an empty list, commitments may not be created in the matching resource and domain. |
 | `commitment_behavior_per_resource[].min_confirm_date` | timestamp in RFC 3339 format | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
 | `commitment_behavior_per_resource[].until_percent` | float | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
-| `commitment_behavior_per_resource[].conversion_rule.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
-| `commitment_behavior_per_resource[].conversion_rule.weight` | no | If given, must contain an integer. When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources gives the conversion rate for the commitment amount. (Or put another way, the product of commitment amount and conversion weight must remain the same before and after the conversion.) For example, if resource `foo` has a weight of 2 and `bar` has a weight of 5, the conversion rate is 2:5, meaning that a commitment for 25 units of `foo` would be converted into a commitment for 10 units of `bar`. |
+| `commitment_behavior_per_resource[].conversion_rules` | `map[identifier]ConversionRule` (see below) | List of conversion rules that this resource can participate in. Conversions are possible between multiple conversion rules with the same `identifier`. |
+| `commitment_behavior_per_resource[].conversion_rules[].weight` | [complex unit](#complexunit) | When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources multiplied with the resources unit (being a [complex unit](#complexunit), too) gives the conversion rate for the commitment amount. (Or put another way, the product of commitment amount, conversion weight and resource unit must remain the same before and after the conversion.) For example, if resource `foo` has a weight of 2, unit of `piece`, and `bar` has a weight of 5, unit of `piece`, the conversion rate is 2:5, meaning that a commitment for 25 `piece` of `foo` would be converted into a commitment for 10 `piece` of `bar`. Conversions with a weight other than `piece` only make sense, when the resource itself has unit `piece` and the conversion partner has a unit other than `piece`. For example, if resource `flavor_m480` has a weight of 480 `GiB`, unit of `piece`, and `ram` has a weight of 1 (`piece`), unit of 60 `GiB`, the conversion rate is 1:8, meaning that a commitment for 25 `piece` of `flavor_m480` would be converted into a commitment of 200 * `60 GiB` of `ram`.|
+| `commitment_behavior_per_resource[].conversion_rules[].only_source` | boolean | If set to `true`, this resource can only be a source of a conversion, but not a target. |
+| `commitment_behavior_per_resource[].conversion_rules[].allow_rounding` | boolean | If set to `true`, this rule as target of a conversion may round the resulting commitment amount down to the next integer. This is useful for conversions that would otherwise result in fractional commitments, which is not allowed and not possible to enter in the database. This does not allow cases, where the next lower integer is 0, meaning a commitment would vanish. |
 
 #### Capacity from liquid
 
@@ -362,7 +364,7 @@ For example, the following configuration can be used with [swift-health-exporter
 [prom]:   https://prometheus.io
 [she]:    https://github.com/sapcc/swift-health-exporter
 
-#### ConfigSet
+#### `ConfigSet`
 
 Every field that is documented to be "a ConfigSet keyed on some string identifier" is structured as a list of key and value pairs, like so:
 
@@ -385,6 +387,12 @@ The resource `foobar` would match the value of 23, because the first rule matche
 The value 42 would not be used, even though the second rule matches, because the first matching rule takes priority.
 The resource `unknown` would not match any value, because no rule matches.
 If you want to have a fallback value that matches if nothing else does, put a rule at the end of the list with the key `.*`.
+
+#### `complex unit`
+
+In Limes, a unit cannot only be `piece`, or multiples of `B` but also consist of a value with unit, e.g.:
+* `1 piece`
+* `480 GiB`
 
 ### Resource behavior
 

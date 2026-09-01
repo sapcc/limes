@@ -4,11 +4,13 @@
 package core
 
 import (
+	"maps"
 	"slices"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 	"go.xyrillian.de/gg/is"
@@ -27,16 +29,16 @@ type CommitmentBehavior struct {
 	// If DurationsPerDomain.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
 	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `json:"durations_per_domain"`
 
-	MinConfirmDate Option[time.Time]                `json:"min_confirm_date"`
-	UntilPercent   Option[float64]                  `json:"until_percent"`
-	ConversionRule Option[CommitmentConversionRule] `json:"conversion_rule"`
+	MinConfirmDate  Option[time.Time]                                     `json:"min_confirm_date"`
+	UntilPercent    Option[float64]                                       `json:"until_percent"`
+	ConversionRules map[ConversionRuleIdentifier]CommitmentConversionRule `json:"conversion_rules"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
 //
 // The `path` argument denotes the location of this behavior in the
 // configuration file, and will be used when generating error messages.
-func (b CommitmentBehavior) Validate(path string, occupiedConversionIdentifiers []string) (errs errext.ErrorSet, identifier string) {
+func (b CommitmentBehavior) Validate(path string, occupiedConversionIdentifiers []ConversionRuleIdentifier) (errs errext.ErrorSet, identifiers []ConversionRuleIdentifier) {
 	if percent, ok := b.UntilPercent.Unpack(); ok {
 		if percent < 0 {
 			errs.Addf("invalid value: %s.until_percent may not be smaller than 0", path)
@@ -45,32 +47,32 @@ func (b CommitmentBehavior) Validate(path string, occupiedConversionIdentifiers 
 			errs.Addf("invalid value: %s.until_percent may not be bigger than 100", path)
 		}
 	}
-	if conversionRule, ok := b.ConversionRule.Unpack(); ok {
-		identifier = conversionRule.Identifier
-		if slices.Contains(occupiedConversionIdentifiers, conversionRule.Identifier) {
-			errs.Addf("invalid value: %s.conversion_rule.identifier values must be restricted to a single serviceType, but %q is already used by another serviceType", path, conversionRule.Identifier)
+	for identifier := range b.ConversionRules {
+		if slices.Contains(occupiedConversionIdentifiers, identifier) {
+			errs.Addf("invalid value: %[1]s.conversion_rules[%[2]q] identifier must be restricted to a single serviceType, but %[2]q is already used by another serviceType", path, identifier)
 		}
+		identifiers = append(identifiers, identifier)
 	}
 
-	return errs, identifier
+	return errs, identifiers
 }
 
 // ScopedCommitmentBehavior is a CommitmentBehavior that applies only to a certain scope (usually a specific domain).
 // It is created through the For... methods on type CommitmentBehavior.
 type ScopedCommitmentBehavior struct {
-	Durations      []limesresources.CommitmentDuration
-	MinConfirmDate Option[time.Time]
-	UntilPercent   Option[float64]
-	ConversionRule Option[CommitmentConversionRule]
+	Durations       []limesresources.CommitmentDuration
+	MinConfirmDate  Option[time.Time]
+	UntilPercent    Option[float64]
+	ConversionRules map[ConversionRuleIdentifier]CommitmentConversionRule
 }
 
 // ForDomain resolves Durations.Pick() using the provided domain name.
 func (b CommitmentBehavior) ForDomain(domainName string) ScopedCommitmentBehavior {
 	return ScopedCommitmentBehavior{
-		Durations:      b.DurationsPerDomain.Pick(domainName).UnwrapOr(nil),
-		MinConfirmDate: b.MinConfirmDate,
-		UntilPercent:   b.UntilPercent,
-		ConversionRule: b.ConversionRule,
+		Durations:       b.DurationsPerDomain.Pick(domainName).UnwrapOr(nil),
+		MinConfirmDate:  b.MinConfirmDate,
+		UntilPercent:    b.UntilPercent,
+		ConversionRules: b.ConversionRules,
 	}
 }
 
@@ -94,10 +96,10 @@ func (b CommitmentBehavior) ForCluster() ScopedCommitmentBehavior {
 	}
 
 	return ScopedCommitmentBehavior{
-		Durations:      allDurations,
-		MinConfirmDate: b.MinConfirmDate,
-		UntilPercent:   b.UntilPercent,
-		ConversionRule: b.ConversionRule,
+		Durations:       allDurations,
+		MinConfirmDate:  b.MinConfirmDate,
+		UntilPercent:    b.UntilPercent,
+		ConversionRules: b.ConversionRules,
 	}
 }
 
@@ -135,39 +137,102 @@ func (b ScopedCommitmentBehavior) ForV2API(now time.Time) Option[resourcesv2.Com
 	return Some(result)
 }
 
+// ConversionRuleIdentifier is an explicit type to increased readability of the code
+type ConversionRuleIdentifier string
+
 // CommitmentConversionRule describes how commitments for a resource may be converted
 // into commitments for other resources with the same rule identifier.
 type CommitmentConversionRule struct {
-	Identifier string `json:"identifier"`
-	Weight     uint64 `json:"weight"`
+	Weight limes.Unit `json:"weight"`
+	// if set, only allows this conversion rule as source of conversions
+	OnlySource bool `json:"only_source"`
+	// if set, this rule as target allows to round the amount down to the next integer, except when it would be 0
+	AllowRounding bool `json:"allow_rounding"`
 }
 
 // CommitmentConversionRate describes the rate for converting commitments between two compatible resources.
 type CommitmentConversionRate struct {
-	FromAmount uint64
-	ToAmount   uint64
+	FromAmount    uint64
+	ToAmount      uint64
+	AllowRounding bool
 }
 
 // GetConversionRateTo checks whether this resource can be converted into the given resource.
-// If so, the conversion rate is returned.
-func (b ScopedCommitmentBehavior) GetConversionRateTo(other ScopedCommitmentBehavior) Option[CommitmentConversionRate] {
-	sourceRule, ok := b.ConversionRule.Unpack()
-	if !ok {
+// If so, the conversion rate between the first two matching conversion rules (ordered by
+// identifier alphabetically) is returned.
+//
+// The conversion rate satisfies the invariant:
+//
+//	fromAmount × sourceWeightFactor × sourceUnitFactor = toAmount × targetWeightFactor × targetUnitFactor
+//
+// To avoid overflow when multiplying large byte-based factors, the four factors
+// are reduced pairwise (weight pair and unit pair) by their GCD before multiplying.
+func (b ScopedCommitmentBehavior) GetConversionRateTo(other ScopedCommitmentBehavior, sourceUnit, targetUnit liquid.Unit) Option[CommitmentConversionRate] {
+	sourceRules := b.ConversionRules
+	if len(sourceRules) == 0 {
 		return None[CommitmentConversionRate]()
 	}
-	targetRule, ok := other.ConversionRule.Unpack()
-	if !ok {
-		return None[CommitmentConversionRate]()
-	}
-	if sourceRule.Identifier != targetRule.Identifier {
+	targetRules := other.ConversionRules
+	if len(targetRules) == 0 {
 		return None[CommitmentConversionRate]()
 	}
 
-	divisor := getGreatestCommonDivisor(sourceRule.Weight, targetRule.Weight)
-	return Some(CommitmentConversionRate{
-		FromAmount: targetRule.Weight / divisor,
-		ToAmount:   sourceRule.Weight / divisor,
-	})
+	sourceUnitBase, sourceUnitFactor := sourceUnit.Base()
+	sourceUnitIsByte := sourceUnitBase == limes.UnitBytes
+	targetUnitBase, targetUnitFactor := targetUnit.Base()
+	targetUnitIsByte := targetUnitBase == limes.UnitBytes
+
+outer:
+	for _, sourceIdentifier := range slices.Sorted(maps.Keys(sourceRules)) {
+		sourceRule := sourceRules[sourceIdentifier]
+		for _, targetIdentifier := range slices.Sorted(maps.Keys(targetRules)) {
+			targetRule := targetRules[targetIdentifier]
+			if sourceIdentifier != targetIdentifier || targetRule.OnlySource {
+				if sourceIdentifier <= targetIdentifier {
+					continue outer
+				}
+				continue
+			}
+			sourceWeightUnitBase, sourceWeightFactor := sourceRule.Weight.Base()
+			sourceWeightIsByte := sourceWeightUnitBase == limes.UnitBytes
+			targetWeightUnitBase, targetWeightFactor := targetRule.Weight.Base()
+			targetWeightIsByte := targetWeightUnitBase == limes.UnitBytes
+
+			// we need to guard the units so that this works out:
+			// okay: all piece units
+			// okay: one of source is byte based, one of target is byte based
+			// not okay: all other cases
+			if sourceWeightIsByte && sourceUnitIsByte || targetWeightIsByte && targetUnitIsByte {
+				continue
+			}
+			if (sourceWeightIsByte || sourceUnitIsByte) && !targetWeightIsByte && !targetUnitIsByte {
+				continue
+			}
+			if (targetWeightIsByte || targetUnitIsByte) && !sourceWeightIsByte && !sourceUnitIsByte {
+				continue
+			}
+
+			// we need: fromAmount × sourceWeightFactor × sourceUnitFactor = toAmount × targetWeightFactor × targetUnitFactor
+			// therefore: fromAmount / toAmount = (targetWeightFactor × targetUnitFactor) / (sourceWeightFactor × sourceUnitFactor)
+			// to reduce before multiplying (avoiding overflow), we cancel common factors weights and units separately
+			weightDivisor := getGreatestCommonDivisor(sourceWeightFactor, targetWeightFactor)
+			unitDivisor := getGreatestCommonDivisor(sourceUnitFactor, targetUnitFactor)
+			fromAmount := (targetWeightFactor / weightDivisor) * (targetUnitFactor / unitDivisor)
+			toAmount := (sourceWeightFactor / weightDivisor) * (sourceUnitFactor / unitDivisor)
+
+			finalDivisor := getGreatestCommonDivisor(fromAmount, toAmount)
+			fromAmount /= finalDivisor
+			toAmount /= finalDivisor
+
+			return Some(CommitmentConversionRate{
+				FromAmount:    fromAmount,
+				ToAmount:      toAmount,
+				AllowRounding: targetRule.AllowRounding,
+			})
+		}
+	}
+
+	return None[CommitmentConversionRate]()
 }
 
 func getGreatestCommonDivisor(a, b uint64) uint64 {
