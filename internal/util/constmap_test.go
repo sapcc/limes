@@ -33,12 +33,7 @@ func TestConstMapGetOrZero(t *testing.T) {
 func TestConstMapAll(t *testing.T) {
 	m := NewConstMap(map[string]int{"a": 1, "b": 2, "c": 3})
 
-	seen := maps.Collect(m.All())
-
-	assert.Equal(t, len(seen), 3)
-	assert.Equal(t, seen["a"], 1)
-	assert.Equal(t, seen["b"], 2)
-	assert.Equal(t, seen["c"], 3)
+	assert.Equal(t, maps.Collect(m.All()), map[string]int{"a": 1, "b": 2, "c": 3})
 }
 
 func TestConstMapKeys(t *testing.T) {

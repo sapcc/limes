@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"sync"
 	"time"
 
@@ -567,119 +566,125 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 	s.dataMutex.Lock()
 	defer s.dataMutex.Unlock()
 
-	// Build area mapping (constant, derived from config)
+	// build area mapping (constant, derived from config)
 	areaMappingPlain := make(map[db.ServiceType]string, len(s.config.Liquids))
 	for st, liquidConfiguration := range s.config.Liquids {
 		areaMappingPlain[st] = liquidConfiguration.Area
 	}
 
-	// Start with existing data (for partial invalidation) or empty maps.
-	// We always build into plain maps, then wrap with util.NewConstMap() at the end.
+	// we start with empty maps, get the data we want from the database and then possibly copy over the old values
 	services := make(map[db.ServiceType]db.Service)
-	resources := make(map[db.ServiceType]map[liquid.ResourceName]db.Resource)
-	azResources := make(map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource)
-	rates := make(map[db.ServiceType]map[liquid.RateName]db.Rate)
-	categories := make(map[db.ServiceType]map[db.CategoryID]db.Category)
+	resources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, db.Resource])
+	azResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, util.ConstMap[liquid.AvailabilityZone, db.AZResource]])
+	rates := make(map[db.ServiceType]util.ConstMap[liquid.RateName, db.Rate])
+	categories := make(map[db.ServiceType]util.ConstMap[db.CategoryID, db.Category])
 
-	if st, ok := serviceType.Unpack(); ok {
-		// Partial invalidation: copy all data except the invalidated service type.
-		for sType, svc := range s.data.services.All() {
-			if sType != st {
-				services[sType] = svc
-			}
-		}
-		for sType, resByName := range s.data.resources.All() {
-			if sType != st {
-				// Unwrap the inner constmap into a plain map for consistency.
-				// This is safe because we're building a new snapshot.
-				inner := maps.Collect(resByName.All())
-				resources[sType] = inner
-			}
-		}
-		for sType, azResByName := range s.data.azResources.All() {
-			if sType != st {
-				innerByName := make(map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource, azResByName.Len())
-				for name, azResByAZ := range azResByName.All() {
-					innerByName[name] = maps.Collect(azResByAZ.All())
-				}
-				azResources[sType] = innerByName
-			}
-		}
-		for sType, rateByName := range s.data.rates.All() {
-			if sType != st {
-				rates[sType] = maps.Collect(rateByName.All())
-			}
-		}
-		for sType, catByID := range s.data.categories.All() {
-			if sType != st {
-				categories[sType] = maps.Collect(catByID.All())
-			}
-		}
-	}
-
-	// Load fresh data from DB for the affected services.
+	// load fresh data for affected services
 	dbServices, err := db.ServiceStore.SelectWhere(ctx, s.DB, `type = $1 OR $1 IS NULL`, serviceType).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading services for type(s) %v: %w", serviceType, err)
 	}
+	serviceIDs := make([]db.ServiceID, 0, len(dbServices))
 	for _, dbService := range dbServices {
 		services[dbService.Type] = dbService
+		serviceIDs = append(serviceIDs, dbService.ID)
 	}
 
-	dbResources, err := db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType).Collect()
+	dbResources, err := db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r WHERE r.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path`, pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
 	}
+	var (
+		currentService               db.ServiceType
+		resourcesForCurrentService   map[liquid.ResourceName]db.Resource
+		azResourcesForCurrentService map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource
+		ratesForCurrentService       map[liquid.RateName]db.Rate
+		categoriesForCurrentService  map[db.CategoryID]db.Category
+	)
+	currentService = ""
 	for _, dbResource := range dbResources {
 		path := dbResource.Path
-		if resources[path.ServiceType] == nil {
-			resources[path.ServiceType] = make(map[liquid.ResourceName]db.Resource)
+		if currentService != path.ServiceType {
+			// flush
+			resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+			resourcesForCurrentService = make(map[liquid.ResourceName]db.Resource)
+			currentService = path.ServiceType
 		}
-		resources[path.ServiceType][path.ResourceName] = dbResource
+		resourcesForCurrentService[path.ResourceName] = dbResource
 	}
+	resources[currentService] = util.NewConstMap(resourcesForCurrentService)
 
-	dbAZResources, err := db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType).Collect()
+	dbAZResources, err := db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path`, pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
+	currentService = ""
 	for _, dbAZResource := range dbAZResources {
 		path := dbAZResource.Path
-		if azResources[path.ServiceType] == nil {
-			azResources[path.ServiceType] = make(map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource)
+		if currentService != path.ServiceType {
+			// flush
+			azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
+			azResourcesForCurrentService = make(map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource)
+			currentService = path.ServiceType
 		}
-		if azResources[path.ServiceType][path.ResourceName] == nil {
-			azResources[path.ServiceType][path.ResourceName] = make(map[limes.AvailabilityZone]db.AZResource)
+		if azResourcesForCurrentService[path.ResourceName] == nil {
+			azResourcesForCurrentService[path.ResourceName] = make(map[liquid.AvailabilityZone]db.AZResource)
 		}
-		azResources[path.ServiceType][path.ResourceName][path.AvailabilityZone] = dbAZResource
+		azResourcesForCurrentService[path.ResourceName][path.AvailabilityZone] = dbAZResource
 	}
+	azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
 
-	dbRates, err := db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra JOIN services s ON ra.service_id = s.id WHERE s.type = $1 OR $1 IS NULL", serviceType).Collect()
+	dbRates, err := db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra WHERE ra.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path", pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
+	currentService = ""
 	for _, dbRate := range dbRates {
 		path := dbRate.Path
-		if rates[path.ServiceType] == nil {
-			rates[path.ServiceType] = make(map[liquid.RateName]db.Rate)
+		if currentService != path.ServiceType {
+			// flush
+			rates[currentService] = util.NewConstMap(ratesForCurrentService)
+			ratesForCurrentService = make(map[liquid.RateName]db.Rate)
+			currentService = path.ServiceType
 		}
-		rates[path.ServiceType][path.RateName] = dbRate
+		ratesForCurrentService[path.RateName] = dbRate
 	}
+	rates[currentService] = util.NewConstMap(ratesForCurrentService)
 
 	type categoryRecord struct {
 		db.Category
 		ServiceType db.ServiceType `db:"service_type"`
 	}
 	categoryRecords, err := oblast.MustNewStore[categoryRecord](oblast.PostgresDialect()).Select(ctx, s.DB,
-		`SELECT c.*, s.type AS service_type FROM categories c JOIN services s ON c.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType,
+		`SELECT c.*, s.type AS service_type FROM categories c JOIN services s ON c.service_id = s.id WHERE s.id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY s.type`, pq.Array(serviceIDs),
 	).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading categories for type(s) %v: %w", serviceType, err)
 	}
+	currentService = ""
 	for _, record := range categoryRecords {
-		if categories[record.ServiceType] == nil {
-			categories[record.ServiceType] = make(map[db.CategoryID]db.Category)
+		if currentService != record.ServiceType {
+			// flush
+			categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+			categoriesForCurrentService = make(map[db.CategoryID]db.Category)
+			currentService = record.ServiceType
 		}
-		categories[record.ServiceType][record.ID] = record.Category
+		categoriesForCurrentService[record.ID] = record.Category
+	}
+	categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+
+	// copy unchanged entries, if there are any
+	if stFilter, ok := serviceType.Unpack(); ok {
+		for st, oldService := range s.data.services.All() {
+			if st == stFilter {
+				continue
+			}
+			services[st] = oldService
+			resources[st], _ = s.data.resources.Get(st)
+			azResources[st], _ = s.data.azResources.Get(st)
+			rates[st], _ = s.data.rates.Get(st)
+			categories[st], _ = s.data.categories.Get(st)
+		}
 	}
 
 	// Build ID indexes.
@@ -689,27 +694,27 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 	}
 	resourcesByID := make(map[db.ResourceID]db.Resource)
 	for _, resByName := range resources {
-		for _, resource := range resByName {
+		for resource := range resByName.Values() {
 			resourcesByID[resource.ID] = resource
 		}
 	}
 	azResourcesByID := make(map[db.AZResourceID]db.AZResource)
 	for _, azResByName := range azResources {
-		for _, azResByAZ := range azResByName {
-			for _, azRes := range azResByAZ {
+		for azResByAZ := range azResByName.Values() {
+			for azRes := range azResByAZ.Values() {
 				azResourcesByID[azRes.ID] = azRes
 			}
 		}
 	}
 	ratesByID := make(map[db.RateID]db.Rate)
 	for _, rateByName := range rates {
-		for _, rate := range rateByName {
+		for rate := range rateByName.Values() {
 			ratesByID[rate.ID] = rate
 		}
 	}
 	categoriesByID := make(map[db.CategoryID]db.Category)
 	for _, catByID := range categories {
-		for _, cat := range catByID {
+		for cat := range catByID.Values() {
 			categoriesByID[cat.ID] = cat
 		}
 	}
@@ -717,10 +722,10 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 	// Wrap nested maps and assign the new snapshot atomically.
 	s.data = ServiceInfoSnapshot{
 		services:        util.NewConstMap(services),
-		resources:       util.New2LevelConstMap(resources),
-		azResources:     util.New3LevelConstMap(azResources),
-		rates:           util.New2LevelConstMap(rates),
-		categories:      util.New2LevelConstMap(categories),
+		resources:       util.NewConstMap(resources),
+		azResources:     util.NewConstMap(azResources),
+		rates:           util.NewConstMap(rates),
+		categories:      util.NewConstMap(categories),
 		servicesByID:    util.NewConstMap(servicesByID),
 		resourcesByID:   util.NewConstMap(resourcesByID),
 		azResourcesByID: util.NewConstMap(azResourcesByID),
