@@ -474,11 +474,7 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// For updating project_rates, we need to find the project_rates' rate_name
-	rateSlice := make([]db.Rate, 0, rates.Len())
-	for _, rate := range rates.All() {
-		rateSlice = append(rateSlice, rate)
-	}
-	ratesByID := db.RateByIDIndex.Index(rateSlice)
+	ratesByID := db.RateByIDIndex.Index(slices.Collect(rates.Values()))
 
 	// update existing project_rates entries
 	rateExists := make(map[liquid.RateName]bool)
