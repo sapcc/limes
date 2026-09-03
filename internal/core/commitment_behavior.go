@@ -137,7 +137,8 @@ func (b ScopedCommitmentBehavior) ForV2API(now time.Time) Option[resourcesv2.Com
 	return Some(result)
 }
 
-// ConversionRuleIdentifier is an explicit type to increased readability of the code
+// ConversionRuleIdentifier is an explicit type to increase readability of the code.
+// It appears in type [CommitmentBehavior].
 type ConversionRuleIdentifier string
 
 // CommitmentConversionRule describes how commitments for a resource may be converted

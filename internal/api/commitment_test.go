@@ -4,6 +4,7 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"maps"
 	"net/http"
@@ -59,7 +60,7 @@ var testCommitmentsJSONWithoutMinConfirmDate = testCommitmentsJSON.
 	Modify("del(.liquids.first.commitment_behavior_per_resource)").
 	Modify(`.liquids.second.commitment_behavior_per_resource[0].value.durations_per_domain[0].value += ["3 hours"]`).
 	Modify("del(.liquids.second.commitment_behavior_per_resource[0].value.min_confirm_date)")
-var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(test.RemoveCommentsFromJSON(`
+var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(`
 	{
 		"areas": { "third": { "display_name": "Third" }, "fourth": { "display_name": "Fourth" }},
 		"liquids": {
@@ -149,7 +150,7 @@ var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(test.RemoveC
 				]
 			}
 		}
-	}`), "testConvertCommitmentsJSON").
+	}`, "testConvertCommitmentsJSON").
 	ModifyWithVariable(".discovery = $ref", common_fixtures.DiscoveryBerlinDresdenParis).
 	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo)
 
@@ -167,12 +168,12 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		HandlesCommitments: true,
 	}
 	resInfoConvertibleFits := liquid.ResourceInfo{
-		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(16)),
+		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(36)),
 		Topology:           liquid.FlatTopology,
 		HandlesCommitments: true,
 	}
 	resInfoConvertibleDoesNotFit := liquid.ResourceInfo{
-		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(20)),
+		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(80)),
 		Topology:           liquid.FlatTopology,
 		HandlesCommitments: true,
 	}
@@ -2026,8 +2027,8 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	// capacity_c120 uses "piece" weight but its resource unit is also "piece" (resInfoLikeThings),
 	// so it's a pure piece-to-piece conversion which only works between same-unit resources;
 	// however c48 has GiB weight with piece unit, so no match.
-	// capacity_fits (weight=1 piece, unit=16 GiB): 48 GiB fits 3 times into 16 GiB → from=1, to=3
-	// capacity_does_not_fit (weight=1 piece, unit=20 GiB): 48 GiB fits 2.4 times into 20 GiB → from=5, to=12
+	// capacity_fits (weight=1 piece, unit=36 GiB): 48 GiB / 36 GiB = 4/3 → from=3, to=4
+	// capacity_does_not_fit (weight=1 piece, unit=80 GiB): 48 GiB / 80 GiB = 3/5 → from=5, to=3
 	resp1 := []oldassert.JSONObject{
 		{
 			"from":            2,
@@ -2036,14 +2037,14 @@ func Test_GetCommitmentConversion(t *testing.T) {
 			"target_resource": "capacity_c96",
 		},
 		{
-			"from":            5, // 48 GiB / 20 GiB = 2.4 → reduced to 5:12
-			"to":              12,
+			"from":            5, // 48 GiB / 80 GiB = 3/5 → reduced to 5:3
+			"to":              3,
 			"target_service":  "third",
 			"target_resource": "capacity_does_not_fit",
 		},
 		{
-			"from":            1, // 48 GiB / 16 GiB = 3.0 → reduced to 1:3
-			"to":              3,
+			"from":            3, // 48 GiB / 36 GiB = 4/3 → reduced to 3:4
+			"to":              4,
 			"target_service":  "third",
 			"target_resource": "capacity_fits",
 		},
@@ -2341,8 +2342,8 @@ func Test_ConvertCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 	assert.Equal(t, s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
 
-	// test conversion from capacity_c48 (piece, weight=48 GiB) to capacity_fits (16 GiB, weight=1 piece)
-	// conversion rate: from=1, to=3  (1 piece × 48 GiB = 3 × 16 GiB)
+	// test conversion from capacity_c48 (piece, weight=48 GiB) to capacity_fits (36 GiB, weight=1 piece)
+	// conversion rate: from=3, to=4  (3 piece × 48 GiB = 144 GiB = 4 × 36 GiB)
 	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -2361,7 +2362,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/6/convert",
-		Body:         req("third", "capacity_fits", 3, 9),
+		Body:         req("third", "capacity_fits", 3, 4),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
@@ -2369,24 +2370,28 @@ func Test_ConvertCommitments(t *testing.T) {
 	commitmentToCheck = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 7`))(t)
 	assert.Equal(t, commitmentToCheck.Amount, uint64(7)) // 10 - 3 = 7 remainder
 	convertedCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 8`))(t)
-	assert.Equal(t, convertedCommitment.Amount, uint64(9)) // 3 * 3 = 9
+	assert.Equal(t, convertedCommitment.Amount, uint64(4)) // 3 * 4 / 3 = 4
 
-	// test conversion from capacity_c48 to capacity_does_not_fit with rounding (20 GiB, weight=1 piece, allow_rounding=true)
-	// conversion rate: from=5, to=12  (5 piece × 48 GiB = 240 GiB = 12 × 20 GiB)
-	// with sourceAmount=3: (3 * 12) / 5 = 36 / 5 = 7 (rounded down from 7.2)
+	// test conversion from capacity_c48 to capacity_does_not_fit with rounding (80 GiB, weight=1 piece, allow_rounding=true)
+	// conversion rate: from=5, to=3  (5 piece × 48 GiB = 240 GiB = 3 × 80 GiB)
+	// with sourceAmount=3: (3 * 3) / 5 = 9 / 5 = 1 (rounded down from 1.8)
+	// lost value: 3 × 48 GiB - 1 × 80 GiB = 144 - 80 = 64 GiB > 48 GiB (more than 1 source unit!)
+	// no leftover commitment is created for the rounded-down amount
 	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/7/convert",
-		Body:         req("third", "capacity_does_not_fit", 3, 7),
+		Body:         req("third", "capacity_does_not_fit", 3, 1),
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
 	convertedCommitment = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 10`))(t)
-	assert.Equal(t, convertedCommitment.Amount, uint64(7))
+	assert.Equal(t, convertedCommitment.Amount, uint64(1))
+	_, err := db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 11`)
+	assert.ErrEqual(t, err, sql.ErrNoRows)
 
 	// test that non-fitting conversions are rejected when target has allow_rounding=false
 	// We convert capacity_does_not_fit → capacity_fits (target has allow_rounding=false)
-	// rate = from=4, to=5 (20 GiB source : 16 GiB target)
+	// rate = from=9, to=20 (80 GiB source / gcd(36,80)=4 : 36 GiB target / gcd(36,80)=4 → 20:9)
 	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -2406,13 +2411,13 @@ func Test_ConvertCommitments(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/11/convert",
 		Body:         req("third", "capacity_fits", 3, 3),
-		ExpectBody:   oldassert.StringData("amount: 3 does not fit into conversion rate of: 4\n"),
+		ExpectBody:   oldassert.StringData("amount: 3 does not fit into conversion rate of: 9\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
 	// test that rounding to 0 is rejected even with allow_rounding=true
-	// capacity_fits → capacity_does_not_fit: rate = from=5, to=4, allow_rounding=true on target
-	// sourceAmount=1: (1 * 4) / 5 = 0 → rejected
+	// capacity_fits → capacity_does_not_fit: rate = from=20, to=9, allow_rounding=true on target
+	// sourceAmount=1: (1 * 9) / 20 = 0 → rejected
 	oldassert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
