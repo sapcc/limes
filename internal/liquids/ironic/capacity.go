@@ -251,7 +251,7 @@ func listNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pa
 		url += query
 	}
 	return pagination.NewPager(client, url, func(r pagination.PageResult) pagination.Page {
-		return nodePage{nodes.NodePage{LinkedPageBase: pagination.LinkedPageBase{PageResult: r}}}
+		return nodePage{nodes.NodePage{PageResult: r}}
 	})
 }
 

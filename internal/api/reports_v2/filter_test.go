@@ -64,7 +64,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// area filter
-	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Area: Some("second")}}
+	resourceOpts = common.ResourceReportOpts{Area: Some("second")}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 1)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("first"))), 0)
@@ -72,7 +72,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("first"))), 0)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
-	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Area: Some("second")}}
+	rateOpts = common.RateReportOpts{Area: Some("second")}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 1)
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("first"))), 0)
@@ -81,7 +81,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// service filter
-	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("second"))}}
+	resourceOpts = common.ResourceReportOpts{ServiceType: Some(db.ServiceType("second"))}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 1)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetResourcesForType("first"))), 0)
@@ -89,7 +89,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("first"))), 0)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
-	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("second"))}}
+	rateOpts = common.RateReportOpts{ServiceType: Some(db.ServiceType("second"))}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 1)
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetResourcesForType("first"))), 0)
@@ -98,7 +98,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// category filter
-	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("foo_category"))}}
+	resourceOpts = common.ResourceReportOpts{Category: Some(liquid.CategoryName("foo_category"))}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 2)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
@@ -106,7 +106,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
-	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("foo_category"))}}
+	rateOpts = common.RateReportOpts{Category: Some(liquid.CategoryName("foo_category"))}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 2)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
@@ -115,7 +115,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.NotBeOK(rateFilter.GetRatesForType("second"))), 0)
 
 	// category filter: using serviceType value as category to get resources/rates without explicit category
-	resourceOpts = common.ResourceReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("first"))}}
+	resourceOpts = common.ResourceReportOpts{Category: Some(liquid.CategoryName("first"))}
 	resourceFilter = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, resourceOpts))(t)
 	assert.Equal(t, len(resourceFilter.GetServices()), 1)
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetResourcesForType("first"))), 1)
@@ -123,7 +123,7 @@ func TestV2FilterCreation(t *testing.T) {
 	assert.Equal(t, len(must.BeOK(resourceFilter.GetRatesForType("first"))), 1)
 	assert.Equal(t, len(must.NotBeOK(resourceFilter.GetRatesForType("second"))), 0)
 
-	rateOpts = common.RateReportOpts{GenericReportOpts: common.GenericReportOpts{Category: Some(liquid.CategoryName("first"))}}
+	rateOpts = common.RateReportOpts{Category: Some(liquid.CategoryName("first"))}
 	rateFilter = must.ReturnT(reports_v2.FilterFromRateOpts(s.Cluster, rateOpts))(t)
 	assert.Equal(t, len(rateFilter.GetServices()), 1)
 	assert.Equal(t, len(must.BeOK(rateFilter.GetResourcesForType("first"))), 1)
@@ -173,7 +173,7 @@ func TestV2ExpandServiceFilters(t *testing.T) {
 
 	// filtered by area: all three get replaced with args
 	filtered := must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, common.ResourceReportOpts{
-		GenericReportOpts: common.GenericReportOpts{Area: Some("first")},
+		Area: Some("first"),
 	}))(t)
 	query, args = filtered.ExpandServiceFilters(
 		`SELECT * FROM t WHERE {{s.id = ANY($service_id)}} AND {{r.id = ANY($resource_id)}} AND {{ra.id = ANY($rate_id)}}`,
@@ -183,7 +183,7 @@ func TestV2ExpandServiceFilters(t *testing.T) {
 
 	// filtered by service type: service_id and resource_id get arg positions
 	filtered = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, common.ResourceReportOpts{
-		GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("first"))},
+		ServiceType: Some(db.ServiceType("first")),
 	}))(t)
 	query, args = filtered.ExpandServiceFilters(
 		`SELECT * FROM t WHERE {{s.id = ANY($service_id)}} AND {{r.id = ANY($resource_id)}}`,
@@ -213,7 +213,7 @@ func TestV2ExpandServiceFilters(t *testing.T) {
 
 	// with pre-existing args: arg positions continue from highest existing position
 	filtered = must.ReturnT(reports_v2.FilterFromResourceOpts(s.Cluster, common.ResourceReportOpts{
-		GenericReportOpts: common.GenericReportOpts{ServiceType: Some(db.ServiceType("first"))},
+		ServiceType: Some(db.ServiceType("first")),
 	}))(t)
 	query, args = filtered.ExpandServiceFilters(
 		`SELECT * FROM t WHERE t.name = $14 AND {{s.id = ANY($service_id)}}`,

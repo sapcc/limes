@@ -95,12 +95,10 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 	allProjectReports := make(map[db.ProjectID]*limesresources.ProjectReport, len(allProjects))
 	for _, project := range allProjects {
 		allProjectReports[project.ID] = &limesresources.ProjectReport{
-			ProjectInfo: limes.ProjectInfo{
-				Name:       project.Name,
-				UUID:       string(project.UUID),
-				ParentUUID: project.ParentUUID,
-			},
-			Services: make(limesresources.ProjectServiceReports),
+			Name:       project.Name,
+			UUID:       string(project.UUID),
+			ParentUUID: project.ParentUUID,
+			Services:   make(limesresources.ProjectServiceReports),
 		}
 	}
 
@@ -181,8 +179,8 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 		if srvReport == nil {
 			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			srvReport = &limesresources.ProjectServiceReport{
-				ServiceInfo: limes.ServiceInfo{Type: apiIdentity.ServiceType, Area: srvCfg.Area},
-				Resources:   make(limesresources.ProjectResourceReports),
+				Type: apiIdentity.ServiceType, Area: srvCfg.Area,
+				Resources: make(limesresources.ProjectResourceReports),
 			}
 			projectReport.Services[apiIdentity.ServiceType] = srvReport
 
@@ -501,8 +499,8 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 		if srvReport == nil {
 			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
-				Rates:       make(limesrates.ProjectRateReports),
+				Type: apiServiceType, Area: srvCfg.Area,
+				Rates: make(limesrates.ProjectRateReports),
 			}
 			projectReport.Services[apiServiceType] = srvReport
 		}
@@ -591,8 +589,8 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 			if srvReport == nil {
 				srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 				srvReport = &limesrates.ProjectServiceReport{
-					ServiceInfo: limes.ServiceInfo{Type: apiServiceType, Area: srvCfg.Area},
-					Rates:       make(limesrates.ProjectRateReports),
+					Type: apiServiceType, Area: srvCfg.Area,
+					Rates: make(limesrates.ProjectRateReports),
 				}
 				report.Services[apiServiceType] = srvReport
 			}

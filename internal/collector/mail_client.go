@@ -32,11 +32,9 @@ func NewMailClient(provider *gophercloud.ProviderClient, endpoint string) (MailC
 	}
 
 	return mailClientImpl{
-		ServiceClient: gophercloud.ServiceClient{
-			ProviderClient: provider,
-			Endpoint:       endpoint,
-			Type:           "mailClient",
-		},
+		ProviderClient: provider,
+		Endpoint:       endpoint,
+		Type:           "mailClient",
 	}, nil
 }
 
