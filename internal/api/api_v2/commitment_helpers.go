@@ -4,6 +4,8 @@
 package api_v2
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -22,48 +25,51 @@ import (
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 var (
 	errAZMustNotBeAny            = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
 	errAZMustBeAny               = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
 	errCommitmentsDisabled       = errors.New("commitments are not enabled for this resource")
+	errNotDeletable              = errors.New("commitment cannot be deleted")
 	errConfirmByInPast           = errors.New("confirm_by may not be set in the past")
 	errConfirmByMissing          = errors.New("confirm_by must be set for the requested initial commitment status")
 	errConfirmByNotAllowed       = errors.New("confirm_by may not be set for the requested initial commitment status")
 	errEmptyAmount               = errors.New("amount of committed resource must be greater than zero")
 	errInvalidInitialStatus      = errors.New("initial commitment status value is invalid")
+	errInvalidResourceReference  = errors.New("reference to an unknown az resource (race condition)")
 	errNoSuchAZ                  = errors.New("no such availability zone")
 	errNoSuchResource            = errors.New("no such resource")
 	errNoSuchService             = errors.New("no such service")
+	errNoSuchCommitment          = errors.New("no such commitment")
 	errNotifyOnConfirmNotAllowed = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
 	errResourceForbidden         = errors.New("resource is not enabled in this project")
 )
 
-func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, project db.Project, canBeDeleted bool) resourcesv2.Commitment {
+func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
 	return resourcesv2.Commitment{
 		UUID:             c.UUID,
 		Amount:           c.Amount,
 		Duration:         c.Duration,
-		ProjectUUID:      project.UUID,
+		ProjectUUID:      projectUUID,
 		ServiceType:      path.ServiceType,
 		ResourceName:     path.ResourceName,
 		AvailabilityZone: path.AvailabilityZone,
 		Status:           c.Status,
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
-		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
-		UpdatedAt:        limes.UnixEncodedTime{Time: c.UpdatedAt},
+		CreatedAt:        common.RFC3339EncodedTime{Time: c.CreatedAt},
+		UpdatedAt:        common.RFC3339EncodedTime{Time: c.UpdatedAt},
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
-		CanBeDeleted:     canBeDeleted,
-		ConfirmBy:        options.Map(c.ConfirmBy, util.IntoUnixEncodedTime),
-		ConfirmedAt:      options.Map(c.ConfirmedAt, util.IntoUnixEncodedTime),
-		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
+		CanBeDeleted:     deletable,
+		ConfirmBy:        options.Map(c.ConfirmBy, common.IntoRFC3339EncodedTime),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, common.IntoRFC3339EncodedTime),
+		ExpiresAt:        common.RFC3339EncodedTime{Time: c.ExpiresAt},
 		NotifyOnConfirm:  c.NotifyOnConfirm,
 		WasRenewed:       c.RenewContextJSON.IsSome(),
 	}
@@ -207,4 +213,57 @@ func analyzeCommitmentChangeResponse(resp liquid.CommitmentChangeResponse) error
 	} else {
 		return respondwith.CustomStatus(http.StatusConflict, err)
 	}
+}
+
+// isDeletable checks whether the user with the given token is allowed to delete this commitment.
+// For that, the commitment cannot be older than 24 hours and only directly created.
+// An admin exception is also allowed.
+func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow func() time.Time) bool {
+	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusConfirmed}, c.Status) {
+		var creationContext db.CommitmentWorkflowContext
+		err := json.Unmarshal(c.CreationContextJSON, &creationContext)
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(c.CreatedAt.Add(24*time.Hour)) {
+			return token.Check("v2:project:commitment_delete")
+		}
+	}
+
+	// admin exception
+	return token.Check("v2:project:commitment_delete_admin")
+}
+
+var findActiveCommitmentQuery = db.ProjectCommitmentStore.MustPrepareSelectQueryWhere(
+	sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		uuid = $1 AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`,
+	)),
+)
+
+func (p *v2Provider) selectCommitmentIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUID liquid.CommitmentUUID) (_ db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+	c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
+		return
+	case err != nil:
+		return
+	}
+
+	// obtain service ref
+	azRes, ok := sis.GetAZResourceForID(c.AZResourceID)
+	if !ok {
+		err = errInvalidResourceReference
+		// defense in depth, the referenced AZResource should exist
+		return
+	}
+
+	// check auth
+	scope, err := p.checkProjectAccessByID(ctx, token, c.ProjectID, policyRule)
+	if err != nil {
+		return
+	}
+	deletable := isDeletable(token, c, p.timeNow)
+	if !deletable {
+		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
+		return
+	}
+	return c, azRes, scope, nil
 }

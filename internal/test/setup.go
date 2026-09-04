@@ -270,10 +270,15 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowEditMaxQuota: true,
 		AllowUncommit:     true,
 		// v2 actions
-		AllowInfo:             true,
-		AllowReportSingle:     true,
-		AllowReportMultiple:   true,
-		AllowCommitmentCreate: true,
+		AllowInfo:                  true,
+		AllowReportSingle:          true,
+		AllowReportMultiple:        true,
+		AllowCommitmentCreate:      true,
+		AllowCommitmentDelete:      true,
+		AllowCommitmentDeleteAdmin: true,
+		AllowCommitmentGet:         true,
+		AllowCommitmentGetPublic:   true,
+		AllowCommitmentGetUnscoped: true,
 	}
 	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",

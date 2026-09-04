@@ -14,6 +14,7 @@ import (
 	"go.xyrillian.de/gg/is"
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )
 
@@ -113,9 +114,13 @@ func (b ScopedCommitmentBehavior) CanConfirmCommitmentsAt(t time.Time) (errorMsg
 // ForAPI converts this behavior into its API representation.
 func (b ScopedCommitmentBehavior) ForAPI(now time.Time) Option[limesresources.CommitmentConfiguration] {
 	if v2Result, ok := b.ForV2API(now).Unpack(); ok {
+		var minConfirmBy *limes.UnixEncodedTime
+		if t, ok := v2Result.MinConfirmBy.Unpack(); ok {
+			minConfirmBy = &limes.UnixEncodedTime{Time: t.Time}
+		}
 		return Some(limesresources.CommitmentConfiguration{
 			Durations:    v2Result.Durations,
-			MinConfirmBy: v2Result.MinConfirmBy.AsPointer(),
+			MinConfirmBy: minConfirmBy,
 		})
 	}
 	return None[limesresources.CommitmentConfiguration]()
@@ -130,7 +135,7 @@ func (b ScopedCommitmentBehavior) ForV2API(now time.Time) Option[resourcesv2.Com
 		Durations: b.Durations,
 	}
 	if date, ok := b.MinConfirmDate.Unpack(); ok && date.After(now) {
-		result.MinConfirmBy = Some(limes.UnixEncodedTime{Time: date})
+		result.MinConfirmBy = Some(common.RFC3339EncodedTime{Time: date})
 	}
 	return Some(result)
 }

@@ -180,13 +180,13 @@ func TestCommitmentCreateBasic(t *testing.T) {
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
 				"status":            "pending",
-				"created_at":        s.Clock.Now().Unix(),
+				"created_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 				"creator_uuid":      "uuid-for-alice",
 				"creator_name":      "alice@Default",
 				"can_be_deleted":    true,
-				"confirm_by":        s.Clock.Now().Unix(),
-				"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
-				"updated_at":        s.Clock.Now().Unix(),
+				"confirm_by":        s.Clock.Now().UTC().Format(time.RFC3339),
+				"expires_at":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+				"updated_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 			}, func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
@@ -241,7 +241,7 @@ func TestCommitmentCreateBasic(t *testing.T) {
 				"resource_name":     "things",
 				"availability_zone": "any",
 				"status":            "planned",
-				"confirm_by":        s.Clock.Now().Add(10 * oneDay).Unix(),
+				"confirm_by":        s.Clock.Now().Add(10 * oneDay).UTC().Format(time.RFC3339),
 			}, jsonmatch.Object{
 				"uuid":              jsonmatch.CaptureField(&uuid2),
 				"amount":            2,
@@ -251,13 +251,13 @@ func TestCommitmentCreateBasic(t *testing.T) {
 				"resource_name":     "things",
 				"availability_zone": "any",
 				"status":            "planned",
-				"created_at":        s.Clock.Now().Unix(),
+				"created_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 				"creator_uuid":      "uuid-for-alice",
 				"creator_name":      "alice@Default",
 				"can_be_deleted":    true,
-				"confirm_by":        s.Clock.Now().Add(10 * oneDay).Unix(),
-				"expires_at":        s.Clock.Now().Add(10*oneDay + 1*time.Hour).Unix(),
-				"updated_at":        s.Clock.Now().Unix(),
+				"confirm_by":        s.Clock.Now().Add(10 * oneDay).UTC().Format(time.RFC3339),
+				"expires_at":        s.Clock.Now().Add(10*oneDay + 1*time.Hour).UTC().Format(time.RFC3339),
+				"updated_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 			}, func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
@@ -326,13 +326,13 @@ func TestCommitmentCreateBasic(t *testing.T) {
 				"resource_name":     "capacity",
 				"availability_zone": "az-two",
 				"status":            "confirmed",
-				"created_at":        s.Clock.Now().Unix(),
+				"created_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 				"creator_uuid":      "uuid-for-alice",
 				"creator_name":      "alice@Default",
 				"can_be_deleted":    true,
-				"confirmed_at":      s.Clock.Now().Unix(),
-				"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
-				"updated_at":        s.Clock.Now().Unix(),
+				"confirmed_at":      s.Clock.Now().UTC().Format(time.RFC3339),
+				"expires_at":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+				"updated_at":        s.Clock.Now().UTC().Format(time.RFC3339),
 			}, func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
@@ -585,7 +585,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
 			"status":            status,
-			"confirm_by":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+			"confirm_by":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
 		}, func(r httptest.Response) {
 			r.ExpectText(t, http.StatusUnprocessableEntity, "confirm_by may not be set for the requested initial commitment status\n")
 		})
@@ -601,7 +601,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"resource_name":     "capacity",
 		"availability_zone": "az-one",
 		"status":            "planned",
-		"confirm_by":        s.Clock.Now().Add(-1 * time.Hour).Unix(),
+		"confirm_by":        s.Clock.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339),
 	}, func(r httptest.Response) {
 		r.ExpectText(t, http.StatusUnprocessableEntity, "confirm_by may not be set in the past\n")
 	})
@@ -627,7 +627,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"resource_name":     "things",
 		"availability_zone": "any",
 		"status":            "planned",
-		"confirm_by":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+		"confirm_by":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
 	}, func(r httptest.Response) {
 		r.ExpectText(t, http.StatusUnprocessableEntity, "this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n")
 	})
@@ -642,7 +642,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"resource_name":     "things",
 		"availability_zone": "any",
 		"status":            "planned",
-		"confirm_by":        must.Return(time.Parse(time.RFC3339, "1970-01-08T00:00:00Z")).Unix(),
+		"confirm_by":        "1970-01-08T00:00:00Z",
 	})).ExpectStatus(t, http.StatusCreated)
 
 	// invalid choice of notify_on_confirm

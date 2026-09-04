@@ -22,12 +22,12 @@ import (
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolicy.Token) (resourcesv2.Commitment, error) {
@@ -50,7 +50,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	}
 	attrs := commitmentStatusAttributes{
 		Status:          req.Status,
-		ConfirmBy:       options.Map(req.ConfirmBy, util.FromUnixEncodedTime),
+		ConfirmBy:       options.Map(req.ConfirmBy, common.FromRFC3339EncodedTime),
 		NotifyOnConfirm: req.NotifyOnConfirm,
 	}
 	now := p.timeNow()
@@ -230,8 +230,8 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 		}
 	}
 
-	canBeDeleted := datamodel.CanDeleteCommitment(token, c, p.timeNow)
-	result := convertCommitmentToDisplayForm(c, path, scope.Project, canBeDeleted)
+	deletable := isDeletable(token, c, p.timeNow)
+	result := convertCommitmentToDisplayForm(c, path, scope.Project.UUID, deletable)
 	if req.DryRun {
 		result.UUID = "00000000-0000-0000-0000-000000000000"
 	}
