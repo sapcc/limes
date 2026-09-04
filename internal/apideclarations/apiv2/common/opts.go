@@ -111,5 +111,5 @@ type CommitmentListOpts struct {
 
 	// extra filters
 	UpdatedAfter Option[time.Time] `q:"updated_after,format:RFC3339"` // any change on the commitment is considered an update
-	WithInactive bool              `q:"with,value:inactive"`          // returns deleted, superseded and expired commitments; only allowed for users with certain permissions
+	WithObsolete bool              `q:"with,value:obsolete"`          // returns deleted, superseded and expired commitments; only allowed for users with certain permissions
 }

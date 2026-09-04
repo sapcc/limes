@@ -32,7 +32,7 @@ type PolicyEnforcer struct {
 	AllowCommitmentGetUnscoped bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
 	ForbidWithHistoricalUsage bool
-	ForbidWithInactive        bool
+	ForbidWithObsolete        bool
 	ForbidWithSubresources    bool
 	ForbidWithTiming          bool
 	// match by request attribute
@@ -100,8 +100,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowCommitmentGetUnscoped
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
-	case "with_inactive":
-		return !e.ForbidWithInactive
+	case "with_obsolete":
+		return !e.ForbidWithObsolete
 	case "with_subresources":
 		return !e.ForbidWithSubresources
 	case "with_timing":

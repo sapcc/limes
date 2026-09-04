@@ -43,7 +43,7 @@
     "v2:project:report_single": "rule:v2_project_viewer",
     "v2:project:report_multiple": "rule:v2_domain_viewer",
     "v2:project:with_historical_usage": "rule:v2_cluster_viewer",
-    "v2:project:with_inactive": "rule:cluster_viewer",
+    "v2:project:with_obsolete": "rule:cluster_viewer",
     "v2:project:with_subresources": "rule:v2_cluster_viewer",
     "v2:project:with_timing": "rule:v2_cluster_viewer",
     "v2:project:commitment_create": "rule:v2_project_admin",

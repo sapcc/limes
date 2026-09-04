@@ -49,7 +49,7 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 		return none, err
 	}
 	if slices.Contains([]liquid.CommitmentStatus{util.CommitmentStatusDeleted, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired}, c.Status) {
-		err = token.Enforce("v2:project:with_inactive")
+		err = token.Enforce("v2:project:with_obsolete")
 		if err != nil {
 			return none, err
 		}
@@ -78,7 +78,7 @@ var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	AND {{p.id = ANY($project_id)}}
 	$with_public{{AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}}}
 	AND {{pc.updated_at >= $updated_after}}
-	$without_inactive{{AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})}}
+	$without_obsolete{{AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})}}
 	ORDER BY pc.uuid
 `))
 
@@ -191,8 +191,8 @@ func (p *v2Provider) checkCommitmentListOpts(token *gopherpolicy.Token, ctx cont
 			return nil, err
 		}
 	}
-	if options.WithInactive && !token.Check("v2:project:with_inactive") {
-		return nil, respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=inactive" requires special permissions`))
+	if options.WithObsolete && !token.Check("v2:project:with_obsolete") {
+		return nil, respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=obsolete" requires special permissions`))
 	}
 	var (
 		scope reports_v2.Scope
