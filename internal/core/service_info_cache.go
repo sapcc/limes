@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"sync"
 	"time"
 
@@ -50,39 +49,31 @@ func (s ServiceInfoFilter) isEmpty() bool {
 // It is implemented by types [ServiceInfoSnapshot] and [FilteredServiceInfoSnapshot].
 type ServiceInfoReader interface {
 	// GetServices returns all services.
-	GetServices() map[db.ServiceType]db.Service
+	GetServices() util.ConstMap[db.ServiceType, db.Service]
 	// GetServiceForType returns the service for the given service type.
 	GetServiceForType(serviceType db.ServiceType) (db.Service, bool)
 	// GetServiceForID returns the service for the given service ID.
 	GetServiceForID(id db.ServiceID) (db.Service, bool)
-	// GetResources returns all resources.
-	GetResources() map[db.ServiceType]map[liquid.ResourceName]db.Resource
 	// GetResourcesForType returns all resources for the given service type.
-	GetResourcesForType(serviceType db.ServiceType) (map[liquid.ResourceName]db.Resource, bool)
+	GetResourcesForType(serviceType db.ServiceType) util.ConstMap[liquid.ResourceName, db.Resource]
 	// GetResourceForPath returns the resource for the given path.
 	GetResourceForPath(path db.ResourcePath) (db.Resource, bool)
 	// GetResourceForID returns the resource for the given resource ID.
 	GetResourceForID(id db.ResourceID) (db.Resource, bool)
-	// GetAZResources returns all AZ resources.
-	GetAZResources() map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource
-	// GetAZResourcesForType returns all AZ resources for the given service type.
-	GetAZResourcesForType(serviceType db.ServiceType) (map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource, bool)
 	// GetAZResourcesForPath returns all AZ resources for the given ResourcePath.
-	GetAZResourcesForPath(path db.ResourcePath) (map[limes.AvailabilityZone]db.AZResource, bool)
+	GetAZResourcesForPath(path db.ResourcePath) util.ConstMap[limes.AvailabilityZone, db.AZResource]
 	// GetAZResourceForPath returns the AZ resource for the given AZResourcePath.
 	GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool)
 	// GetAZResourceForID returns the AZ resource for the given AZ resource ID.
 	GetAZResourceForID(id db.AZResourceID) (db.AZResource, bool)
-	// GetRates returns all rates.
-	GetRates() map[db.ServiceType]map[liquid.RateName]db.Rate
 	// GetRatesForType returns all rates for the given service type.
-	GetRatesForType(serviceType db.ServiceType) (map[liquid.RateName]db.Rate, bool)
+	GetRatesForType(serviceType db.ServiceType) util.ConstMap[liquid.RateName, db.Rate]
 	// GetRateForPath returns the rate for the given service type and rate name.
 	GetRateForPath(path db.RatePath) (db.Rate, bool)
 	// GetRateForID returns the rate for the given rate ID.
 	GetRateForID(id db.RateID) (db.Rate, bool)
-	// GetCategories returns all categories for the given service type.
-	GetCategoriesForType(serviceType db.ServiceType) map[db.CategoryID]db.Category
+	// GetCategoriesForType returns all categories for the given service type.
+	GetCategoriesForType(serviceType db.ServiceType) util.ConstMap[db.CategoryID, db.Category]
 	// GetCategoryForID returns the category for the given ID.
 	GetCategoryForID(categoryID db.CategoryID) (db.Category, bool)
 }
@@ -95,373 +86,270 @@ var (
 
 ///////////////////////////////////////////////////////////////////////
 
-type (
-	// ServiceInfoSnapshot is the combined representation of db.Service, db.Resource
-	// db.AZResource, db.Rate and db.Category. We chose to provide this as only
-	// data structure and output of ServiceInfoCache mainly for 2 reasons:
-	// This ensures we get one consistent state from the ServiceInfoCache and
-	// not multiple outputs where the cache might have changed in between.
-	// Also, we can express filtering all entities by the same ServiceInfoFilter
-	// which makes application of the same filter to all entities easier.
-	// ServiceInfoSnapshot offers almost the same external method set for
-	// on-read access as FilteredServiceInfoSnapshot, they are defined by the
-	// ServiceInfoReader interface.
-	ServiceInfoSnapshot struct {
-		services    servicesByType
-		resources   resourcesByNameType
-		azResources azResourcesByAZNameType
-		rates       ratesByNameType
-		categories  categoriesByIDType
-		// ID-based indexes for O(1) lookup by primary key
-		servicesByID    servicesByIDIndex
-		resourcesByID   resourcesByIDIndex
-		azResourcesByID azResourcesByIDIndex
-		ratesByID       ratesByIDIndex
-		categoriesByID  categoriesByID
-		// necessary for constructing filters by area
-		areaMapping map[db.ServiceType]string
-	}
-
-	// shorthands for use within this file
-	servicesByType          = map[db.ServiceType]db.Service
-	resourcesByNameType     = map[db.ServiceType]resourcesByName
-	resourcesByName         = map[liquid.ResourceName]db.Resource
-	azResourcesByAZNameType = map[db.ServiceType]azResourcesByAZName
-	azResourcesByAZName     = map[liquid.ResourceName]azResourcesByAZ
-	azResourcesByAZ         = map[limes.AvailabilityZone]db.AZResource
-	ratesByNameType         = map[db.ServiceType]ratesByName
-	ratesByName             = map[liquid.RateName]db.Rate
-	categoriesByIDType      = map[db.ServiceType]categoriesByID
-	categoriesByID          = map[db.CategoryID]db.Category
-
-	servicesByIDIndex    = map[db.ServiceID]db.Service
-	resourcesByIDIndex   = map[db.ResourceID]db.Resource
-	azResourcesByIDIndex = map[db.AZResourceID]db.AZResource
-	ratesByIDIndex       = map[db.RateID]db.Rate
-)
-
-// removeDataForType removes all data of a given serviceType, making the cache ready
-// for populating this serviceType from scratch.
-func (s ServiceInfoSnapshot) removeDataForType(serviceType db.ServiceType) ServiceInfoSnapshot {
-	// remove ID index entries for this service type
-	if svc, ok := s.services[serviceType]; ok {
-		delete(s.servicesByID, svc.ID)
-	}
-	for _, resource := range s.resources[serviceType] {
-		delete(s.resourcesByID, resource.ID)
-	}
-	for _, azResByAZ := range s.azResources[serviceType] {
-		for _, azRes := range azResByAZ {
-			delete(s.azResourcesByID, azRes.ID)
-		}
-	}
-	for _, rate := range s.rates[serviceType] {
-		delete(s.ratesByID, rate.ID)
-	}
-	for _, category := range s.categories[serviceType] {
-		delete(s.categoriesByID, category.ID)
-	}
-	delete(s.services, serviceType)
-	delete(s.resources, serviceType)
-	delete(s.azResources, serviceType)
-	delete(s.rates, serviceType)
-	delete(s.categories, serviceType)
-	return s
-}
-
-// deepClone delivers a deep copy of the ServiceInfoSnapshot. This is used to
-// create a copy which can be altered without interfering with the original.
-// It shall only be used from ServiceInfoCache or when creating a
-// FilteredServiceInfoSnapshot.
-func (s ServiceInfoSnapshot) deepClone() ServiceInfoSnapshot {
-	return ServiceInfoSnapshot{
-		services:  maps.Clone(s.services),
-		resources: deepCloneMap(s.resources, maps.Clone),
-		azResources: deepCloneMap(s.azResources, func(inner azResourcesByAZName) azResourcesByAZName {
-			return deepCloneMap(inner, maps.Clone)
-		}),
-		rates:           deepCloneMap(s.rates, maps.Clone),
-		categories:      deepCloneMap(s.categories, maps.Clone),
-		servicesByID:    maps.Clone(s.servicesByID),
-		resourcesByID:   maps.Clone(s.resourcesByID),
-		azResourcesByID: maps.Clone(s.azResourcesByID),
-		categoriesByID:  maps.Clone(s.categoriesByID),
-		ratesByID:       maps.Clone(s.ratesByID),
-		areaMapping:     s.areaMapping, // should never get modified
-	}
+// ServiceInfoSnapshot is the combined representation of db.Service, db.Resource
+// db.AZResource, db.Rate and db.Category. We chose to provide this as only
+// data structure and output of ServiceInfoCache mainly for 2 reasons:
+// This ensures we get one consistent state from the ServiceInfoCache and
+// not multiple outputs where the cache might have changed in between.
+// Also, we can express filtering all entities by the same ServiceInfoFilter
+// which makes application of the same filter to all entities easier.
+//
+// All internal fields are util.ConstMap (read-only), which means that
+// ServiceInfoSnapshot can be shared across goroutines without deep cloning.
+type ServiceInfoSnapshot struct {
+	services    util.ConstMap[db.ServiceType, db.Service]
+	resources   util.ConstMap[db.ServiceType, util.ConstMap[liquid.ResourceName, db.Resource]]
+	azResources util.ConstMap[db.ServiceType, util.ConstMap[liquid.ResourceName, util.ConstMap[limes.AvailabilityZone, db.AZResource]]]
+	rates       util.ConstMap[db.ServiceType, util.ConstMap[liquid.RateName, db.Rate]]
+	categories  util.ConstMap[db.ServiceType, util.ConstMap[db.CategoryID, db.Category]]
+	// ID-based indexes for O(1) lookup by primary key
+	servicesByID    util.ConstMap[db.ServiceID, db.Service]
+	resourcesByID   util.ConstMap[db.ResourceID, db.Resource]
+	azResourcesByID util.ConstMap[db.AZResourceID, db.AZResource]
+	ratesByID       util.ConstMap[db.RateID, db.Rate]
+	categoriesByID  util.ConstMap[db.CategoryID, db.Category]
+	// necessary for constructing filters by area
+	areaMapping util.ConstMap[db.ServiceType, string]
 }
 
 // Filter applies the filter to the ServiceInfoSnapshot and produces an
-// eagerly filtered FilteredServiceInfoSnapshot.
+// eagerly filtered FilteredServiceInfoSnapshot using a copy-on-filter approach.
+// Only entries that pass the filter are copied into the new snapshot.
 func (s ServiceInfoSnapshot) Filter(filter ServiceInfoFilter) FilteredServiceInfoSnapshot {
-	f := FilteredServiceInfoSnapshot{
-		snapshot: s.deepClone(),
-		filter:   filter,
+	// Phase 1: determine service types which survive area and type filter
+	survivingServiceTypes := make(map[db.ServiceType]struct{})
+	for serviceType := range s.services.All() {
+		if area, ok := filter.ServiceArea.Unpack(); ok {
+			if s.areaMapping.GetOrZero(serviceType) != area {
+				continue
+			}
+		}
+		if typeFilter, ok := filter.ServiceType.Unpack(); ok {
+			if serviceType != typeFilter {
+				continue
+			}
+		}
+		survivingServiceTypes[serviceType] = struct{}{}
 	}
 
-	// filter services by area
-	if areaFilter, ok := f.filter.ServiceArea.Unpack(); ok {
-		for serviceType, area := range f.snapshot.areaMapping {
-			if area == areaFilter {
-				continue
-			}
-			delete(f.snapshot.services, serviceType)
-			delete(f.snapshot.resources, serviceType)
-			delete(f.snapshot.azResources, serviceType)
-			delete(f.snapshot.rates, serviceType)
-			delete(f.snapshot.categories, serviceType)
-		}
-	}
-	// filter services by type
-	if typeFilter, ok := f.filter.ServiceType.Unpack(); ok {
-		for serviceType := range f.snapshot.services {
-			if typeFilter == serviceType {
-				continue
-			}
-			delete(f.snapshot.services, serviceType)
-			delete(f.snapshot.azResources, serviceType)
-			delete(f.snapshot.resources, serviceType)
-			delete(f.snapshot.rates, serviceType)
-			delete(f.snapshot.categories, serviceType)
-		}
-	}
+	// Phase 2: determine categories to remove, when filtering by category
 	categoriesToRemove := make(map[db.CategoryID]struct{})
-	// find categories to remove
-	categoryFilter, categoryFilterExists := f.filter.Category.Unpack()
+	categoryFilter, categoryFilterExists := filter.Category.Unpack()
 	if categoryFilterExists {
-		for serviceType, categories := range f.snapshot.categories {
-			_ = serviceType
-			for categoryID, info := range categories {
+		for serviceType := range survivingServiceTypes {
+			categories := s.categories.GetOrZero(serviceType)
+			for categoryID, info := range categories.All() {
 				if info.Name != categoryFilter {
-					delete(categories, categoryID)
 					categoriesToRemove[categoryID] = struct{}{}
 				}
 			}
 		}
 	}
+
+	// Phase 3: build filtered resources and az_resources
+	resourceNameFilter, resourceFilterExists := filter.ResourceName.Unpack()
 	seenCategories := make(map[db.CategoryID]struct{})
-	resourceNameFilter, resourceFilterExists := f.filter.ResourceName.Unpack()
-	// filter resources/ az_resources by category or name
-	if categoryFilterExists || resourceFilterExists {
-		for serviceType, resources := range f.snapshot.resources {
-			for resourceName, resource := range resources {
-				_, inRemoveSet := categoriesToRemove[resource.CategoryID]
-				shouldRemove := (resourceFilterExists && resourceName != resourceNameFilter) ||
-					(categoryFilterExists && inRemoveSet)
-				if shouldRemove {
-					delete(f.snapshot.resources[serviceType], resourceName)
-					delete(f.snapshot.azResources[serviceType], resourceName)
-					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
-						delete(f.snapshot.services, serviceType)
-						delete(f.snapshot.resources, serviceType)
-						delete(f.snapshot.azResources, serviceType)
-						delete(f.snapshot.rates, serviceType)
-						delete(f.snapshot.categories, serviceType)
-					}
-				} else {
-					seenCategories[resource.CategoryID] = struct{}{}
-				}
+	newResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, db.Resource], len(survivingServiceTypes))
+	newAZResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, util.ConstMap[limes.AvailabilityZone, db.AZResource]], len(survivingServiceTypes))
+
+	for serviceType := range survivingServiceTypes {
+		resByName := s.resources.GetOrZero(serviceType)
+		azResByName := s.azResources.GetOrZero(serviceType)
+		filteredRes := make(map[liquid.ResourceName]db.Resource)
+		filteredAZRes := make(map[liquid.ResourceName]util.ConstMap[limes.AvailabilityZone, db.AZResource])
+
+		for resourceName, resource := range resByName.All() {
+			_, inRemoveSet := categoriesToRemove[resource.CategoryID]
+			if resourceFilterExists && resourceName != resourceNameFilter {
+				continue
+			}
+			if categoryFilterExists && inRemoveSet {
+				continue
+			}
+			filteredRes[resourceName] = resource
+			seenCategories[resource.CategoryID] = struct{}{}
+			if azByAZ, ok := azResByName.Get(resourceName); ok {
+				filteredAZRes[resourceName] = azByAZ
 			}
 		}
-	}
-	rateNameFilter, rateFilterExists := f.filter.RateName.Unpack()
-	// filter rates by category or name
-	if categoryFilterExists || rateFilterExists {
-		for serviceType, rates := range f.snapshot.rates {
-			for rateName, rate := range rates {
-				_, inRemoveSet := categoriesToRemove[rate.CategoryID]
-				shouldRemove := (rateFilterExists && rateName != rateNameFilter) ||
-					(categoryFilterExists && inRemoveSet)
-				if shouldRemove {
-					delete(f.snapshot.rates[serviceType], rateName)
-					if len(f.snapshot.resources[serviceType]) == 0 && len(f.snapshot.rates[serviceType]) == 0 {
-						delete(f.snapshot.services, serviceType)
-						delete(f.snapshot.resources, serviceType)
-						delete(f.snapshot.azResources, serviceType)
-						delete(f.snapshot.rates, serviceType)
-						delete(f.snapshot.categories, serviceType)
-					}
-				} else {
-					seenCategories[rate.CategoryID] = struct{}{}
-				}
-			}
+		if len(filteredRes) > 0 {
+			newResources[serviceType] = util.NewConstMap(filteredRes)
+		}
+		if len(filteredAZRes) > 0 {
+			newAZResources[serviceType] = util.NewConstMap(filteredAZRes)
 		}
 	}
 
-	// if we filtered by rate or service name, we must thin out the categories
-	if resourceFilterExists || rateFilterExists {
-		for serviceType, categories := range f.snapshot.categories {
-			for categoryID := range categories {
-				if _, ok := seenCategories[categoryID]; !ok {
-					delete(categories, categoryID)
-				}
+	// Phase 4: build filtered rates
+	rateNameFilter, rateFilterExists := filter.RateName.Unpack()
+	newRates := make(map[db.ServiceType]util.ConstMap[liquid.RateName, db.Rate], len(survivingServiceTypes))
+
+	for serviceType := range survivingServiceTypes {
+		rateByName := s.rates.GetOrZero(serviceType)
+		filteredRates := make(map[liquid.RateName]db.Rate)
+
+		for rateName, rate := range rateByName.All() {
+			_, inRemoveSet := categoriesToRemove[rate.CategoryID]
+			if rateFilterExists && rateName != rateNameFilter {
+				continue
 			}
-			if len(categories) == 0 {
-				delete(f.snapshot.categories, serviceType)
+			if categoryFilterExists && inRemoveSet {
+				continue
 			}
+			filteredRates[rateName] = rate
+			seenCategories[rate.CategoryID] = struct{}{}
+		}
+		if len(filteredRates) > 0 {
+			newRates[serviceType] = util.NewConstMap(filteredRates)
 		}
 	}
 
-	// rebuild ID indexes from the surviving path-based maps
-	f.snapshot.servicesByID = make(servicesByIDIndex, len(f.snapshot.services))
-	for _, svc := range f.snapshot.services {
-		f.snapshot.servicesByID[svc.ID] = svc
-	}
-	f.snapshot.resourcesByID = make(resourcesByIDIndex)
-	for _, resources := range f.snapshot.resources {
-		for _, resource := range resources {
-			f.snapshot.resourcesByID[resource.ID] = resource
+	// Phase 5: remove empty service types
+	newServices := make(map[db.ServiceType]db.Service, len(survivingServiceTypes))
+	for serviceType := range survivingServiceTypes {
+		if newResources[serviceType].Len() == 0 && newRates[serviceType].Len() == 0 {
+			delete(newResources, serviceType)
+			delete(newAZResources, serviceType)
+			delete(newRates, serviceType)
+			continue
 		}
+		svc, _ := s.services.Get(serviceType)
+		newServices[serviceType] = svc
 	}
-	f.snapshot.azResourcesByID = make(azResourcesByIDIndex)
-	for _, azResByAZName := range f.snapshot.azResources {
-		for _, azResByAZ := range azResByAZName {
-			for _, azRes := range azResByAZ {
-				f.snapshot.azResourcesByID[azRes.ID] = azRes
+
+	// Phase 6: build filtered categories (using seenCategories).
+	newCategories := make(map[db.ServiceType]util.ConstMap[db.CategoryID, db.Category])
+	for serviceType := range newServices {
+		cats := s.categories.GetOrZero(serviceType)
+		filteredCats := make(map[db.CategoryID]db.Category)
+		for categoryID, cat := range cats.All() {
+			if _, ok := seenCategories[categoryID]; ok {
+				filteredCats[categoryID] = cat
 			}
 		}
-	}
-	f.snapshot.ratesByID = make(ratesByIDIndex, len(f.snapshot.rates))
-	for _, rates := range f.snapshot.rates {
-		for _, rate := range rates {
-			f.snapshot.ratesByID[rate.ID] = rate
-		}
-	}
-	f.snapshot.categoriesByID = make(categoriesByID, len(f.snapshot.categories))
-	for _, categories := range f.snapshot.categories {
-		for _, category := range categories {
-			f.snapshot.categoriesByID[category.ID] = category
+		if len(filteredCats) > 0 {
+			newCategories[serviceType] = util.NewConstMap(filteredCats)
 		}
 	}
 
-	return f
+	// Phase 7: build ID indexes
+	newServicesByID := make(map[db.ServiceID]db.Service, len(newServices))
+	for _, svc := range newServices {
+		newServicesByID[svc.ID] = svc
+	}
+	newResourcesByID := make(map[db.ResourceID]db.Resource)
+	for _, resByName := range newResources {
+		for _, resource := range resByName.All() {
+			newResourcesByID[resource.ID] = resource
+		}
+	}
+	newAZResourcesByID := make(map[db.AZResourceID]db.AZResource)
+	for _, azResByName := range newAZResources {
+		for _, azResByAZ := range azResByName.All() {
+			for _, azRes := range azResByAZ.All() {
+				newAZResourcesByID[azRes.ID] = azRes
+			}
+		}
+	}
+	newRatesByID := make(map[db.RateID]db.Rate)
+	for _, rateByName := range newRates {
+		for _, rate := range rateByName.All() {
+			newRatesByID[rate.ID] = rate
+		}
+	}
+	newCategoriesByID := make(map[db.CategoryID]db.Category)
+	for _, catByID := range newCategories {
+		for _, cat := range catByID.All() {
+			newCategoriesByID[cat.ID] = cat
+		}
+	}
+
+	return FilteredServiceInfoSnapshot{
+		snapshot: ServiceInfoSnapshot{
+			services:        util.NewConstMap(newServices),
+			resources:       util.NewConstMap(newResources),
+			azResources:     util.NewConstMap(newAZResources),
+			rates:           util.NewConstMap(newRates),
+			categories:      util.NewConstMap(newCategories),
+			servicesByID:    util.NewConstMap(newServicesByID),
+			resourcesByID:   util.NewConstMap(newResourcesByID),
+			azResourcesByID: util.NewConstMap(newAZResourcesByID),
+			ratesByID:       util.NewConstMap(newRatesByID),
+			categoriesByID:  util.NewConstMap(newCategoriesByID),
+			areaMapping:     s.areaMapping, // shared, never modified
+		},
+		filter: filter,
+	}
 }
 
 // GetServices implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetServices() servicesByType {
-	return maps.Clone(s.services)
+func (s ServiceInfoSnapshot) GetServices() util.ConstMap[db.ServiceType, db.Service] {
+	return s.services
 }
 
 // GetServiceForType implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetServiceForType(serviceType db.ServiceType) (db.Service, bool) {
-	val, ok := s.services[serviceType]
-	return val, ok
+	return s.services.Get(serviceType)
 }
 
 // GetServiceForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetServiceForID(id db.ServiceID) (db.Service, bool) {
-	val, ok := s.servicesByID[id]
-	return val, ok
-}
-
-// GetResources implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetResources() resourcesByNameType {
-	return deepCloneMap(s.resources, maps.Clone)
+	return s.servicesByID.Get(id)
 }
 
 // GetResourcesForType implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) (resourcesByName, bool) {
-	val, ok := s.resources[serviceType]
-	return maps.Clone(val), ok
+func (s ServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) util.ConstMap[liquid.ResourceName, db.Resource] {
+	return s.resources.GetOrZero(serviceType)
 }
 
 // GetResourceForPath implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetResourceForPath(path db.ResourcePath) (db.Resource, bool) {
-	val, ok := s.resources[path.ServiceType][path.ResourceName]
-	return val, ok
+	return s.resources.GetOrZero(path.ServiceType).Get(path.ResourceName)
 }
 
 // GetResourceForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetResourceForID(id db.ResourceID) (db.Resource, bool) {
-	val, ok := s.resourcesByID[id]
-	return val, ok
-}
-
-// GetAZResources implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetAZResources() azResourcesByAZNameType {
-	return deepCloneMap(s.azResources, func(inner azResourcesByAZName) azResourcesByAZName {
-		return deepCloneMap(inner, maps.Clone)
-	})
-}
-
-// GetAZResourcesForType implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetAZResourcesForType(serviceType db.ServiceType) (azResourcesByAZName, bool) {
-	val, ok := s.azResources[serviceType]
-	return deepCloneMap(val, maps.Clone), ok
+	return s.resourcesByID.Get(id)
 }
 
 // GetAZResourcesForPath implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetAZResourcesForPath(path db.ResourcePath) (azResourcesByAZ, bool) {
-	val, ok := s.azResources[path.ServiceType][path.ResourceName]
-	return maps.Clone(val), ok
+func (s ServiceInfoSnapshot) GetAZResourcesForPath(path db.ResourcePath) util.ConstMap[limes.AvailabilityZone, db.AZResource] {
+	return s.azResources.GetOrZero(path.ServiceType).GetOrZero(path.ResourceName)
 }
 
 // GetAZResourceForPath implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetAZResourceForPath(path db.AZResourcePath) (db.AZResource, bool) {
-	val, ok := s.azResources[path.ServiceType][path.ResourceName][path.AvailabilityZone]
-	return val, ok
+	return s.azResources.GetOrZero(path.ServiceType).GetOrZero(path.ResourceName).Get(path.AvailabilityZone)
 }
 
 // GetAZResourceForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetAZResourceForID(id db.AZResourceID) (db.AZResource, bool) {
-	val, ok := s.azResourcesByID[id]
-	return val, ok
-}
-
-// GetRates implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetRates() ratesByNameType {
-	return deepCloneMap(s.rates, maps.Clone)
+	return s.azResourcesByID.Get(id)
 }
 
 // GetRatesForType implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) (ratesByName, bool) {
-	val, ok := s.rates[serviceType]
-	return maps.Clone(val), ok
+func (s ServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) util.ConstMap[liquid.RateName, db.Rate] {
+	return s.rates.GetOrZero(serviceType)
 }
 
 // GetRateForPath implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetRateForPath(path db.RatePath) (db.Rate, bool) {
-	val, ok := s.rates[path.ServiceType][path.RateName]
-	return val, ok
+	return s.rates.GetOrZero(path.ServiceType).Get(path.RateName)
 }
 
 // GetRateForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetRateForID(id db.RateID) (db.Rate, bool) {
-	val, ok := s.ratesByID[id]
-	return val, ok
+	return s.ratesByID.Get(id)
 }
 
 // GetCategoriesForType implements the [ServiceInfoReader] interface.
-func (s ServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) categoriesByID {
-	return maps.Clone(s.categories[serviceType])
+func (s ServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) util.ConstMap[db.CategoryID, db.Category] {
+	return s.categories.GetOrZero(serviceType)
 }
 
 // GetCategoryForID implements the [ServiceInfoReader] interface.
 func (s ServiceInfoSnapshot) GetCategoryForID(categoryID db.CategoryID) (db.Category, bool) {
-	val, ok := s.categoriesByID[categoryID]
-	return val, ok
-}
-
-// newEmptyServiceInfoSnapshot() returns an empty ServiceInfoSnapshot with all
-// maps initialized on their first level.
-func newEmptyServiceInfoSnapshot(config ClusterConfiguration) ServiceInfoSnapshot {
-	areaMapping := make(map[db.ServiceType]string)
-	for serviceType, liquidConfiguration := range config.Liquids {
-		areaMapping[serviceType] = liquidConfiguration.Area
-	}
-	return ServiceInfoSnapshot{
-		services:        make(servicesByType),
-		resources:       make(resourcesByNameType),
-		azResources:     make(azResourcesByAZNameType),
-		rates:           make(ratesByNameType),
-		categories:      make(categoriesByIDType),
-		servicesByID:    make(servicesByIDIndex),
-		resourcesByID:   make(resourcesByIDIndex),
-		azResourcesByID: make(azResourcesByIDIndex),
-		ratesByID:       make(ratesByIDIndex),
-		categoriesByID:  make(categoriesByID),
-		areaMapping:     areaMapping,
-	}
+	return s.categoriesByID.Get(categoryID)
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -482,7 +370,7 @@ func (f FilteredServiceInfoSnapshot) FilterIsEmpty() bool {
 }
 
 // GetServices implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetServices() servicesByType {
+func (f FilteredServiceInfoSnapshot) GetServices() util.ConstMap[db.ServiceType, db.Service] {
 	return f.snapshot.GetServices()
 }
 
@@ -496,13 +384,8 @@ func (f FilteredServiceInfoSnapshot) GetServiceForID(id db.ServiceID) (db.Servic
 	return f.snapshot.GetServiceForID(id)
 }
 
-// GetResources implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetResources() resourcesByNameType {
-	return f.snapshot.GetResources()
-}
-
 // GetResourcesForType implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) (resourcesByName, bool) {
+func (f FilteredServiceInfoSnapshot) GetResourcesForType(serviceType db.ServiceType) util.ConstMap[liquid.ResourceName, db.Resource] {
 	return f.snapshot.GetResourcesForType(serviceType)
 }
 
@@ -516,18 +399,8 @@ func (f FilteredServiceInfoSnapshot) GetResourceForID(id db.ResourceID) (db.Reso
 	return f.snapshot.GetResourceForID(id)
 }
 
-// GetAZResources implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetAZResources() azResourcesByAZNameType {
-	return f.snapshot.GetAZResources()
-}
-
-// GetAZResourcesForType implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetAZResourcesForType(serviceType db.ServiceType) (azResourcesByAZName, bool) {
-	return f.snapshot.GetAZResourcesForType(serviceType)
-}
-
 // GetAZResourcesForPath implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetAZResourcesForPath(path db.ResourcePath) (azResourcesByAZ, bool) {
+func (f FilteredServiceInfoSnapshot) GetAZResourcesForPath(path db.ResourcePath) util.ConstMap[limes.AvailabilityZone, db.AZResource] {
 	return f.snapshot.GetAZResourcesForPath(path)
 }
 
@@ -541,13 +414,8 @@ func (f FilteredServiceInfoSnapshot) GetAZResourceForID(id db.AZResourceID) (db.
 	return f.snapshot.GetAZResourceForID(id)
 }
 
-// GetRates implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetRates() ratesByNameType {
-	return f.snapshot.GetRates()
-}
-
 // GetRatesForType implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) (ratesByName, bool) {
+func (f FilteredServiceInfoSnapshot) GetRatesForType(serviceType db.ServiceType) util.ConstMap[liquid.RateName, db.Rate] {
 	return f.snapshot.GetRatesForType(serviceType)
 }
 
@@ -562,7 +430,7 @@ func (f FilteredServiceInfoSnapshot) GetRateForID(id db.RateID) (db.Rate, bool) 
 }
 
 // GetCategoriesForType implements the [ServiceInfoReader] interface.
-func (f FilteredServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) categoriesByID {
+func (f FilteredServiceInfoSnapshot) GetCategoriesForType(serviceType db.ServiceType) util.ConstMap[db.CategoryID, db.Category] {
 	return f.snapshot.GetCategoriesForType(serviceType)
 }
 
@@ -608,7 +476,6 @@ func NewServiceInfoCache(ctx context.Context, dbm *gsql.DB, config ClusterConfig
 	sic := &ServiceInfoCache{
 		DB:     dbm,
 		config: config,
-		data:   newEmptyServiceInfoSnapshot(config),
 	}
 
 	// populate all data from the DB on startup
@@ -693,113 +560,189 @@ func (s *ServiceInfoCache) signalInvalidation() {
 
 // InvalidateService will make the ServiceInfoCache reload one service (if
 // serviceType is provided) or all services (if no serviceType is provided).
+// It rebuilds the internal util.ConstMap fields from scratch for the affected
+// services so that the existing references to those maps are not affected.
 func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Option[db.ServiceType]) error {
 	s.dataMutex.Lock()
 	defer s.dataMutex.Unlock()
 
-	if st, ok := serviceType.Unpack(); ok {
-		s.data = s.data.removeDataForType(st)
-	} else {
-		s.data = newEmptyServiceInfoSnapshot(s.config)
+	// build area mapping (constant, derived from config)
+	areaMappingPlain := make(map[db.ServiceType]string, len(s.config.Liquids))
+	for st, liquidConfiguration := range s.config.Liquids {
+		areaMappingPlain[st] = liquidConfiguration.Area
 	}
 
-	// now we fill the cache for the invalidated services again
-	servicesByType, err := db.ServiceByTypeIndex.IndexFrom(db.ServiceStore.SelectWhere(ctx, s.DB, `type = $1 OR $1 IS NULL`, serviceType))
+	// we start with empty maps, get the data we want from the database and then possibly copy over the old values
+	services := make(map[db.ServiceType]db.Service)
+	resources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, db.Resource])
+	azResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, util.ConstMap[liquid.AvailabilityZone, db.AZResource]])
+	rates := make(map[db.ServiceType]util.ConstMap[liquid.RateName, db.Rate])
+	categories := make(map[db.ServiceType]util.ConstMap[db.CategoryID, db.Category])
+
+	// load fresh data for affected services
+	dbServices, err := db.ServiceStore.SelectWhere(ctx, s.DB, `type = $1 OR $1 IS NULL`, serviceType).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading services for type(s) %v: %w", serviceType, err)
 	}
-	maps.Copy(s.data.services, servicesByType)
-	for _, svc := range servicesByType {
-		s.data.servicesByID[svc.ID] = svc
+	serviceIDs := make([]db.ServiceID, 0, len(dbServices))
+	for _, dbService := range dbServices {
+		services[dbService.Type] = dbService
+		serviceIDs = append(serviceIDs, dbService.ID)
 	}
 
-	// TODO: simplify queries below by using the ServiceID from the record that we just pulled
-
-	resourcesByPath, err := db.ResourceByPathIndex.IndexFrom(
-		db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType),
-	)
+	dbResources, err := db.ResourceStore.Select(ctx, s.DB, `SELECT r.* FROM resources r WHERE r.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path`, pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading resources for type(s) %v: %w", serviceType, err)
 	}
-	for path, resource := range resourcesByPath {
-		if _, sExists := s.data.resources[path.ServiceType]; !sExists {
-			s.data.resources[path.ServiceType] = make(resourcesByName)
-		}
-		s.data.resources[path.ServiceType][path.ResourceName] = resource
-		s.data.resourcesByID[resource.ID] = resource
-	}
-
-	azResourcesByPath, err := db.AZResourceByPathIndex.IndexFrom(
-		db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id JOIN services s ON r.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType),
+	var (
+		currentService               db.ServiceType
+		resourcesForCurrentService   map[liquid.ResourceName]db.Resource
+		azResourcesForCurrentService map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource
+		ratesForCurrentService       map[liquid.RateName]db.Rate
+		categoriesForCurrentService  map[db.CategoryID]db.Category
 	)
+	currentService = ""
+	for _, dbResource := range dbResources {
+		path := dbResource.Path
+		if currentService != path.ServiceType {
+			// flush
+			resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+			resourcesForCurrentService = make(map[liquid.ResourceName]db.Resource)
+			currentService = path.ServiceType
+		}
+		resourcesForCurrentService[path.ResourceName] = dbResource
+	}
+	resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+
+	dbAZResources, err := db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path`, pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
-	for path, azResource := range azResourcesByPath {
-		if _, sExists := s.data.azResources[path.ServiceType]; !sExists {
-			s.data.azResources[path.ServiceType] = make(azResourcesByAZName)
+	currentService = ""
+	for _, dbAZResource := range dbAZResources {
+		path := dbAZResource.Path
+		if currentService != path.ServiceType {
+			// flush
+			azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
+			azResourcesForCurrentService = make(map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource)
+			currentService = path.ServiceType
 		}
-		if _, rExists := s.data.azResources[path.ServiceType][path.ResourceName]; !rExists {
-			s.data.azResources[path.ServiceType][path.ResourceName] = make(azResourcesByAZ)
+		if azResourcesForCurrentService[path.ResourceName] == nil {
+			azResourcesForCurrentService[path.ResourceName] = make(map[liquid.AvailabilityZone]db.AZResource)
 		}
-		s.data.azResources[path.ServiceType][path.ResourceName][path.AvailabilityZone] = azResource
-		s.data.azResourcesByID[azResource.ID] = azResource
+		azResourcesForCurrentService[path.ResourceName][path.AvailabilityZone] = dbAZResource
 	}
+	azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
 
-	ratesByPath, err := db.RateByPathIndex.IndexFrom(
-		db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra JOIN services s ON ra.service_id = s.id WHERE s.type = $1 OR $1 IS NULL", serviceType),
-	)
+	dbRates, err := db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra WHERE ra.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path", pq.Array(serviceIDs)).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
-	for path, rate := range ratesByPath {
-		if _, rExists := s.data.rates[path.ServiceType]; !rExists {
-			s.data.rates[path.ServiceType] = make(ratesByName)
+	currentService = ""
+	for _, dbRate := range dbRates {
+		path := dbRate.Path
+		if currentService != path.ServiceType {
+			// flush
+			rates[currentService] = util.NewConstMap(ratesForCurrentService)
+			ratesForCurrentService = make(map[liquid.RateName]db.Rate)
+			currentService = path.ServiceType
 		}
-		s.data.rates[path.ServiceType][path.RateName] = rate
-		s.data.ratesByID[rate.ID] = rate
+		ratesForCurrentService[path.RateName] = dbRate
 	}
+	rates[currentService] = util.NewConstMap(ratesForCurrentService)
 
 	type categoryRecord struct {
 		db.Category
 		ServiceType db.ServiceType `db:"service_type"`
 	}
 	categoryRecords, err := oblast.MustNewStore[categoryRecord](oblast.PostgresDialect()).Select(ctx, s.DB,
-		`SELECT c.*, s.type AS service_type FROM categories c JOIN services s ON c.service_id = s.id WHERE s.type = $1 OR $1 IS NULL`, serviceType,
+		`SELECT c.*, s.type AS service_type FROM categories c JOIN services s ON c.service_id = s.id WHERE s.id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY s.type`, pq.Array(serviceIDs),
 	).Collect()
 	if err != nil {
 		return fmt.Errorf("while reading categories for type(s) %v: %w", serviceType, err)
 	}
+	currentService = ""
 	for _, record := range categoryRecords {
-		if _, ok := s.data.categories[record.ServiceType]; !ok {
-			s.data.categories[record.ServiceType] = make(categoriesByID)
+		if currentService != record.ServiceType {
+			// flush
+			categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+			categoriesForCurrentService = make(map[db.CategoryID]db.Category)
+			currentService = record.ServiceType
 		}
-		s.data.categories[record.ServiceType][record.ID] = record.Category
-		s.data.categoriesByID[record.ID] = record.Category
+		categoriesForCurrentService[record.ID] = record.Category
+	}
+	categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+
+	// copy unchanged entries, if there are any
+	if stFilter, ok := serviceType.Unpack(); ok {
+		for st, oldService := range s.data.services.All() {
+			if st == stFilter {
+				continue
+			}
+			services[st] = oldService
+			resources[st], _ = s.data.resources.Get(st)
+			azResources[st], _ = s.data.azResources.Get(st)
+			rates[st], _ = s.data.rates.Get(st)
+			categories[st], _ = s.data.categories.Get(st)
+		}
+	}
+
+	// Build ID indexes.
+	servicesByID := make(map[db.ServiceID]db.Service, len(services))
+	for _, svc := range services {
+		servicesByID[svc.ID] = svc
+	}
+	resourcesByID := make(map[db.ResourceID]db.Resource)
+	for _, resByName := range resources {
+		for resource := range resByName.Values() {
+			resourcesByID[resource.ID] = resource
+		}
+	}
+	azResourcesByID := make(map[db.AZResourceID]db.AZResource)
+	for _, azResByName := range azResources {
+		for azResByAZ := range azResByName.Values() {
+			for azRes := range azResByAZ.Values() {
+				azResourcesByID[azRes.ID] = azRes
+			}
+		}
+	}
+	ratesByID := make(map[db.RateID]db.Rate)
+	for _, rateByName := range rates {
+		for rate := range rateByName.Values() {
+			ratesByID[rate.ID] = rate
+		}
+	}
+	categoriesByID := make(map[db.CategoryID]db.Category)
+	for _, catByID := range categories {
+		for cat := range catByID.Values() {
+			categoriesByID[cat.ID] = cat
+		}
+	}
+
+	// Wrap nested maps and assign the new snapshot atomically.
+	s.data = ServiceInfoSnapshot{
+		services:        util.NewConstMap(services),
+		resources:       util.NewConstMap(resources),
+		azResources:     util.NewConstMap(azResources),
+		rates:           util.NewConstMap(rates),
+		categories:      util.NewConstMap(categories),
+		servicesByID:    util.NewConstMap(servicesByID),
+		resourcesByID:   util.NewConstMap(resourcesByID),
+		azResourcesByID: util.NewConstMap(azResourcesByID),
+		ratesByID:       util.NewConstMap(ratesByID),
+		categoriesByID:  util.NewConstMap(categoriesByID),
+		areaMapping:     util.NewConstMap(areaMappingPlain),
 	}
 
 	return nil
 }
 
 // GetSnapshot returns a ServiceInfoSnapshot with the current data in the ServiceInfoCache.
+// This is a cheap O(1) operation because all internal fields are immutable util.ConstMap values.
 func (s *ServiceInfoCache) GetSnapshot() ServiceInfoSnapshot {
 	s.dataMutex.RLock()
 	defer s.dataMutex.RUnlock()
-	return s.data.deepClone()
-}
-
-// HasService is the same as the second return value of s.GetSnapshot().GetServiceForType(serviceType),
-// but avoids a costly deep clone.
-//
-// Usually, we want all access to payload in ServiceInfoCache to go through [ServiceInfoSnapshot],
-// but this particular method allows us to reduce memory allocations in the collector by 30%.
-//
-// TODO: remove this method once we rework GetSnapshot into a cheap shallow copy
-func (s *ServiceInfoCache) HasService(serviceType db.ServiceType) bool {
-	s.dataMutex.RLock()
-	defer s.dataMutex.RUnlock()
-	_, ok := s.data.services[serviceType]
-	return ok
+	return s.data
 }
 
 // GetServiceInfo should only be used when interacting with the liquid
@@ -809,9 +752,9 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 	s.dataMutex.RLock()
 	defer s.dataMutex.RUnlock()
 	// we can assume the data is saved because of the call context
-	service := s.data.services[serviceType]
-	resources := s.data.resources[serviceType]
-	rates := s.data.rates[serviceType]
+	service := s.data.services.GetOrZero(serviceType)
+	resources := s.data.resources.GetOrZero(serviceType)
+	rates := s.data.rates.GetOrZero(serviceType)
 	categories := s.data.categoriesByID
 
 	capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
@@ -829,14 +772,14 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 		UsageReportNeedsProjectMetadata:        service.UsageReportNeedsProjectMetadata,
 		QuotaUpdateNeedsProjectMetadata:        service.QuotaUpdateNeedsProjectMetadata,
 		CommitmentHandlingNeedsProjectMetadata: service.CommitmentHandlingNeedsProjectMetadata,
-		Resources:                              make(map[liquid.ResourceName]liquid.ResourceInfo, len(resources)),
-		Rates:                                  make(map[liquid.RateName]liquid.RateInfo, len(rates)),
+		Resources:                              make(map[liquid.ResourceName]liquid.ResourceInfo, resources.Len()),
+		Rates:                                  make(map[liquid.RateName]liquid.RateInfo, rates.Len()),
 		Categories:                             make(map[liquid.CategoryName]liquid.CategoryInfo),
 		CapacityMetricFamilies:                 capacityMetricFamilies,
 		UsageMetricFamilies:                    usageMetricFamilies,
 	}
 	// reconstruct resource infos
-	for name, res := range resources {
+	for name, res := range resources.All() {
 		resInfo := liquid.ResourceInfo{
 			DisplayName:         res.DisplayName,
 			Unit:                res.Unit,
@@ -849,7 +792,7 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 		if res.AttributesJSON != "" {
 			resInfo.Attributes = json.RawMessage(res.AttributesJSON)
 		}
-		if cat, exists := categories[res.CategoryID]; exists {
+		if cat, exists := categories.Get(res.CategoryID); exists {
 			resInfo.Category = Some(cat.Name)
 			info.Categories[cat.Name] = liquid.CategoryInfo{
 				DisplayName: cat.DisplayName,
@@ -858,14 +801,14 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 		info.Resources[name] = resInfo
 	}
 	// reconstruct rate infos
-	for name, rate := range rates {
+	for name, rate := range rates.All() {
 		rateInfo := liquid.RateInfo{
 			DisplayName: rate.DisplayName,
 			Unit:        rate.Unit,
 			Topology:    rate.Topology,
 			HasUsage:    rate.HasUsage,
 		}
-		if cat, exists := categories[rate.CategoryID]; exists {
+		if cat, exists := categories.Get(rate.CategoryID); exists {
 			rateInfo.Category = Some(cat.Name)
 			info.Categories[cat.Name] = liquid.CategoryInfo{
 				DisplayName: cat.DisplayName,
@@ -874,22 +817,4 @@ func (s *ServiceInfoCache) GetServiceInfo(serviceType db.ServiceType) (info liqu
 		info.Rates[name] = rateInfo
 	}
 	return info, nil
-}
-
-///////////////////////////////////////////////////////////////////////
-// Utility functions
-
-// deepCloneMap returns a deep copy of a map by cloning each value using the
-// provided cloneValue function. For leaf maps (where values are not maps),
-// pass maps.Clone directly. For nested maps, pass a function that itself
-// calls deepCloneMap to deepClone the next level.
-func deepCloneMap[M ~map[K]V, K comparable, V any](m M, cloneValue func(V) V) M {
-	if m == nil {
-		return nil
-	}
-	result := make(M, len(m))
-	for k, v := range m {
-		result[k] = cloneValue(v)
-	}
-	return result
 }

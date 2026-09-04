@@ -35,7 +35,7 @@ type Filter struct {
 
 // ReadFilter extracts a Filter from the given Request.
 func ReadFilter(r *http.Request, cluster *core.Cluster, sis core.ServiceInfoSnapshot) Filter {
-	resources := sis.GetResources()
+	services := sis.GetServices()
 	queryValues := r.URL.Query()
 	apiServiceTypes := apiFilter(queryValues["service"])
 	apiResourceNames := apiFilter(queryValues["resource"])
@@ -43,7 +43,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, sis core.ServiceInfoSnap
 	_, withDetail := queryValues["detail"]
 
 	f := Filter{
-		Includes:               make(map[db.ServiceType]map[liquid.ResourceName]bool, len(resources)),
+		Includes:               make(map[db.ServiceType]map[liquid.ResourceName]bool, services.Len()),
 		ServiceTypeIsFiltered:  (len(apiServiceTypes) + len(apiAreas)) > 0,
 		ResourceNameIsFiltered: len(apiResourceNames) > 0,
 		WithSubresources:       withDetail,
@@ -51,13 +51,14 @@ func ReadFilter(r *http.Request, cluster *core.Cluster, sis core.ServiceInfoSnap
 		WithAZBreakdown:        strings.Contains(r.Header.Get("X-Limes-V2-API-Preview"), "per-az"),
 	}
 
-	for _, dbServiceType := range slices.Sorted(maps.Keys(resources)) {
+	for _, dbServiceType := range slices.Sorted(services.Keys()) {
 		srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
 		if !apiAreas.matches(srvCfg.Area) {
 			continue
 		}
 
-		for dbResourceName := range resources[dbServiceType] {
+		resByName := sis.GetResourcesForType(dbServiceType)
+		for dbResourceName := range resByName.Keys() {
 			apiIdentity := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 
 			if !apiServiceTypes.matches(string(apiIdentity.ServiceType)) {

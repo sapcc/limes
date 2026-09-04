@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -1775,9 +1774,10 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	if sourceBehavior.ConversionRule.IsSome() {
-		for _, targetServiceType := range slices.Sorted(maps.Keys(sis.GetResources())) {
-			resources, _ := sis.GetResourcesForType(targetServiceType) // can have no resources
-			for targetResourceName, targetResource := range resources {
+		for _, targetServiceType := range slices.Sorted(sis.GetServices().Keys()) {
+			resources := sis.GetResourcesForType(targetServiceType) // can have no resources
+			for _, targetResourceName := range slices.Sorted(resources.Keys()) {
+				targetResource := resources.GetOrZero(targetResourceName)
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}

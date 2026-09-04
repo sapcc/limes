@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math/big"
 	"net/http"
 	"slices"
@@ -99,8 +98,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		resources, _ := c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType) // we can ignore "ok" because the len matters
-		if len(resources) > 0 {
+		if c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType).Len() > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
@@ -156,7 +154,7 @@ type CapacityCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityCollectionMetricsOkGauge.Describe(ch)
-	for _, service := range c.Cluster.SIC.GetSnapshot().GetServices() {
+	for service := range c.Cluster.SIC.GetSnapshot().GetServices().Values() {
 		capacityMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.CapacityMetricFamiliesJSON, "capacity_metric_families")
 		if err != nil {
 			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing capacity_metric_families for %s: %w", service.Type, err))
@@ -254,7 +252,7 @@ type QuotaCollectionMetricsInstance struct {
 // Describe implements the prometheus.Collector interface.
 func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	usageCollectionMetricsOkGauge.Describe(ch)
-	for _, service := range c.Cluster.SIC.GetSnapshot().GetServices() {
+	for service := range c.Cluster.SIC.GetSnapshot().GetServices().Values() {
 		usageMetricFamilies, err := util.JSONToAny[map[liquid.MetricName]liquid.MetricFamilyInfo](service.UsageMetricFamiliesJSON, "usage_metric_families")
 		if err != nil {
 			ch <- prometheus.NewInvalidDesc(fmt.Errorf("error describing usage_metric_families for %s: %w", service.Type, err))
@@ -480,7 +478,8 @@ var (
 
 func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *microprom.MetricSet) error {
 	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
-	resources := d.Cluster.SIC.GetSnapshot().GetResources()
+	sis := d.Cluster.SIC.GetSnapshot()
+	services := sis.GetServices()
 
 	// fetch values for cluster level
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
@@ -552,8 +551,8 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for _, serviceType := range slices.Sorted(maps.Keys(resources)) {
-		for resName := range resources[serviceType] {
+	for _, serviceType := range slices.Sorted(services.Keys()) {
+		for resName := range sis.GetResourcesForType(serviceType).Keys() {
 			if capacityReported[serviceType][resName] {
 				continue
 			}
@@ -708,8 +707,8 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch metadata for services/resources
-	for _, serviceType := range slices.Sorted(maps.Keys(resources)) {
-		for dbResourceName, resourceInfo := range resources[serviceType] {
+	for _, serviceType := range slices.Sorted(services.Keys()) {
+		for dbResourceName, resourceInfo := range sis.GetResourcesForType(serviceType).All() {
 			behavior := behaviorCache.Get(serviceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := ms.FormatLabels(dmv1ResourceLabelNames,

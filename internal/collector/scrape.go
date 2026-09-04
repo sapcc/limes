@@ -118,7 +118,7 @@ func (c *Collector) discoverScrapeTask(ctx context.Context, labels prometheus.La
 	}
 	// if the above check succeeded, this should never fail because the SIC is updated after the
 	// LiquidConnection is initialized.
-	if !c.Cluster.SIC.HasService(serviceType) {
+	if _, ok := c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType); !ok {
 		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
@@ -253,9 +253,8 @@ func extractRateData(report liquid.ServiceUsageReport) (result map[liquid.RateNa
 
 func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, resourceData liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot) error {
 	service, sExists := sis.GetServiceForType(serviceType)
-	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
-	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
-	if !sExists {                                            // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
+	resources := sis.GetResourcesForType(serviceType) // can have no resources
+	if !sExists {                                     // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
@@ -325,12 +324,6 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 	}
 
 	// For inserting the project_az_resources, we need to find the project_az_resources availabilityZone
-	azResourcesByID := make(map[db.AZResourceID]db.AZResource)
-	for _, azResourcesByAZ := range azResources {
-		for _, azr := range azResourcesByAZ {
-			azResourcesByID[azr.ID] = azr
-		}
-	}
 	projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceIDIndex.IndexFrom(
 		db.ProjectAZResourceStore.Select(ctx, tx,
 			`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
@@ -340,21 +333,20 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 	if err != nil {
 		return err
 	}
-	resourceNames := slices.Sorted(maps.Keys(resources))
 
 	// update project_az_resources for each resource
 	hasBackendQuotaDrift := false
-	for _, resourceName := range resourceNames {
-		resource := resources[resourceName]
-		filteredAZResources := azResources[resourceName]
+	for _, resourceName := range slices.Sorted(resources.Keys()) {
+		resource := resources.GetOrZero(resourceName)
+		filteredAZResources := sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
 		usageData := resourceData.Resources[resourceName].PerAZ
-		projectAZResources := make([]db.ProjectAZResource, 0, len(filteredAZResources))
-		for _, azResource := range filteredAZResources {
+		projectAZResources := make([]db.ProjectAZResource, 0, filteredAZResources.Len())
+		for _, azResource := range filteredAZResources.All() {
 			projectAZResources = append(projectAZResources, projectAZResourcesByAZResourceID[azResource.ID])
 		}
 		wantedKeys := make([]db.AZResourceID, 0, len(usageData))
 		for _, az := range slices.Sorted(maps.Keys(usageData)) {
-			wantedKeys = append(wantedKeys, filteredAZResources[az].ID)
+			wantedKeys = append(wantedKeys, filteredAZResources.GetOrZero(az).ID)
 		}
 
 		setUpdate := db.SetUpdate[db.ProjectAZResource, db.AZResourceID]{
@@ -369,11 +361,15 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 					AZResourceID: id,
 				}, nil
 			},
-			Update: func(azRes *db.ProjectAZResource) (err error) {
-				az := azResourcesByID[azRes.AZResourceID].AvailabilityZone
+			Update: func(projectAZRes *db.ProjectAZResource) (err error) {
+				azRes, ok := sis.GetAZResourceForID(projectAZRes.AZResourceID)
+				if !ok { // defense in depth: referential integrity
+					return fmt.Errorf("no data found in ServiceInfoCache for az_resource.id %d", projectAZRes.AZResourceID)
+				}
+				az := azRes.AvailabilityZone
 				data := usageData[az]
-				azRes.Usage = data.Usage
-				azRes.PhysicalUsage = data.PhysicalUsage
+				projectAZRes.Usage = data.Usage
+				projectAZRes.PhysicalUsage = data.PhysicalUsage
 
 				// for the quota values, we want to
 				// a) reset both to None when HasQuota is false
@@ -381,21 +377,21 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 				// c) set backendQuota for the applicable cases according to topology, otherwise set None (important for topology switch)
 				// d) check for backendQuota drift
 				if !resource.HasQuota {
-					azRes.BackendQuota = None[int64]()
-					azRes.Quota = None[uint64]()
+					projectAZRes.BackendQuota = None[int64]()
+					projectAZRes.Quota = None[uint64]()
 				} else {
-					if datamodel.AZHasQuotaForTopology(resource.Topology, az) && azRes.Quota.IsNone() {
-						azRes.Quota = Some[uint64](0)
+					if datamodel.AZHasQuotaForTopology(resource.Topology, az) && projectAZRes.Quota.IsNone() {
+						projectAZRes.Quota = Some[uint64](0)
 					}
 					if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
-						azRes.BackendQuota = data.Quota
+						projectAZRes.BackendQuota = data.Quota
 					} else {
-						azRes.BackendQuota = None[int64]()
+						projectAZRes.BackendQuota = None[int64]()
 					}
 					if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
 						// check if we need to arrange for SetQuotaJob to look at this project service
-						backendQuota := azRes.BackendQuota.UnwrapOr(-1)
-						quota := azRes.Quota.UnwrapOr(0)
+						backendQuota := projectAZRes.BackendQuota.UnwrapOr(-1)
+						quota := projectAZRes.Quota.UnwrapOr(0)
 						if backendQuota < 0 || uint64(backendQuota) != quota {
 							hasBackendQuotaDrift = true
 						}
@@ -410,7 +406,7 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 					)
 				}
 
-				azRes.SubresourcesJSON, err = util.RenderListToJSON("subresources", data.Subresources)
+				projectAZRes.SubresourcesJSON, err = util.RenderListToJSON("subresources", data.Subresources)
 				if err != nil {
 					return err
 				}
@@ -418,7 +414,7 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 				// track historical usage if required (only required for AutogrowQuotaDistribution)
 				autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(service.Type, resourceName).Autogrow.Unpack()
 				if ok {
-					ts, err := util.ParseTimeSeries[uint64](azRes.HistoricalUsageJSON)
+					ts, err := util.ParseTimeSeries[uint64](projectAZRes.HistoricalUsageJSON)
 					if err != nil {
 						return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
 					}
@@ -427,12 +423,12 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
 					}
 					ts.PruneOldValues(task.Timing.FinishedAt, autogrowCfg.UsageDataRetentionPeriod.Into())
-					azRes.HistoricalUsageJSON, err = ts.Serialize()
+					projectAZRes.HistoricalUsageJSON, err = ts.Serialize()
 					if err != nil {
 						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
 					}
 				} else {
-					azRes.HistoricalUsageJSON = ""
+					projectAZRes.HistoricalUsageJSON = ""
 				}
 
 				return nil
@@ -469,7 +465,7 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 	if !sExists { // defense in depth: this snapshot is taken immediately after saving the ServiceInfo
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
-	rates, _ := sis.GetRatesForType(serviceType) // can have no rates
+	rates := sis.GetRatesForType(serviceType) // can have no rates
 
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -478,7 +474,7 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// For updating project_rates, we need to find the project_rates' rate_name
-	ratesByID := db.RateByIDIndex.Index(slices.Collect(maps.Values(rates)))
+	ratesByID := db.RateByIDIndex.Index(slices.Collect(rates.Values()))
 
 	// update existing project_rates entries
 	rateExists := make(map[liquid.RateName]bool)
@@ -515,8 +511,8 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 	}
 
 	// insert missing project_rates entries
-	for _, rateName := range slices.Sorted(maps.Keys(rates)) {
-		rate := rates[rateName]
+	for _, rateName := range slices.Sorted(rates.Keys()) {
+		rate := rates.GetOrZero(rateName)
 		if _, exists := rateExists[rateName]; exists {
 			continue
 		}
@@ -559,9 +555,8 @@ func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Projec
 	defer sqlext.RollbackUnlessCommitted(tx)
 	sis := c.Cluster.SIC.GetSnapshot()
 	service, sExists := sis.GetServiceForType(serviceType)
-	resources, _ := sis.GetResourcesForType(serviceType)     // can have no resources
-	azResources, _ := sis.GetAZResourcesForType(serviceType) // can have no az_resources
-	if !sExists {                                            // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
+	resources := sis.GetResourcesForType(serviceType) // can have no resources
+	if !sExists {                                     // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
@@ -581,11 +576,11 @@ func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Projec
 		return err
 	}
 
-	for _, resName := range slices.Sorted(maps.Keys(azResources)) {
-		resByAZ := azResources[resName]
-		resource := resources[resName]
-		for _, az := range slices.Sorted(maps.Keys(resByAZ)) {
-			azResource := resByAZ[az]
+	for _, resName := range slices.Sorted(resources.Keys()) {
+		resource := resources.GetOrZero(resName)
+		resByAZ := sis.GetAZResourcesForPath(resource.Path)
+		for _, az := range slices.Sorted(resByAZ.Keys()) {
+			azResource := resByAZ.GetOrZero(az)
 			if az == limes.AvailabilityZoneUnknown {
 				// we don't write dummy entries for unknown - this should just exist, when there is real usage
 				continue

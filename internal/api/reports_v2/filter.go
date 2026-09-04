@@ -34,17 +34,23 @@ func FilterFromResourceOpts(cluster *core.Cluster, opts common.ResourceReportOpt
 		ResourceName: opts.ResourceName,
 	})}
 	services := f.GetServices()
-	if area, ok := opts.Area.Unpack(); ok && len(services) == 0 {
+	if area, ok := opts.Area.Unpack(); ok && services.Len() == 0 {
 		return f, fmt.Errorf(`no services found for area %q`, area)
 	}
-	if serviceType, ok := opts.ServiceType.Unpack(); ok && len(services) == 0 {
+	if serviceType, ok := opts.ServiceType.Unpack(); ok && services.Len() == 0 {
 		return f, fmt.Errorf(`no services found for type %q`, serviceType)
 	}
-	resources := f.GetResources()
-	if category, ok := opts.Category.Unpack(); ok && len(resources) == 0 {
+	hasResources := false
+	for serviceType := range f.GetServices().Keys() {
+		if f.GetResourcesForType(serviceType).Len() > 0 {
+			hasResources = true
+			break
+		}
+	}
+	if category, ok := opts.Category.Unpack(); ok && !hasResources {
 		return f, fmt.Errorf(`no resources found for category %q`, category)
 	}
-	if name, ok := opts.ResourceName.Unpack(); ok && len(resources) == 0 {
+	if name, ok := opts.ResourceName.Unpack(); ok && !hasResources {
 		return f, fmt.Errorf(`no resources found for name %q`, name)
 	}
 	return f, nil
@@ -60,17 +66,23 @@ func FilterFromRateOpts(cluster *core.Cluster, opts common.RateReportOpts) (f Fi
 		RateName:    opts.RateName,
 	})}
 	services := f.GetServices()
-	if area, ok := opts.Area.Unpack(); ok && len(services) == 0 {
+	if area, ok := opts.Area.Unpack(); ok && services.Len() == 0 {
 		return f, fmt.Errorf(`no services found for area %q`, area)
 	}
-	if serviceType, ok := opts.ServiceType.Unpack(); ok && len(services) == 0 {
+	if serviceType, ok := opts.ServiceType.Unpack(); ok && services.Len() == 0 {
 		return f, fmt.Errorf(`no services found for type %q`, serviceType)
 	}
-	rates := f.GetRates()
-	if category, ok := opts.Category.Unpack(); ok && len(rates) == 0 {
+	hasRates := false
+	for serviceType := range f.GetServices().Keys() {
+		if f.GetRatesForType(serviceType).Len() > 0 {
+			hasRates = true
+			break
+		}
+	}
+	if category, ok := opts.Category.Unpack(); ok && !hasRates {
 		return f, fmt.Errorf(`no rates found for category %q`, category)
 	}
-	if name, ok := opts.RateName.Unpack(); ok && len(rates) == 0 {
+	if name, ok := opts.RateName.Unpack(); ok && !hasRates {
 		return f, fmt.Errorf(`no rates found for name %q`, name)
 	}
 	return f, nil
@@ -127,15 +139,15 @@ func (f Filter) ExpandServiceFilters(originalQuery string, originalArgs ...any) 
 }
 
 func (f Filter) getServiceIDs() (ids []db.ServiceID) {
-	for _, service := range f.GetServices() {
+	for service := range f.GetServices().Values() {
 		ids = append(ids, service.ID)
 	}
 	return ids
 }
 
 func (f Filter) getResourceIDs() (ids []db.ResourceID) {
-	for _, resources := range f.GetResources() {
-		for _, resource := range resources {
+	for serviceType := range f.GetServices().Keys() {
+		for resource := range f.GetResourcesForType(serviceType).Values() {
 			ids = append(ids, resource.ID)
 		}
 	}
@@ -143,9 +155,9 @@ func (f Filter) getResourceIDs() (ids []db.ResourceID) {
 }
 
 func (f Filter) getAZResourceIDs() (ids []db.AZResourceID) {
-	for _, azResources := range f.GetAZResources() {
-		for _, azResourcesByAZ := range azResources {
-			for _, azResource := range azResourcesByAZ {
+	for serviceType := range f.GetServices().Keys() {
+		for res := range f.GetResourcesForType(serviceType).Values() {
+			for azResource := range f.GetAZResourcesForPath(res.Path).Values() {
 				ids = append(ids, azResource.ID)
 			}
 		}
@@ -154,8 +166,8 @@ func (f Filter) getAZResourceIDs() (ids []db.AZResourceID) {
 }
 
 func (f Filter) getRateIDs() (ids []db.RateID) {
-	for _, rates := range f.GetRates() {
-		for _, rate := range rates {
+	for serviceType := range f.GetServices().Keys() {
+		for rate := range f.GetRatesForType(serviceType).Values() {
 			ids = append(ids, rate.ID)
 		}
 	}
