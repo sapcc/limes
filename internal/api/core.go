@@ -240,8 +240,8 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 }
 
 // GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
-func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, now time.Time, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesresources.DomainReport, error) {
-	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, now, dbi, filter, sis)
+func GetDomainReport(ctx context.Context, cluster *core.Cluster, dbDomain db.Domain, now time.Time, dbi db.Interface, filter reports.Filter, sis core.ServiceInfoSnapshot) (*limesresources.DomainReport, error) {
+	domainReports, err := reports.GetDomains(ctx, cluster, &dbDomain.ID, now, dbi, filter, sis)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	sis := p.Cluster.SIC.GetSnapshot()
 	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("domain_list", filter)
-	domains, err := reports.GetDomains(p.Cluster, nil, p.timeNow(), p.DB, filter, sis)
+	domains, err := reports.GetDomains(r.Context(), p.Cluster, nil, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -50,7 +50,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster, sis)
 	p.recordReportSpecificity("domain_show", filter)
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, sis)
+	domain, err := GetDomainReport(r.Context(), p.Cluster, *dbDomain, p.timeNow(), p.DB, filter, sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
