@@ -1774,19 +1774,16 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
-	if sourceBehavior.ConversionRule.IsSome() {
+	if len(sourceBehavior.ConversionRules) > 0 {
 		for _, targetServiceType := range slices.Sorted(maps.Keys(sis.GetResources())) {
 			resources, _ := sis.GetResourcesForType(targetServiceType) // can have no resources
 			for targetResourceName, targetResource := range resources {
 				if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 					continue
 				}
-				if sourceResource.Unit != targetResource.Unit {
-					continue
-				}
 
 				targetBehavior := forTokenScope(p.Cluster.CommitmentBehaviorForResource(targetServiceType, targetResourceName))
-				if rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior).Unpack(); ok {
+				if rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior, sourceResource.Unit, targetResource.Unit).Unpack(); ok {
 					apiServiceType, apiResourceName, ok := nm.MapToV1API(targetServiceType, targetResourceName)
 					if ok {
 						conversions = append(conversions, limesresources.CommitmentConversionRule{
@@ -1859,8 +1856,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResourcePath(sourcePath.Resource()).ForDomain(dbDomain.Name)
 
 	sis := p.Cluster.SIC.GetSnapshot()
-	sourceService, sExists := sis.GetServiceForType(sourcePath.ServiceType)
-	if !sExists {
+	sourceService, _ := sis.GetServiceForType(sourcePath.ServiceType)
+	sourceResource, rExists := sis.GetResourceForPath(sourcePath.Resource())
+	if !rExists {
 		http.Error(w, "service or resource not found", http.StatusNotFound)
 		return
 	}
@@ -1890,7 +1888,12 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		ResourceName:     targetResourceName,
 		AvailabilityZone: sourcePath.AvailabilityZone,
 	}
-	targetBehavior := p.Cluster.CommitmentBehaviorForResourcePath(targetPath.Resource()).ForDomain(dbDomain.Name)
+	targetResource, rExists := sis.GetResourceForPath(targetPath.Resource())
+	if !rExists {
+		http.Error(w, "service or resource not found", http.StatusNotFound)
+		return
+	}
+	targetBehavior := p.Cluster.CommitmentBehaviorForResourcePath(targetResource.Path).ForDomain(dbDomain.Name)
 	if sourcePath.ResourceName == targetResourceName && sourcePath.ServiceType == targetServiceType {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
@@ -1900,7 +1903,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior).Unpack()
+	rate, ok := sourceBehavior.GetConversionRateTo(targetBehavior, sourceResource.Unit, targetResource.Unit).Unpack()
 	if !ok {
 		msg := fmt.Sprintf("commitment is not convertible into resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -1913,11 +1916,15 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
-	conversionAmount := (req.SourceAmount / rate.FromAmount) * rate.ToAmount
 	remainderAmount := req.SourceAmount % rate.FromAmount
-	if remainderAmount > 0 {
+	if remainderAmount > 0 && !rate.AllowRounding {
 		msg := fmt.Sprintf("amount: %v does not fit into conversion rate of: %v", req.SourceAmount, rate.FromAmount)
 		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+	conversionAmount := (req.SourceAmount * rate.ToAmount) / rate.FromAmount
+	if conversionAmount == 0 {
+		http.Error(w, "converted amount would be zero", http.StatusConflict)
 		return
 	}
 	if conversionAmount != req.TargetAmount {
@@ -2089,7 +2096,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetResource := must.BeOK(sis.GetResourceForPath(targetPath.Resource()))
 	c := datamodel.ConvertCommitmentToDisplayForm(convertedCommitment, targetPath.AvailabilityZone, p.Cluster.BehaviorForResourcePath(targetPath.Resource()).IdentityInV1API, datamodel.CanDeleteCommitment(token, convertedCommitment, p.timeNow), targetResource.Unit)
 
 	auditEvents := audit.CommitmentEventTarget{

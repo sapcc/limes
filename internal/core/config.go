@@ -226,7 +226,7 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 	usedAreas := make(map[string]bool)
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional
-	var occupiedConversionIdentifiers []string
+	var occupiedConversionIdentifiers []ConversionRuleIdentifier
 	// sorted for deterministic test order
 	for _, serviceType := range slices.Sorted(maps.Keys(cluster.Liquids)) {
 		l := cluster.Liquids[serviceType]
@@ -236,15 +236,15 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			errs.Addf(`liquids.%s has area %s which is not defined in areas`, string(serviceType), l.Area)
 		}
 		usedAreas[l.Area] = true
-		serviceIdentifiers := make([]string, 0, len(l.CommitmentBehaviorPerResource))
+		serviceIdentifiers := make([]ConversionRuleIdentifier, 0, len(l.CommitmentBehaviorPerResource))
 		for idx2, behavior := range l.CommitmentBehaviorPerResource {
 			var (
-				validationErrs    errext.ErrorSet
-				serviceIdentifier string
+				validationErrs      errext.ErrorSet
+				resourceIdentifiers []ConversionRuleIdentifier
 			)
-			validationErrs, serviceIdentifier = behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2), occupiedConversionIdentifiers)
+			validationErrs, resourceIdentifiers = behavior.Value.Validate(fmt.Sprintf("liquids.%s.commitment_behavior_per_resource[%d]", string(serviceType), idx2), occupiedConversionIdentifiers)
 			errs.Append(validationErrs)
-			serviceIdentifiers = append(serviceIdentifiers, serviceIdentifier)
+			serviceIdentifiers = append(serviceIdentifiers, resourceIdentifiers...)
 		}
 		occupiedConversionIdentifiers = append(occupiedConversionIdentifiers, serviceIdentifiers...)
 	}
