@@ -78,7 +78,7 @@ The v2 API uses the policy rules listed below.
 | `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid` |
 | `v2:cluster:validation` | none | `GET /admin/mail/render` |
 | `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |
-| `v2:project:with_inactive` | none | `with=inactive` in commitment APIs |
+| `v2:project:with_obsolete` | none | `with=inactive` in commitment APIs |
 | `v2:project:with_subresources` | none | `?with=subresources` in resource reports |
 | `v2:project:with_timing` | none | `?with=timing` in resource reports |
 | `v2:meta:no_error_obfuscation` | none | see unobfuscated error messages in HTTP 5xx responses (usually restricted to cloud admins) |

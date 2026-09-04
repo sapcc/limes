@@ -68,14 +68,14 @@ func TestCommitmentGetSingle(t *testing.T) {
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 
-	// error: permission denied as regular user for inactive commitment
-	s.TokenValidator.Enforcer.ForbidWithInactive = true
+	// error: permission denied as regular user for obsolete commitment
+	s.TokenValidator.Enforcer.ForbidWithObsolete = true
 	s.MustDBExec(`UPDATE project_commitments SET status = 'deleted' WHERE uuid = $1`, uuidOne)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
-	s.TokenValidator.Enforcer.ForbidWithInactive = false
+	s.TokenValidator.Enforcer.ForbidWithObsolete = false
 
-	// success: elevated user can see inactive commitment
+	// success: elevated user can see obsolete commitment
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
@@ -172,11 +172,11 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&resource=capacity").
 		ExpectText(t, http.StatusBadRequest, "\"category\" or \"resource\" require \"service\" to be set\n")
 
-	// error: with=inactive without permission
-	s.TokenValidator.Enforcer.ForbidWithInactive = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&with=inactive").
-		ExpectText(t, http.StatusForbidden, "\"with=inactive\" requires special permissions\n")
-	s.TokenValidator.Enforcer.ForbidWithInactive = false
+	// error: with=obsolete without permission
+	s.TokenValidator.Enforcer.ForbidWithObsolete = true
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&with=obsolete").
+		ExpectText(t, http.StatusForbidden, "\"with=obsolete\" requires special permissions\n")
+	s.TokenValidator.Enforcer.ForbidWithObsolete = false
 
 	// error: no permission at all
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
@@ -239,10 +239,10 @@ func TestCommitmentGetMultiple(t *testing.T) {
 			httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 				Modify(deletedModification))
 
-	// success: inactive (and service filter, because it's always required)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=inactive&service=first").
+	// success: obsolete (and service filter, because it's always required)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=obsolete&service=first").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "inactive"))
+			httptest.NewJQModifiableJSONFixture(fixturePath, "obsolete"))
 
 	// success: updated after
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first&updated_after="+s.Clock.Now().Add(-1*time.Hour).Format(time.RFC3339)).
