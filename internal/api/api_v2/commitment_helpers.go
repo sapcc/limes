@@ -50,7 +50,7 @@ var (
 	errResourceForbidden         = errors.New("resource is not enabled in this project")
 )
 
-func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, canBeDeleted bool) resourcesv2.Commitment {
+func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
 	return resourcesv2.Commitment{
 		UUID:             c.UUID,
 		Amount:           c.Amount,
@@ -66,7 +66,7 @@ func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePa
 		UpdatedAt:        common.RFC3339EncodedTime{Time: c.UpdatedAt},
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
-		CanBeDeleted:     canBeDeleted,
+		CanBeDeleted:     deletable,
 		ConfirmBy:        options.Map(c.ConfirmBy, common.IntoRFC3339EncodedTime),
 		ConfirmedAt:      options.Map(c.ConfirmedAt, common.IntoRFC3339EncodedTime),
 		ExpiresAt:        common.RFC3339EncodedTime{Time: c.ExpiresAt},
@@ -237,7 +237,7 @@ var findActiveCommitmentQuery = db.ProjectCommitmentStore.MustPrepareSelectQuery
 	)),
 )
 
-func (p *v2Provider) selectCommitmentIfPermitted(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUID liquid.CommitmentUUID) (_ db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+func (p *v2Provider) selectCommitmentIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUID liquid.CommitmentUUID) (_ db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
 	c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -260,8 +260,8 @@ func (p *v2Provider) selectCommitmentIfPermitted(ctx context.Context, dbi db.Int
 	if err != nil {
 		return
 	}
-	canBeDeleted := isDeletable(token, c, p.timeNow)
-	if !canBeDeleted {
+	deletable := isDeletable(token, c, p.timeNow)
+	if !deletable {
 		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
 		return
 	}

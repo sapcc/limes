@@ -5,6 +5,7 @@ package api_v2
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 
@@ -40,8 +41,11 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 		return nil, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	c, azRes, scope, err := p.selectCommitmentIfPermitted(ctx, tx, sis, token, "v2:project:commitment_delete", liquid.CommitmentUUID(cUUID))
-	if err != nil {
+	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", liquid.CommitmentUUID(cUUID))
+	switch {
+	case errors.Is(err, errNoSuchCommitment):
+		return nil, nil // respond with 204 if commitment already deleted (DELETE should be idempotent)
+	case err != nil:
 		return nil, err
 	}
 

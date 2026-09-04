@@ -21,7 +21,6 @@ import (
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
-	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -62,8 +61,8 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 		// defense in depth, the referenced AZResource should exist
 		return none, errInvalidResourceReference
 	}
-	canBeDeleted := datamodel.CanDeleteCommitment(token, c, p.timeNow)
-	result := convertCommitmentToDisplayForm(c, azRes.Path, scope.Project.UUID, canBeDeleted)
+	deletable := isDeletable(token, c, p.timeNow)
+	result := convertCommitmentToDisplayForm(c, azRes.Path, scope.Project.UUID, deletable)
 	return result, nil
 }
 
@@ -128,8 +127,8 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 			// defense in depth, the referenced AZResource should exist
 			return errInvalidResourceReference
 		}
-		canBeDeleted := datamodel.CanDeleteCommitment(token, c.ProjectCommitment, p.timeNow)
-		result.Commitments = append(result.Commitments, convertCommitmentToDisplayForm(c.ProjectCommitment, azRes.Path, c.ProjectUUID, canBeDeleted))
+		deletable := isDeletable(token, c.ProjectCommitment, p.timeNow)
+		result.Commitments = append(result.Commitments, convertCommitmentToDisplayForm(c.ProjectCommitment, azRes.Path, c.ProjectUUID, deletable))
 
 		// redact project_uuids if the user is not allowed to see them
 		authorized, ok := authByProject[c.ProjectUUID]

@@ -25,10 +25,16 @@ import (
 )
 
 // Helper function for a successful commitment deletion.
-func deleteCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, liquidHandlesCommitments bool, uuid liquid.CommitmentUUID, ccr liquid.CommitmentChangeRequest) {
+func deleteCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, liquidHandlesCommitments bool, ccr liquid.CommitmentChangeRequest) {
 	t.Helper()
-	path := "/resources/v2/commitments/" + string(uuid)
+	uuid := "00000000-0000-0000-0000-000000000001"
+	path := "/resources/v2/commitments/" + uuid
 	s.Handler.RespondTo(s.Ctx, "DELETE "+path).ExpectStatus(t, http.StatusNoContent)
+
+	// if CCR is empty, this was an already deleted commitment and we don't need to check for any updates
+	if ccr.InfoVersion == 0 {
+		return
+	}
 
 	// assertions
 	tr.DBChanges().AssertEqualf("UPDATE project_commitments SET status = 'deleted', deleted_at = %[1]d, updated_at = %[1]d WHERE id = 1 AND uuid = '00000000-0000-0000-0000-000000000001' AND transfer_token = NULL;", s.Clock.Now().Unix())
@@ -39,7 +45,7 @@ func deleteCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 		RequestPath: path,
 		Target: cadf.Resource{
 			TypeURI:     "service/resources/commitment",
-			ID:          "00000000-0000-0000-0000-000000000001",
+			ID:          uuid,
 			DomainID:    "uuid-for-france",
 			DomainName:  "france",
 			ProjectID:   "uuid-for-paris",
@@ -139,12 +145,10 @@ func TestCommitmentDeleteBasic(t *testing.T) {
 			tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 			tr0.Ignore()
 
-			deleteCommitmentAndExpectSuccess(t, s, tr, manager == "liquid", uuidOne, generateDeleteCCR(uuidOne, expiresAt))
+			deleteCommitmentAndExpectSuccess(t, s, tr, manager == "liquid", generateDeleteCCR(uuidOne, expiresAt))
 
-			// the commitment is gone, subsequent calls fail
-			deleteCommitmentAndExpectError(t, s, tr, uuidOne, liquid.CommitmentChangeRequest{}, func(r httptest.Response) {
-				r.ExpectBody(t, http.StatusNotFound, []byte("no such commitment\n"))
-			})
+			// the commitment is gone, subsequent calls return 204
+			deleteCommitmentAndExpectSuccess(t, s, tr, true, liquid.CommitmentChangeRequest{})
 		})
 	}
 }
@@ -171,11 +175,9 @@ func TestCommitmentDeleteErrors(t *testing.T) {
 	)
 	tr, _ := easypg.NewTracker(t, s.DB.DB)
 
-	// non-existing commitment
+	// non-existing commitment - as we have all permissions, we get 204
 	uuidOne := liquid.CommitmentUUID("00000000-0000-0000-0000-000000000001")
-	deleteCommitmentAndExpectError(t, s, tr, uuidOne, liquid.CommitmentChangeRequest{}, func(r httptest.Response) {
-		r.ExpectBody(t, http.StatusNotFound, []byte("no such commitment\n"))
-	})
+	deleteCommitmentAndExpectSuccess(t, s, tr, true, liquid.CommitmentChangeRequest{})
 
 	// create a commitment, which is 24 hours old (cannot be deleted by non-admins)
 	projectParisID := s.GetProjectID("paris")
@@ -215,7 +217,7 @@ func TestCommitmentDeleteErrors(t *testing.T) {
 
 	// delete with admin privileges succeeds
 	s.TokenValidator.Enforcer.AllowCommitmentDeleteAdmin = true
-	deleteCommitmentAndExpectSuccess(t, s, tr, true, uuidOne, generateDeleteCCR(uuidOne, expiresAt))
+	deleteCommitmentAndExpectSuccess(t, s, tr, true, generateDeleteCCR(uuidOne, expiresAt))
 
 	// another test commitment
 	uuidTwo := liquid.CommitmentUUID("00000000-0000-0000-0000-000000000002")
