@@ -48,7 +48,8 @@ func NewV2API(cluster *core.Cluster, domainNames Option[DomainNames], tokenValid
 }
 
 // AddTo implements the httpapi.API interface.
-func (p *v2Provider) AddTo(r *mux.Router) {
+func (p *v2Provider) AddTo(c *httpapi.Composer) {
+	r := c.Router()
 	resRouter := r.PathPrefix("/resources/v2/").Subrouter()
 	ratesRouter := r.PathPrefix("/rates/v2/").Subrouter()
 

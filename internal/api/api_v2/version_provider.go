@@ -29,7 +29,7 @@ func NewVersionProviderAPI(domainNames DomainNames) httpapi.API {
 }
 
 // AddTo implements the httpapi.API interface.
-func (p *versionProvider) AddTo(r *mux.Router) {
+func (p *versionProvider) AddTo(c *httpapi.Composer) {
 	// NOTE: The intent of this is to provide a minimal response on every URL
 	//       that appears in the Keystone catalog. These are, by service type:
 	//
@@ -42,6 +42,7 @@ func (p *versionProvider) AddTo(r *mux.Router) {
 	enforceV1 := EnforceDomainName(p.DomainNames.V1)
 	enforceV2 := EnforceDomainName(p.DomainNames.V2)
 
+	r := c.Router()
 	for _, v1Path := range []string{"/", "/v1/"} {
 		r.Methods("HEAD", "GET").Path(v1Path).Handler(enforceV1(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpapi.IdentifyEndpoint(r, v1Path)
