@@ -6,7 +6,7 @@ package util
 import "iter"
 
 // ConstMap is a read-only wrapper around a Go map. It only exposes read operations
-// (Get, GetOrZero, All, Keys, Len). Since the value type V is typically a
+// (Get, GetOrZero, All, Keys, Values, Len). Since the value type V is typically a
 // non-pointer struct, Get() returns a copy of the value, making it safe
 // for callers to modify the returned value without affecting the original.
 //

@@ -575,7 +575,7 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 	// we start with empty maps, get the data we want from the database and then possibly copy over the old values
 	services := make(map[db.ServiceType]db.Service)
 	resources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, db.Resource])
-	azResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, util.ConstMap[liquid.AvailabilityZone, db.AZResource]])
+	azResources := make(map[db.ServiceType]util.ConstMap[liquid.ResourceName, util.ConstMap[limes.AvailabilityZone, db.AZResource]])
 	rates := make(map[db.ServiceType]util.ConstMap[liquid.RateName, db.Rate])
 	categories := make(map[db.ServiceType]util.ConstMap[db.CategoryID, db.Category])
 
@@ -597,16 +597,18 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 	var (
 		currentService               db.ServiceType
 		resourcesForCurrentService   map[liquid.ResourceName]db.Resource
-		azResourcesForCurrentService map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource
+		azResourcesForCurrentService map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource
 		ratesForCurrentService       map[liquid.RateName]db.Rate
 		categoriesForCurrentService  map[db.CategoryID]db.Category
 	)
 	currentService = ""
-	for _, dbResource := range dbResources {
+	for i, dbResource := range dbResources {
 		path := dbResource.Path
 		if currentService != path.ServiceType {
 			// flush
-			resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+			if i > 0 {
+				resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+			}
 			resourcesForCurrentService = make(map[liquid.ResourceName]db.Resource)
 			currentService = path.ServiceType
 		}
@@ -621,16 +623,18 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		return fmt.Errorf("while reading az_resources for type(s) %v: %w", serviceType, err)
 	}
 	currentService = ""
-	for _, dbAZResource := range dbAZResources {
+	for i, dbAZResource := range dbAZResources {
 		path := dbAZResource.Path
 		if currentService != path.ServiceType {
 			// flush
-			azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
-			azResourcesForCurrentService = make(map[liquid.ResourceName]map[liquid.AvailabilityZone]db.AZResource)
+			if i > 0 {
+				azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
+			}
+			azResourcesForCurrentService = make(map[liquid.ResourceName]map[limes.AvailabilityZone]db.AZResource)
 			currentService = path.ServiceType
 		}
 		if azResourcesForCurrentService[path.ResourceName] == nil {
-			azResourcesForCurrentService[path.ResourceName] = make(map[liquid.AvailabilityZone]db.AZResource)
+			azResourcesForCurrentService[path.ResourceName] = make(map[limes.AvailabilityZone]db.AZResource)
 		}
 		azResourcesForCurrentService[path.ResourceName][path.AvailabilityZone] = dbAZResource
 	}
@@ -643,11 +647,13 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		return fmt.Errorf("while reading rates for type(s) %v: %w", serviceType, err)
 	}
 	currentService = ""
-	for _, dbRate := range dbRates {
+	for i, dbRate := range dbRates {
 		path := dbRate.Path
 		if currentService != path.ServiceType {
 			// flush
-			rates[currentService] = util.NewConstMap(ratesForCurrentService)
+			if i > 0 {
+				rates[currentService] = util.NewConstMap(ratesForCurrentService)
+			}
 			ratesForCurrentService = make(map[liquid.RateName]db.Rate)
 			currentService = path.ServiceType
 		}
@@ -668,10 +674,12 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		return fmt.Errorf("while reading categories for type(s) %v: %w", serviceType, err)
 	}
 	currentService = ""
-	for _, record := range categoryRecords {
+	for i, record := range categoryRecords {
 		if currentService != record.ServiceType {
 			// flush
-			categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+			if i > 0 {
+				categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+			}
 			categoriesForCurrentService = make(map[db.CategoryID]db.Category)
 			currentService = record.ServiceType
 		}
