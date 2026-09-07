@@ -4,6 +4,7 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"maps"
 	"net/http"
@@ -70,35 +71,49 @@ var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(`
 						"key": "capacity_c32",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor1", "weight": 32}
+							"conversion_rules": {"flavor1": { "weight": "32 GiB", "only_source": true }}
 						}
 					},
 					{
 						"key": "capacity_c48",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor1", "weight": 48}
+							"conversion_rules": {"flavor1": { "weight": "48 GiB" }}
 						}
 					},
 					{
 						"key": "capacity_c96",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor1", "weight": 96}
+							"conversion_rules": {"flavor1": { "weight": "96 GiB" }}
 						}
 					},
 					{
 						"key": "capacity_c120",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor1", "weight": 120}
+							"conversion_rules": {"flavor1": { "weight": "120 piece" }}
 						}
 					},
 					{
 						"key": "capacity2_c144",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor2", "weight": 144}
+							"conversion_rules": {"flavor2": { "weight": "144 piece" }}
+						}
+					},
+					{
+						"key": "capacity_fits",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rules": {"flavor1": { "weight": "1 piece" }}
+						}
+					},
+					{
+						"key": "capacity_does_not_fit",
+						"value": {
+							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
+							"conversion_rules": {"flavor1": { "weight": "1 piece", "allow_rounding": true }}
 						}
 					},
 					{
@@ -116,14 +131,14 @@ var testConvertCommitmentsJSON = httptest.NewJQModifiableJSONString(`
 						"key": "capacity_a",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor3", "weight": 48}
+							"conversion_rules": {"flavor3": { "weight": "48 piece" }}
 						}
 					},
 					{
 						"key": "capacity_b",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
-							"conversion_rule": {"identifier": "flavor3", "weight": 32}
+							"conversion_rules": {"flavor3": { "weight": "32 piece" }}
 						}
 					},
 					{
@@ -148,7 +163,17 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 	resInfoLikeThings := test.DefaultLiquidServiceInfo("").Resources["things"]
 	resInfoLikeThings.HandlesCommitments = true
 	resInfoConvertible := liquid.ResourceInfo{
-		Unit:               liquid.UnitBytes,
+		Unit:               liquid.UnitPiece,
+		Topology:           liquid.FlatTopology,
+		HandlesCommitments: true,
+	}
+	resInfoConvertibleFits := liquid.ResourceInfo{
+		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(36)),
+		Topology:           liquid.FlatTopology,
+		HandlesCommitments: true,
+	}
+	resInfoConvertibleDoesNotFit := liquid.ResourceInfo{
+		Unit:               must.Return(liquid.UnitGibibytes.MultiplyBy(80)),
 		Topology:           liquid.FlatTopology,
 		HandlesCommitments: true,
 	}
@@ -175,11 +200,13 @@ func setupCommitmentTest(t *testing.T, configJSON string) test.Setup {
 		Version:     1,
 		DisplayName: "Third",
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
-			"capacity_c32":   resInfoConvertible,
-			"capacity_c48":   resInfoConvertible,
-			"capacity_c96":   resInfoConvertible,
-			"capacity_c120":  resInfoLikeThings,
-			"capacity2_c144": resInfoLikeThings,
+			"capacity_c32":          resInfoConvertible,
+			"capacity_c48":          resInfoConvertible,
+			"capacity_c96":          resInfoConvertible,
+			"capacity_c120":         resInfoLikeThings,
+			"capacity2_c144":        resInfoLikeThings,
+			"capacity_fits":         resInfoConvertibleFits,
+			"capacity_does_not_fit": resInfoConvertibleDoesNotFit,
 		},
 	}
 	srvInfoFourth := liquid.ServiceInfo{
@@ -1996,19 +2023,32 @@ func TestTransferCommitmentForbiddenResource(t *testing.T) {
 func Test_GetCommitmentConversion(t *testing.T) {
 	s := setupCommitmentTest(t, string(must.Return(testConvertCommitmentsJSON.MarshalJSON())))
 
-	// capacity_c120 uses a different Unit than the source and is therefore ignored.
+	// c32 has only_source=true so it does not appear as a target.
+	// capacity_c120 uses "piece" weight but its resource unit is also "piece" (resInfoLikeThings),
+	// so it's a pure piece-to-piece conversion which only works between same-unit resources;
+	// however c48 has GiB weight with piece unit, so no match.
+	// capacity_fits (weight=1 piece, unit=36 GiB): 48 GiB / 36 GiB = 4/3 → from=3, to=4
+	// capacity_does_not_fit (weight=1 piece, unit=80 GiB): 48 GiB / 80 GiB = 3/5 → from=5, to=3
 	resp1 := []oldassert.JSONObject{
 		{
-			"from":            2,
-			"to":              3,
-			"target_service":  "third",
-			"target_resource": "capacity_c32",
-		}, {
 			"from":            2,
 			"to":              1,
 			"target_service":  "third",
 			"target_resource": "capacity_c96",
-		}}
+		},
+		{
+			"from":            5, // 48 GiB / 80 GiB = 3/5 → reduced to 5:3
+			"to":              3,
+			"target_service":  "third",
+			"target_resource": "capacity_does_not_fit",
+		},
+		{
+			"from":            3, // 48 GiB / 36 GiB = 4/3 → reduced to 3:4
+			"to":              4,
+			"target_service":  "third",
+			"target_resource": "capacity_fits",
+		},
+	}
 
 	resp2 := []oldassert.JSONObject{}
 
@@ -2301,6 +2341,105 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	assert.Equal(t, s.LiquidClients["fourth"].LastCommitmentChangeRequest, commitmentChangeRequest)
+
+	// test conversion from capacity_c48 (piece, weight=48 GiB) to capacity_fits (36 GiB, weight=1 piece)
+	// conversion rate: from=3, to=4  (3 piece × 48 GiB = 144 GiB = 4 × 36 GiB)
+	oldassert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
+				"service_type":      "third",
+				"resource_name":     "capacity_c48",
+				"availability_zone": "any",
+				"amount":            10,
+				"duration":          "1 hour",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	oldassert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/6/convert",
+		Body:         req("third", "capacity_fits", 3, 4),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// check remaining amount and new commitment
+	commitmentToCheck = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 7`))(t)
+	assert.Equal(t, commitmentToCheck.Amount, uint64(7)) // 10 - 3 = 7 remainder
+	convertedCommitment := must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 8`))(t)
+	assert.Equal(t, convertedCommitment.Amount, uint64(4)) // 3 * 4 / 3 = 4
+
+	// test conversion from capacity_c48 to capacity_does_not_fit with rounding (80 GiB, weight=1 piece, allow_rounding=true)
+	// conversion rate: from=5, to=3  (5 piece × 48 GiB = 240 GiB = 3 × 80 GiB)
+	// with sourceAmount=3: (3 * 3) / 5 = 9 / 5 = 1 (rounded down from 1.8)
+	// lost value: 3 × 48 GiB - 1 × 80 GiB = 144 - 80 = 64 GiB > 48 GiB (more than 1 source unit!)
+	// no leftover commitment is created for the rounded-down amount
+	oldassert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/7/convert",
+		Body:         req("third", "capacity_does_not_fit", 3, 1),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	convertedCommitment = must.ReturnT(db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 10`))(t)
+	assert.Equal(t, convertedCommitment.Amount, uint64(1))
+	_, err := db.ProjectCommitmentStore.SelectOneWhere(s.Ctx, s.DB, `id = 11`)
+	assert.ErrEqual(t, err, sql.ErrNoRows)
+
+	// test that non-fitting conversions are rejected when target has allow_rounding=false
+	// We convert capacity_does_not_fit → capacity_fits (target has allow_rounding=false)
+	// rate = from=9, to=20 (80 GiB source / gcd(36,80)=4 : 36 GiB target / gcd(36,80)=4 → 20:9)
+	oldassert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
+				"service_type":      "third",
+				"resource_name":     "capacity_does_not_fit",
+				"availability_zone": "any",
+				"amount":            10,
+				"duration":          "1 hour",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	// commitment 11 = capacity_does_not_fit, amount 10
+	oldassert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/11/convert",
+		Body:         req("third", "capacity_fits", 3, 3),
+		ExpectBody:   oldassert.StringData("amount: 3 does not fit into conversion rate of: 9\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// test that rounding to 0 is rejected even with allow_rounding=true
+	// capacity_fits → capacity_does_not_fit: rate = from=20, to=9, allow_rounding=true on target
+	// sourceAmount=1: (1 * 9) / 20 = 0 → rejected
+	oldassert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: oldassert.JSONObject{
+			"commitment": oldassert.JSONObject{
+				"service_type":      "third",
+				"resource_name":     "capacity_fits",
+				"availability_zone": "any",
+				"amount":            10,
+				"duration":          "1 hour",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	// commitment 12 = capacity_fits, amount 10
+	oldassert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/12/convert",
+		Body:         req("third", "capacity_does_not_fit", 1, 0),
+		ExpectBody:   oldassert.StringData("converted amount would be zero\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
 }
 
 func Test_UpdateCommitmentDuration(t *testing.T) {

@@ -183,9 +183,10 @@ func TestConfigValidation(t *testing.T) {
 									"value": ["1 hour", "2 hours"]
 								}
 							],
-							"conversion_rule": {
-								"identifier": "flavor1",
-								"weight": 32
+							"conversion_rules": {
+								"flavor1" : {
+									"weight": "32 piece"
+								}
 							}
 						}
 					},
@@ -198,9 +199,10 @@ func TestConfigValidation(t *testing.T) {
 									"value": ["1 hour", "2 hours"]
 								}
 							],
-							"conversion_rule": {
-								"identifier": "flavor2",
-								"weight": 144
+							"conversion_rules": {
+								"flavor2": {
+									"weight": "144 piece"
+								}
 							}
 						}
 					}
@@ -218,9 +220,10 @@ func TestConfigValidation(t *testing.T) {
 									"value": ["1 hour", "2 hours"]
 								}
 							],
-							"conversion_rule": {
-								"identifier": "flavor2",
-								"weight": 48
+							"conversion_rules": {
+								"flavor2": {
+									"weight": "48 piece"
+								}
 							}
 						}
 					}
@@ -228,7 +231,7 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), `invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rule.identifier values must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`)
+	assert.Equal(t, errs.Join(","), `invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rules["flavor2"] identifier must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`)
 
 	// Valid config. Empty discovery method should be allowed
 	_, errs = core.NewClusterFromJSON([]byte(`{
