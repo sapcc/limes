@@ -15,6 +15,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
 
@@ -46,6 +47,11 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 	case errors.Is(err, errNoSuchCommitment):
 		return nil, nil // respond with 204 if commitment already deleted (DELETE should be idempotent)
 	case err != nil:
+		return nil, err
+	}
+	deletable := isDeletable(token, c, p.timeNow)
+	if !deletable {
+		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
 		return nil, err
 	}
 

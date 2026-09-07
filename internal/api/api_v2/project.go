@@ -132,7 +132,7 @@ func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, to
 		if token.Context.Request == nil {
 			token.Context.Request = make(map[string]string, 1)
 		}
-		return p.checkDomainAccess(r.Context(), token, queryDomainUUID, "v2:domain:report_single")
+		return p.checkDomainAccess(r.Context(), token, queryDomainUUID, "v2:project:report_multiple")
 	} else {
 		return reports_v2.ClusterScope{}, token.Enforce("v2:project:report_multiple")
 	}

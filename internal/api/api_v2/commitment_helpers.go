@@ -260,10 +260,5 @@ func (p *v2Provider) selectCommitmentIfPermittedAndAlive(ctx context.Context, db
 	if err != nil {
 		return
 	}
-	deletable := isDeletable(token, c, p.timeNow)
-	if !deletable {
-		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
-		return
-	}
 	return c, azRes, scope, nil
 }

@@ -78,7 +78,7 @@ var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	$with_public{{AND pc.transfer_status = {{limesresources.CommitmentTransferStatusPublic}}}}
 	AND {{pc.updated_at >= $updated_after}}
 	$without_obsolete{{AND pc.status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})}}
-	ORDER BY pc.uuid
+	ORDER BY pc.id
 `))
 
 func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherpolicy.Token) (resourcesv2.CommitmentList, error) {
@@ -128,7 +128,6 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 			return errInvalidResourceReference
 		}
 		deletable := isDeletable(token, c.ProjectCommitment, p.timeNow)
-		result.Commitments = append(result.Commitments, convertCommitmentToDisplayForm(c.ProjectCommitment, azRes.Path, c.ProjectUUID, deletable))
 
 		// redact project_uuids if the user is not allowed to see them
 		authorized, ok := authByProject[c.ProjectUUID]
@@ -138,10 +137,11 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 			authorized = token.Check("v2:project:commitment_get")
 			authByProject[c.ProjectUUID] = authorized
 		}
-		if authorized {
-			return nil
+		if !authorized {
+			c.ProjectUUID = ""
 		}
-		c.ProjectUUID = ""
+
+		result.Commitments = append(result.Commitments, convertCommitmentToDisplayForm(c.ProjectCommitment, azRes.Path, c.ProjectUUID, deletable))
 		return nil
 	})
 
@@ -193,22 +193,11 @@ func (p *v2Provider) checkCommitmentListOpts(token *gopherpolicy.Token, ctx cont
 	if options.WithObsolete && !token.Check("v2:project:with_obsolete") {
 		return nil, respondwith.CustomStatus(http.StatusForbidden, errors.New(`"with=obsolete" requires special permissions`))
 	}
-	var (
-		scope reports_v2.Scope
-		err   error
-	)
 	if domainUUID, ok := options.DomainUUID.Unpack(); ok {
-		scope, err = p.checkDomainAccess(ctx, token, domainUUID, "v2:project:commitment_get")
-		if err != nil {
-			return nil, err
-		}
+		return p.checkDomainAccess(ctx, token, domainUUID, "v2:project:commitment_get")
 	} else if projectUUID, ok := options.ProjectUUID.Unpack(); ok {
-		scope, err = p.checkProjectAccess(ctx, token, projectUUID, "v2:project:commitment_get")
-		if err != nil {
-			return nil, err
-		}
+		return p.checkProjectAccess(ctx, token, projectUUID, "v2:project:commitment_get")
 	} else {
-		scope = reports_v2.ClusterScope{}
+		return reports_v2.ClusterScope{}, nil
 	}
-	return scope, nil
 }

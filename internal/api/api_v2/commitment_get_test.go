@@ -4,21 +4,16 @@
 package api_v2_test
 
 import (
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httptest"
-	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/jsonmatch"
 
-	. "go.xyrillian.de/gg/option"
-
-	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
-	"github.com/sapcc/limes/internal/util"
 )
 
 func TestCommitmentGetSingle(t *testing.T) {
@@ -30,33 +25,55 @@ func TestCommitmentGetSingle(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	// setup: place one commitment into the DB
-	projectParisID := s.GetProjectID("paris")
-	firstCapacityID := s.GetAZResourceID("first", "capacity", "az-one")
-	expiresAt := s.Clock.Now().AddDate(1, 0, 0).UTC()
-	uuidOne := liquid.CommitmentUUID("00000000-0000-0000-0000-000000000001")
-	s.MustDBInsert(&db.ProjectCommitment{
-		UUID:                uuidOne,
-		ProjectID:           projectParisID,
-		AZResourceID:        firstCapacityID,
-		Amount:              10,
-		Duration:            must.Return(limesresources.ParseCommitmentDuration("1 year")),
-		CreatedAt:           s.Clock.Now(),
-		UpdatedAt:           s.Clock.Now(),
-		ConfirmedAt:         Some(s.Clock.Now()),
-		CreatorUUID:         "dummy",
-		CreatorName:         "dummy",
-		ExpiresAt:           expiresAt,
-		CreationContextJSON: must.Return(json.Marshal(db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate})),
-		Status:              liquid.CommitmentStatusConfirmed,
+	// setup: ensure capacity is available for confirmed commitments
+	firstCapacityAZOneID := s.GetAZResourceID("first", "capacity", "az-one")
+	firstCapacityTotalID := s.GetAZResourceID("first", "capacity", "total")
+	s.MustDBExec("UPDATE az_resources SET raw_capacity = $1 WHERE id IN ($2, $3)", 100, firstCapacityAZOneID, firstCapacityTotalID)
+
+	// setup: create one commitment via the POST API
+	s.UpdateMockUserIdentity(map[string]string{
+		"project_id":          "uuid-for-paris",
+		"project_name":        "paris",
+		"project_domain_name": "france",
+		"project_domain_id":   "uuid-for-france",
+	})
+
+	var uuidOne string
+	createdAt := s.Clock.Now().UTC().Format(time.RFC3339)
+	expiresAt := s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339)
+	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+		"amount":            10,
+		"duration":          "1 hour",
+		"project_id":        "uuid-for-paris",
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"status":            "confirmed",
+	})).ExpectJSON(t, http.StatusCreated, jsonmatch.Object{
+		"uuid":              jsonmatch.CaptureField(&uuidOne),
+		"amount":            10,
+		"duration":          "1 hour",
+		"project_id":        "uuid-for-paris",
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"status":            "confirmed",
+		"created_at":        createdAt,
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      createdAt,
+		"expires_at":        expiresAt,
+		"updated_at":        createdAt,
 	})
 	s.Clock.StepBy(time.Hour)
 
 	// success: get existing commitment
 	fixturePath := "./fixtures/commitment-get-single.json"
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "success"))
+			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
+				Modify(fmt.Sprintf(`.uuid = %q`, uuidOne)))
 
 	// error: get non-existing commitment
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000099").
@@ -64,22 +81,24 @@ func TestCommitmentGetSingle(t *testing.T) {
 
 	// error: permission denied
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 
 	// error: permission denied as regular user for obsolete commitment
 	s.TokenValidator.Enforcer.ForbidWithObsolete = true
-	s.MustDBExec(`UPDATE project_commitments SET status = 'deleted' WHERE uuid = $1`, uuidOne)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+	s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+uuidOne).ExpectStatus(t, http.StatusNoContent)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.ForbidWithObsolete = false
 
-	// success: elevated user can see obsolete commitment
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000001").
+	// success: elevated user can see obsolete commitment (with updated timestamp)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
-				Modify(`.status = "deleted"`))
+				Modify(fmt.Sprintf(`.uuid = %q`, uuidOne)).
+				Modify(`.status = "deleted"`).
+				Modify(`.updated_at = "1970-01-01T01:00:00Z"`))
 }
 
 func TestCommitmentGetMultiple(t *testing.T) {
@@ -91,54 +110,72 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		test.WithEmptyResourceRecordsAsNeeded,
 	)
 
-	// setup: place commitments into the DB
-	projectParisID := s.GetProjectID("paris")
-	projectBerlinID := s.GetProjectID("berlin")
-	projectDresdenID := s.GetProjectID("dresden")
-	firstCapacityID := s.GetAZResourceID("first", "capacity", "az-one")
-	expiresAt := s.Clock.Now().AddDate(1, 0, 0).UTC()
+	// setup: ensure capacity is available for confirmed commitments
+	firstCapacityAZOneID := s.GetAZResourceID("first", "capacity", "az-one")
+	firstCapacityTotalID := s.GetAZResourceID("first", "capacity", "total")
+	s.MustDBExec("UPDATE az_resources SET raw_capacity = $1 WHERE id IN ($2, $3)", 1000, firstCapacityAZOneID, firstCapacityTotalID)
 
-	testCommitment := &db.ProjectCommitment{
-		UUID:                "00000000-0000-0000-0000-000000000001",
-		ProjectID:           projectParisID,
-		AZResourceID:        firstCapacityID,
-		Amount:              10,
-		Duration:            must.Return(limesresources.ParseCommitmentDuration("1 year")),
-		CreatedAt:           s.Clock.Now(),
-		UpdatedAt:           s.Clock.Now(),
-		ConfirmedAt:         Some(s.Clock.Now()),
-		CreatorUUID:         "dummy",
-		CreatorName:         "dummy",
-		ExpiresAt:           expiresAt,
-		CreationContextJSON: must.Return(json.Marshal(db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate})),
-		Status:              liquid.CommitmentStatusConfirmed,
+	// helper to create a confirmed commitment via POST API
+	createConfirmedCommitment := func(projectUUID, projectName, domainUUID, domainName string, amount int, uuidTarget *string) {
+		t.Helper()
+		s.UpdateMockUserIdentity(map[string]string{
+			"project_id":          projectUUID,
+			"project_name":        projectName,
+			"project_domain_name": domainName,
+			"project_domain_id":   domainUUID,
+		})
+		s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			"amount":            amount,
+			"duration":          "1 hour",
+			"project_id":        projectUUID,
+			"service_type":      "first",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"status":            "confirmed",
+		})).ExpectJSON(t, http.StatusCreated, jsonmatch.Object{
+			"uuid":              jsonmatch.CaptureField(uuidTarget),
+			"amount":            amount,
+			"duration":          "1 hour",
+			"project_id":        projectUUID,
+			"service_type":      "first",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"status":            "confirmed",
+			"created_at":        s.Clock.Now().UTC().Format(time.RFC3339),
+			"creator_uuid":      "uuid-for-alice",
+			"creator_name":      "alice@Default",
+			"can_be_deleted":    true,
+			"confirmed_at":      s.Clock.Now().UTC().Format(time.RFC3339),
+			"expires_at":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+			"updated_at":        s.Clock.Now().UTC().Format(time.RFC3339),
+		})
 	}
-	s.MustDBInsert(testCommitment)
-	// one more regular one
-	testCommitment.ID = 0
-	testCommitment.UUID = "00000000-0000-0000-0000-000000000002"
-	testCommitment.ProjectID = projectBerlinID
-	testCommitment.Amount = 20
-	s.MustDBInsert(testCommitment)
-	// a public commitment
+
+	// commitment 1: paris, amount 10
+	var uuid1 string
+	createConfirmedCommitment("uuid-for-paris", "paris", "uuid-for-france", "france", 10, &uuid1)
+
+	// commitment 2: berlin, amount 20
+	var uuid2 string
+	createConfirmedCommitment("uuid-for-berlin", "berlin", "uuid-for-germany", "germany", 20, &uuid2)
+
+	// commitment 3: dresden, amount 5 (will be made public via DB)
 	s.Clock.StepBy(time.Hour)
-	testCommitment.CreatedAt = s.Clock.Now()
-	testCommitment.UpdatedAt = s.Clock.Now()
-	testCommitment.ExpiresAt = s.Clock.Now().AddDate(1, 0, 0).UTC()
-	testCommitment.ID = 0
-	testCommitment.UUID = "00000000-0000-0000-0000-000000000003"
-	testCommitment.ProjectID = projectDresdenID
-	testCommitment.Amount = 5
-	testCommitment.TransferStatus = limesresources.CommitmentTransferStatusPublic
-	testCommitment.TransferToken = Some(test.GenerateDummyTransferToken(1))
-	s.MustDBInsert(testCommitment)
-	// a deleted commitment
-	testCommitment.ID = 0
-	testCommitment.UUID = "00000000-0000-0000-0000-000000000004"
-	testCommitment.TransferStatus = limesresources.CommitmentTransferStatusNone
-	testCommitment.TransferToken = None[string]()
-	testCommitment.Status = util.CommitmentStatusDeleted
-	s.MustDBInsert(testCommitment)
+	var uuid3 string
+	createConfirmedCommitment("uuid-for-dresden", "dresden", "uuid-for-germany", "germany", 5, &uuid3)
+
+	// make commitment 3 public via DB (no v2 API for transfer yet)
+	// TODO: use API for this update
+	s.MustDBExec(`UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE uuid = $3`,
+		limesresources.CommitmentTransferStatusPublic, test.GenerateDummyTransferToken(1), uuid3)
+
+	// commitment 4: dresden, amount 5 (will be deleted)
+	var uuid4 string
+	createConfirmedCommitment("uuid-for-dresden", "dresden", "uuid-for-germany", "germany", 5, &uuid4)
+
+	// mark commitment 4 as deleted
+	s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+uuid4).ExpectStatus(t, http.StatusNoContent)
+
 	s.Clock.StepBy(time.Hour)
 
 	// To make the token project-scoped to "paris" in domain "france"
@@ -148,6 +185,15 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		"project_domain_name": "france",
 		"project_domain_id":   "uuid-for-france",
 	})
+
+	// helper: build jq modification to inject captured UUIDs into fixture
+	injectUUIDs := func(f httptest.JQModifiableContent) httptest.JQModifiableContent {
+		return f.
+			Modify(fmt.Sprintf(`.commitments[0].uuid = %q`, uuid1)).
+			Modify(fmt.Sprintf(`.commitments[1].uuid = %q`, uuid2)).
+			Modify(fmt.Sprintf(`.commitments[2].uuid = %q`, uuid3)).
+			Modify(fmt.Sprintf(`.commitments[3].uuid = %q`, uuid4))
+	}
 
 	// error cases
 	// error: no main filter set (admin)
@@ -197,7 +243,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	deletedModification := `del(.commitments.[] | select(.status == "deleted"))`
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "single project").
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "single project")).
 				Modify(deletedModification).
 				Modify(`del(.commitments.[] | select(.project_id != "uuid-for-paris"))`))
 
@@ -212,7 +258,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	})
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?domain_uuid=uuid-for-germany").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "single domain").
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "single domain")).
 				Modify(deletedModification).
 				Modify(`del(.commitments.[] | select(.project_id == "uuid-for-paris"))`))
 
@@ -220,33 +266,33 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "public").
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "public")).
 				Modify(deletedModification).
-				Modify(`del(.commitments.[] | select(.uuid != "00000000-0000-0000-0000-000000000003"))`).
-				Modify(`del(.commitments.[].project_uuid)`))
+				Modify(fmt.Sprintf(`del(.commitments.[] | select(.uuid != %q))`, uuid3)).
+				Modify(`del(.commitments.[].project_id)`))
 
 	// success: filter by public (this token can see the project_uuid)
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "public").
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "public")).
 				Modify(deletedModification).
-				Modify(`del(.commitments.[] | select(.uuid != "00000000-0000-0000-0000-000000000003"))`))
+				Modify(fmt.Sprintf(`del(.commitments.[] | select(.uuid != %q))`, uuid3)))
 
-	// success: with service filter (admin scenario — switch to cluster-level token)
+	// success: with service filter (admin scenario)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "service filter")).
 				Modify(deletedModification))
 
 	// success: obsolete (and service filter, because it's always required)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=obsolete&service=first").
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "obsolete"))
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "obsolete")))
 
 	// success: updated after
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first&updated_after="+s.Clock.Now().Add(-1*time.Hour).Format(time.RFC3339)).
 		ExpectJSON(t, http.StatusOK,
-			httptest.NewJQModifiableJSONFixture(fixturePath, "updated_after").
-				Modify(`del(.commitments.[] | select(.uuid != "00000000-0000-0000-0000-000000000003"))`))
+			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "updated_after")).
+				Modify(fmt.Sprintf(`del(.commitments.[] | select(.uuid != %q))`, uuid3)))
 }
