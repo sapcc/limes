@@ -274,7 +274,8 @@ var diffOptions = append(
 )
 
 // AddTo implements the httpapi.API interface.
-func (rt *runtime) AddTo(r *mux.Router) {
+func (rt *runtime) AddTo(c *httpapi.Composer) {
+	r := c.Router()
 	r.Methods("GET").Path("/v1/info").HandlerFunc(rt.handleGetInfo)
 	r.Methods("POST").Path("/v1/report-capacity").HandlerFunc(rt.handleReportCapacity)
 	r.Methods("POST").Path("/v1/projects/{project_id}/report-usage").HandlerFunc(rt.handleReportUsage)

@@ -96,7 +96,8 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 }
 
 // AddTo implements the httpapi.API interface.
-func (p *v1Provider) AddTo(r *mux.Router) {
+func (p *v1Provider) AddTo(c *httpapi.Composer) {
+	r := c.Router()
 	resRouter := r.PathPrefix("/v1/").Subrouter()
 	ratesRouter := r.PathPrefix("/rates/v1/").Subrouter()
 	adminRouter := r.PathPrefix("/admin/").Subrouter()
