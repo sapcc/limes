@@ -612,7 +612,9 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		}
 		resourcesForCurrentService[path.ResourceName] = dbResource
 	}
-	resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+	if currentService != "" {
+		resources[currentService] = util.NewConstMap(resourcesForCurrentService)
+	}
 
 	dbAZResources, err := db.AZResourceStore.Select(ctx, s.DB, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path`, pq.Array(serviceIDs)).Collect()
 	if err != nil {
@@ -632,7 +634,9 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		}
 		azResourcesForCurrentService[path.ResourceName][path.AvailabilityZone] = dbAZResource
 	}
-	azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
+	if currentService != "" {
+		azResources[currentService] = util.New2LevelConstMap(azResourcesForCurrentService)
+	}
 
 	dbRates, err := db.RateStore.Select(ctx, s.DB, "SELECT ra.* FROM rates ra WHERE ra.service_id = ANY($1) OR CARDINALITY($1) = 0 ORDER BY path", pq.Array(serviceIDs)).Collect()
 	if err != nil {
@@ -649,7 +653,9 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		}
 		ratesForCurrentService[path.RateName] = dbRate
 	}
-	rates[currentService] = util.NewConstMap(ratesForCurrentService)
+	if currentService != "" {
+		rates[currentService] = util.NewConstMap(ratesForCurrentService)
+	}
 
 	type categoryRecord struct {
 		db.Category
@@ -671,7 +677,9 @@ func (s *ServiceInfoCache) InvalidateService(ctx context.Context, serviceType Op
 		}
 		categoriesForCurrentService[record.ID] = record.Category
 	}
-	categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+	if currentService != "" {
+		categories[currentService] = util.NewConstMap(categoriesForCurrentService)
+	}
 
 	// copy unchanged entries, if there are any
 	if stFilter, ok := serviceType.Unpack(); ok {

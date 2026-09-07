@@ -180,6 +180,58 @@ func TestServiceInfoCache(t *testing.T) {
 	assert.Equal(t, sis.GetRatesForType("first").Len(), 3)
 }
 
+func TestServiceInfoCacheEmptyServiceInvalidation(t *testing.T) {
+	// Check that an empty list of resources, rates etc. does not
+	// break the cache invalidation.
+	emptyServiceInfo := liquid.ServiceInfo{
+		Version:     1,
+		DisplayName: "Empty",
+		Resources:   map[liquid.ResourceName]liquid.ResourceInfo{},
+		Rates:       map[liquid.RateName]liquid.RateInfo{},
+		Categories:  map[liquid.CategoryName]liquid.CategoryInfo{},
+	}
+	s := test.NewSetup(t,
+		test.WithConfig(configJSON),
+		test.WithPersistedServiceInfo("first", emptyServiceInfo),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+	)
+	first := s.GetServiceID("first")
+	// by calling connect with a DB-URL, we register the service info listeners
+	s.Cluster.Connect(s.Ctx, nil, gophercloud.EndpointOpts{}, func(serviceType db.ServiceType) (core.LiquidClient, error) { return nil, nil }, Some(s.DBConnectionTarget))
+	t.Cleanup(func() { s.Cluster.SIC.Close() })
+
+	sis := s.Cluster.SIC.GetSnapshot()
+	assert.Equal(t, sis.GetServices().Len(), 2)
+	// "first" has nothing, "second" the usual entries
+	assert.Equal(t, sis.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetCategoriesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetResourcesForType("second").Len(), 2)
+	// verify no wrong empty-string service type leaked in
+	_, ok := sis.GetServiceForType("")
+	assert.Equal(t, ok, false)
+
+	// Trigger a pg-notify invalidation for "first" only. This calls
+	// InvalidateService(Some("first")), where all four queries (resources,
+	// az_resources, rates, categories) return zero rows for "first". Before the
+	// fix, the unguarded post-loop flush would write a "" key into the maps.
+	s.MustDBExec("UPDATE services SET display_name = 'EmptyChanged' WHERE id = $1", first)
+	<-s.Cluster.SIC.OnInvalidate
+	sis = s.Cluster.SIC.GetSnapshot()
+
+	assert.Equal(t, sis.GetServices().Len(), 2)
+	// verify the update was applied
+	assert.Equal(t, must.BeOKT(sis.GetServiceForType("first"))(t).DisplayName, "EmptyChanged")
+	// everything else should still be the same
+	assert.Equal(t, sis.GetResourcesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetRatesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetCategoriesForType("first").Len(), 0)
+	assert.Equal(t, sis.GetResourcesForType("second").Len(), 2)
+	// verify no wrong empty-string service type exists after invalidation
+	_, ok = sis.GetServiceForType("")
+	assert.Equal(t, ok, false)
+}
+
 func TestServiceInfoCacheGetByID(t *testing.T) {
 	serviceInfoFirst := test.DefaultLiquidServiceInfo("First")
 	serviceInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
