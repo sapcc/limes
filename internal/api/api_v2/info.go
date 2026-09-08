@@ -17,7 +17,7 @@ import (
 // handleGetResourcesInfo handles GET /resources/v2/info.
 func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy.Token) (resourcesv2.InfoReport, error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
-	return reports_v2.GetResourcesInfo(p.Cluster, token, p.timeNow(), p.Cluster.SIC.GetSnapshot())
+	return reports_v2.GetResourcesInfo(r.Context(), p.Cluster, token, p.timeNow(), p.Cluster.SIC.GetSnapshot())
 }
 
 // handleGetRatesInfo handles GET /rates/v2/info.

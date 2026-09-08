@@ -108,7 +108,7 @@ func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gophe
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetResourcesInfo(cluster, token, timeNow, filter)
+		infoReport, err := GetResourcesInfo(ctx, cluster, token, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -144,7 +144,7 @@ func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gophe
 
 			// do not report commitment stats if the resource does not allow new commitments in this domain
 			// (however, if there are pre-existing commitments, report those in the usual way until they all expire or are deleted)
-			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
+			commitmentBehavior := cluster.CommitmentBehaviorForResourcePath(azResource.Path.Resource())
 			if len(commitmentBehavior.ForDomain(r.DomainName).Durations) == 0 && len(committed) == 0 {
 				committed = nil
 				r.UsageUncommitted = None[uint64]()

@@ -11,8 +11,12 @@ import (
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/jsonmatch"
 
+	. "go.xyrillian.de/gg/option"
+
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -29,6 +33,8 @@ func TestCommitmentGetSingle(t *testing.T) {
 	firstCapacityAZOneID := s.GetAZResourceID("first", "capacity", "az-one")
 	firstCapacityTotalID := s.GetAZResourceID("first", "capacity", "total")
 	s.MustDBExec("UPDATE az_resources SET raw_capacity = $1 WHERE id IN ($2, $3)", 100, firstCapacityAZOneID, firstCapacityTotalID)
+	// update ServiceInfoCache (used by az_allocation_stats file)
+	must.ReturnT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
 
 	// setup: create one commitment via the POST API
 	s.UpdateMockUserIdentity(map[string]string{
@@ -114,6 +120,8 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	firstCapacityAZOneID := s.GetAZResourceID("first", "capacity", "az-one")
 	firstCapacityTotalID := s.GetAZResourceID("first", "capacity", "total")
 	s.MustDBExec("UPDATE az_resources SET raw_capacity = $1 WHERE id IN ($2, $3)", 1000, firstCapacityAZOneID, firstCapacityTotalID)
+	// update ServiceInfoCache (used by az_allocation_stats file)
+	must.ReturnT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
 
 	// helper to create a confirmed commitment via POST API
 	createConfirmedCommitment := func(projectUUID, projectName, domainUUID, domainName string, amount int, uuidTarget *string) {

@@ -67,7 +67,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
-	SELECT s.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT s.type AS service_type, MIN(ps.scraped_at) AS min_scraped_at, MAX(ps.scraped_at) AS max_scraped_at
 	  FROM project_services ps
 	  JOIN services s ON s.id = ps.service_id
 	 WHERE ps.scraped_at IS NOT NULL
@@ -85,29 +85,22 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	maxScrapedAtGauge.Describe(descCh)
 	maxScrapedAtDesc := <-descCh
 
-	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
-		var (
-			serviceType       db.ServiceType
-			minScrapedAt      *time.Time
-			maxScrapedAt      *time.Time
-			minRatesScrapedAt *time.Time
-			maxRatesScrapedAt *time.Time
-		)
-		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt, &minRatesScrapedAt, &maxRatesScrapedAt)
-		if err != nil {
-			return err
-		}
-
-		if c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType).Len() > 0 {
+	type scrapedAtAggregateRecord struct {
+		ServiceType  db.ServiceType `db:"service_type"`
+		MinScrapedAt *time.Time     `db:"min_scraped_at"`
+		MaxScrapedAt *time.Time     `db:"max_scraped_at"`
+	}
+	err := oblast.MustNewStore[scrapedAtAggregateRecord](oblast.PostgresDialect()).Select(context.Background(), c.DB, scrapedAtAggregateQuery).Foreach(func(r scrapedAtAggregateRecord) error {
+		if c.Cluster.SIC.GetSnapshot().GetResourcesForType(r.ServiceType).Len() > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				string(serviceType),
+				prometheus.GaugeValue, timeAsUnixOrZero(r.MinScrapedAt),
+				string(r.ServiceType),
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				string(serviceType),
+				prometheus.GaugeValue, timeAsUnixOrZero(r.MaxScrapedAt),
+				string(r.ServiceType),
 			)
 		}
 		return nil
@@ -147,8 +140,8 @@ type CapacityCollectionMetricsCollector struct {
 // CapacityCollectionMetricsInstance describes a single project service for which collection
 // metrics are submitted. It appears in type CapacityCollectionMetricsCollector.
 type CapacityCollectionMetricsInstance struct {
-	ServiceType       db.ServiceType
-	SerializedMetrics string
+	ServiceType       db.ServiceType `db:"service_type"`
+	SerializedMetrics string         `db:"serialized_metrics"`
 }
 
 // Describe implements the prometheus.Collector interface.
@@ -165,7 +158,7 @@ func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc
 }
 
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
-	SELECT type, serialized_metrics
+	SELECT type AS service_type, serialized_metrics
 	  FROM services
 	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
@@ -183,13 +176,9 @@ func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric
 		return
 	}
 
-	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
-		var i CapacityCollectionMetricsInstance
-		err := rows.Scan(&i.ServiceType, &i.SerializedMetrics)
-		if err == nil {
-			c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
-		}
-		return err
+	err := oblast.MustNewStore[CapacityCollectionMetricsInstance](oblast.PostgresDialect()).Select(context.Background(), c.DB, capacitySerializedMetricsGetQuery).Foreach(func(i CapacityCollectionMetricsInstance) error {
+		c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
+		return nil
 	})
 	if err != nil {
 		logg.Error("collect capacity collection metrics failed: " + err.Error())
@@ -397,7 +386,7 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT d.name, d.uuid, s.type, r.name, SUM(pazr.quota)
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, s.type AS service_type, r.name AS resource_name, SUM(pazr.quota) AS quota
 	  FROM project_az_resources pazr
 	  JOIN projects p ON p.id = pazr.project_id
 	  JOIN domains d ON d.id = p.domain_id
@@ -454,7 +443,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 `))
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, ra.name, pra.usage_as_bigint
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, p.name AS project_name, p.uuid AS project_uuid, s.type AS service_type, ra.name AS rate_name, pra.usage_as_bigint
 	  FROM project_rates pra
 	  JOIN projects p ON p.id = pra.project_id
 	  JOIN rates ra ON ra.id = pra.rate_id
@@ -566,26 +555,22 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for domain level
-	err = sqlext.ForeachRow(d.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName     string
-			domainUUID     string
-			dbServiceType  db.ServiceType
-			dbResourceName liquid.ResourceName
-			quota          *uint64
-		)
-		err := rows.Scan(&domainName, &domainUUID, &dbServiceType, &dbResourceName, &quota)
-		if err != nil {
-			return err
-		}
-		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
+	type domainMetricsRecord struct {
+		DomainName   string              `db:"domain_name"`
+		DomainUUID   string              `db:"domain_uuid"`
+		ServiceType  db.ServiceType      `db:"service_type"`
+		ResourceName liquid.ResourceName `db:"resource_name"`
+		Quota        *uint64             `db:"quota"`
+	}
+	err = oblast.MustNewStore[domainMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, domainMetricsQuery).Foreach(func(r domainMetricsRecord) error {
+		apiIdentity := behaviorCache.Get(r.ServiceType, r.ResourceName).IdentityInV1API
 
-		if quota != nil {
+		if r.Quota != nil {
 			labels := ms.FormatLabels(dmv1DomainResourceLabelNames,
-				domainName, domainUUID,
-				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+				r.DomainName, r.DomainUUID,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
-			ms.Add("limes_domain_quota", labels, float64(*quota))
+			ms.Add("limes_domain_quota", labels, float64(*r.Quota))
 		}
 		return nil
 	})
@@ -734,32 +719,28 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for project level (rate usage)
-	err = sqlext.ForeachRow(d.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName    string
-			domainUUID    string
-			projectName   string
-			projectUUID   string
-			dbServiceType db.ServiceType
-			dbRateName    liquid.RateName
-			usageAsBigint string
-		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbRateName, &usageAsBigint)
-		if err != nil {
-			return err
-		}
-		usageAsBigFloat, _, err := big.NewFloat(0).Parse(usageAsBigint, 10)
+	type projectRateMetricsRecord struct {
+		DomainName    string          `db:"domain_name"`
+		DomainUUID    string          `db:"domain_uuid"`
+		ProjectName   string          `db:"project_name"`
+		ProjectUUID   string          `db:"project_uuid"`
+		ServiceType   db.ServiceType  `db:"service_type"`
+		RateName      liquid.RateName `db:"rate_name"`
+		UsageAsBigint string          `db:"usage_as_bigint"`
+	}
+	err = oblast.MustNewStore[projectRateMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, projectRateMetricsQuery).Foreach(func(r projectRateMetricsRecord) error {
+		usageAsBigFloat, _, err := big.NewFloat(0).Parse(r.UsageAsBigint, 10)
 		if err != nil {
 			return err
 		}
 		usageAsFloat, _ := usageAsBigFloat.Float64()
 
 		if d.ReportZeroes || usageAsFloat != 0 {
-			behavior := behaviorCache.GetForRate(dbServiceType, dbRateName)
+			behavior := behaviorCache.GetForRate(r.ServiceType, r.RateName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := ms.FormatLabels(dmv1ProjectRateLabelNames,
-				domainName, domainUUID, projectName, projectUUID,
-				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+				r.DomainName, r.DomainUUID, r.ProjectName, r.ProjectUUID,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
 			ms.Add("limes_project_rate_usage", labels, usageAsFloat)
 		}

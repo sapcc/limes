@@ -306,6 +306,8 @@ func TestCommitmentCreateBasic(t *testing.T) {
 			firstCapacityAZTwoID := s.GetAZResourceID("first", "capacity", "az-two")
 			firstCapacityTotalID := s.GetAZResourceID("first", "capacity", "total")
 			s.MustDBExec("UPDATE az_resources SET raw_capacity = $1 WHERE id IN ($2, $3)", 100, firstCapacityAZTwoID, firstCapacityTotalID)
+			// update ServiceInfoCache (used by az_allocation_stats file)
+			must.ReturnT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
 			tr.DBChanges().Ignore()
 
 			var uuid3 string
@@ -731,6 +733,8 @@ func TestCommitmentCreateRejectedByLimes(t *testing.T) {
 		s.MustDBExec(`UPDATE az_resources SET raw_capacity = $1 WHERE az = $2 AND resource_id = $3`,
 			capacity, az, firstCapacityID)
 	}
+	// update ServiceInfoCache (used by az_allocation_stats file)
+	must.ReturnT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
 	dresdenID := s.GetProjectID("dresden")
 	firstCapacityOneID := s.GetAZResourceID("first", "capacity", "az-one")
 	s.MustDBExec(`UPDATE project_az_resources SET usage = $1 WHERE project_id = $2 AND az_resource_id = $3`,

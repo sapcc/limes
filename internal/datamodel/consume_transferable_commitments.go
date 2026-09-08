@@ -141,7 +141,7 @@ func NewTransferableCommitmentCache(ctx context.Context, dbi db.Interface, clust
 
 	// determine whether liquid handles commitments for this resource
 	t.liquidHandlesCommitments = resource.HandlesCommitments
-	statsByAZ, err := collectAZAllocationStats(path.ServiceType, path.ResourceName, Some(path.AvailabilityZone), cluster, dbi)
+	statsByAZ, err := collectAZAllocationStats(ctx, sis, path.Resource(), Some(path.AvailabilityZone), cluster, dbi)
 	if err != nil {
 		return t, fmt.Errorf("while collecting AZ stats for %s: %w", path, err)
 	}

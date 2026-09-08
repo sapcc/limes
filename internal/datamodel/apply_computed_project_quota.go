@@ -4,6 +4,7 @@
 package datamodel
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -26,14 +28,6 @@ import (
 // since they represent individual steps of ApplyComputedProjectQuota.
 
 var (
-	acpqGetClusterwideIDsQuery = sqlext.SimplifyWhitespace(`
-		SELECT s.id, r.id, azr.id, azr.az
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
-		 WHERE s.type = $1 AND r.name = $2
-	`)
-
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
 		SELECT project_id, forbidden, max_quota_from_outside_admin, forbid_autogrowth, override_quota_from_config
 		  FROM project_resources
@@ -94,12 +88,12 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value Option[uint64]) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot, resource db.Resource, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
 	if !resource.HasQuota {
 		return nil
 	}
-	cfg, ok := cluster.QuotaDistributionConfigForResource(serviceType, resource.Name).Autogrow.Unpack()
+	cfg, ok := cluster.QuotaDistributionConfigForResource(resource.Path.ServiceType, resource.Name).Autogrow.Unpack()
 	if !ok {
 		return nil
 	}
@@ -113,56 +107,36 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource,
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// to avoid excessive joins, convert serviceType+resourceName into a ResourceID only once
-	var (
-		serviceID        db.ServiceID
-		resourceID       db.ResourceID
-		azResourceIDByAZ = make(map[liquid.AvailabilityZone]db.AZResourceID)
-	)
-	err = sqlext.ForeachRow(tx, acpqGetClusterwideIDsQuery, []any{serviceType, resource.Name}, func(rows *sql.Rows) error {
-		var (
-			azResourceID db.AZResourceID
-			az           liquid.AvailabilityZone
-		)
-		err := rows.Scan(&serviceID, &resourceID, &azResourceID, &az)
-		if err == nil {
-			azResourceIDByAZ[az] = azResourceID
-		}
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("could not find IDs for services/resources/azresources records: %w", err)
+	// resolve service for convenience
+	service, exists := sis.GetServiceForType(resource.Path.ServiceType)
+	if !exists {
+		return fmt.Errorf("no service entry for %s", resource.Path.ServiceType)
 	}
 
-	// collect required data (TODO: pass `resourceID` into here to simplify queries over there too?)
-	stats, err := collectAZAllocationStats(serviceType, resource.Name, None[liquid.AvailabilityZone](), cluster, tx)
+	// collect required data
+	stats, err := collectAZAllocationStats(ctx, sis, resource.Path, None[liquid.AvailabilityZone](), cluster, tx)
 	if err != nil {
 		return err
 	}
 
+	type acpqLocalQuotaConstraintsRow struct {
+		ProjectID                 db.ProjectID   `db:"project_id"`
+		Forbidden                 bool           `db:"forbidden"`
+		MaxQuotaFromOutsideAdmin  Option[uint64] `db:"max_quota_from_outside_admin"`
+		ForbidAutogrowthFromAdmin bool           `db:"forbid_autogrowth"`
+		OverrideQuotaFromConfig   Option[uint64] `db:"override_quota_from_config"`
+	}
 	constraints := make(map[db.ProjectID]projectLocalQuotaConstraints)
-	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{resourceID}, func(rows *sql.Rows) error {
-		var (
-			projectID                 db.ProjectID
-			forbidden                 bool
-			maxQuotaFromOutsideAdmin  Option[uint64]
-			forbidAutogrowthFromAdmin bool
-			overrideQuotaFromConfig   Option[uint64]
-		)
-		err := rows.Scan(&projectID, &forbidden, &maxQuotaFromOutsideAdmin, &forbidAutogrowthFromAdmin, &overrideQuotaFromConfig)
-		if err != nil {
-			return err
-		}
-
+	err = oblast.MustNewStore[acpqLocalQuotaConstraintsRow](oblast.PostgresDialect()).Select(ctx, tx, acpqGetLocalQuotaConstraintsQuery, resource.ID).Foreach(func(row acpqLocalQuotaConstraintsRow) error {
 		var c projectLocalQuotaConstraints
-		if forbidden || forbidAutogrowthFromAdmin {
+		if row.Forbidden || row.ForbidAutogrowthFromAdmin {
 			c.AddMaxQuota(Some(uint64(0)))
 		}
-		c.AddMaxQuota(maxQuotaFromOutsideAdmin)
-		c.AddMinQuota(overrideQuotaFromConfig)
-		c.AddMaxQuota(overrideQuotaFromConfig)
+		c.AddMaxQuota(row.MaxQuotaFromOutsideAdmin)
+		c.AddMinQuota(row.OverrideQuotaFromConfig)
+		c.AddMaxQuota(row.OverrideQuotaFromConfig)
 
-		constraints[projectID] = c
+		constraints[row.ProjectID] = c
 		return nil
 	})
 	if err != nil {
@@ -173,28 +147,28 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource,
 	// AZ separated basequota will be assigned to all available AZs
 	if logg.ShowDebug {
 		// NOTE: The structs that contain pointers must be printed as JSON to actually show all values.
-		logg.Debug("ACPQ for %s/%s: statsByAZ = %#v", serviceType, resource.Name, stats)
-		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resource.Name, cfg)
+		logg.Debug("ACPQ for %s: statsByAZ = %#v", resource.Path, stats)
+		logg.Debug("ACPQ for %s: cfg = %#v", resource.Path, cfg)
 		buf, _ := json.Marshal(constraints) //nolint:errcheck
-		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resource.Name, string(buf))
+		logg.Debug("ACPQ for %s: constraints = %s", resource.Path, string(buf))
 	}
 	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
 	if logg.ShowDebug {
-		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resource.Name, allowsQuotaOvercommit)
+		logg.Debug("ACPQ for %s: allowsQuotaOvercommit = %#v", resource.Path, allowsQuotaOvercommit)
 		buf, _ := json.Marshal(target) //nolint:errcheck
-		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resource.Name, string(buf))
+		logg.Debug("ACPQ for %s: target = %s", resource.Path, string(buf))
 	}
 
 	// write new AZ quotas to database (this includes az=total)
 	projectsWithUpdatedQuota := make(map[db.ProjectID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
-			azResourceID, exists := azResourceIDByAZ[az]
+			azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
 			if !exists {
-				return fmt.Errorf("no az_resources entry for %s/%s/%s", serviceType, resource.Name, az)
+				return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 			}
 			for projectID, projectTarget := range azTarget {
-				result, err := stmt.Exec(projectTarget.Allocated, projectID, azResourceID)
+				result, err := stmt.Exec(projectTarget.Allocated, projectID, azRes.ID)
 				if err != nil {
 					return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 				}
@@ -211,13 +185,13 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource,
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while writing updated %s/%s AZ quotas to DB: %w", serviceType, resource.Name, err)
+		return fmt.Errorf("while writing updated %s AZ quotas to DB: %w", resource.Path, err)
 	}
 
 	// mark project services with changed quota for SyncQuotaToBackendJob
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectServicesQuery, func(stmt *sql.Stmt) error {
 		for projectID := range projectsWithUpdatedQuota {
-			_, err := stmt.Exec(now, projectID, serviceID)
+			_, err := stmt.Exec(now, projectID, service.ID)
 			if err != nil {
 				return fmt.Errorf("in project %d: %w", projectID, err)
 			}
@@ -225,7 +199,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resource db.Resource,
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resource.Name, err)
+		return fmt.Errorf("while marking updated %s project quotas for sync in DB: %w", resource.Path, err)
 	}
 	return tx.Commit()
 }
