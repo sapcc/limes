@@ -4,12 +4,13 @@
 package reports
 
 import (
-	"database/sql"
+	"context"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -27,28 +28,32 @@ type Inconsistencies struct {
 // the inconsistency type where for some project the 'usage > quota' for a
 // single resource.
 type OverspentProjectQuota struct {
-	Project  core.KeystoneProject        `json:"project"`
-	Service  limes.ServiceType           `json:"service"`
-	Resource limesresources.ResourceName `json:"resource"`
-	Unit     limes.Unit                  `json:"unit,omitzero"`
-	Quota    uint64                      `json:"quota"`
-	Usage    uint64                      `json:"usage"`
+	Project      core.KeystoneProject        `json:"project"`
+	Service      limes.ServiceType           `json:"service" db:"-"`
+	Resource     limesresources.ResourceName `json:"resource" db:"-"`
+	Unit         limes.Unit                  `json:"unit,omitzero" db:"-"`
+	ServiceType  db.ServiceType              `json:"-" db:"type"`
+	ResourceName liquid.ResourceName         `json:"-" db:"name"`
+	Quota        uint64                      `json:"quota" db:"quota"`
+	Usage        uint64                      `json:"usage" db:"usage"`
 }
 
 // MismatchProjectQuota is a substructure of Inconsistency containing data for
 // the inconsistency type where for some project the 'backend_quota != quota'
 // for a single resource.
 type MismatchProjectQuota struct {
-	Project      core.KeystoneProject        `json:"project"`
-	Service      limes.ServiceType           `json:"service"`
-	Resource     limesresources.ResourceName `json:"resource"`
-	Unit         limes.Unit                  `json:"unit,omitzero"`
-	Quota        uint64                      `json:"quota"`
-	BackendQuota int64                       `json:"backend_quota"`
+	Project        core.KeystoneProject        `json:"project"`
+	Service        limes.ServiceType           `json:"service" db:"-"`
+	Resource       limesresources.ResourceName `json:"resource" db:"-"`
+	Unit           limes.Unit                  `json:"unit,omitzero" db:"-"`
+	DBServiceType  db.ServiceType              `json:"-" db:"type"`
+	DBResourceName liquid.ResourceName         `json:"-" db:"name"`
+	Quota          uint64                      `json:"quota" db:"quota"`
+	BackendQuota   int64                       `json:"backend_quota" db:"backend_quota"`
 }
 
 var ospqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pazr.quota, pazr.usage
+	SELECT d.uuid AS domain_uuid, d.name AS domain_name, p.uuid AS project_uuid, p.name AS project_name, s.type, r.name, pazr.quota, pazr.usage
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_az_resources pazr ON pazr.project_id = p.id
@@ -60,7 +65,7 @@ var ospqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT d.uuid, d.name, p.uuid, p.name, s.type, r.name, pazr.quota, pazr.backend_quota
+	SELECT d.uuid AS domain_uuid, d.name AS domain_name, p.uuid AS project_uuid, p.name AS project_name, s.type, r.name, pazr.quota, pazr.backend_quota
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_az_resources pazr ON pazr.project_id = p.id
@@ -72,7 +77,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*Inconsistencies, error) {
+func GetInconsistencies(ctx context.Context, cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*Inconsistencies, error) {
 	// Initialize inconsistencies as Inconsistencies type.
 	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
@@ -86,33 +91,19 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 
 	// ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
-	//nolint:dupl
-	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			ospq           OverspentProjectQuota
-			dbServiceType  db.ServiceType
-			dbResourceName liquid.ResourceName
-		)
-		err := rows.Scan(
-			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name,
-			&ospq.Project.UUID, &ospq.Project.Name, &dbServiceType,
-			&dbResourceName, &ospq.Quota, &ospq.Usage,
-		)
-		path := db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName}
-		if err != nil {
-			return err
-		}
+	err := oblast.MustNewStore[OverspentProjectQuota](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r OverspentProjectQuota) error {
+		path := db.ResourcePath{ServiceType: r.ServiceType, ResourceName: r.ResourceName}
 
 		var exists bool
-		ospq.Service, ospq.Resource, exists = nm.MapToV1API(dbServiceType, dbResourceName)
+		r.Service, r.Resource, exists = nm.MapToV1API(r.ServiceType, r.ResourceName)
 		if !exists {
 			return nil
 		}
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
 		resource, _ := sis.GetResourceForPath(path)
-		ospq.Unit = core.ConvertUnitToV1(resource.Unit)
-		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
+		r.Unit = core.ConvertUnitToV1(resource.Unit)
+		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, r)
 
 		return nil
 	})
@@ -122,32 +113,17 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter, 
 
 	// mmpqReportQuery: data for mismatch project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
-	//nolint:dupl
-	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			mmpq           MismatchProjectQuota
-			dbServiceType  db.ServiceType
-			dbResourceName liquid.ResourceName
-		)
-		err := rows.Scan(
-			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name,
-			&mmpq.Project.UUID, &mmpq.Project.Name, &dbServiceType,
-			&dbResourceName, &mmpq.Quota, &mmpq.BackendQuota,
-		)
-		if err != nil {
-			return err
-		}
-
+	err = oblast.MustNewStore[MismatchProjectQuota](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r MismatchProjectQuota) error {
 		var exists bool
-		mmpq.Service, mmpq.Resource, exists = nm.MapToV1API(dbServiceType, dbResourceName)
+		r.Service, r.Resource, exists = nm.MapToV1API(r.DBServiceType, r.DBResourceName)
 		if !exists {
 			return nil
 		}
 
 		// we ignore when a resource can't be found in the app layer yet, it will appear with default value
-		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
-		mmpq.Unit = core.ConvertUnitToV1(resource.Unit)
-		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.DBServiceType, ResourceName: r.DBResourceName})
+		r.Unit = core.ConvertUnitToV1(resource.Unit)
+		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, r)
 
 		return nil
 	})

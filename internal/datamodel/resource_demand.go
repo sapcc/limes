@@ -4,12 +4,13 @@
 package datamodel
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -27,7 +28,7 @@ type capacityScrapeBackchannelImpl struct {
 
 var (
 	getResourceDemandQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT azr.az, pazr.usage, COALESCE(pc_view.confirmed, 0), COALESCE(pc_view.pending, 0), r.topology
+		SELECT azr.az, pazr.usage, COALESCE(pc_view.confirmed, 0) AS confirmed, COALESCE(pc_view.pending, 0) AS pending, r.topology
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  JOIN az_resources azr ON azr.resource_id = r.id
@@ -44,44 +45,40 @@ var (
 	`))
 )
 
+type resourceDemandRecord struct {
+	AZ                 limes.AvailabilityZone `db:"az"`
+	Usage              uint64                 `db:"usage"`
+	ActiveCommitments  uint64                 `db:"confirmed"`
+	PendingCommitments uint64                 `db:"pending"`
+	Topology           liquid.Topology        `db:"topology"`
+}
+
 // GetResourceDemand implements the CapacityScrapeBackchannel interface.
 func (i capacityScrapeBackchannelImpl) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error) {
 	result := liquid.ResourceDemand{
 		OvercommitFactor: i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
 		PerAZ:            make(map[limes.AvailabilityZone]liquid.ResourceDemandInAZ),
 	}
-	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
-		var (
-			az                 limes.AvailabilityZone
-			usage              uint64
-			activeCommitments  uint64
-			pendingCommitments uint64
-			topology           liquid.Topology
-		)
-		err := rows.Scan(&az, &usage, &activeCommitments, &pendingCommitments, &topology)
-		if err != nil {
-			return err
-		}
-
+	err := oblast.MustNewStore[resourceDemandRecord](oblast.PostgresDialect()).Select(context.TODO(), i.DB, getResourceDemandQuery, serviceType, resourceName).Foreach(func(r resourceDemandRecord) error {
 		// ignore usage in pseudo-AZs (as an exception, topology "flat" has a single entry for AZ "any")
-		switch topology {
+		switch r.Topology {
 		case liquid.FlatTopology:
-			if az != liquid.AvailabilityZoneAny {
+			if r.AZ != liquid.AvailabilityZoneAny {
 				return nil
 			}
 		default:
-			if !az.IsReal() {
+			if !r.AZ.IsReal() {
 				return nil
 			}
 		}
 
-		demand := result.PerAZ[az]
-		demand.Usage += usage
-		if activeCommitments > usage {
-			demand.UnusedCommitments += activeCommitments - usage
+		demand := result.PerAZ[r.AZ]
+		demand.Usage += r.Usage
+		if r.ActiveCommitments > r.Usage {
+			demand.UnusedCommitments += r.ActiveCommitments - r.Usage
 		}
-		demand.PendingCommitments += pendingCommitments
-		result.PerAZ[az] = demand
+		demand.PendingCommitments += r.PendingCommitments
+		result.PerAZ[r.AZ] = demand
 
 		return nil
 	})
