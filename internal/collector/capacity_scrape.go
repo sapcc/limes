@@ -164,8 +164,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	if !sExists { // defense in depth: when we get here, the scrape was successful, so the service should be up to date
 		return fmt.Errorf("no data found in ServiceInfoCache for type %s", connection.ServiceType)
 	}
-	resources, _ := sis.GetResourcesForType(serviceType)     // might have no resources
-	azResources, _ := sis.GetAZResourcesForType(serviceType) // might have no az_resources
+	resources := sis.GetResourcesForType(serviceType) // might have no resources
 
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
@@ -198,7 +197,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// az_resources should be there - enumerate the data and complain if they don't match (with exceptions)
-	for _, res := range resources {
+	for _, res := range resources.All() {
 		resourceData, resExists := capacityData.Resources[res.Name]
 		if !resExists {
 			logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
@@ -206,7 +205,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		}
 
 		_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
-		for _, azRes := range azResources[res.Name] {
+		for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
 			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
 			// az=unknown and az=any do not have to exist
 			// specific AZs do not need capacity when az=any has capacity (sum should be correct)
@@ -255,7 +254,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, sync commitment status with reality
-	for _, res := range resources {
+	for _, res := range resources.All() {
 		now := c.MeasureTime()
 		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, res.Path, now)
 		if err != nil {
@@ -264,7 +263,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, try to confirm pending commitments
-	for _, resource := range resources {
+	for _, resource := range resources.All() {
 		err := c.confirmPendingCommitmentsIfNecessary(ctx, resource)
 		if err != nil {
 			return err
@@ -272,7 +271,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, recompute project quotas if necessary
-	for _, res := range resources {
+	for _, res := range resources.All() {
 		now := c.MeasureTime()
 		err := datamodel.ApplyComputedProjectQuota(service.Type, res, c.Cluster, now)
 		if err != nil {

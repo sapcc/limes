@@ -5,7 +5,6 @@ package api
 
 import (
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 
@@ -260,7 +259,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	for _, serviceType := range slices.Sorted(maps.Keys(sis.GetServices())) {
+	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
 		service, _ := sis.GetServiceForType(serviceType)
 		requestedInService, exists := requested[service.Type]
 		if !exists {
@@ -401,7 +400,7 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	for _, serviceType := range slices.Sorted(maps.Keys(sis.GetServices())) {
+	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
 		service, _ := sis.GetServiceForType(serviceType)
 		requestedInService, exists := requested[service.Type]
 		if !exists {
