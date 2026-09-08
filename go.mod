@@ -15,7 +15,7 @@ require (
 	github.com/sapcc/go-bits v0.0.0-20260907125021-ceb8c12b73ac
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.14.0
-	go.xyrillian.de/oblast v0.13.2
+	go.xyrillian.de/oblast v0.14.0
 	go.xyrillian.de/schwift/v2 v2.2.1
 )
 
