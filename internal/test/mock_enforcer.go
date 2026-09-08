@@ -21,14 +21,20 @@ type PolicyEnforcer struct {
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
 	// flags by v2 action
-	AllowInfo             bool
-	AllowReportSingle     bool
-	AllowReportMultiple   bool
-	AllowCommitmentCreate bool
+	AllowInfo                  bool
+	AllowReportSingle          bool
+	AllowReportMultiple        bool
+	AllowCommitmentCreate      bool
+	AllowCommitmentDelete      bool
+	AllowCommitmentDeleteAdmin bool
+	AllowCommitmentGet         bool
+	AllowCommitmentGetPublic   bool
+	AllowCommitmentGetUnscoped bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
-	ForbidWithTiming          bool
-	ForbidWithSubresources    bool
 	ForbidWithHistoricalUsage bool
+	ForbidWithObsolete        bool
+	ForbidWithSubresources    bool
+	ForbidWithTiming          bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -82,12 +88,24 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowReportMultiple
 	case "commitment_create":
 		return e.AllowCommitmentCreate
-	case "with_timing":
-		return !e.ForbidWithTiming
-	case "with_subresources":
-		return !e.ForbidWithSubresources
+	case "commitment_delete":
+		return e.AllowCommitmentDelete
+	case "commitment_delete_admin":
+		return e.AllowCommitmentDeleteAdmin
+	case "commitment_get":
+		return e.AllowCommitmentGet
+	case "commitment_get_public":
+		return e.AllowCommitmentGetPublic
+	case "commitment_get_unscoped":
+		return e.AllowCommitmentGetUnscoped
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
+	case "with_obsolete":
+		return !e.ForbidWithObsolete
+	case "with_subresources":
+		return !e.ForbidWithSubresources
+	case "with_timing":
+		return !e.ForbidWithTiming
 	case "block_commitments":
 		return false
 	default:

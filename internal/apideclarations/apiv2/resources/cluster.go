@@ -11,6 +11,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -43,7 +44,7 @@ type ClusterServiceReport struct {
 	// ScrapedAt is the most recent time at which capacity and usage data for this service within this
 	// cluster was successfully collected from the backend, or None if no usage data has been collected yet.
 	// It is only returned when the respective query option with=timing is set.
-	ScrapedAt  Option[limes.UnixEncodedTime]                 `json:"scraped_at,omitzero"`
+	ScrapedAt  Option[common.RFC3339EncodedTime]             `json:"scraped_at,omitzero"`
 	Categories map[liquid.CategoryName]ClusterCategoryReport `json:"categories"`
 }
 

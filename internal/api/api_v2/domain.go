@@ -30,11 +30,7 @@ func (p *v2Provider) handleGetResourcesDomains(r *http.Request, token *gopherpol
 // handleGetResourcesDomain handles GET /resources/v2/domains/:domain_uuid.
 func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/resources/v2/domains/:domain_uuid")
-	err = token.Enforce("v2:domain:report_single")
-	if err != nil {
-		return
-	}
-	scope, err := reports_v2.NewDomainScope(r.Context(), token.Context.Request["domain_uuid"], p.DB)
+	scope, err := p.checkDomainAccess(r.Context(), token, token.Context.Request["domain_uuid"], "v2:domain:report_single")
 	if err != nil {
 		return
 	}
@@ -70,11 +66,7 @@ func (p *v2Provider) handleGetRatesDomains(r *http.Request, token *gopherpolicy.
 // handleGetRatesDomain handles GET /rates/v2/domains/:domain_uuid.
 func (p *v2Provider) handleGetRatesDomain(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.DomainGetResponse, err error) {
 	httpapi.IdentifyEndpoint(r, "/rates/v2/domains/:domain_uuid")
-	err = token.Enforce("v2:domain:report_single")
-	if err != nil {
-		return
-	}
-	scope, err := reports_v2.NewDomainScope(r.Context(), token.Context.Request["domain_uuid"], p.DB)
+	scope, err := p.checkDomainAccess(r.Context(), token, token.Context.Request["domain_uuid"], "v2:domain:report_single")
 	if err != nil {
 		return
 	}

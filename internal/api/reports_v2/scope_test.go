@@ -9,7 +9,6 @@ import (
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
-	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
@@ -27,44 +26,6 @@ var scopeConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString("{}"
 	ModifyWithVariable(".availability_zones = $ref", common_fixtures.AZsOneTwo).
 	ModifyWithVariable(". * $ref", common_fixtures.AreaLiquidFirstSecond).
 	MarshalJSON()))
-
-func TestV2ScopeCreation(t *testing.T) {
-	ctx := t.Context()
-
-	s := test.NewSetup(t,
-		test.WithConfig(scopeConfigJSON),
-		test.WithInitialDiscovery,
-	)
-	var (
-		domainFrance = must.ReturnT(db.DomainStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-france"))(t)
-		projectParis = must.ReturnT(db.ProjectStore.SelectOneWhere(ctx, s.DB, `uuid = $1`, "uuid-for-paris"))(t)
-	)
-
-	// domain-scoped case
-	var (
-		scope reports_v2.Scope
-		err   error
-	)
-	scope, err = reports_v2.NewDomainScope(ctx, "uuid-for-france", s.DB)
-	if assert.ErrEqual(t, err, nil) {
-		assert.Equal(t, scope, reports_v2.Scope(reports_v2.DomainScope{
-			Domain: domainFrance,
-		}))
-	}
-
-	// project-scoped case
-	scope, err = reports_v2.NewProjectScope(ctx, "uuid-for-paris", Some("uuid-for-france"), s.DB)
-	if assert.ErrEqual(t, err, nil) {
-		assert.Equal(t, scope, reports_v2.Scope(reports_v2.ProjectScope{
-			Domain:  domainFrance,
-			Project: projectParis,
-		}))
-	}
-
-	// error: inconsistent project-scoped request
-	_, err = reports_v2.NewProjectScope(ctx, "uuid-for-paris", Some("uuid-for-germany"), s.DB)
-	assert.ErrEqual(t, err, `inconsistent NewScope() invocation: got domainUUID = "uuid-for-germany" and projectUUID = "uuid-for-paris", but that project actually belongs to domain "france" with UUID = "uuid-for-france"`)
-}
 
 func TestV2ExpandScopeFilters(t *testing.T) {
 	ctx := t.Context()

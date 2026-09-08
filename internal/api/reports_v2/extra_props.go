@@ -47,6 +47,16 @@ func EvalProjectResourceExtraProps(sql string, opts common.ProjectResourceReport
 	return handleProps(sql, optSettings)
 }
 
+// EvalCommitmentListExtraProps works like EvalClusterResourceExtraProps but with
+// common.CommitmentListOpts.
+func EvalCommitmentListExtraProps(sql string, opts common.CommitmentListOpts) string {
+	optSettings := map[string]bool{
+		"obsolete": opts.WithObsolete,
+		"public":   opts.OnlyPublic,
+	}
+	return handleProps(sql, optSettings)
+}
+
 // handleProps is the generic, unexported function which takes an array of
 // optStrings and does the replacement according to the chosen options.
 // It panics when $with_[opt]{{...}} or $without_[opt]{{...}} is found in the sql string, but not in the optSettings map.
