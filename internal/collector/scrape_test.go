@@ -203,7 +203,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// first Scrape should create the entries in `project_resources` with the
-	// correct usage and backend quota values (and quota = 0 because no ACPQ has run yet)
+	// correct usage and backend quota values (and quota = max(usage, 0) because no ACPQ has run yet)
 	// and set `project_services.scraped_at` to the current time;
 	// a desync should be noted, but we will not run syncJob until later in this test
 	s.Clock.StepBy(collector.ScrapeInterval)
@@ -219,16 +219,16 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage) VALUES (11, 2, 3, 0, 0, 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (12, 2, 4, 0, 0, '{"t":[%[3]d],"v":[0]}', 100);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (13, 2, 6, 0, 0, '{"t":[%[3]d],"v":[0]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (14, 2, 7, 0, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (15, 2, 8, 0, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (16, 2, 9, 0, 4, '{"t":[%[3]d],"v":[4]}', 42);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (14, 2, 7, 2, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (15, 2, 8, 2, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (16, 2, 9, 4, 4, '{"t":[%[3]d],"v":[4]}', 42);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage) VALUES (2, 1, 2, 0, 0, 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage) VALUES (3, 1, 3, 0, 0, 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (4, 1, 4, 0, 0, '{"t":[%[1]d],"v":[0]}', 100);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (5, 1, 6, 0, 0, '{"t":[%[1]d],"v":[0]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (6, 1, 7, 0, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (7, 1, 8, 0, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (8, 1, 9, 0, 4, '{"t":[%[1]d],"v":[4]}', 42);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (6, 1, 7, 2, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage) VALUES (7, 1, 8, 2, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (8, 1, 9, 4, 4, '{"t":[%[1]d],"v":[4]}', 42);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (9, 2, 1, 0, 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (10, 2, 5, '');
 		INSERT INTO project_rates (id, project_id, rate_id, usage_as_bigint) VALUES (3, 1, 1, '1024');
@@ -828,13 +828,13 @@ func Test_TopologyScrapes(t *testing.T) {
 		DELETE FROM az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'unittest/capacity/any';
 		DELETE FROM az_resources WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'unittest/things/any';
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (1, 1, 2, 0, 0, 0, '{"t":[%[1]d],"v":[0]}', 50);
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (10, 2, 7, 0, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}', 21);
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (11, 2, 8, 0, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (10, 2, 7, 2, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[3]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (11, 2, 8, 2, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[3]d],"v":[2]}', 21);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, historical_usage) VALUES (12, 2, 9, 4, '{"t":[%[3]d],"v":[4]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (2, 1, 3, 0, 0, 0, '{"t":[%[1]d],"v":[0]}', 50);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, historical_usage) VALUES (3, 1, 4, 0, '{"t":[%[1]d],"v":[0]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (4, 1, 7, 0, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}', 21);
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (5, 1, 8, 0, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (4, 1, 7, 2, 2, '[{"name":"index","usage":0},{"name":"index","usage":1}]', '{"t":[%[1]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, subresources, historical_usage, backend_quota) VALUES (5, 1, 8, 2, 2, '[{"name":"index","usage":2},{"name":"index","usage":3}]', '{"t":[%[1]d],"v":[2]}', 21);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, usage, historical_usage) VALUES (6, 1, 9, 4, '{"t":[%[1]d],"v":[4]}');
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (7, 2, 2, 0, 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
 		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, physical_usage, historical_usage, backend_quota) VALUES (8, 2, 3, 0, 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
