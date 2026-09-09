@@ -38,7 +38,13 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
+type azResourceLoc struct {
+	ID   db.AZResourceID   `db:"id"`
+	Path db.AZResourcePath `db:"path"`
+}
+
 var (
+	azResourceLocStore         = oblast.MustNewStore[azResourceLoc](oblast.PostgresDialect())
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
 		  FROM project_commitments pc
@@ -129,16 +135,9 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"pazr.project_id": dbProject.ID}, len(joinArgs))
 	azResourcePathsByID := make(map[db.AZResourceID]db.AZResourcePath)
-	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			id   db.AZResourceID
-			path db.AZResourcePath
-		)
-		err := rows.Scan(&id, &path)
-		if err != nil {
-			return err
-		}
-		azResourcePathsByID[id] = path
+
+	err := azResourceLocStore.Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
+		azResourcePathsByID[r.ID] = r.Path
 		return nil
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {
@@ -264,16 +263,8 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(nil, len(joinArgs))
 	azResourcePathsByID := make(map[db.AZResourceID]db.AZResourcePath)
-	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			id   db.AZResourceID
-			path db.AZResourcePath
-		)
-		err := rows.Scan(&id, &path)
-		if err != nil {
-			return err
-		}
-		azResourcePathsByID[id] = path
+	err := azResourceLocStore.Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
+		azResourcePathsByID[r.ID] = r.Path
 		return nil
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {

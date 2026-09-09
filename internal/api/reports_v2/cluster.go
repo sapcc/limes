@@ -104,7 +104,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetResourcesInfo(cluster, token, timeNow, filter)
+		infoReport, err := GetResourcesInfo(ctx, cluster, token, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -132,7 +132,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 			// defense in depth: an az_resource was deleted in between, so we ignore the data
 			return nil
 		}
-		overcommitFactor := cluster.BehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName).OvercommitFactor
+		overcommitFactor := cluster.BehaviorForResourcePath(azResource.Path.Resource()).OvercommitFactor
 		capacity := overcommitFactor.ApplyTo(r.RawCapacity)
 		var committed map[liquid.CommitmentStatus]map[limesresources.CommitmentDuration]uint64
 		if opts.WithCommitmentStats {
@@ -143,7 +143,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 			// do not report commitment stats if the resource does not allow new commitments in any domains
 			// (however, if there are pre-existing commitments, report those in the usual way until they all expire or are deleted)
-			commitmentBehavior := cluster.CommitmentBehaviorForResource(azResource.Path.ServiceType, azResource.Path.ResourceName)
+			commitmentBehavior := cluster.CommitmentBehaviorForResourcePath(azResource.Path.Resource())
 			if len(commitmentBehavior.ForCluster().Durations) == 0 && len(committed) == 0 {
 				committed = nil
 				r.UsageUncommitted = None[uint64]()

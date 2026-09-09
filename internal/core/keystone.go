@@ -19,8 +19,8 @@ import (
 
 // KeystoneDomain describes the basic attributes of a Keystone domain.
 type KeystoneDomain struct {
-	UUID string `json:"id"`
-	Name string `json:"name"`
+	UUID string `json:"id" db:"domain_uuid"`
+	Name string `json:"name" db:"domain_name"`
 }
 
 // KeystoneDomainFromDB converts a db.Domain into a KeystoneDomain.
@@ -33,9 +33,9 @@ func KeystoneDomainFromDB(dbDomain db.Domain) KeystoneDomain {
 
 // KeystoneProject describes the basic attributes of a Keystone project.
 type KeystoneProject struct {
-	UUID       liquid.ProjectUUID `json:"id"`
-	Name       string             `json:"name"`
-	ParentUUID string             `json:"parent_id,omitempty"`
+	UUID       liquid.ProjectUUID `json:"id" db:"project_uuid"`
+	Name       string             `json:"name" db:"project_name"`
+	ParentUUID string             `json:"parent_id,omitempty" db:"parent_uuid"`
 	Domain     KeystoneDomain     `json:"domain"`
 }
 

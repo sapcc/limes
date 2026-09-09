@@ -5,7 +5,6 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -67,7 +66,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
-	SELECT s.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT s.type AS service_type, MIN(ps.scraped_at) AS min_scraped_at, MAX(ps.scraped_at) AS max_scraped_at
 	  FROM project_services ps
 	  JOIN services s ON s.id = ps.service_id
 	 WHERE ps.scraped_at IS NOT NULL
@@ -85,31 +84,22 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	maxScrapedAtGauge.Describe(descCh)
 	maxScrapedAtDesc := <-descCh
 
-	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
-		var (
-			serviceType       db.ServiceType
-			minScrapedAt      *time.Time
-			maxScrapedAt      *time.Time
-			minRatesScrapedAt *time.Time
-			maxRatesScrapedAt *time.Time
+	type scrapedAtAggregateRecord struct {
+		ServiceType  db.ServiceType `db:"service_type"`
+		MinScrapedAt *time.Time     `db:"min_scraped_at"`
+		MaxScrapedAt *time.Time     `db:"max_scraped_at"`
+	}
+	err := oblast.MustNewStore[scrapedAtAggregateRecord](oblast.PostgresDialect()).Select(context.Background(), c.DB, scrapedAtAggregateQuery).Foreach(func(r scrapedAtAggregateRecord) error {
+		ch <- prometheus.MustNewConstMetric(
+			minScrapedAtDesc,
+			prometheus.GaugeValue, timeAsUnixOrZero(r.MinScrapedAt),
+			string(r.ServiceType),
 		)
-		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt, &minRatesScrapedAt, &maxRatesScrapedAt)
-		if err != nil {
-			return err
-		}
-
-		if c.Cluster.SIC.GetSnapshot().GetResourcesForType(serviceType).Len() > 0 {
-			ch <- prometheus.MustNewConstMetric(
-				minScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				string(serviceType),
-			)
-			ch <- prometheus.MustNewConstMetric(
-				maxScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				string(serviceType),
-			)
-		}
+		ch <- prometheus.MustNewConstMetric(
+			maxScrapedAtDesc,
+			prometheus.GaugeValue, timeAsUnixOrZero(r.MaxScrapedAt),
+			string(r.ServiceType),
+		)
 		return nil
 	})
 	if err != nil {
@@ -147,9 +137,11 @@ type CapacityCollectionMetricsCollector struct {
 // CapacityCollectionMetricsInstance describes a single project service for which collection
 // metrics are submitted. It appears in type CapacityCollectionMetricsCollector.
 type CapacityCollectionMetricsInstance struct {
-	ServiceType       db.ServiceType
-	SerializedMetrics string
+	ServiceType       db.ServiceType `db:"service_type"`
+	SerializedMetrics string         `db:"serialized_metrics"`
 }
+
+var capacityCollectionMetricsStore = oblast.MustNewStore[CapacityCollectionMetricsInstance](oblast.PostgresDialect())
 
 // Describe implements the prometheus.Collector interface.
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -165,7 +157,7 @@ func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc
 }
 
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
-	SELECT type, serialized_metrics
+	SELECT type AS service_type, serialized_metrics
 	  FROM services
 	 WHERE serialized_metrics != '' AND serialized_metrics != '{}'
 `)
@@ -183,13 +175,9 @@ func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric
 		return
 	}
 
-	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
-		var i CapacityCollectionMetricsInstance
-		err := rows.Scan(&i.ServiceType, &i.SerializedMetrics)
-		if err == nil {
-			c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
-		}
-		return err
+	err := capacityCollectionMetricsStore.Select(context.Background(), c.DB, capacitySerializedMetricsGetQuery).Foreach(func(i CapacityCollectionMetricsInstance) error {
+		c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
+		return nil
 	})
 	if err != nil {
 		logg.Error("collect capacity collection metrics failed: " + err.Error())
@@ -245,9 +233,11 @@ type UsageCollectionMetricsCollector struct {
 // metrics are submitted. It appears in type UsageCollectionMetricsCollector.
 type QuotaCollectionMetricsInstance struct {
 	Project           core.KeystoneProject
-	ServiceType       db.ServiceType
-	SerializedMetrics string
+	ServiceType       db.ServiceType `db:"type"`
+	SerializedMetrics string         `db:"serialized_metrics"`
 }
+
+var quotaCollectionMetricsStore = oblast.MustNewStore[QuotaCollectionMetricsInstance](oblast.PostgresDialect())
 
 // Describe implements the prometheus.Collector interface.
 func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -263,7 +253,7 @@ func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, s.type, ps.serialized_metrics
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, p.name AS project_name, p.uuid AS project_uuid, p.parent_uuid, s.type, ps.serialized_metrics
 	  FROM project_services ps
 	  JOIN projects p ON p.id = ps.project_id
 	  JOIN domains d ON d.id = p.domain_id
@@ -285,16 +275,9 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	err := sqlext.ForeachRow(c.DB, quotaSerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
-		var i QuotaCollectionMetricsInstance
-		err := rows.Scan(
-			&i.Project.Domain.Name, &i.Project.Domain.UUID,
-			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
-			&i.ServiceType, &i.SerializedMetrics)
-		if err == nil {
-			c.collectOneProjectService(ch, collectionMetricsOkDesc, i, sis)
-		}
-		return err
+	err := quotaCollectionMetricsStore.Select(context.Background(), c.DB, quotaSerializedMetricsGetQuery).Foreach(func(r QuotaCollectionMetricsInstance) error {
+		c.collectOneProjectService(ch, collectionMetricsOkDesc, r, sis)
+		return nil
 	})
 	if err != nil {
 		logg.Error("collect usage collection metrics failed: " + err.Error())
@@ -389,7 +372,7 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity), JSON_OBJECT_AGG(azr.az, azr.usage)
+	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity) AS capacity_per_az_json, JSON_OBJECT_AGG(azr.az, azr.usage) AS usage_per_az_json
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -397,7 +380,7 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT d.name, d.uuid, s.type, r.name, SUM(pazr.quota)
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, s.type AS service_type, r.name AS resource_name, SUM(pazr.quota) AS quota
 	  FROM project_az_resources pazr
 	  JOIN projects p ON p.id = pazr.project_id
 	  JOIN domains d ON d.id = p.domain_id
@@ -418,7 +401,7 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}
 		GROUP BY p.domain_id, p.id, s.type, r.name
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name,
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, p.name AS project_name, p.uuid AS project_uuid, s.type, r.name,
 	       pazr.quota, pazr.backend_quota, pr.override_quota_from_config,
 	       pazr.usage AS usage, COALESCE(pazr.physical_usage, pazr.usage) AS physical_usage, COALESCE(pazr.physical_usage > 0, FALSE) AS has_physical_usage,
 	       pcmea.project_commitment_min_expires_at
@@ -443,7 +426,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 	    FROM project_commitment_sums_by_status
 	   GROUP BY az_resource_id, project_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, p.name AS project_name, p.uuid AS project_uuid, s.type, r.name, azr.az, pazr.usage, pcs.amount_by_status
 	  FROM project_az_resources pazr
 	  JOIN projects p ON p.id = pazr.project_id
 	  JOIN az_resources azr ON azr.id = pazr.az_resource_id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -454,7 +437,7 @@ var projectAZMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(
 `))
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, s.type, ra.name, pra.usage_as_bigint
+	SELECT d.name AS domain_name, d.uuid AS domain_uuid, p.name AS project_name, p.uuid AS project_uuid, s.type AS service_type, ra.name AS rate_name, pra.usage_as_bigint
 	  FROM project_rates pra
 	  JOIN projects p ON p.id = pra.project_id
 	  JOIN rates ra ON ra.id = pra.rate_id
@@ -482,28 +465,23 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	services := sis.GetServices()
 
 	// fetch values for cluster level
+	type clusterCapacityRecord struct {
+		ServiceType       db.ServiceType      `db:"type"`
+		ResourceName      liquid.ResourceName `db:"name"`
+		CapacityPerAZJSON string              `db:"capacity_per_az_json"`
+		UsagePerAZJSON    string              `db:"usage_per_az_json"`
+	}
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
-	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			dbServiceType     db.ServiceType
-			dbResourceName    liquid.ResourceName
-			capacityPerAZJSON string
-			usagePerAZJSON    string
-		)
-		err := rows.Scan(&dbServiceType, &dbResourceName, &capacityPerAZJSON, &usagePerAZJSON)
-		if err != nil {
-			return err
-		}
-
+	err := oblast.MustNewStore[clusterCapacityRecord](oblast.PostgresDialect()).Select(ctx, d.DB, clusterMetricsQuery).Foreach(func(r clusterCapacityRecord) error {
 		var (
 			capacityPerAZ map[liquid.AvailabilityZone]uint64
 			usagePerAZ    map[liquid.AvailabilityZone]*uint64
 		)
-		err = json.Unmarshal([]byte(capacityPerAZJSON), &capacityPerAZ)
+		err := json.Unmarshal([]byte(r.CapacityPerAZJSON), &capacityPerAZ)
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal([]byte(usagePerAZJSON), &usagePerAZ)
+		err = json.Unmarshal([]byte(r.UsagePerAZJSON), &usagePerAZ)
 		if err != nil {
 			return err
 		}
@@ -512,7 +490,7 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 			totalCapacity += azCapacity
 		}
 
-		behavior := behaviorCache.Get(dbServiceType, dbResourceName)
+		behavior := behaviorCache.Get(r.ServiceType, r.ResourceName)
 		apiIdentity := behavior.IdentityInV1API
 		for az, azCapacity := range capacityPerAZ {
 			if slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, az) && azCapacity == 0 {
@@ -521,7 +499,7 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 				continue
 			}
 			azLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
-				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
 			ms.Add("limes_cluster_capacity_per_az", azLabels, float64(behavior.OvercommitFactor.ApplyTo(azCapacity)))
 
@@ -532,15 +510,15 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 
 		labels := ms.FormatLabels(dmv1ResourceLabelNames,
-			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 		)
 		ms.Add("limes_cluster_capacity", labels, float64(behavior.OvercommitFactor.ApplyTo(totalCapacity)))
 
-		_, exists := capacityReported[dbServiceType]
+		_, exists := capacityReported[r.ServiceType]
 		if !exists {
-			capacityReported[dbServiceType] = make(map[liquid.ResourceName]bool)
+			capacityReported[r.ServiceType] = make(map[liquid.ResourceName]bool)
 		}
-		capacityReported[dbServiceType][dbResourceName] = true
+		capacityReported[r.ServiceType][r.ResourceName] = true
 
 		return nil
 	})
@@ -566,26 +544,22 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for domain level
-	err = sqlext.ForeachRow(d.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName     string
-			domainUUID     string
-			dbServiceType  db.ServiceType
-			dbResourceName liquid.ResourceName
-			quota          *uint64
-		)
-		err := rows.Scan(&domainName, &domainUUID, &dbServiceType, &dbResourceName, &quota)
-		if err != nil {
-			return err
-		}
-		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
+	type domainMetricsRecord struct {
+		DomainName   string              `db:"domain_name"`
+		DomainUUID   string              `db:"domain_uuid"`
+		ServiceType  db.ServiceType      `db:"service_type"`
+		ResourceName liquid.ResourceName `db:"resource_name"`
+		Quota        *uint64             `db:"quota"`
+	}
+	err = oblast.MustNewStore[domainMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, domainMetricsQuery).Foreach(func(r domainMetricsRecord) error {
+		apiIdentity := behaviorCache.Get(r.ServiceType, r.ResourceName).IdentityInV1API
 
-		if quota != nil {
+		if r.Quota != nil {
 			labels := ms.FormatLabels(dmv1DomainResourceLabelNames,
-				domainName, domainUUID,
-				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+				r.DomainName, r.DomainUUID,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
-			ms.Add("limes_domain_quota", labels, float64(*quota))
+			ms.Add("limes_domain_quota", labels, float64(*r.Quota))
 		}
 		return nil
 	})
@@ -594,57 +568,52 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for project level (quota/usage)
-	err = sqlext.ForeachRow(d.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName              string
-			domainUUID              string
-			projectName             string
-			projectUUID             string
-			dbServiceType           db.ServiceType
-			dbResourceName          liquid.ResourceName
-			quota                   *uint64
-			backendQuota            *int64
-			overrideQuotaFromConfig *uint64
-			usage                   uint64
-			physicalUsage           uint64
-			hasPhysicalUsage        bool
-			minExpiresAt            *time.Time
-		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&quota, &backendQuota, &overrideQuotaFromConfig, &usage, &physicalUsage, &hasPhysicalUsage, &minExpiresAt)
-		if err != nil {
-			return err
-		}
-		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
+	type projectMetricsRecord struct {
+		DomainName              string              `db:"domain_name"`
+		DomainUUID              string              `db:"domain_uuid"`
+		ProjectName             string              `db:"project_name"`
+		ProjectUUID             string              `db:"project_uuid"`
+		ServiceType             db.ServiceType      `db:"type"`
+		ResourceName            liquid.ResourceName `db:"name"`
+		Quota                   *uint64             `db:"quota"`
+		BackendQuota            *int64              `db:"backend_quota"`
+		OverrideQuotaFromConfig *uint64             `db:"override_quota_from_config"`
+		Usage                   uint64              `db:"usage"`
+		PhysicalUsage           uint64              `db:"physical_usage"`
+		HasPhysicalUsage        bool                `db:"has_physical_usage"`
+		MinExpiresAt            *time.Time          `db:"project_commitment_min_expires_at"`
+	}
+	err = oblast.MustNewStore[projectMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, projectMetricsQuery).Foreach(func(r projectMetricsRecord) error {
+		apiIdentity := behaviorCache.Get(r.ServiceType, r.ResourceName).IdentityInV1API
 
 		labels := ms.FormatLabels(dmv1ProjectResourceLabelNames,
-			domainName, domainUUID, projectName, projectUUID,
-			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+			r.DomainName, r.DomainUUID, r.ProjectName, r.ProjectUUID,
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 		)
 
-		if quota != nil {
-			if d.ReportZeroes || *quota != 0 {
-				ms.Add("limes_project_quota", labels, float64(*quota))
+		if r.Quota != nil {
+			if d.ReportZeroes || *r.Quota != 0 {
+				ms.Add("limes_project_quota", labels, float64(*r.Quota))
 			}
 		}
-		if backendQuota != nil {
-			if d.ReportZeroes || *backendQuota != 0 {
-				ms.Add("limes_project_backendquota", labels, float64(*backendQuota))
+		if r.BackendQuota != nil {
+			if d.ReportZeroes || *r.BackendQuota != 0 {
+				ms.Add("limes_project_backendquota", labels, float64(*r.BackendQuota))
 			}
 		}
-		if overrideQuotaFromConfig != nil {
-			ms.Add("limes_project_override_quota_from_config", labels, float64(*overrideQuotaFromConfig))
+		if r.OverrideQuotaFromConfig != nil {
+			ms.Add("limes_project_override_quota_from_config", labels, float64(*r.OverrideQuotaFromConfig))
 		}
-		if d.ReportZeroes || usage != 0 {
-			ms.Add("limes_project_usage", labels, float64(usage))
+		if d.ReportZeroes || r.Usage != 0 {
+			ms.Add("limes_project_usage", labels, float64(r.Usage))
 		}
-		if hasPhysicalUsage {
-			if d.ReportZeroes || physicalUsage != 0 {
-				ms.Add("limes_project_physical_usage", labels, float64(physicalUsage))
+		if r.HasPhysicalUsage {
+			if d.ReportZeroes || r.PhysicalUsage != 0 {
+				ms.Add("limes_project_physical_usage", labels, float64(r.PhysicalUsage))
 			}
 		}
-		if minExpiresAt != nil || d.ReportZeroes {
-			ms.Add("limes_project_commitment_min_expires_at", labels, timeAsUnixOrZero(minExpiresAt))
+		if r.MinExpiresAt != nil || d.ReportZeroes {
+			ms.Add("limes_project_commitment_min_expires_at", labels, timeAsUnixOrZero(r.MinExpiresAt))
 		}
 		return nil
 	})
@@ -653,39 +622,34 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for project AZ level (usage/commitments)
-	err = sqlext.ForeachRow(d.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName         string
-			domainUUID         string
-			projectName        string
-			projectUUID        string
-			dbServiceType      db.ServiceType
-			dbResourceName     liquid.ResourceName
-			az                 liquid.AvailabilityZone
-			usage              uint64
-			amountByStatusJSON *string
-		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&az, &usage, &amountByStatusJSON)
-		if err != nil {
-			return err
-		}
-		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
+	type projectAZMetricsRecord struct {
+		DomainName         string                  `db:"domain_name"`
+		DomainUUID         string                  `db:"domain_uuid"`
+		ProjectName        string                  `db:"project_name"`
+		ProjectUUID        string                  `db:"project_uuid"`
+		ServiceType        db.ServiceType          `db:"type"`
+		ResourceName       liquid.ResourceName     `db:"name"`
+		AZ                 liquid.AvailabilityZone `db:"az"`
+		Usage              uint64                  `db:"usage"`
+		AmountByStatusJSON *string                 `db:"amount_by_status"`
+	}
+	err = oblast.MustNewStore[projectAZMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, projectAZMetricsQuery).Foreach(func(r projectAZMetricsRecord) error {
+		apiIdentity := behaviorCache.Get(r.ServiceType, r.ResourceName).IdentityInV1API
 
 		labels := ms.FormatLabels(dmv1ProjectAZResourceLabelNames,
-			string(az), domainName, domainUUID, projectName, projectUUID,
-			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+			string(r.AZ), r.DomainName, r.DomainUUID, r.ProjectName, r.ProjectUUID,
+			string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 		)
 
-		if d.ReportZeroes || usage != 0 {
-			ms.Add("limes_project_usage_per_az", labels, float64(usage))
+		if d.ReportZeroes || r.Usage != 0 {
+			ms.Add("limes_project_usage_per_az", labels, float64(r.Usage))
 		}
 		committed := uint64(0)
-		if amountByStatusJSON != nil {
+		if r.AmountByStatusJSON != nil {
 			var amountByStatus map[liquid.CommitmentStatus]uint64
-			err = json.Unmarshal([]byte(*amountByStatusJSON), &amountByStatus)
+			err := json.Unmarshal([]byte(*r.AmountByStatusJSON), &amountByStatus)
 			if err != nil {
-				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *amountByStatusJSON)
+				return fmt.Errorf("while unmarshalling amount_by_status: %w (input was %q)", err, *r.AmountByStatusJSON)
 			}
 			committed = amountByStatus[liquid.CommitmentStatusConfirmed]
 			for status, amount := range amountByStatus {
@@ -697,8 +661,8 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 				ms.Add("limes_project_committed_per_az", labelsWithState, float64(amount))
 			}
 		}
-		if d.ReportZeroes || max(usage, committed) != 0 {
-			ms.Add("limes_project_used_and_or_committed_per_az", labels, float64(max(usage, committed)))
+		if d.ReportZeroes || max(r.Usage, committed) != 0 {
+			ms.Add("limes_project_used_and_or_committed_per_az", labels, float64(max(r.Usage, committed)))
 		}
 		return nil
 	})
@@ -734,32 +698,28 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch values for project level (rate usage)
-	err = sqlext.ForeachRow(d.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
-		var (
-			domainName    string
-			domainUUID    string
-			projectName   string
-			projectUUID   string
-			dbServiceType db.ServiceType
-			dbRateName    liquid.RateName
-			usageAsBigint string
-		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbRateName, &usageAsBigint)
-		if err != nil {
-			return err
-		}
-		usageAsBigFloat, _, err := big.NewFloat(0).Parse(usageAsBigint, 10)
+	type projectRateMetricsRecord struct {
+		DomainName    string          `db:"domain_name"`
+		DomainUUID    string          `db:"domain_uuid"`
+		ProjectName   string          `db:"project_name"`
+		ProjectUUID   string          `db:"project_uuid"`
+		ServiceType   db.ServiceType  `db:"service_type"`
+		RateName      liquid.RateName `db:"rate_name"`
+		UsageAsBigint string          `db:"usage_as_bigint"`
+	}
+	err = oblast.MustNewStore[projectRateMetricsRecord](oblast.PostgresDialect()).Select(ctx, d.DB, projectRateMetricsQuery).Foreach(func(r projectRateMetricsRecord) error {
+		usageAsBigFloat, _, err := big.NewFloat(0).Parse(r.UsageAsBigint, 10)
 		if err != nil {
 			return err
 		}
 		usageAsFloat, _ := usageAsBigFloat.Float64()
 
 		if d.ReportZeroes || usageAsFloat != 0 {
-			behavior := behaviorCache.GetForRate(dbServiceType, dbRateName)
+			behavior := behaviorCache.GetForRate(r.ServiceType, r.RateName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := ms.FormatLabels(dmv1ProjectRateLabelNames,
-				domainName, domainUUID, projectName, projectUUID,
-				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(dbServiceType),
+				r.DomainName, r.DomainUUID, r.ProjectName, r.ProjectUUID,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
 			ms.Add("limes_project_rate_usage", labels, usageAsFloat)
 		}
@@ -1193,8 +1153,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch project-scoped rate data
-	// TODO: replace MustNewStore with `db.ProjectRateStore` once that exists
-	err = oblast.MustNewStore[db.ProjectRate](oblast.PostgresDialect()).Select(ctx, d.DB, `SELECT * FROM project_rates`).Foreach(func(prr db.ProjectRate) error {
+	err = db.ProjectRateStore.Select(ctx, d.DB, `SELECT * FROM project_rates`).Foreach(func(prr db.ProjectRate) error {
 		ri, ok := rateInfoByID[prr.RateID]
 		if !ok {
 			return fmt.Errorf("saw unexpected RateID %d", prr.RateID)

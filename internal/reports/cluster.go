@@ -4,7 +4,7 @@
 package reports
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,6 +15,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -27,11 +28,11 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	   WHERE status = {{liquid.CommitmentStatusConfirmed}}
 	   GROUP BY project_id, az_resource_id
 	)
-	SELECT s.type, r.name, azr.az, SUM(pazr.usage),
-		   SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage, COUNT(pazr.physical_usage) > 0 as show_physical_usage,
+	SELECT s.type, r.name, azr.az, SUM(pazr.usage) AS usage,
+		   SUM(COALESCE(pazr.physical_usage, pazr.usage)) AS physical_usage, COUNT(pazr.physical_usage) > 0 AS show_physical_usage,
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)) AS unused_commitments,
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))) AS uncommitted_usage,
-	       SUM(pazr.quota) AS quota, MIN(ps.SCRAPED_AT), MAX(ps.SCRAPED_AT)
+	       SUM(pazr.quota) AS quota, MIN(ps.scraped_at) AS min_scraped_at, MAX(ps.scraped_at) AS max_scraped_at
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -43,14 +44,42 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	 GROUP BY s.type, r.name, azr.az
 `))
 
+type clusterResourceUsageRecord struct {
+	ServiceType       db.ServiceType          `db:"type"`
+	ResourceName      liquid.ResourceName     `db:"name"`
+	AvailabilityZone  *limes.AvailabilityZone `db:"az"`
+	Usage             *uint64                 `db:"usage"`
+	PhysicalUsage     *uint64                 `db:"physical_usage"`
+	ShowPhysicalUsage *bool                   `db:"show_physical_usage"`
+	UnusedCommitments *uint64                 `db:"unused_commitments"`
+	UncommittedUsage  *uint64                 `db:"uncommitted_usage"`
+	Quota             *uint64                 `db:"quota"`
+	MinScrapedAt      *time.Time              `db:"min_scraped_at"`
+	MaxScrapedAt      *time.Time              `db:"max_scraped_at"`
+}
+
+var clusterResourceUsageStore = oblast.MustNewStore[clusterResourceUsageRecord](oblast.PostgresDialect())
+
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT s.type, r.name, azr.az, azr.raw_capacity, azr.usage, azr.subcapacities, s.scraped_at
+	SELECT s.type, r.name, azr.az, azr.raw_capacity, azr.usage, azr.subcapacities AS subcapacities, s.scraped_at
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  LEFT OUTER JOIN az_resources azr ON azr.resource_id = r.id
 	 WHERE TRUE {{AND s.type = $service_type}}
 	 ORDER BY azr.az
 `))
+
+type clusterResourceCapacityRecord struct {
+	ServiceType      db.ServiceType          `db:"type"`
+	ResourceName     liquid.ResourceName     `db:"name"`
+	AvailabilityZone *limes.AvailabilityZone `db:"az"`
+	RawCapacity      *uint64                 `db:"raw_capacity"`
+	Usage            *uint64                 `db:"usage"`
+	Subcapacities    *string                 `db:"subcapacities"`
+	ScrapedAt        *time.Time              `db:"scraped_at"`
+}
+
+var clusterResourceCapacityStore = oblast.MustNewStore[clusterResourceCapacityRecord](oblast.PostgresDialect())
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -62,7 +91,7 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	   GROUP BY az_resource_id, duration
 	)
 	SELECT s.type, r.name, azr.az,
-	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
+	       pcs.duration, SUM(pcs.confirmed) AS confirmed, SUM(pcs.pending) AS pending, SUM(pcs.planned) AS planned
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -71,8 +100,20 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	 GROUP BY s.type, r.name, azr.az, pcs.duration
 `))
 
+type clusterCommitmentRecord struct {
+	ServiceType     db.ServiceType                    `db:"type"`
+	ResourceName    liquid.ResourceName               `db:"name"`
+	AZ              limes.AvailabilityZone            `db:"az"`
+	Duration        limesresources.CommitmentDuration `db:"duration"`
+	ConfirmedAmount uint64                            `db:"confirmed"`
+	PendingAmount   uint64                            `db:"pending"`
+	PlannedAmount   uint64                            `db:"planned"`
+}
+
+var clusterCommitmentStore = oblast.MustNewStore[clusterCommitmentRecord](oblast.PostgresDialect())
+
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT s.type, ra.name, MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT s.type, ra.name, MIN(ps.scraped_at) AS min_scraped_at, MAX(ps.scraped_at) AS max_scraped_at
 	  FROM services s
 	  JOIN rates ra ON ra.service_id = s.id
 	  JOIN project_services ps ON ps.service_id = s.id
@@ -83,8 +124,17 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	 GROUP BY s.type, ra.name
 `)
 
+type clusterRateScrapedAtRecord struct {
+	ServiceType       db.ServiceType  `db:"type"`
+	RateName          liquid.RateName `db:"name"`
+	MinRatesScrapedAt *time.Time      `db:"min_scraped_at"`
+	MaxRatesScrapedAt *time.Time      `db:"max_scraped_at"`
+}
+
+var clusterRateReportStore = oblast.MustNewStore[clusterRateScrapedAtRecord](oblast.PostgresDialect())
+
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
+func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -94,65 +144,46 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 
 	// first query: collect project usage data in these clusters
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
-	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			dbServiceType     db.ServiceType
-			dbResourceName    liquid.ResourceName
-			availabilityZone  *limes.AvailabilityZone
-			usage             *uint64
-			physicalUsage     *uint64
-			showPhysicalUsage *bool
-			unusedCommitments *uint64
-			uncommittedUsage  *uint64
-			quota             *uint64
-			minScrapedAt      *time.Time
-			maxScrapedAt      *time.Time
-		)
-		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
-			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments, &uncommittedUsage, &quota,
-			&minScrapedAt, &maxScrapedAt)
-		if err != nil {
-			return err
-		}
-		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
+	err := clusterResourceUsageStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceUsageRecord) error {
+		if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 			return nil
 		}
-		serviceReport, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
+		serviceReport, resourceReport, _ := findInClusterReport(cluster, report, r.ServiceType, r.ResourceName, now, sis)
 
-		serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
-		serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
+		serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, r.MaxScrapedAt)
+		serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, r.MinScrapedAt)
 
-		if availabilityZone == nil {
+		if r.AvailabilityZone == nil {
 			return nil
 		}
 
-		if *availabilityZone == liquid.AvailabilityZoneTotal {
+		if *r.AvailabilityZone == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, we will set the quota here
-			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
-			resourceReport.Usage = *usage
-			if quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.ServiceType, ResourceName: r.ResourceName})
+			resourceReport.Usage = *r.Usage
+			if r.Quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
 				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
 				// the sum of all project quotas, since quotas only exist on project level by now.
-				resourceReport.DomainsQuota = quota
+				resourceReport.DomainsQuota = r.Quota
 			}
-			if *showPhysicalUsage {
-				resourceReport.PhysicalUsage = physicalUsage
+			if *r.ShowPhysicalUsage {
+				resourceReport.PhysicalUsage = r.PhysicalUsage
 			}
 		}
 
-		if *availabilityZone != liquid.AvailabilityZoneTotal && filter.WithAZBreakdown {
+		if *r.AvailabilityZone != liquid.AvailabilityZoneTotal && filter.WithAZBreakdown {
 			if resourceReport.PerAZ == nil {
 				resourceReport.PerAZ = make(limesresources.ClusterAZResourceReports)
 			}
 			azReport := limesresources.ClusterAZResourceReport{
-				ProjectsUsage:     *usage,
-				UnusedCommitments: *unusedCommitments,
-				UncommittedUsage:  *uncommittedUsage,
+				ProjectsUsage:     *r.Usage,
+				UnusedCommitments: *r.UnusedCommitments,
+				UncommittedUsage:  *r.UncommittedUsage,
 			}
-			if *showPhysicalUsage {
-				azReport.PhysicalUsage = physicalUsage
+			if *r.ShowPhysicalUsage {
+				azReport.PhysicalUsage = r.PhysicalUsage
 			}
-			resourceReport.PerAZ[*availabilityZone] = &azReport
+			resourceReport.PerAZ[*r.AvailabilityZone] = &azReport
 		}
 
 		return nil
@@ -166,86 +197,73 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	if !filter.WithSubcapacities {
 		queryStr = strings.Replace(queryStr, "azr.subcapacities", "''", 1)
 	}
-	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			dbServiceType    db.ServiceType
-			dbResourceName   liquid.ResourceName
-			availabilityZone *limes.AvailabilityZone
-			rawCapacity      *uint64
-			usage            *uint64
-			subcapacities    *string
-			scrapedAt        *time.Time
-		)
-		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
-			&rawCapacity, &usage, &subcapacities, &scrapedAt)
-		if err != nil {
-			return err
-		}
-		if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
+	err = clusterResourceCapacityStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceCapacityRecord) error {
+		if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 			return nil
 		}
-		_, resourceReport, behavior := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
+		_, resourceReport, behavior := findInClusterReport(cluster, report, r.ServiceType, r.ResourceName, now, sis)
 		overcommitFactor := behavior.OvercommitFactor
 
-		if availabilityZone == nil {
+		if r.AvailabilityZone == nil {
 			return nil
 		}
 
-		if *availabilityZone == liquid.AvailabilityZoneTotal {
-			resourceReport.Capacity = pointerTo(overcommitFactor.ApplyTo(*rawCapacity)) //nolint:modernize // pointerTo takes a value, new() creates a zero value
-			if *resourceReport.Capacity != *rawCapacity {
-				resourceReport.RawCapacity = pointerTo(*rawCapacity) //nolint:modernize // pointerTo takes a value, new() creates a zero value
+		if *r.AvailabilityZone == liquid.AvailabilityZoneTotal {
+			resourceReport.Capacity = pointerTo(overcommitFactor.ApplyTo(*r.RawCapacity)) //nolint:modernize // pointerTo takes a value, new() creates a zero value
+			if *resourceReport.Capacity != *r.RawCapacity {
+				resourceReport.RawCapacity = pointerTo(*r.RawCapacity) //nolint:modernize // pointerTo takes a value, new() creates a zero value
 			}
 		}
 
-		if rawCapacity != nil && *availabilityZone != liquid.AvailabilityZoneTotal {
+		if r.RawCapacity != nil && *r.AvailabilityZone != liquid.AvailabilityZoneTotal {
 			azReport := limesresources.ClusterAvailabilityZoneReport{
-				Name:  *availabilityZone,
-				Usage: unwrapOrDefault(usage, 0),
+				Name:  *r.AvailabilityZone,
+				Usage: unwrapOrDefault(r.Usage, 0),
 			}
-			azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacity)
-			if azReport.Capacity != *rawCapacity {
-				azReport.RawCapacity = *rawCapacity
+			azReport.Capacity = overcommitFactor.ApplyTo(*r.RawCapacity)
+			if azReport.Capacity != *r.RawCapacity {
+				azReport.RawCapacity = *r.RawCapacity
 			}
 
 			if resourceReport.CapacityPerAZ == nil {
 				resourceReport.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
 			}
-			resourceReport.CapacityPerAZ[*availabilityZone] = &azReport
+			resourceReport.CapacityPerAZ[*r.AvailabilityZone] = &azReport
 
 			// only the az-entries have subcapacities!=''
-			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
+			if r.Subcapacities != nil && *r.Subcapacities != "" && filter.IsSubcapacityAllowed(r.ServiceType, r.ResourceName) {
 				translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
 				// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-				resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
+				resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.ServiceType, ResourceName: r.ResourceName})
 				if translate != nil {
-					*subcapacities, err = translate(*subcapacities, *availabilityZone, resource)
+					var err error
+					*r.Subcapacities, err = translate(*r.Subcapacities, *r.AvailabilityZone, resource)
 					if err != nil {
 						return fmt.Errorf("could not apply TranslationRule to subcapacities in %s/%s/%s: %w",
-							dbServiceType, dbResourceName, *availabilityZone, err)
+							r.ServiceType, r.ResourceName, *r.AvailabilityZone, err)
 					}
 				}
-				mergeJSONListInto(&resourceReport.Subcapacities, *subcapacities)
+				mergeJSONListInto(&resourceReport.Subcapacities, *r.Subcapacities)
 			}
 
 			if filter.WithAZBreakdown {
 				if resourceReport.PerAZ == nil {
 					resourceReport.PerAZ = make(limesresources.ClusterAZResourceReports)
 				}
-				azReportV2 := resourceReport.PerAZ[*availabilityZone]
+				azReportV2 := resourceReport.PerAZ[*r.AvailabilityZone]
 				if azReportV2 == nil {
 					azReportV2 = &limesresources.ClusterAZResourceReport{}
-					resourceReport.PerAZ[*availabilityZone] = azReportV2
+					resourceReport.PerAZ[*r.AvailabilityZone] = azReportV2
 				}
 				azReportV2.Capacity = azReport.Capacity
 				azReportV2.RawCapacity = azReport.RawCapacity
-				azReportV2.Usage = usage
-				azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacities, ""))
+				azReportV2.Usage = r.Usage
+				azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(r.Subcapacities, ""))
 			}
 		}
 
-		report.MaxScrapedAt = mergeMaxTime(report.MaxScrapedAt, scrapedAt)
-		report.MinScrapedAt = mergeMinTime(report.MinScrapedAt, scrapedAt)
+		report.MaxScrapedAt = mergeMaxTime(report.MaxScrapedAt, r.ScrapedAt)
+		report.MinScrapedAt = mergeMinTime(report.MinScrapedAt, r.ScrapedAt)
 
 		return nil
 	})
@@ -256,50 +274,34 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	if filter.WithAZBreakdown {
 		// third query: collect commitment data that is broken down by commitment duration
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
-		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-			var (
-				dbServiceType   db.ServiceType
-				dbResourceName  liquid.ResourceName
-				az              limes.AvailabilityZone
-				duration        limesresources.CommitmentDuration
-				confirmedAmount uint64
-				pendingAmount   uint64
-				plannedAmount   uint64
-			)
-			err := rows.Scan(
-				&dbServiceType, &dbResourceName, &az,
-				&duration, &confirmedAmount, &pendingAmount, &plannedAmount,
-			)
-			if err != nil {
-				return err
-			}
-			if _, exists := cluster.Config.Liquids[dbServiceType]; !filter.Includes[dbServiceType][dbResourceName] || !exists {
+		err = clusterCommitmentStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterCommitmentRecord) error {
+			if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 				return nil
 			}
-			_, resourceReport, _ := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now, sis)
+			_, resourceReport, _ := findInClusterReport(cluster, report, r.ServiceType, r.ResourceName, now, sis)
 
-			azReport := resourceReport.PerAZ[az]
+			azReport := resourceReport.PerAZ[r.AZ]
 			if azReport == nil {
 				return nil
 			}
 
-			if confirmedAmount > 0 {
+			if r.ConfirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = confirmedAmount
+				azReport.Committed[r.Duration.String()] = r.ConfirmedAmount
 			}
-			if pendingAmount > 0 {
+			if r.PendingAmount > 0 {
 				if azReport.PendingCommitments == nil {
 					azReport.PendingCommitments = make(map[string]uint64)
 				}
-				azReport.PendingCommitments[duration.String()] = pendingAmount
+				azReport.PendingCommitments[r.Duration.String()] = r.PendingAmount
 			}
-			if plannedAmount > 0 {
+			if r.PlannedAmount > 0 {
 				if azReport.PlannedCommitments == nil {
 					azReport.PlannedCommitments = make(map[string]uint64)
 				}
-				azReport.PlannedCommitments[duration.String()] = plannedAmount
+				azReport.PlannedCommitments[r.Duration.String()] = r.PlannedAmount
 			}
 
 			return nil
@@ -351,7 +353,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 }
 
 // GetClusterRates returns the rate data report for the whole cluster.
-func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesrates.ClusterReport, error) {
+func GetClusterRates(ctx context.Context, cluster *core.Cluster, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesrates.ClusterReport, error) {
 	nm := core.BuildRateNameMapping(cluster, sis)
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
@@ -362,29 +364,18 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis
 
 	// collect scraping timestamp summaries
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
-	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var (
-			dbServiceType     db.ServiceType
-			dbRateName        liquid.RateName
-			minRatesScrapedAt *time.Time
-			maxRatesScrapedAt *time.Time
-		)
-		err := rows.Scan(&dbServiceType, &dbRateName, &minRatesScrapedAt, &maxRatesScrapedAt)
-		if err != nil {
-			return err
-		}
-
-		if _, ok := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: dbRateName}); !ok {
+	err := clusterRateReportStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterRateScrapedAtRecord) error {
+		if _, ok := sis.GetRateForPath(db.RatePath{ServiceType: r.ServiceType, RateName: r.RateName}); !ok {
 			return nil
 		}
-		apiServiceType, _, exists := nm.MapToV1API(dbServiceType, dbRateName)
+		apiServiceType, _, exists := nm.MapToV1API(r.ServiceType, r.RateName)
 		if !exists {
 			return nil
 		}
 
 		srvReport, exists := report.Services[apiServiceType]
 		if !exists {
-			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(r.ServiceType)
 			srvReport = &limesrates.ClusterServiceReport{
 				Type: apiServiceType, Area: srvCfg.Area,
 				Rates: make(limesrates.ClusterRateReports),
@@ -392,8 +383,8 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter, sis
 			report.Services[apiServiceType] = srvReport
 		}
 
-		srvReport.MaxScrapedAt = mergeMaxTime(srvReport.MaxScrapedAt, maxRatesScrapedAt)
-		srvReport.MinScrapedAt = mergeMinTime(srvReport.MinScrapedAt, minRatesScrapedAt)
+		srvReport.MaxScrapedAt = mergeMaxTime(srvReport.MaxScrapedAt, r.MaxRatesScrapedAt)
+		srvReport.MinScrapedAt = mergeMinTime(srvReport.MinScrapedAt, r.MinRatesScrapedAt)
 
 		return nil
 	})

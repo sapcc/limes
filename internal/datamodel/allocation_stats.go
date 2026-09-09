@@ -4,13 +4,14 @@
 package datamodel
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -113,17 +114,8 @@ type projectAZAllocationStats struct {
 	MaxHistoricalUsage uint64
 }
 
-var (
-	getRawCapacityInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT azr.az, azr.raw_capacity, azr.last_nonzero_raw_capacity IS NOT NULL
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
-		  WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3) AND azr.az != {{liquid.AvailabilityZoneTotal}}
-	`))
-
-	getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT pazr.project_id, azr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0)
+var getUsageInResourceQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+		SELECT pazr.project_id, azr.az, pazr.usage, pazr.historical_usage, COALESCE(SUM(pc.amount), 0) AS committed
 		  FROM services s
 		  JOIN resources r ON r.service_id = s.id
 		  JOIN az_resources azr ON azr.resource_id = r.id
@@ -132,64 +124,57 @@ var (
 		 WHERE s.type = $1 AND r.name = $2 AND ($3::text IS NULL OR azr.az = $3) AND azr.az != {{liquid.AvailabilityZoneTotal}}
 		 GROUP BY pazr.project_id, azr.az, pazr.usage, pazr.historical_usage
 	`))
-)
 
 // Shared data collection phase for ApplyComputedProjectQuota,
 // CanConfirmNewCommitment and ConfirmPendingCommitments.
-func collectAZAllocationStats(serviceType db.ServiceType, resourceName liquid.ResourceName, azFilter Option[limes.AvailabilityZone], cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
-	scopeDesc := fmt.Sprintf("%s/%s", serviceType, resourceName)
+func collectAZAllocationStats(ctx context.Context, sis core.ServiceInfoSnapshot, resourcePath db.ResourcePath, azFilter Option[limes.AvailabilityZone], cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
+	scopeDesc := resourcePath.String()
 	if azFilter.IsSome() {
 		scopeDesc += fmt.Sprintf(" in %s", azFilter)
 	}
 	result := make(map[limes.AvailabilityZone]clusterAZAllocationStats)
 
 	// get capacity
-	queryArgs := []any{serviceType, resourceName, azFilter}
-	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
-	err := sqlext.ForeachRow(dbi, getRawCapacityInResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			az                            limes.AvailabilityZone
-			rawCapacity                   uint64
-			observedNonzeroCapacityBefore bool
-		)
-		err := rows.Scan(&az, &rawCapacity, &observedNonzeroCapacityBefore)
-		result[az] = clusterAZAllocationStats{
-			Capacity:                      overcommitFactor.ApplyTo(rawCapacity),
-			ObservedNonzeroCapacityBefore: observedNonzeroCapacityBefore,
+	overcommitFactor := cluster.BehaviorForResourcePath(resourcePath).OvercommitFactor
+	for azRes := range sis.GetAZResourcesForPath(resourcePath).Values() {
+		if az, exists := azFilter.Unpack(); exists && azRes.AvailabilityZone != az && azRes.AvailabilityZone != liquid.AvailabilityZoneTotal {
+			continue
 		}
-		return err
-	})
-	if err != nil {
-		return result, fmt.Errorf("while getting raw capacity for %s: %w", scopeDesc, err)
+		result[azRes.AvailabilityZone] = clusterAZAllocationStats{
+			Capacity:                      overcommitFactor.ApplyTo(azRes.RawCapacity),
+			ObservedNonzeroCapacityBefore: azRes.LastNonzeroRawCapacity.IsSome(),
+		}
 	}
 
 	// get resource usage
-	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			projectID           db.ProjectID
-			az                  limes.AvailabilityZone
-			stats               projectAZAllocationStats
-			historicalUsageJSON string
-		)
-		err := rows.Scan(&projectID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
+	type usageInResourceRecord struct {
+		ProjectID       db.ProjectID           `db:"project_id"`
+		AZ              limes.AvailabilityZone `db:"az"`
+		Usage           uint64                 `db:"usage"`
+		HistoricalUsage string                 `db:"historical_usage"`
+		Committed       uint64                 `db:"committed"`
+	}
+	queryArgs := []any{resourcePath.ServiceType, resourcePath.ResourceName, azFilter}
+	err := oblast.MustNewStore[usageInResourceRecord](oblast.PostgresDialect()).Select(ctx, dbi, getUsageInResourceQuery, queryArgs...).Foreach(func(r usageInResourceRecord) error {
+		ts, err := util.ParseTimeSeries[uint64](r.HistoricalUsage)
 		if err != nil {
-			return err
+			return fmt.Errorf("could not parse historical usage of %s for project %d in %s: %w",
+				resourcePath.String(), r.ProjectID, r.AZ, err)
 		}
-		ts, err := util.ParseTimeSeries[uint64](historicalUsageJSON)
-		if err != nil {
-			return fmt.Errorf("could not parse historical usage of %s/%s for project %d in %s: %w",
-				serviceType, resourceName, projectID, az, err)
+		stats := projectAZAllocationStats{
+			Committed:          r.Committed,
+			Usage:              r.Usage,
+			MinHistoricalUsage: ts.MinOr(r.Usage),
+			MaxHistoricalUsage: ts.MaxOr(r.Usage),
 		}
-		stats.MinHistoricalUsage = ts.MinOr(stats.Usage)
-		stats.MaxHistoricalUsage = ts.MaxOr(stats.Usage)
 
-		azStats := result[az].ProjectStats
+		azStats := result[r.AZ].ProjectStats
 		if azStats == nil {
-			azEntry := result[az]
-			azEntry.ProjectStats = map[db.ProjectID]projectAZAllocationStats{projectID: stats}
-			result[az] = azEntry
+			azEntry := result[r.AZ]
+			azEntry.ProjectStats = map[db.ProjectID]projectAZAllocationStats{r.ProjectID: stats}
+			result[r.AZ] = azEntry
 		} else {
-			azStats[projectID] = stats
+			azStats[r.ProjectID] = stats
 		}
 		return nil
 	})

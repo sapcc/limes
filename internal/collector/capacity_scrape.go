@@ -252,6 +252,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	if err != nil {
 		return err
 	}
+	sis = c.Cluster.SIC.GetSnapshot()
 
 	// for all resources thus updated, sync commitment status with reality
 	for _, res := range resources.All() {
@@ -273,7 +274,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all resources thus updated, recompute project quotas if necessary
 	for _, res := range resources.All() {
 		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(service.Type, res, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(ctx, sis, res, c.Cluster, now)
 		if err != nil {
 			return err
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -96,25 +97,20 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 	}
 
 	// sort remaining commitments by project
+	type expiringCommitmentRecord struct {
+		ProjectID    db.ProjectID           `db:"project_id"`
+		Path         db.AZResourcePath      `db:"path"`
+		CommitmentID db.ProjectCommitmentID `db:"id"`
+	}
 	notifications := make(map[db.ProjectID][]core.CommitmentNotification)
-	err = sqlext.ForeachRow(tx, locateExpiringCommitmentsQuery, []any{pq.Array(slices.Collect(maps.Keys(longTermCommitmentsByID)))}, func(rows *sql.Rows) error {
-		var (
-			pid  db.ProjectID
-			cid  db.ProjectCommitmentID
-			path db.AZResourcePath
-		)
-		err := rows.Scan(&pid, &path, &cid)
-		if err != nil {
-			return err
-		}
-
-		apiIdentity := c.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API
-		commitment := longTermCommitmentsByID[cid]
-		notifications[pid] = append(notifications[pid], core.CommitmentNotification{
+	err = oblast.MustNewStore[expiringCommitmentRecord](oblast.PostgresDialect()).Select(ctx, tx, locateExpiringCommitmentsQuery, pq.Array(slices.Collect(maps.Keys(longTermCommitmentsByID)))).Foreach(func(r expiringCommitmentRecord) error {
+		apiIdentity := c.Cluster.BehaviorForResourcePath(r.Path.Resource()).IdentityInV1API
+		commitment := longTermCommitmentsByID[r.CommitmentID]
+		notifications[r.ProjectID] = append(notifications[r.ProjectID], core.CommitmentNotification{
 			Resource: core.AZResourceLocationV1{
 				ServiceType:      apiIdentity.ServiceType,
 				ResourceName:     apiIdentity.Name,
-				AvailabilityZone: path.AvailabilityZone,
+				AvailabilityZone: r.Path.AvailabilityZone,
 			},
 			Commitment: commitment,
 			DateString: commitment.ExpiresAt.Format(time.DateOnly),

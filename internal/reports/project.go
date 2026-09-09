@@ -5,7 +5,6 @@ package reports
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -17,30 +16,34 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
 
-// Both queries are "ORDER BY p.uuid" to ensure that a) the output order is
-// reproducible to keep the tests happy and b) records for the same project
-// appear in a cluster, so that the implementation can publish completed
-// project reports (and then reclaim their memory usage) as soon as possible.
-var (
-	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, s.type, ps.scraped_at, ra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
-	  FROM services s
-	  JOIN rates ra ON ra.service_id = s.id
-	  CROSS JOIN projects p
-	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
-	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = ps.project_id
-	 WHERE %s {{AND s.type = $service_type}}
-	 ORDER BY p.uuid
-`)
+type projectResourceRecord struct {
+	ProjectID                db.ProjectID            `db:"project_id"`
+	DBServiceType            db.ServiceType          `db:"type"`
+	ScrapedAt                *time.Time              `db:"scraped_at"`
+	DBResourceName           liquid.ResourceName     `db:"name"`
+	MaxQuotaFromOutsideAdmin *uint64                 `db:"max_quota_from_outside_admin"`
+	ForbidAutogrowth         bool                    `db:"forbid_autogrowth"`
+	Forbidden                bool                    `db:"forbidden"`
+	AZ                       *limes.AvailabilityZone `db:"az"`
+	Quota                    *uint64                 `db:"quota"`
+	Usage                    *uint64                 `db:"usage"`
+	PhysicalUsage            *uint64                 `db:"physical_usage"`
+	HistoricalUsage          *string                 `db:"historical_usage"`
+	BackendQuota             *int64                  `db:"backend_quota"`
+	Subresources             *string                 `db:"subresources"`
+}
 
-	projectReportResourcesQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT p.id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, pr.forbidden, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
+var projectResourceStore = oblast.MustNewStore[projectResourceRecord](oblast.PostgresDialect())
+
+var projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
+	SELECT p.id AS project_id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, pr.forbidden, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -51,9 +54,21 @@ var (
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
 	 WHERE %s {{AND s.type = $service_type}}
 	 ORDER BY p.uuid, azr.az
-`))
+`)
 
-	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+type projectCommitmentRecord struct {
+	DBServiceType   db.ServiceType                    `db:"type"`
+	DBResourceName  liquid.ResourceName               `db:"name"`
+	AZ              limes.AvailabilityZone            `db:"az"`
+	Duration        limesresources.CommitmentDuration `db:"duration"`
+	ConfirmedAmount uint64                            `db:"confirmed"`
+	PendingAmount   uint64                            `db:"pending"`
+	PlannedAmount   uint64                            `db:"planned"`
+}
+
+var projectCommitmentStore = oblast.MustNewStore[projectCommitmentRecord](oblast.PostgresDialect())
+
+var projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
@@ -65,7 +80,33 @@ var (
 	 WHERE pc.project_id = $1
 	 GROUP BY s.type, r.name, azr.az, pc.duration
 	`))
-)
+
+type projectRateRecord struct {
+	ProjectID      db.ProjectID       `db:"project_id"`
+	DBServiceType  db.ServiceType     `db:"type"`
+	RatesScrapedAt *time.Time         `db:"scraped_at"`
+	DBRateName     liquid.RateName    `db:"name"`
+	Limit          *uint64            `db:"rate_limit"`
+	Window         *limesrates.Window `db:"window_ns"`
+	UsageAsBigint  *string            `db:"usage_as_bigint"`
+}
+
+var projectRateStore = oblast.MustNewStore[projectRateRecord](oblast.PostgresDialect())
+
+// Both queries are "ORDER BY p.uuid" to ensure that a) the output order is
+// reproducible to keep the tests happy and b) records for the same project
+// appear in a cluster, so that the implementation can publish completed
+// project reports (and then reclaim their memory usage) as soon as possible.
+var projectRateReportQuery = sqlext.SimplifyWhitespace(`
+	SELECT p.id AS project_id, s.type, ps.scraped_at, ra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	  FROM services s
+	  JOIN rates ra ON ra.service_id = s.id
+	  CROSS JOIN projects p
+	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
+	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = ps.project_id
+	 WHERE %s {{AND s.type = $service_type}}
+	 ORDER BY p.uuid
+`)
 
 // GetProjectResources returns limes.ProjectReport reports for all projects in
 // the given domain or, if project is non-nil, for that project only. Only the
@@ -105,7 +146,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 	// avoid collecting the potentially large subresources strings when possible
 	queryStr = projectReportResourcesQuery
 	if !filter.WithSubresources {
-		queryStr = strings.Replace(queryStr, "pazr.subresources", "''", 1)
+		queryStr = strings.Replace(queryStr, "pazr.subresources", "'' AS subresources", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
@@ -114,41 +155,17 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 		currentProjectID db.ProjectID
 		projectReport    *limesresources.ProjectReport
 	)
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			projectID                db.ProjectID
-			dbServiceType            db.ServiceType
-			scrapedAt                *time.Time
-			dbResourceName           liquid.ResourceName
-			maxQuotaFromOutsideAdmin *uint64
-			ForbidAutogrowth         bool
-			forbidden                bool
-			az                       *limes.AvailabilityZone
-			quota                    *uint64
-			usage                    *uint64
-			physicalUsage            *uint64
-			historicalUsage          *string
-			backendQuota             *int64
-			subresources             *string
-		)
-		err := rows.Scan(
-			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&maxQuotaFromOutsideAdmin, &ForbidAutogrowth, &forbidden,
-			&az, &quota, &usage, &physicalUsage, &historicalUsage, &backendQuota, &subresources,
-		)
-		if err != nil {
-			return err
-		}
-		if !filter.Includes[dbServiceType][dbResourceName] {
+	err = projectResourceStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r projectResourceRecord) error {
+		if !filter.Includes[r.DBServiceType][r.DBResourceName] {
 			return nil
 		}
-		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+		behavior := cluster.BehaviorForResource(r.DBServiceType, r.DBResourceName)
 		apiIdentity := behavior.IdentityInV1API
 
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
-		if projectReport != nil && currentProjectID != projectID {
-			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter, nm)
+		if projectReport != nil && currentProjectID != r.ProjectID {
+			err := finalizeProjectResourceReport(ctx, projectReport, currentProjectID, dbi, filter, nm)
 			if err != nil {
 				return err
 			}
@@ -162,30 +179,30 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 
 		// start new project report when necessary
 		if projectReport == nil {
-			projectReport = allProjectReports[projectID]
-			delete(allProjectReports, projectID)
+			projectReport = allProjectReports[r.ProjectID]
+			delete(allProjectReports, r.ProjectID)
 			if projectReport == nil {
 				// this can happen if a project was inserted between the first and second query;
 				// ignore those projects because we don't have complete information about them
 				currentProjectID = 0
 				return nil
 			} else {
-				currentProjectID = projectID
+				currentProjectID = r.ProjectID
 			}
 		}
 
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiIdentity.ServiceType]
 		if srvReport == nil {
-			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(r.DBServiceType)
 			srvReport = &limesresources.ProjectServiceReport{
 				Type: apiIdentity.ServiceType, Area: srvCfg.Area,
 				Resources: make(limesresources.ProjectResourceReports),
 			}
 			projectReport.Services[apiIdentity.ServiceType] = srvReport
 
-			if scrapedAt != nil {
-				t := limes.UnixEncodedTime{Time: *scrapedAt}
+			if r.ScrapedAt != nil {
+				t := limes.UnixEncodedTime{Time: *r.ScrapedAt}
 				srvReport.ScrapedAt = &t
 			}
 		}
@@ -193,7 +210,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 		// start new resource report when necessary
 		resReport := srvReport.Resources[apiIdentity.Name]
 		// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
+		resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.DBServiceType, ResourceName: r.DBResourceName})
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo: behavior.BuildAPIResourceInfo(apiIdentity.Name, resource),
@@ -201,8 +218,8 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 				// all other fields are set below
 			}
 
-			if !forbidden {
-				resReport.CommitmentConfig = cluster.CommitmentBehaviorForResource(dbServiceType, dbResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer()
+			if !r.Forbidden {
+				resReport.CommitmentConfig = cluster.CommitmentBehaviorForResource(r.DBServiceType, r.DBResourceName).ForDomain(domain.Name).ForAPI(now).AsPointer()
 			}
 
 			if filter.WithAZBreakdown {
@@ -213,56 +230,57 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 
 		// fill data from project_az_resources into resource report
 		// start with special handling of "total" AZ
-		if *az == liquid.AvailabilityZoneTotal {
-			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
+		if *r.AZ == liquid.AvailabilityZoneTotal {
+			qdConfig := cluster.QuotaDistributionConfigForResource(r.DBServiceType, r.DBResourceName)
 			resReport.QuotaDistributionModel = qdConfig.Model
 
-			resReport.Usage = *usage
-			if physicalUsage != nil {
-				resReport.PhysicalUsage = physicalUsage
+			resReport.Usage = *r.Usage
+			if r.PhysicalUsage != nil {
+				resReport.PhysicalUsage = r.PhysicalUsage
 			}
 
-			if !resReport.NoQuota && quota != nil {
+			if !resReport.NoQuota && r.Quota != nil {
 				if resource.Topology != liquid.AZSeparatedTopology {
-					resReport.Quota = quota
-					resReport.UsableQuota = quota
-					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
-						resReport.BackendQuota = backendQuota
+					resReport.Quota = r.Quota
+					resReport.UsableQuota = r.Quota
+					if r.BackendQuota != nil && (*r.BackendQuota < 0 || uint64(*r.BackendQuota) != *r.Quota) {
+						resReport.BackendQuota = r.BackendQuota
 					}
 				}
-				if maxQuotaFromOutsideAdmin != nil {
-					resReport.MaxQuota = maxQuotaFromOutsideAdmin
+				if r.MaxQuotaFromOutsideAdmin != nil {
+					resReport.MaxQuota = r.MaxQuotaFromOutsideAdmin
 				}
-				resReport.ForbidAutogrowth = ForbidAutogrowth
+				resReport.ForbidAutogrowth = r.ForbidAutogrowth
 			}
 		}
 
-		if *az != liquid.AvailabilityZoneTotal {
+		if *r.AZ != liquid.AvailabilityZoneTotal {
 			// we take the subresources from the AZ entries, so that we know from which AZ they come
-			if subresources != nil {
+			if r.Subresources != nil {
 				translate := behavior.TranslationRuleInV1API.TranslateSubresources
 				if translate != nil {
-					*subresources, err = translate(*subresources, *az, resource)
-					if err != nil {
+					var translateErr error
+					*r.Subresources, translateErr = translate(*r.Subresources, *r.AZ, resource)
+					if translateErr != nil {
 						return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
-							dbServiceType, dbResourceName, *az, currentProjectID, err)
+							r.DBServiceType, r.DBResourceName, *r.AZ, currentProjectID, translateErr)
 					}
 				}
-				mergeJSONListInto(&resReport.Subresources, *subresources)
+				mergeJSONListInto(&resReport.Subresources, *r.Subresources)
 			}
 
 			if filter.WithAZBreakdown {
-				resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
-					Quota:         quota,
+				resReport.PerAZ[*r.AZ] = &limesresources.ProjectAZResourceReport{
+					Quota:         r.Quota,
 					Committed:     nil, // will be filled by finalizeProjectResourceReport()
-					Usage:         *usage,
-					PhysicalUsage: physicalUsage,
-					Subresources:  json.RawMessage(*subresources),
+					Usage:         *r.Usage,
+					PhysicalUsage: r.PhysicalUsage,
+					Subresources:  json.RawMessage(*r.Subresources),
 				}
 
-				if *historicalUsage != "" {
+				if *r.HistoricalUsage != "" {
 					var duration limesresources.CommitmentDuration
-					autogrowCfg, ok := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName).Autogrow.Unpack()
+					autogrowCfg, ok := cluster.QuotaDistributionConfigForResource(r.DBServiceType, r.DBResourceName).Autogrow.Unpack()
 					if ok {
 						duration = limesresources.CommitmentDuration{
 							Short: autogrowCfg.UsageDataRetentionPeriod.Into(),
@@ -272,11 +290,11 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 							Short: 0,
 						}
 					}
-					ts, err := util.ParseTimeSeries[uint64](*historicalUsage)
+					ts, err := util.ParseTimeSeries[uint64](*r.HistoricalUsage)
 					if err != nil {
 						return err
 					}
-					resReport.PerAZ[*az].HistoricalUsage = &limesresources.HistoricalReport{
+					resReport.PerAZ[*r.AZ].HistoricalUsage = &limesresources.HistoricalReport{
 						MinUsage: ts.MinOr(resReport.Usage),
 						MaxUsage: ts.MaxOr(resReport.Usage),
 						Duration: duration,
@@ -293,7 +311,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 
 	// submit final non-empty project report
 	if projectReport != nil {
-		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter, nm)
+		err := finalizeProjectResourceReport(ctx, projectReport, currentProjectID, dbi, filter, nm)
 		if err != nil {
 			return err
 		}
@@ -322,24 +340,11 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
+func finalizeProjectResourceReport(ctx context.Context, projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all relevant commitments using a different query
-		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
-			var (
-				dbServiceType   db.ServiceType
-				dbResourceName  liquid.ResourceName
-				az              limes.AvailabilityZone
-				duration        limesresources.CommitmentDuration
-				confirmedAmount uint64
-				pendingAmount   uint64
-				plannedAmount   uint64
-			)
-			err := rows.Scan(&dbServiceType, &dbResourceName, &az, &duration, &confirmedAmount, &pendingAmount, &plannedAmount)
-			if err != nil {
-				return err
-			}
-			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
+		err := projectCommitmentStore.Select(ctx, dbi, projectReportCommitmentsQuery, projectID).Foreach(func(r projectCommitmentRecord) error {
+			apiServiceType, apiResourceName, exists := nm.MapToV1API(r.DBServiceType, r.DBResourceName)
 			if !exists {
 				return nil
 			}
@@ -351,28 +356,28 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			if resReport == nil {
 				return nil
 			}
-			azReport := resReport.PerAZ[az]
+			azReport := resReport.PerAZ[r.AZ]
 			if azReport == nil {
 				return nil
 			}
 
-			if confirmedAmount > 0 {
+			if r.ConfirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = confirmedAmount
+				azReport.Committed[r.Duration.String()] = r.ConfirmedAmount
 			}
-			if pendingAmount > 0 {
+			if r.PendingAmount > 0 {
 				if azReport.PendingCommitments == nil {
 					azReport.PendingCommitments = make(map[string]uint64)
 				}
-				azReport.PendingCommitments[duration.String()] = pendingAmount
+				azReport.PendingCommitments[r.Duration.String()] = r.PendingAmount
 			}
-			if plannedAmount > 0 {
+			if r.PlannedAmount > 0 {
 				if azReport.PlannedCommitments == nil {
 					azReport.PlannedCommitments = make(map[string]uint64)
 				}
-				azReport.PlannedCommitments[duration.String()] = plannedAmount
+				azReport.PlannedCommitments[r.Duration.String()] = r.PlannedAmount
 			}
 
 			return nil
@@ -441,27 +446,10 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 		currentProjectID db.ProjectID
 		projectReport    *limesrates.ProjectReport
 	)
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			projectID      db.ProjectID
-			dbServiceType  db.ServiceType
-			ratesScrapedAt *time.Time
-			dbRateName     liquid.RateName
-			limit          *uint64
-			window         *limesrates.Window
-			usageAsBigint  *string
-		)
-		err := rows.Scan(
-			&projectID, &dbServiceType, &ratesScrapedAt,
-			&dbRateName, &limit, &window, &usageAsBigint,
-		)
-		if err != nil {
-			return err
-		}
-
+	err = projectRateStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r projectRateRecord) error {
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
-		if projectReport != nil && currentProjectID != projectID {
+		if projectReport != nil && currentProjectID != r.ProjectID {
 			err := submit(projectReport)
 			if err != nil {
 				return err
@@ -471,10 +459,10 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 
 		// start new project report when necessary
 		if projectReport == nil {
-			projectInfo, exists := allProjectInfos[projectID]
-			delete(allProjectInfos, projectID)
+			projectInfo, exists := allProjectInfos[r.ProjectID]
+			delete(allProjectInfos, r.ProjectID)
 			if exists {
-				currentProjectID = projectID
+				currentProjectID = r.ProjectID
 			} else {
 				// this can happen if a project was inserted between the first and second query;
 				// ignore those projects because we don't have complete information about them
@@ -485,11 +473,11 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 		}
 
 		// if we don't have a valid rate, we're done with this result row
-		rate, ok := sis.GetRateForPath(db.RatePath{ServiceType: dbServiceType, RateName: dbRateName})
+		rate, ok := sis.GetRateForPath(db.RatePath{ServiceType: r.DBServiceType, RateName: r.DBRateName})
 		if !ok {
 			return nil
 		}
-		apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
+		apiServiceType, apiRateName, exists := nm.MapToV1API(r.DBServiceType, r.DBRateName)
 		if !exists {
 			return nil
 		}
@@ -497,7 +485,7 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiServiceType]
 		if srvReport == nil {
-			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(dbServiceType)
+			srvCfg, _ := cluster.Config.GetLiquidConfigurationForType(r.DBServiceType)
 			srvReport = &limesrates.ProjectServiceReport{
 				Type: apiServiceType, Area: srvCfg.Area,
 				Rates: make(limesrates.ProjectRateReports),
@@ -505,8 +493,8 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 			projectReport.Services[apiServiceType] = srvReport
 		}
 
-		if ratesScrapedAt != nil {
-			t := limes.UnixEncodedTime{Time: *ratesScrapedAt}
+		if r.RatesScrapedAt != nil {
+			t := limes.UnixEncodedTime{Time: *r.RatesScrapedAt}
 			srvReport.ScrapedAt = &t
 		}
 
@@ -514,7 +502,7 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 		// one because of the default rate limit, so this is only relevant for
 		// rates that only have a usage)
 		rateReport := srvReport.Rates[apiRateName]
-		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && rate.HasUsage {
+		if rateReport == nil && r.UsageAsBigint != nil && *r.UsageAsBigint != "" && rate.HasUsage {
 			// if we are in here, the rate has to exist
 			rateReport = &limesrates.ProjectRateReport{
 				RateInfo: core.BuildAPIRateInfo(apiRateName, rate.Unit),
@@ -524,19 +512,19 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 
 		// fill remaining data into rate report
 		if rateReport != nil {
-			if usageAsBigint != nil {
-				rateReport.UsageAsBigint = *usageAsBigint
+			if r.UsageAsBigint != nil {
+				rateReport.UsageAsBigint = *r.UsageAsBigint
 			}
 
 			// overwrite the default limit if a different custom limit is
 			// configured, but ignore custom limits where there is no default
 			// limit
-			if rateReport.Limit != 0 && limit != nil && window != nil {
-				if rateReport.Limit != *limit || *rateReport.Window != *window {
+			if rateReport.Limit != 0 && r.Limit != nil && r.Window != nil {
+				if rateReport.Limit != *r.Limit || *rateReport.Window != *r.Window {
 					rateReport.DefaultLimit = rateReport.Limit
 					rateReport.DefaultWindow = rateReport.Window
-					rateReport.Limit = *limit
-					rateReport.Window = window
+					rateReport.Limit = *r.Limit
+					rateReport.Window = r.Window
 				}
 			}
 		}

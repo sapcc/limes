@@ -5,7 +5,6 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"maps"
 	"slices"
@@ -16,6 +15,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/db"
 )
@@ -60,36 +60,32 @@ var (
 	`)
 )
 
-func (c *Collector) checkConsistency(_ context.Context, _ prometheus.Labels) error {
+type missingProjectServiceRecord struct {
+	ProjectID db.ProjectID `db:"project_id"`
+	ServiceID db.ServiceID `db:"service_id"`
+}
+
+var missingProjectServiceStore = oblast.MustNewStore[missingProjectServiceRecord](oblast.PostgresDialect())
+
+func (c *Collector) checkConsistency(ctx context.Context, _ prometheus.Labels) error {
 	// cleanup entries for services that have been removed from the configuration
 	// (this is also done by core.SaveServiceInfoToDB() on startup, so this is
 	// only defense in depth against garbage entries entering the DB somehow)
 	knownServiceTypes := slices.Sorted(maps.Keys(c.Cluster.Config.Liquids))
-	err := sqlext.ForeachRow(c.DB, deleteSuperfluousServicesQuery, []any{pq.Array(knownServiceTypes)}, func(rows *sql.Rows) error {
-		var serviceType db.ServiceType
-		err := rows.Scan(&serviceType)
-		if err == nil {
-			logg.Info("cleaned up services entry with type = %q (no such type configured)", serviceType)
-		}
-		return err
-	})
+	deletedTypes, err := db.SelectSeveralValues[db.ServiceType](c.DB, deleteSuperfluousServicesQuery, pq.Array(knownServiceTypes))
 	if err != nil {
 		return fmt.Errorf("while cleaning up services: %w", err)
+	}
+	for _, serviceType := range deletedTypes {
+		logg.Info("cleaned up services entry with type = %q (no such type configured)", serviceType)
 	}
 
 	// ensure that `project_services` matches the fully populated cross product of `projects` and `services`
 	// (this is usually only relevant when core.SaveServiceInfoToDB() created a new `services` entry;
 	// for new `projects` entries, initProject() will already have created the respective `project_services` records)
-	err = sqlext.ForeachRow(c.DB, insertMissingProjectServicesQuery, []any{c.MeasureTime()}, func(rows *sql.Rows) error {
-		var (
-			projectID db.ProjectID
-			serviceID db.ServiceID
-		)
-		err := rows.Scan(&projectID, &serviceID)
-		if err == nil {
-			logg.Info("created missing project_services entry with project_id = %d, service_id = %d", projectID, serviceID)
-		}
-		return err
+	err = missingProjectServiceStore.Select(ctx, c.DB, insertMissingProjectServicesQuery, c.MeasureTime()).Foreach(func(r missingProjectServiceRecord) error {
+		logg.Info("created missing project_services entry with project_id = %d, service_id = %d", r.ProjectID, r.ServiceID)
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("while populating missing project_services: %w", err)

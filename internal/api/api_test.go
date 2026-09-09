@@ -858,26 +858,14 @@ func expectStaleProjectServices(t *testing.T, dbm *gsql.DB, pairs ...string) {
 	t.Helper()
 
 	queryStr := sqlext.SimplifyWhitespace(`
-		SELECT p.name, s.type
+		SELECT p.name || ':' || s.type
 		 FROM projects p JOIN project_services ps ON ps.project_id = p.id
 		 JOIN services s on ps.service_id = s.id
 		 WHERE ps.stale
 		 ORDER BY p.name, s.type
 	`)
-	var actualPairs []string
 
-	must.SucceedT(t, sqlext.ForeachRow(dbm, queryStr, nil, func(rows *sql.Rows) error {
-		var (
-			projectName string
-			serviceType limes.ServiceType
-		)
-		err := rows.Scan(&projectName, &serviceType)
-		if err != nil {
-			return err
-		}
-		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, string(serviceType)))
-		return nil
-	}))
+	actualPairs := must.ReturnT(db.SelectSeveralValues[string](dbm, queryStr))(t)
 	assert.Equal(t, actualPairs, pairs)
 }
 

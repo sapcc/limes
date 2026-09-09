@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -40,7 +41,7 @@ func (c *Collector) ApplyQuotaOverridesJob(registerer prometheus.Registerer) job
 
 // ApplyQuotaOverrides is called once on startup of limes-collect.
 // It persists the contents of the quota overrides config file into the DB.
-func (c *Collector) applyQuotaOverrides(_ context.Context, _ prometheus.Labels) error {
+func (c *Collector) applyQuotaOverrides(ctx context.Context, _ prometheus.Labels) error {
 	overrides, errs := datamodel.LoadQuotaOverrides(c.Cluster)
 	if !errs.IsEmpty() {
 		return errors.New(errs.Join(", "))
@@ -59,23 +60,19 @@ func (c *Collector) applyQuotaOverrides(_ context.Context, _ prometheus.Labels) 
 	}
 
 	// enumerate all existing quota overrides and clear away those that have been removed from the config
-	err := sqlext.ForeachRow(c.DB, aqoListOverridesQuery, nil, func(rows *sql.Rows) error {
-		var (
-			resourceID   db.ProjectResourceID
-			domainName   string
-			projectName  string
-			serviceType  db.ServiceType
-			resourceName liquid.ResourceName
-		)
-		err := rows.Scan(&resourceID, &domainName, &projectName, &serviceType, &resourceName)
-		if err != nil {
-			return err
-		}
-		_, exists := overrides[domainName][projectName][serviceType][resourceName]
+	type aqoOverrideRecord struct {
+		ResourceID   db.ProjectResourceID `db:"resource_id"`
+		DomainName   string               `db:"domain_name"`
+		ProjectName  string               `db:"project_name"`
+		ServiceType  db.ServiceType       `db:"service_type"`
+		ResourceName liquid.ResourceName  `db:"resource_name"`
+	}
+	err := oblast.MustNewStore[aqoOverrideRecord](oblast.PostgresDialect()).Select(ctx, c.DB, aqoListOverridesQuery).Foreach(func(r aqoOverrideRecord) error {
+		_, exists := overrides[r.DomainName][r.ProjectName][r.ServiceType][r.ResourceName]
 		if exists {
 			return nil // nothing to do in this loop iteration
 		}
-		_, err = c.DB.Exec(aqoClearOverrideQuery, resourceID)
+		_, err := c.DB.Exec(aqoClearOverrideQuery, r.ResourceID)
 		return err
 	})
 	if err != nil {
@@ -103,7 +100,7 @@ var (
 		 AND ps.id = $2 AND r.name = $3
 	`)
 	aqoListOverridesQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, d.name, p.name, s.type, r.name
+		SELECT pr.id AS resource_id, d.name AS domain_name, p.name AS project_name, s.type AS service_type, r.name AS resource_name
 		  FROM domains d
 		  JOIN projects p ON p.domain_id = d.id
 		  JOIN project_resources pr ON pr.project_id = p.id

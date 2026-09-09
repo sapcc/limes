@@ -22,7 +22,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 
 	sis := p.Cluster.SIC.GetSnapshot()
 
-	scrapeErrors, err := reports.GetScrapeErrors(p.DB, reports.ReadFilter(r, p.Cluster, sis))
+	scrapeErrors, err := reports.GetScrapeErrors(r.Context(), p.DB, reports.ReadFilter(r, p.Cluster, sis))
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

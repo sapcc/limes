@@ -4,12 +4,14 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/util"
 )
@@ -118,5 +120,19 @@ func enumValueToSQLLiteral[S ~string](value S) string {
 func SelectOneValue[T any](db Interface, query string, args ...any) (T, error) {
 	var result T
 	err := db.QueryRow(query, args...).Scan(&result)
+	return result, err
+}
+
+// SelectSeveralValues executes a query that yields rows with a single value each.
+func SelectSeveralValues[T any](db Interface, query string, args ...any) ([]T, error) {
+	var result []T
+	err := sqlext.ForeachRow(db, query, args, func(rows *sql.Rows) error {
+		var value T
+		err := rows.Scan(&value)
+		if err == nil {
+			result = append(result, value)
+		}
+		return err
+	})
 	return result, err
 }

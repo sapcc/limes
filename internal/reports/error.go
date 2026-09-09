@@ -4,18 +4,21 @@
 package reports
 
 import (
-	"database/sql"
+	"context"
 	"sort"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/oblast"
+
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/db"
 )
 
 var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, s.type, ps.checked_at, ps.scrape_error_message
+	SELECT d.uuid AS domain_uuid, d.name AS domain_name, p.uuid AS project_uuid, p.name AS project_name, s.type, ps.checked_at, ps.scrape_error_message
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id
@@ -24,45 +27,36 @@ var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
 	ORDER BY d.name, p.name, s.type, ps.scrape_error_message
 `)
 
-type scrapeError struct {
+type scrapeErrorRecord struct {
 	Project struct {
-		ID     string `json:"id"`
-		Name   string `json:"name"`
+		ID     string `json:"id" db:"project_uuid"`
+		Name   string `json:"name" db:"project_name"`
 		Domain struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID   string `json:"id" db:"domain_uuid"`
+			Name string `json:"name" db:"domain_name"`
 		} `json:"domain"`
 	} `json:"project"`
-	AffectedProjects int               `json:"affected_projects,omitempty"`
-	ServiceType      limes.ServiceType `json:"service_type"`
-	CheckedAt        *int64            `json:"checked_at"`
-	Message          string            `json:"message"`
+	AffectedProjects int               `json:"affected_projects,omitempty" db:"-"`
+	ServiceType      limes.ServiceType `json:"service_type" db:"type"`
+	CheckedAtTime    Option[time.Time] `json:"-" db:"checked_at"`
+	CheckedAtUnix    *int64            `json:"checked_at" db:"_"`
+	Message          string            `json:"message" db:"scrape_error_message"`
 }
 
 // GetScrapeErrors retrieves scrape errors from the database according to the given filter.
-func GetScrapeErrors(dbi db.Interface, filter Filter) ([]scrapeError, error) {
-	return getScrapeErrors(dbi, filter, scrapeErrorsQuery)
+func GetScrapeErrors(ctx context.Context, dbi db.Interface, filter Filter) ([]scrapeErrorRecord, error) {
+	return getScrapeErrors(ctx, dbi, filter, scrapeErrorsQuery)
 }
 
-func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]scrapeError, error) {
-	var result []scrapeError
+func getScrapeErrors(ctx context.Context, dbi db.Interface, filter Filter, dbQuery string) ([]scrapeErrorRecord, error) {
+	var result []scrapeErrorRecord
 	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
-	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		var sErr scrapeError
-		var checkedAtAsTime *time.Time
-		err := rows.Scan(
-			&sErr.Project.Domain.ID, &sErr.Project.Domain.Name, &sErr.Project.ID,
-			&sErr.Project.Name, &sErr.ServiceType, &checkedAtAsTime, &sErr.Message,
-		)
-		if err != nil {
-			return err
+	err := oblast.MustNewStore[scrapeErrorRecord](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r scrapeErrorRecord) error {
+		if t, ok := r.CheckedAtTime.Unpack(); ok {
+			v := t.Unix()
+			r.CheckedAtUnix = &v
 		}
-
-		if checkedAtAsTime != nil {
-			v := checkedAtAsTime.Unix()
-			sErr.CheckedAt = &v
-		}
-		result = append(result, sErr)
+		result = append(result, r)
 
 		return nil
 	})
@@ -72,19 +66,19 @@ func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]scrapeE
 
 	if len(result) == 0 {
 		// Ensure that empty list gets serialized as `[]` rather than as `null`.
-		return []scrapeError{}, nil
+		return []scrapeErrorRecord{}, nil
 	}
 
 	// To avoid excessively large responses, we group identical scrape errors for multiple
 	// project services of the same type into one item.
-	uniqueErrors := make(map[limes.ServiceType]map[string]scrapeError) // second key is error message
+	uniqueErrors := make(map[limes.ServiceType]map[string]scrapeErrorRecord) // second key is error message
 	for _, v := range result {
 		if vFromMap, found := uniqueErrors[v.ServiceType][v.Message]; found {
 			// Use the value from map so we can preserve AffectedProject count.
 			v = vFromMap
 		}
 		if _, ok := uniqueErrors[v.ServiceType]; !ok {
-			uniqueErrors[v.ServiceType] = make(map[string]scrapeError)
+			uniqueErrors[v.ServiceType] = make(map[string]scrapeErrorRecord)
 		}
 		v.AffectedProjects++
 		uniqueErrors[v.ServiceType][v.Message] = v

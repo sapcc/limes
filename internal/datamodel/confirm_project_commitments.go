@@ -50,7 +50,7 @@ const ConsumeAction cadf.Action = "consume"
 
 // CanAcceptCommitmentChangeRequest returns whether the requested moves and creations
 // within the liquid.CommitmentChangeRequest can be done from capacity perspective.
-func CanAcceptCommitmentChangeRequest(ctx context.Context, req liquid.CommitmentChangeRequest, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanAcceptCommitmentChangeRequest(ctx context.Context, req liquid.CommitmentChangeRequest, sis core.ServiceInfoSnapshot, serviceType db.ServiceType, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	var distinctResources = make(map[liquid.ResourceName]struct{})
 	for _, projectCommitmentChangeset := range req.ByProject {
 		for resourceName := range projectCommitmentChangeset.ByResource {
@@ -94,7 +94,7 @@ func CanAcceptCommitmentChangeRequest(ctx context.Context, req liquid.Commitment
 		if len(additions) == 0 {
 			continue
 		}
-		statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, Some(req.AZ), cluster, dbi)
+		statsByAZ, err := collectAZAllocationStats(ctx, sis, path, Some(req.AZ), cluster, dbi)
 		if err != nil {
 			return false, err
 		}

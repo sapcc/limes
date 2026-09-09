@@ -5,7 +5,6 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -14,8 +13,10 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -87,12 +88,12 @@ var (
 	// NOTE: This query does not use `AND quota IS NOT NULL` to filter out NoQuota resources
 	// because it would also filter out resources with AZSeparatedTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-		SELECT pazr.id, r.name, azr.az, pazr.backend_quota, pazr.quota, pr.forbidden
+		SELECT pazr.id AS project_az_resource_id, azr.id as az_resource_id, pazr.backend_quota, pazr.quota
 		FROM project_resources pr
-		JOIN resources r ON pr.resource_id = r.id
-		JOIN az_resources azr ON azr.resource_id = r.id
+		JOIN az_resources azr ON azr.resource_id = pr.resource_id
 		JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = pr.project_id
-		WHERE r.service_id = $1 AND pr.project_id = $2
+		WHERE pr.resource_id = ANY($1) AND pr.project_id = $2
+		AND (pr.forbidden = false OR COALESCE(pazr.backend_quota, 0) != 0)
 	`))
 	quotaSyncMarkProjectAZResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources pazr
@@ -119,8 +120,13 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	startedAt := c.MeasureTime()
 
 	sis := c.Cluster.SIC.GetSnapshot()
-	if _, sExists := sis.GetServiceForType(serviceType); !sExists {
+	resources := sis.GetResourcesForType(serviceType)
+	if resources.Len() == 0 {
 		return fmt.Errorf("no data found in ServiceInfoCache for %s", serviceType)
+	}
+	resourceIDs := make([]db.ResourceID, 0, resources.Len())
+	for resource := range resources.Values() {
+		resourceIDs = append(resourceIDs, resource.ID)
 	}
 
 	// collect az quotas and "total" quota from the DB to check what needs to be applied
@@ -128,56 +134,45 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	var projectAZResourceIDs []db.ProjectAZResourceID
-	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ServiceID, project.ID}, func(rows *sql.Rows) error {
-		var (
-			projectAZResourceID db.ProjectAZResourceID
-			resourceName        liquid.ResourceName
-			availabilityZone    liquid.AvailabilityZone
-			currentQuotaPtr     Option[int64]
-			targetQuotaPtr      Option[uint64]
-			forbidden           bool
-		)
-		err := rows.Scan(&projectAZResourceID, &resourceName, &availabilityZone, &currentQuotaPtr, &targetQuotaPtr, &forbidden)
-		if err != nil {
-			return err
-		}
-
-		resource, ok := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
+	type quotaToSyncRecord struct {
+		ProjectAZResourceID db.ProjectAZResourceID `db:"project_az_resource_id"`
+		AZResourceID        db.AZResourceID        `db:"az_resource_id"`
+		CurrentQuotaOpt     Option[int64]          `db:"backend_quota"`
+		TargetQuotaOpt      Option[uint64]         `db:"quota"`
+	}
+	err := oblast.MustNewStore[quotaToSyncRecord](oblast.PostgresDialect()).Select(ctx, c.DB, quotaSyncSelectQuery, pq.Array(resourceIDs), project.ID).Foreach(func(r quotaToSyncRecord) error {
+		azResource, ok := sis.GetAZResourceForID(r.AZResourceID)
 		if !ok {
-			// race condition: selected projectResource while the resource got deleted
-			// other projectResources/ resources might still exist, so we don't abort!
+			// race condition: az_resource deleted while the select was executed
 			return nil
 		}
+		resource := must.BeOK(sis.GetResourceForID(azResource.ResourceID))
 		if !resource.HasQuota {
 			return nil
 		}
 
-		if forbidden && currentQuotaPtr.UnwrapOr(0) == 0 {
-			return nil
-		}
-
 		// skip AZ-specific quotas if the backend does not support them
-		if !datamodel.AZHasBackendQuotaForTopology(resource.Topology, availabilityZone) {
+		if !datamodel.AZHasBackendQuotaForTopology(resource.Topology, azResource.AvailabilityZone) {
 			return nil
 		}
-		targetQuota, targetQuotaExists := targetQuotaPtr.Unpack()
+		targetQuota, targetQuotaExists := r.TargetQuotaOpt.Unpack()
 		if !targetQuotaExists {
-			return fmt.Errorf("found unexpected NULL value in project_az_resources.quota for %s/%s/%s", serviceType, resourceName, availabilityZone)
+			return fmt.Errorf("found unexpected NULL value in project_az_resources.quota for %s/%s/%s", serviceType, resource.Name, azResource.AvailabilityZone)
 		}
-		currentQuota, currentQuotaExists := currentQuotaPtr.Unpack()
+		currentQuota, currentQuotaExists := r.CurrentQuotaOpt.Unpack()
 		// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
-		if resource.Topology == liquid.AZSeparatedTopology && (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && !currentQuotaExists {
-			return fmt.Errorf("detected invalid AZ %q for resource %s/%s with topology %s (backend quota was nil)", availabilityZone, serviceType, resourceName, resource.Topology)
+		if resource.Topology == liquid.AZSeparatedTopology && (azResource.AvailabilityZone == liquid.AvailabilityZoneAny || azResource.AvailabilityZone == liquid.AvailabilityZoneUnknown) && !currentQuotaExists {
+			return fmt.Errorf("detected invalid AZ %q for resource %s/%s with topology %s (backend quota was nil)", azResource.AvailabilityZone, serviceType, resource.Name, resource.Topology)
 		}
-		projectAZResourceIDs = append(projectAZResourceIDs, projectAZResourceID)
-		if targetAZQuotasInDB[resourceName] == nil {
-			targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
+		projectAZResourceIDs = append(projectAZResourceIDs, r.ProjectAZResourceID)
+		if targetAZQuotasInDB[resource.Name] == nil {
+			targetAZQuotasInDB[resource.Name] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 		}
 		// due to the interface not understanding liquid.AvailabilityZoneTotal, we have to fish that out
-		if availabilityZone == liquid.AvailabilityZoneTotal {
-			targetQuotasInDB[resourceName] = targetQuota
+		if azResource.AvailabilityZone == liquid.AvailabilityZoneTotal {
+			targetQuotasInDB[resource.Name] = targetQuota
 		} else {
-			targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetQuota}
+			targetAZQuotasInDB[resource.Name][azResource.AvailabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetQuota}
 		}
 		if !currentQuotaExists || currentQuota < 0 || uint64(currentQuota) != targetQuota {
 			needsApply = true

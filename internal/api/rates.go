@@ -35,7 +35,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	// not work for rates. Would be better to use a dedicated filter for that which is fed with "rates".
 	sis := p.Cluster.SIC.GetSnapshot()
 
-	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, sis), sis)
+	cluster, err := reports.GetClusterRates(r.Context(), p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster, sis), sis)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

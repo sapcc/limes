@@ -4,7 +4,7 @@
 package reports
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,18 +15,32 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/options"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
 
-var domainReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT d.id, d.uuid, d.name
-	  FROM domains d
-	 WHERE %s
-`)
+type domainResourceRecord struct {
+	DomainID             db.DomainID            `db:"domain_id"`
+	DBServiceType        db.ServiceType         `db:"type"`
+	DBResourceName       liquid.ResourceName    `db:"name"`
+	AZ                   limes.AvailabilityZone `db:"az"`
+	Quota                *uint64                `db:"sum_quota"`
+	Usage                *uint64                `db:"sum_usage"`
+	UnusedCommitments    *uint64                `db:"unused_commitments"`
+	UncommittedUsage     *uint64                `db:"uncommitted_usage"`
+	BackendQuota         *uint64                `db:"backend_quota"`
+	InfiniteBackendQuota *bool                  `db:"infinite_backend_quota"`
+	PhysicalUsage        *uint64                `db:"physical_usage"`
+	ShowPhysicalUsage    *bool                  `db:"has_physical_usage"`
+	MinScrapedAt         *time.Time             `db:"min_scraped_at"`
+	MaxScrapedAt         *time.Time             `db:"max_scraped_at"`
+}
 
-var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+var domainResourceStore = oblast.MustNewStore[domainResourceRecord](oblast.PostgresDialect())
+
+var domainReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
@@ -34,12 +48,12 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	   GROUP BY project_id, az_resource_id
 	)
 	SELECT p.domain_id, s.type, r.name, azr.az,
-	       SUM(pazr.quota), SUM(pazr.usage),
+	       SUM(pazr.quota) as sum_quota, SUM(pazr.usage) as sum_usage,
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - pazr.usage)) AS unused_commitments,
 	       SUM(GREATEST(0, pazr.usage - COALESCE(pcs.amount, 0))) AS uncommitted_usage,
 		   SUM(GREATEST(pazr.backend_quota, 0)) as backend_quota, MIN(pazr.backend_quota) < 0 as infinite_backend_quota,
 		   SUM(COALESCE(pazr.physical_usage, pazr.usage)) as physical_usage, COUNT(pazr.physical_usage) > 0 as has_physical_usage,
-	       MIN(ps.scraped_at), MAX(ps.scraped_at)
+	       MIN(ps.scraped_at) as min_scraped_at, MAX(ps.scraped_at) as max_scraped_at
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id
@@ -52,7 +66,20 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	 GROUP BY p.domain_id, s.type, r.name, azr.az
 `))
 
-var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+type domainCommitmentRecord struct {
+	DomainID        db.DomainID                       `db:"domain_id"`
+	DBServiceType   db.ServiceType                    `db:"type"`
+	DBResourceName  liquid.ResourceName               `db:"name"`
+	AZ              limes.AvailabilityZone            `db:"az"`
+	Duration        limesresources.CommitmentDuration `db:"duration"`
+	ConfirmedAmount uint64                            `db:"sum_confirmed"`
+	PendingAmount   uint64                            `db:"sum_pending"`
+	PlannedAmount   uint64                            `db:"sum_planned"`
+}
+
+var domainCommitmentStore = oblast.MustNewStore[domainCommitmentRecord](oblast.PostgresDialect())
+
+var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, duration,
 	         COALESCE(SUM(amount) FILTER (WHERE status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
@@ -62,7 +89,7 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	   GROUP BY project_id, az_resource_id, duration
 	)
 	SELECT p.domain_id, s.type, r.name, azr.az,
-	       pcs.duration, SUM(pcs.confirmed), SUM(pcs.pending), SUM(pcs.planned)
+	       pcs.duration, SUM(pcs.confirmed) as sum_confirmed, SUM(pcs.pending) as sum_pending, SUM(pcs.planned) as sum_planned
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -76,10 +103,16 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) ([]*limesresources.DomainReport, error) {
-	var fields map[string]any
+func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) ([]*limesresources.DomainReport, error) {
+	var (
+		fields    map[string]any
+		whereArgs []any
+	)
+	whereStr := "TRUE"
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
+		whereStr = "id = $1"
+		whereArgs = []any{*domainID}
 	}
 
 	// first query: basic information about domains
@@ -87,20 +120,11 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	// (this is important because a filter like `?service=none` is supported,
 	// but will yield no results at all in the other queries)
 	domains := make(map[db.DomainID]*limesresources.DomainReport)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(domainReportQuery1, whereStr), whereArgs, func(rows *sql.Rows) error {
-		var (
-			domainID   db.DomainID
-			domainInfo limes.DomainInfo
-		)
-		err := rows.Scan(&domainID, &domainInfo.UUID, &domainInfo.Name)
-		if err != nil {
-			return err
-		}
-
-		domains[domainID] = &limesresources.DomainReport{
-			DomainInfo: domainInfo,
-			Services:   make(limesresources.DomainServiceReports),
+	err := db.DomainStore.SelectWhere(ctx, dbi, whereStr, whereArgs...).Foreach(func(d db.Domain) error {
+		domains[d.ID] = &limesresources.DomainReport{
+			UUID:     d.UUID,
+			Name:     d.Name,
+			Services: make(limesresources.DomainServiceReports),
 		}
 		return nil
 	})
@@ -114,81 +138,58 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	}
 
 	// second query: add resource and az-level values
-	queryStr := domainReportQuery2
+	queryStr := domainReportQuery1
 	if !filter.WithAZBreakdown {
 		queryStr = strings.Replace(queryStr, "%s", db.ExpandEnumPlaceholders("azr.az = {{liquid.AvailabilityZoneTotal}} AND %s"), 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			domainID             db.DomainID
-			dbServiceType        db.ServiceType
-			dbResourceName       liquid.ResourceName
-			az                   limes.AvailabilityZone
-			quota                *uint64
-			usage                *uint64
-			unusedCommitments    *uint64
-			uncommittedUsage     *uint64
-			backendQuota         *uint64
-			infiniteBackendQuota *bool
-			physicalUsage        *uint64
-			showPhysicalUsage    *bool
-			minScrapedAt         *time.Time
-			maxScrapedAt         *time.Time
-		)
-		err := rows.Scan(
-			&domainID, &dbServiceType, &dbResourceName, &az,
-			&quota, &usage, &unusedCommitments, &uncommittedUsage,
-			&backendQuota, &infiniteBackendQuota, &physicalUsage, &showPhysicalUsage, &minScrapedAt, &maxScrapedAt,
-		)
-		if err != nil {
-			return err
-		}
-		if domains[domainID] == nil {
-			return nil
-		}
-		if !filter.Includes[dbServiceType][dbResourceName] {
-			return nil
-		}
-		serviceReport, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, sis)
 
-		if az == liquid.AvailabilityZoneTotal {
+	err = domainResourceStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainResourceRecord) error {
+		if domains[r.DomainID] == nil {
+			return nil
+		}
+		if !filter.Includes[r.DBServiceType][r.DBResourceName] {
+			return nil
+		}
+		serviceReport, resourceReport := findInDomainReport(domains[r.DomainID], cluster, r.DBServiceType, r.DBResourceName, now, sis)
+
+		if r.AZ == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: dbServiceType, ResourceName: dbResourceName})
-			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, maxScrapedAt)
-			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, minScrapedAt)
+			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.DBServiceType, ResourceName: r.DBResourceName})
+			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, r.MaxScrapedAt)
+			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, r.MinScrapedAt)
 
-			if usage != nil {
-				resourceReport.Usage = *usage
+			if r.Usage != nil {
+				resourceReport.Usage = *r.Usage
 			}
 			if !resourceReport.NoQuota {
-				if quota != nil && resource.Topology != liquid.AZSeparatedTopology {
-					resourceReport.ProjectsQuota = quota
-					resourceReport.DomainQuota = quota
-					if backendQuota != nil && *quota != *backendQuota {
-						resourceReport.BackendQuota = backendQuota
+				if r.Quota != nil && resource.Topology != liquid.AZSeparatedTopology {
+					resourceReport.ProjectsQuota = r.Quota
+					resourceReport.DomainQuota = r.Quota
+					if r.BackendQuota != nil && *r.Quota != *r.BackendQuota {
+						resourceReport.BackendQuota = r.BackendQuota
 					}
 				}
-				if infiniteBackendQuota != nil && *infiniteBackendQuota {
-					resourceReport.InfiniteBackendQuota = infiniteBackendQuota
+				if r.InfiniteBackendQuota != nil && *r.InfiniteBackendQuota {
+					resourceReport.InfiniteBackendQuota = r.InfiniteBackendQuota
 				}
 			}
-			if showPhysicalUsage != nil && *showPhysicalUsage {
-				resourceReport.PhysicalUsage = physicalUsage
+			if r.ShowPhysicalUsage != nil && *r.ShowPhysicalUsage {
+				resourceReport.PhysicalUsage = r.PhysicalUsage
 			}
 		}
 
-		if filter.WithAZBreakdown && az != liquid.AvailabilityZoneTotal {
+		if filter.WithAZBreakdown && r.AZ != liquid.AvailabilityZoneTotal {
 			if resourceReport.PerAZ == nil {
 				resourceReport.PerAZ = make(limesresources.DomainAZResourceReports)
 			}
-			sanitizedQuota := options.FromPointer(quota).UnwrapOr(0)
-			resourceReport.PerAZ[az] = &limesresources.DomainAZResourceReport{
+			sanitizedQuota := options.FromPointer(r.Quota).UnwrapOr(0)
+			resourceReport.PerAZ[r.AZ] = &limesresources.DomainAZResourceReport{
 				Quota:             &sanitizedQuota,
-				Usage:             *usage,
-				UnusedCommitments: *unusedCommitments,
-				UncommittedUsage:  *uncommittedUsage,
+				Usage:             *r.Usage,
+				UnusedCommitments: *r.UnusedCommitments,
+				UncommittedUsage:  *r.UncommittedUsage,
 			}
 		}
 		return nil
@@ -199,56 +200,39 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 
 	// fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
 	if filter.WithAZBreakdown {
-		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery4)
+		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				domainID        db.DomainID
-				dbServiceType   db.ServiceType
-				dbResourceName  liquid.ResourceName
-				az              limes.AvailabilityZone
-				duration        limesresources.CommitmentDuration
-				confirmedAmount uint64
-				pendingAmount   uint64
-				plannedAmount   uint64
-			)
-			err := rows.Scan(
-				&domainID, &dbServiceType, &dbResourceName, &az,
-				&duration, &confirmedAmount, &pendingAmount, &plannedAmount,
-			)
-			if err != nil {
-				return err
-			}
-			if domains[domainID] == nil {
+		err = domainCommitmentStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainCommitmentRecord) error {
+			if domains[r.DomainID] == nil {
 				return nil
 			}
-			if !filter.Includes[dbServiceType][dbResourceName] {
+			if !filter.Includes[r.DBServiceType][r.DBResourceName] {
 				return nil
 			}
-			_, resourceReport := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now, sis)
+			_, resourceReport := findInDomainReport(domains[r.DomainID], cluster, r.DBServiceType, r.DBResourceName, now, sis)
 
-			if resourceReport.PerAZ[az] == nil {
+			if resourceReport.PerAZ[r.AZ] == nil {
 				return nil
 			}
-			azReport := resourceReport.PerAZ[az]
+			azReport := resourceReport.PerAZ[r.AZ]
 
-			if confirmedAmount > 0 {
+			if r.ConfirmedAmount > 0 {
 				if azReport.Committed == nil {
 					azReport.Committed = make(map[string]uint64)
 				}
-				azReport.Committed[duration.String()] = confirmedAmount
+				azReport.Committed[r.Duration.String()] = r.ConfirmedAmount
 			}
-			if pendingAmount > 0 {
+			if r.PendingAmount > 0 {
 				if azReport.PendingCommitments == nil {
 					azReport.PendingCommitments = make(map[string]uint64)
 				}
-				azReport.PendingCommitments[duration.String()] = pendingAmount
+				azReport.PendingCommitments[r.Duration.String()] = r.PendingAmount
 			}
-			if plannedAmount > 0 {
+			if r.PlannedAmount > 0 {
 				if azReport.PlannedCommitments == nil {
 					azReport.PlannedCommitments = make(map[string]uint64)
 				}
-				azReport.PlannedCommitments[duration.String()] = plannedAmount
+				azReport.PlannedCommitments[r.Duration.String()] = r.PlannedAmount
 			}
 
 			return nil

@@ -4,13 +4,14 @@
 package reports_v2
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"net/http"
 	"slices"
 	"time"
 
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -76,7 +77,7 @@ func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID
 
 // GetResourcesInfo returns a resourcesv2.InfoReport, which can be exposed via
 // an own endpoint or re-used in resource reports.
-func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
+func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
 	dbm := cluster.DB
 	var none resourcesv2.InfoReport // used on error return paths only
 
@@ -86,17 +87,17 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 	}
 
 	// collect allowed items for this user
-	allowedResourcesByService := make(map[db.ServiceType][]liquid.ResourceName)
-	err = sqlext.ForeachRow(dbm, findAllowedResourcesQuery, []any{projectUUID, domainUUID}, func(rows *sql.Rows) error {
-		var (
-			serviceType  db.ServiceType
-			resourceName liquid.ResourceName
-		)
-		err := rows.Scan(&serviceType, &resourceName)
-		if err == nil {
-			allowedResourcesByService[serviceType] = append(allowedResourcesByService[serviceType], resourceName)
+	allowedResourcesByService := make(map[db.ServiceType]map[liquid.ResourceName]struct{})
+	type allowedResourceRecord struct {
+		ServiceType  db.ServiceType      `db:"type"`
+		ResourceName liquid.ResourceName `db:"name"`
+	}
+	err = oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, findAllowedResourcesQuery, projectUUID, domainUUID).Foreach(func(r allowedResourceRecord) error {
+		if allowedResourcesByService[r.ServiceType] == nil {
+			allowedResourcesByService[r.ServiceType] = make(map[liquid.ResourceName]struct{})
 		}
-		return err
+		allowedResourcesByService[r.ServiceType][r.ResourceName] = struct{}{}
+		return nil
 	})
 	if err != nil {
 		return none, err
@@ -146,7 +147,7 @@ func GetResourcesInfo(cluster *core.Cluster, token *gopherpolicy.Token, timeNow 
 		for _, resourceName := range slices.Sorted(resources.Keys()) {
 			resource := resources.GetOrZero(resourceName)
 			// skip non-allowed resources for this user, if any
-			if !slices.Contains(allowedResources, resourceName) {
+			if _, resNameOK := allowedResources[resourceName]; !resNameOK {
 				continue
 			}
 			category := categories.GetOrZero(resource.CategoryID)
