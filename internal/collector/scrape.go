@@ -381,7 +381,10 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 					projectAZRes.Quota = None[uint64]()
 				} else {
 					if datamodel.AZHasQuotaForTopology(resource.Topology, az) && projectAZRes.Quota.IsNone() {
-						projectAZRes.Quota = Some[uint64](0)
+						// this branch will only be taken for new projects (where ACPQ has not computed a quota yet),
+						// so most likely `usage = 0` and thus `quota = 0`; but some resources have non-zero default usage
+						// (currently only Neutron, which auto-provisions a default security group with a few rules for each new project)
+						projectAZRes.Quota = Some[uint64](projectAZRes.Usage)
 					}
 					if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
 						projectAZRes.BackendQuota = data.Quota
