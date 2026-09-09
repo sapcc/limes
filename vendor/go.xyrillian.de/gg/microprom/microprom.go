@@ -22,8 +22,8 @@
 //
 // # How to use
 //
-// To get started with microprom, declare your metric families in a [Metadata] instance,
-// and then call [Metadata.Handler] to obtain a handler for your "GET /metrics" endpoint.
+// To get started with microprom, look at how to build a [Handler] instance,
+// and follow the documentation from there.
 //
 // [promhttp]: https://pkg.go.dev/github.com/prometheus/client_golang/prometheus/promhttp
 // [prometheus/client_golang]: https://pkg.go.dev/github.com/prometheus/client_golang
@@ -35,7 +35,7 @@ import (
 	"regexp"
 )
 
-// MetricFamilyInfo appears in type [HandlerInfo].
+// MetricFamilyInfo appears in type [Handler].
 type MetricFamilyInfo struct {
 	Type MetricType
 	Help string

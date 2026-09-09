@@ -9,7 +9,7 @@ import (
 )
 
 // Labels holds a label set, formatted according to the text protocol of [OpenMetrics 1.0].
-// Instances are constructed through [LabelNames.Format].
+// Instances are constructed through [MetricSet.FormatLabels].
 //
 // [OpenMetrics 1.0]: https://prometheus.io/docs/specs/om/open_metrics_spec/
 type Labels string
@@ -51,7 +51,9 @@ func NewLabelNames(names ...string) LabelNames {
 //	labels := ms.FormatLabels(names, "bar", "world")
 //	assert.Equal(t, labels, `foo="bar",hello="world"`)
 func (ms *MetricSet) FormatLabels(n LabelNames, values ...string) Labels {
-	// NOTE on API structure: This is not part of ms.Add() to allow reusing label sets for multiple metrics.
+	// NOTE on API structure:
+	//   - This is not part of ms.Add() to allow reusing label sets for multiple metrics.
+	//   - This is a method of MetricSet because we want to be able to depend on the negotiated syntax in the future (e.g. for escaping rules).
 
 	if len(n.names) != len(values) {
 		panic(fmt.Sprintf("expected %d label values, but got %d", len(n.names), len(values)))
