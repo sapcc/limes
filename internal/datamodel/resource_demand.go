@@ -53,13 +53,15 @@ type resourceDemandRecord struct {
 	Topology           liquid.Topology        `db:"topology"`
 }
 
+var resourceDemandStore = oblast.MustNewStore[resourceDemandRecord](oblast.PostgresDialect())
+
 // GetResourceDemand implements the CapacityScrapeBackchannel interface.
 func (i capacityScrapeBackchannelImpl) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error) {
 	result := liquid.ResourceDemand{
 		OvercommitFactor: i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
 		PerAZ:            make(map[limes.AvailabilityZone]liquid.ResourceDemandInAZ),
 	}
-	err := oblast.MustNewStore[resourceDemandRecord](oblast.PostgresDialect()).Select(context.TODO(), i.DB, getResourceDemandQuery, serviceType, resourceName).Foreach(func(r resourceDemandRecord) error {
+	err := resourceDemandStore.Select(context.TODO(), i.DB, getResourceDemandQuery, serviceType, resourceName).Foreach(func(r resourceDemandRecord) error {
 		// ignore usage in pseudo-AZs (as an exception, topology "flat" has a single entry for AZ "any")
 		switch r.Topology {
 		case liquid.FlatTopology:

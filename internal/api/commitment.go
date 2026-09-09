@@ -44,6 +44,7 @@ type azResourceLoc struct {
 }
 
 var (
+	azResourceLocStore         = oblast.MustNewStore[azResourceLoc](oblast.PostgresDialect())
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 		SELECT pc.*
 		  FROM project_commitments pc
@@ -135,7 +136,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"pazr.project_id": dbProject.ID}, len(joinArgs))
 	azResourcePathsByID := make(map[db.AZResourceID]db.AZResourcePath)
 
-	err := oblast.MustNewStore[azResourceLoc](oblast.PostgresDialect()).Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
+	err := azResourceLocStore.Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
 		azResourcePathsByID[r.ID] = r.Path
 		return nil
 	})
@@ -262,7 +263,7 @@ func (p *v1Provider) GetPublicCommitments(w http.ResponseWriter, r *http.Request
 	queryStr, joinArgs := filter.PrepareQuery(getAZResourceLocationsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(nil, len(joinArgs))
 	azResourcePathsByID := make(map[db.AZResourceID]db.AZResourcePath)
-	err := oblast.MustNewStore[azResourceLoc](oblast.PostgresDialect()).Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
+	err := azResourceLocStore.Select(ctx, p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r azResourceLoc) error {
 		azResourcePathsByID[r.ID] = r.Path
 		return nil
 	})

@@ -21,6 +21,25 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+type domainResourceRecord struct {
+	DomainID             db.DomainID            `db:"domain_id"`
+	DBServiceType        db.ServiceType         `db:"type"`
+	DBResourceName       liquid.ResourceName    `db:"name"`
+	AZ                   limes.AvailabilityZone `db:"az"`
+	Quota                *uint64                `db:"sum_quota"`
+	Usage                *uint64                `db:"sum_usage"`
+	UnusedCommitments    *uint64                `db:"unused_commitments"`
+	UncommittedUsage     *uint64                `db:"uncommitted_usage"`
+	BackendQuota         *uint64                `db:"backend_quota"`
+	InfiniteBackendQuota *bool                  `db:"infinite_backend_quota"`
+	PhysicalUsage        *uint64                `db:"physical_usage"`
+	ShowPhysicalUsage    *bool                  `db:"has_physical_usage"`
+	MinScrapedAt         *time.Time             `db:"min_scraped_at"`
+	MaxScrapedAt         *time.Time             `db:"max_scraped_at"`
+}
+
+var domainResourceStore = oblast.MustNewStore[domainResourceRecord](oblast.PostgresDialect())
+
 var domainReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
 	  SELECT project_id, az_resource_id, SUM(amount) AS amount
@@ -46,6 +65,19 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	 WHERE %s {{AND s.type = $service_type}}
 	 GROUP BY p.domain_id, s.type, r.name, azr.az
 `))
+
+type domainCommitmentRecord struct {
+	DomainID        db.DomainID                       `db:"domain_id"`
+	DBServiceType   db.ServiceType                    `db:"type"`
+	DBResourceName  liquid.ResourceName               `db:"name"`
+	AZ              limes.AvailabilityZone            `db:"az"`
+	Duration        limesresources.CommitmentDuration `db:"duration"`
+	ConfirmedAmount uint64                            `db:"sum_confirmed"`
+	PendingAmount   uint64                            `db:"sum_pending"`
+	PlannedAmount   uint64                            `db:"sum_planned"`
+}
+
+var domainCommitmentStore = oblast.MustNewStore[domainCommitmentRecord](oblast.PostgresDialect())
 
 var domainReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -113,23 +145,7 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	type resourceRecord struct {
-		DomainID             db.DomainID            `db:"domain_id"`
-		DBServiceType        db.ServiceType         `db:"type"`
-		DBResourceName       liquid.ResourceName    `db:"name"`
-		AZ                   limes.AvailabilityZone `db:"az"`
-		Quota                *uint64                `db:"sum_quota"`
-		Usage                *uint64                `db:"sum_usage"`
-		UnusedCommitments    *uint64                `db:"unused_commitments"`
-		UncommittedUsage     *uint64                `db:"uncommitted_usage"`
-		BackendQuota         *uint64                `db:"backend_quota"`
-		InfiniteBackendQuota *bool                  `db:"infinite_backend_quota"`
-		PhysicalUsage        *uint64                `db:"physical_usage"`
-		ShowPhysicalUsage    *bool                  `db:"has_physical_usage"`
-		MinScrapedAt         *time.Time             `db:"min_scraped_at"`
-		MaxScrapedAt         *time.Time             `db:"max_scraped_at"`
-	}
-	err = oblast.MustNewStore[resourceRecord](oblast.PostgresDialect()).Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r resourceRecord) error {
+	err = domainResourceStore.Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainResourceRecord) error {
 		if domains[r.DomainID] == nil {
 			return nil
 		}
@@ -186,17 +202,7 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 	if filter.WithAZBreakdown {
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		type commitmentRecord struct {
-			DomainID        db.DomainID                       `db:"domain_id"`
-			DBServiceType   db.ServiceType                    `db:"type"`
-			DBResourceName  liquid.ResourceName               `db:"name"`
-			AZ              limes.AvailabilityZone            `db:"az"`
-			Duration        limesresources.CommitmentDuration `db:"duration"`
-			ConfirmedAmount uint64                            `db:"sum_confirmed"`
-			PendingAmount   uint64                            `db:"sum_pending"`
-			PlannedAmount   uint64                            `db:"sum_planned"`
-		}
-		err = oblast.MustNewStore[commitmentRecord](oblast.PostgresDialect()).Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r commitmentRecord) error {
+		err = domainCommitmentStore.Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainCommitmentRecord) error {
 			if domains[r.DomainID] == nil {
 				return nil
 			}

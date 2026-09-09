@@ -90,18 +90,16 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		MaxScrapedAt *time.Time     `db:"max_scraped_at"`
 	}
 	err := oblast.MustNewStore[scrapedAtAggregateRecord](oblast.PostgresDialect()).Select(context.Background(), c.DB, scrapedAtAggregateQuery).Foreach(func(r scrapedAtAggregateRecord) error {
-		if c.Cluster.SIC.GetSnapshot().GetResourcesForType(r.ServiceType).Len() > 0 {
-			ch <- prometheus.MustNewConstMetric(
-				minScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(r.MinScrapedAt),
-				string(r.ServiceType),
-			)
-			ch <- prometheus.MustNewConstMetric(
-				maxScrapedAtDesc,
-				prometheus.GaugeValue, timeAsUnixOrZero(r.MaxScrapedAt),
-				string(r.ServiceType),
-			)
-		}
+		ch <- prometheus.MustNewConstMetric(
+			minScrapedAtDesc,
+			prometheus.GaugeValue, timeAsUnixOrZero(r.MinScrapedAt),
+			string(r.ServiceType),
+		)
+		ch <- prometheus.MustNewConstMetric(
+			maxScrapedAtDesc,
+			prometheus.GaugeValue, timeAsUnixOrZero(r.MaxScrapedAt),
+			string(r.ServiceType),
+		)
 		return nil
 	})
 	if err != nil {
@@ -143,6 +141,8 @@ type CapacityCollectionMetricsInstance struct {
 	SerializedMetrics string         `db:"serialized_metrics"`
 }
 
+var capacityCollectionMetricsStore = oblast.MustNewStore[CapacityCollectionMetricsInstance](oblast.PostgresDialect())
+
 // Describe implements the prometheus.Collector interface.
 func (c *CapacityCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityCollectionMetricsOkGauge.Describe(ch)
@@ -175,7 +175,7 @@ func (c *CapacityCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric
 		return
 	}
 
-	err := oblast.MustNewStore[CapacityCollectionMetricsInstance](oblast.PostgresDialect()).Select(context.Background(), c.DB, capacitySerializedMetricsGetQuery).Foreach(func(i CapacityCollectionMetricsInstance) error {
+	err := capacityCollectionMetricsStore.Select(context.Background(), c.DB, capacitySerializedMetricsGetQuery).Foreach(func(i CapacityCollectionMetricsInstance) error {
 		c.collectOneCapacitor(ch, collectionMetricsOkDesc, i)
 		return nil
 	})
@@ -237,6 +237,8 @@ type QuotaCollectionMetricsInstance struct {
 	SerializedMetrics string         `db:"serialized_metrics"`
 }
 
+var quotaCollectionMetricsStore = oblast.MustNewStore[QuotaCollectionMetricsInstance](oblast.PostgresDialect())
+
 // Describe implements the prometheus.Collector interface.
 func (c *UsageCollectionMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	usageCollectionMetricsOkGauge.Describe(ch)
@@ -273,7 +275,7 @@ func (c *UsageCollectionMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	err := oblast.MustNewStore[QuotaCollectionMetricsInstance](oblast.PostgresDialect()).Select(context.Background(), c.DB, quotaSerializedMetricsGetQuery).Foreach(func(r QuotaCollectionMetricsInstance) error {
+	err := quotaCollectionMetricsStore.Select(context.Background(), c.DB, quotaSerializedMetricsGetQuery).Foreach(func(r QuotaCollectionMetricsInstance) error {
 		c.collectOneProjectService(ch, collectionMetricsOkDesc, r, sis)
 		return nil
 	})
@@ -1151,8 +1153,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 
 	// fetch project-scoped rate data
-	// TODO: replace MustNewStore with `db.ProjectRateStore` once that exists
-	err = oblast.MustNewStore[db.ProjectRate](oblast.PostgresDialect()).Select(ctx, d.DB, `SELECT * FROM project_rates`).Foreach(func(prr db.ProjectRate) error {
+	err = db.ProjectRateStore.Select(ctx, d.DB, `SELECT * FROM project_rates`).Foreach(func(prr db.ProjectRate) error {
 		ri, ok := rateInfoByID[prr.RateID]
 		if !ok {
 			return fmt.Errorf("saw unexpected RateID %d", prr.RateID)

@@ -65,6 +65,8 @@ type missingProjectServiceRecord struct {
 	ServiceID db.ServiceID `db:"service_id"`
 }
 
+var missingProjectServiceStore = oblast.MustNewStore[missingProjectServiceRecord](oblast.PostgresDialect())
+
 func (c *Collector) checkConsistency(ctx context.Context, _ prometheus.Labels) error {
 	// cleanup entries for services that have been removed from the configuration
 	// (this is also done by core.SaveServiceInfoToDB() on startup, so this is
@@ -81,7 +83,7 @@ func (c *Collector) checkConsistency(ctx context.Context, _ prometheus.Labels) e
 	// ensure that `project_services` matches the fully populated cross product of `projects` and `services`
 	// (this is usually only relevant when core.SaveServiceInfoToDB() created a new `services` entry;
 	// for new `projects` entries, initProject() will already have created the respective `project_services` records)
-	err = oblast.MustNewStore[missingProjectServiceRecord](oblast.PostgresDialect()).Select(ctx, c.DB, insertMissingProjectServicesQuery, c.MeasureTime()).Foreach(func(r missingProjectServiceRecord) error {
+	err = missingProjectServiceStore.Select(ctx, c.DB, insertMissingProjectServicesQuery, c.MeasureTime()).Foreach(func(r missingProjectServiceRecord) error {
 		logg.Info("created missing project_services entry with project_id = %d, service_id = %d", r.ProjectID, r.ServiceID)
 		return nil
 	})

@@ -58,6 +58,8 @@ type clusterResourceUsageRecord struct {
 	MaxScrapedAt      *time.Time              `db:"max_scraped_at"`
 }
 
+var clusterResourceUsageStore = oblast.MustNewStore[clusterResourceUsageRecord](oblast.PostgresDialect())
+
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, azr.raw_capacity, azr.usage, azr.subcapacities AS subcapacities, s.scraped_at
 	  FROM services s
@@ -76,6 +78,8 @@ type clusterResourceCapacityRecord struct {
 	Subcapacities    *string                 `db:"subcapacities"`
 	ScrapedAt        *time.Time              `db:"scraped_at"`
 }
+
+var clusterResourceCapacityStore = oblast.MustNewStore[clusterResourceCapacityRecord](oblast.PostgresDialect())
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	WITH project_commitment_sums AS (
@@ -106,6 +110,8 @@ type clusterCommitmentRecord struct {
 	PlannedAmount   uint64                            `db:"planned"`
 }
 
+var clusterCommitmentStore = oblast.MustNewStore[clusterCommitmentRecord](oblast.PostgresDialect())
+
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT s.type, ra.name, MIN(ps.scraped_at) AS min_scraped_at, MAX(ps.scraped_at) AS max_scraped_at
 	  FROM services s
@@ -125,6 +131,8 @@ type clusterRateScrapedAtRecord struct {
 	MaxRatesScrapedAt *time.Time      `db:"max_scraped_at"`
 }
 
+var clusterRateReportStore = oblast.MustNewStore[clusterRateScrapedAtRecord](oblast.PostgresDialect())
+
 // GetClusterResources returns the resource data report for the whole cluster.
 func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter, sis core.ServiceInfoSnapshot) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
@@ -136,7 +144,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Ti
 
 	// first query: collect project usage data in these clusters
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
-	err := oblast.MustNewStore[clusterResourceUsageRecord](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceUsageRecord) error {
+	err := clusterResourceUsageStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceUsageRecord) error {
 		if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 			return nil
 		}
@@ -189,7 +197,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Ti
 	if !filter.WithSubcapacities {
 		queryStr = strings.Replace(queryStr, "azr.subcapacities", "''", 1)
 	}
-	err = oblast.MustNewStore[clusterResourceCapacityRecord](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceCapacityRecord) error {
+	err = clusterResourceCapacityStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterResourceCapacityRecord) error {
 		if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 			return nil
 		}
@@ -266,7 +274,7 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Ti
 	if filter.WithAZBreakdown {
 		// third query: collect commitment data that is broken down by commitment duration
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
-		err = oblast.MustNewStore[clusterCommitmentRecord](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterCommitmentRecord) error {
+		err = clusterCommitmentStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterCommitmentRecord) error {
 			if _, exists := cluster.Config.Liquids[r.ServiceType]; !filter.Includes[r.ServiceType][r.ResourceName] || !exists {
 				return nil
 			}
@@ -356,7 +364,7 @@ func GetClusterRates(ctx context.Context, cluster *core.Cluster, dbi db.Interfac
 
 	// collect scraping timestamp summaries
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
-	err := oblast.MustNewStore[clusterRateScrapedAtRecord](oblast.PostgresDialect()).Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterRateScrapedAtRecord) error {
+	err := clusterRateReportStore.Select(ctx, dbi, queryStr, joinArgs...).Foreach(func(r clusterRateScrapedAtRecord) error {
 		if _, ok := sis.GetRateForPath(db.RatePath{ServiceType: r.ServiceType, RateName: r.RateName}); !ok {
 			return nil
 		}

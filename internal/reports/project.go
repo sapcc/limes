@@ -23,23 +23,26 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
-// Both queries are "ORDER BY p.uuid" to ensure that a) the output order is
-// reproducible to keep the tests happy and b) records for the same project
-// appear in a cluster, so that the implementation can publish completed
-// project reports (and then reclaim their memory usage) as soon as possible.
-var (
-	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id AS project_id, s.type, ps.scraped_at, ra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
-	  FROM services s
-	  JOIN rates ra ON ra.service_id = s.id
-	  CROSS JOIN projects p
-	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
-	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = ps.project_id
-	 WHERE %s {{AND s.type = $service_type}}
-	 ORDER BY p.uuid
-`)
+type projectResourceRecord struct {
+	ProjectID                db.ProjectID            `db:"project_id"`
+	DBServiceType            db.ServiceType          `db:"type"`
+	ScrapedAt                *time.Time              `db:"scraped_at"`
+	DBResourceName           liquid.ResourceName     `db:"name"`
+	MaxQuotaFromOutsideAdmin *uint64                 `db:"max_quota_from_outside_admin"`
+	ForbidAutogrowth         bool                    `db:"forbid_autogrowth"`
+	Forbidden                bool                    `db:"forbidden"`
+	AZ                       *limes.AvailabilityZone `db:"az"`
+	Quota                    *uint64                 `db:"quota"`
+	Usage                    *uint64                 `db:"usage"`
+	PhysicalUsage            *uint64                 `db:"physical_usage"`
+	HistoricalUsage          *string                 `db:"historical_usage"`
+	BackendQuota             *int64                  `db:"backend_quota"`
+	Subresources             *string                 `db:"subresources"`
+}
 
-	projectReportResourcesQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+var projectResourceStore = oblast.MustNewStore[projectResourceRecord](oblast.PostgresDialect())
+
+var projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.id AS project_id, s.type, ps.scraped_at, r.name, pr.max_quota_from_outside_admin, pr.forbid_autogrowth, pr.forbidden, azr.az, pazr.quota, pazr.usage, pazr.physical_usage, pazr.historical_usage, pazr.backend_quota, pazr.subresources
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id {{AND r.name = $resource_name}}
@@ -51,9 +54,21 @@ var (
 	  JOIN project_az_resources pazr ON pazr.az_resource_id = azr.id AND pazr.project_id = p.id
 	 WHERE %s {{AND s.type = $service_type}}
 	 ORDER BY p.uuid, azr.az
-`))
+`)
 
-	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
+type projectCommitmentRecord struct {
+	DBServiceType   db.ServiceType                    `db:"type"`
+	DBResourceName  liquid.ResourceName               `db:"name"`
+	AZ              limes.AvailabilityZone            `db:"az"`
+	Duration        limesresources.CommitmentDuration `db:"duration"`
+	ConfirmedAmount uint64                            `db:"confirmed"`
+	PendingAmount   uint64                            `db:"pending"`
+	PlannedAmount   uint64                            `db:"planned"`
+}
+
+var projectCommitmentStore = oblast.MustNewStore[projectCommitmentRecord](oblast.PostgresDialect())
+
+var projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 	SELECT s.type, r.name, azr.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}), 0) AS confirmed,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.status = {{liquid.CommitmentStatusPending}}), 0) AS pending,
@@ -65,7 +80,33 @@ var (
 	 WHERE pc.project_id = $1
 	 GROUP BY s.type, r.name, azr.az, pc.duration
 	`))
-)
+
+type projectRateRecord struct {
+	ProjectID      db.ProjectID       `db:"project_id"`
+	DBServiceType  db.ServiceType     `db:"type"`
+	RatesScrapedAt *time.Time         `db:"scraped_at"`
+	DBRateName     liquid.RateName    `db:"name"`
+	Limit          *uint64            `db:"rate_limit"`
+	Window         *limesrates.Window `db:"window_ns"`
+	UsageAsBigint  *string            `db:"usage_as_bigint"`
+}
+
+var projectRateStore = oblast.MustNewStore[projectRateRecord](oblast.PostgresDialect())
+
+// Both queries are "ORDER BY p.uuid" to ensure that a) the output order is
+// reproducible to keep the tests happy and b) records for the same project
+// appear in a cluster, so that the implementation can publish completed
+// project reports (and then reclaim their memory usage) as soon as possible.
+var projectRateReportQuery = sqlext.SimplifyWhitespace(`
+	SELECT p.id AS project_id, s.type, ps.scraped_at, ra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	  FROM services s
+	  JOIN rates ra ON ra.service_id = s.id
+	  CROSS JOIN projects p
+	  JOIN project_services ps ON ps.service_id = s.id AND ps.project_id = p.id
+	  JOIN project_rates pra ON pra.rate_id = ra.id AND pra.project_id = ps.project_id
+	 WHERE %s {{AND s.type = $service_type}}
+	 ORDER BY p.uuid
+`)
 
 // GetProjectResources returns limes.ProjectReport reports for all projects in
 // the given domain or, if project is non-nil, for that project only. Only the
@@ -86,12 +127,9 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 	//
 	// (this is important because a filter like `?service=none` is supported,
 	// but will yield no results at all in the other queries)
-	selectWhereFields := make(map[string]any, len(fields))
-	for k, v := range fields {
-		selectWhereFields[strings.TrimPrefix(k, "p.")] = v
-	}
-	whereStr, whereArgs := db.BuildSimpleWhereClause(selectWhereFields, 0)
-	allProjects, err := db.ProjectStore.SelectWhere(ctx, dbi, whereStr, whereArgs...).Collect()
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
+	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
+	allProjects, err := db.ProjectStore.Select(ctx, dbi, queryStr, whereArgs...).Collect()
 	if err != nil {
 		return err
 	}
@@ -106,35 +144,18 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 	}
 
 	// avoid collecting the potentially large subresources strings when possible
-	queryStr := projectReportResourcesQuery
+	queryStr = projectReportResourcesQuery
 	if !filter.WithSubresources {
 		queryStr = strings.Replace(queryStr, "pazr.subresources", "'' AS subresources", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	type resourceRecord struct {
-		ProjectID                db.ProjectID            `db:"project_id"`
-		DBServiceType            db.ServiceType          `db:"type"`
-		ScrapedAt                *time.Time              `db:"scraped_at"`
-		DBResourceName           liquid.ResourceName     `db:"name"`
-		MaxQuotaFromOutsideAdmin *uint64                 `db:"max_quota_from_outside_admin"`
-		ForbidAutogrowth         bool                    `db:"forbid_autogrowth"`
-		Forbidden                bool                    `db:"forbidden"`
-		AZ                       *limes.AvailabilityZone `db:"az"`
-		Quota                    *uint64                 `db:"quota"`
-		Usage                    *uint64                 `db:"usage"`
-		PhysicalUsage            *uint64                 `db:"physical_usage"`
-		HistoricalUsage          *string                 `db:"historical_usage"`
-		BackendQuota             *int64                  `db:"backend_quota"`
-		Subresources             *string                 `db:"subresources"`
-	}
-
 	var (
 		currentProjectID db.ProjectID
 		projectReport    *limesresources.ProjectReport
 	)
-	err = oblast.MustNewStore[resourceRecord](oblast.PostgresDialect()).Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r resourceRecord) error {
+	err = projectResourceStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r projectResourceRecord) error {
 		if !filter.Includes[r.DBServiceType][r.DBResourceName] {
 			return nil
 		}
@@ -322,16 +343,7 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 func finalizeProjectResourceReport(ctx context.Context, projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all relevant commitments using a different query
-		type commitmentRecord struct {
-			DBServiceType   db.ServiceType                    `db:"type"`
-			DBResourceName  liquid.ResourceName               `db:"name"`
-			AZ              limes.AvailabilityZone            `db:"az"`
-			Duration        limesresources.CommitmentDuration `db:"duration"`
-			ConfirmedAmount uint64                            `db:"confirmed"`
-			PendingAmount   uint64                            `db:"pending"`
-			PlannedAmount   uint64                            `db:"planned"`
-		}
-		err := oblast.MustNewStore[commitmentRecord](oblast.PostgresDialect()).Select(ctx, dbi, projectReportCommitmentsQuery, projectID).Foreach(func(r commitmentRecord) error {
+		err := projectCommitmentStore.Select(ctx, dbi, projectReportCommitmentsQuery, projectID).Foreach(func(r projectCommitmentRecord) error {
 			apiServiceType, apiResourceName, exists := nm.MapToV1API(r.DBServiceType, r.DBResourceName)
 			if !exists {
 				return nil
@@ -411,12 +423,9 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 	//
 	// (this is important because a filter like `?service=none` is supported,
 	// but will yield no results at all in the other queries)
-	selectWhereFields := make(map[string]any, len(fields))
-	for k, v := range fields {
-		selectWhereFields[strings.TrimPrefix(k, "p.")] = v
-	}
-	whereStr, whereArgs := db.BuildSimpleWhereClause(selectWhereFields, 0)
-	allProjects, err := db.ProjectStore.SelectWhere(ctx, dbi, whereStr, whereArgs...).Collect()
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
+	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
+	allProjects, err := db.ProjectStore.Select(ctx, dbi, queryStr, whereArgs...).Collect()
 	if err != nil {
 		return err
 	}
@@ -433,21 +442,11 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, domain db.Domai
 	queryStr, joinArgs := filter.PrepareQuery(projectRateReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	type rateRecord struct {
-		ProjectID      db.ProjectID       `db:"project_id"`
-		DBServiceType  db.ServiceType     `db:"type"`
-		RatesScrapedAt *time.Time         `db:"scraped_at"`
-		DBRateName     liquid.RateName    `db:"name"`
-		Limit          *uint64            `db:"rate_limit"`
-		Window         *limesrates.Window `db:"window_ns"`
-		UsageAsBigint  *string            `db:"usage_as_bigint"`
-	}
-
 	var (
 		currentProjectID db.ProjectID
 		projectReport    *limesrates.ProjectReport
 	)
-	err = oblast.MustNewStore[rateRecord](oblast.PostgresDialect()).Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r rateRecord) error {
+	err = projectRateStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r projectRateRecord) error {
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
 		if projectReport != nil && currentProjectID != r.ProjectID {
