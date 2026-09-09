@@ -145,7 +145,7 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	err = domainResourceStore.Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainResourceRecord) error {
+	err = domainResourceStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainResourceRecord) error {
 		if domains[r.DomainID] == nil {
 			return nil
 		}
@@ -202,7 +202,7 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 	if filter.WithAZBreakdown {
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		err = domainCommitmentStore.Select(ctx, cluster.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainCommitmentRecord) error {
+		err = domainCommitmentStore.Select(ctx, dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...).Foreach(func(r domainCommitmentRecord) error {
 			if domains[r.DomainID] == nil {
 				return nil
 			}

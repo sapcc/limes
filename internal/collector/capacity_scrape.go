@@ -252,6 +252,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	if err != nil {
 		return err
 	}
+	sis = c.Cluster.SIC.GetSnapshot()
 
 	// for all resources thus updated, sync commitment status with reality
 	for _, res := range resources.All() {
