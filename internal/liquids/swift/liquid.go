@@ -45,6 +45,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	for rateName, rateDisplayName := range l.RateDisplayNames {
 		rates[rateName] = liquid.RateInfo{
 			DisplayName: rateDisplayName,
+			Unit:        liquid.UnitPiece,
 			Topology:    liquid.FlatTopology,
 			HasUsage:    false,
 		}
