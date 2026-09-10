@@ -89,6 +89,13 @@ type CommitmentRequest struct {
 	NotifyOnConfirm bool `json:"notify_on_confirm,omitempty"`
 }
 
+// CommitmentPatchRequest is the request payload format for PATCH /v2/commitments/:uuid.
+// The current implementation will reject requests where more than one field is set at once.
+type CommitmentPatchRequest struct {
+	TransferStatus Option[limesresources.CommitmentTransferStatus] `json:"transfer_status,omitzero"`
+	Duration       Option[limesresources.CommitmentDuration]       `json:"duration,omitzero"` // may only be used to increase duration, not decrease it
+}
+
 // CommitmentConfiguration describes how commitments are configured for a given resource.
 //
 // This appears as a field on resource reports, if the respective resource allows commitments.
