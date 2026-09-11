@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/jsonmatch"
@@ -172,10 +171,29 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	var uuid3 string
 	createConfirmedCommitment("uuid-for-dresden", "dresden", "uuid-for-germany", "germany", 5, &uuid3)
 
-	// make commitment 3 public via DB (no v2 API for transfer yet)
-	// TODO: use API for this update
-	s.MustDBExec(`UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE uuid = $3`,
-		limesresources.CommitmentTransferStatusPublic, test.GenerateDummyTransferToken(1), uuid3)
+	// make commitment 3 public via PATCH API
+	var transferToken3 string
+	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+uuid3, httptest.WithJSONBody(map[string]any{
+		"transfer_status": "public",
+	})).ExpectJSON(t, http.StatusAccepted, jsonmatch.Object{
+		"uuid":              uuid3,
+		"amount":            5,
+		"duration":          "1 hour",
+		"project_id":        "uuid-for-dresden",
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"status":            "confirmed",
+		"transfer_status":   "public",
+		"transfer_token":    jsonmatch.CaptureField(&transferToken3),
+		"created_at":        s.Clock.Now().UTC().Format(time.RFC3339),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      s.Clock.Now().UTC().Format(time.RFC3339),
+		"expires_at":        s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+		"updated_at":        s.Clock.Now().UTC().Format(time.RFC3339),
+	})
 
 	// commitment 4: dresden, amount 5 (will be deleted)
 	var uuid4 string
@@ -194,12 +212,13 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		"project_domain_id":   "uuid-for-france",
 	})
 
-	// helper: build jq modification to inject captured UUIDs into fixture
+	// helper: build jq modification to inject captured UUIDs and transfer token into fixture
 	injectUUIDs := func(f httptest.JQModifiableContent) httptest.JQModifiableContent {
 		return f.
 			Modify(fmt.Sprintf(`.commitments[0].uuid = %q`, uuid1)).
 			Modify(fmt.Sprintf(`.commitments[1].uuid = %q`, uuid2)).
 			Modify(fmt.Sprintf(`.commitments[2].uuid = %q`, uuid3)).
+			Modify(fmt.Sprintf(`.commitments[2].transfer_token = %q`, transferToken3)).
 			Modify(fmt.Sprintf(`.commitments[3].uuid = %q`, uuid4))
 	}
 
