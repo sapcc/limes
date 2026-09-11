@@ -68,6 +68,7 @@ The v2 API uses the policy rules listed below.
 | `v2:project:commitment_get` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` as regular user |
 | `v2:project:commitment_get_public` | none | `GET /resources/v2/commitments?only_public=true` |
 | `v2:project:commitment_get_unscoped` | none | `GET /resources/v2/commitments` without `domain_uuid` and `project_uuid` filters |
+| `v2:project:commitment_patch` | `domain_uuid`, `project_uuid` | `PATCH /resources/v2/commitments/:commitment_uuid` |
 | `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
 | `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
