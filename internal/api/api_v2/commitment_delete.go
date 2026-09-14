@@ -16,7 +16,7 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -33,77 +33,71 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 	var (
 		ctx = r.Context()
 		sis = p.Cluster.SIC.GetSnapshot()
+		ccr liquid.CommitmentChangeRequest
 	)
 
-	// validate request contents
-	cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
-	if err != nil {
-		return nil, err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", cUUID)
-	switch {
-	case errors.Is(err, errNoSuchCommitment):
-		return nil, nil // respond with 204 if commitment already deleted (DELETE should be idempotent)
-	case err != nil:
-		return nil, err
-	}
-	deletable := isDeletable(token, c, p.timeNow)
-	if !deletable {
-		err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
-		return nil, err
-	}
+	err := p.DB.WithinTransaction(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *gsql.Tx) error {
+		// validate request contents
+		cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
+		c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", cUUID)
+		switch {
+		case errors.Is(err, errNoSuchCommitment):
+			return nil // respond with 204 if commitment already deleted (DELETE should be idempotent)
+		case err != nil:
+			return err
+		}
+		deletable := isDeletable(token, c, p.timeNow)
+		if !deletable {
+			err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
+			return err
+		}
 
-	// prep deletion
-	stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
-	if err != nil {
-		return nil, err
-	}
-	ccr := liquid.CommitmentChangeRequest{
-		AZ:          azRes.Path.AvailabilityZone,
-		InfoVersion: must.BeOK(sis.GetServiceForType(azRes.Path.ServiceType)).LiquidVersion,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			scope.Project.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(scope.Project, scope.Domain),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					azRes.Path.ResourceName: {
-						TotalConfirmedBefore:  stats.TotalConfirmed,
-						TotalConfirmedAfter:   stats.TotalConfirmed - c.Amount,
-						TotalGuaranteedBefore: stats.TotalGuaranteed,
-						TotalGuaranteedAfter:  stats.TotalGuaranteed, // TODO: change when introducing "guaranteed" commitments
-						Commitments: []liquid.Commitment{
-							{
-								UUID:      c.UUID,
-								OldStatus: Some(c.Status),
-								NewStatus: None[liquid.CommitmentStatus](),
-								Amount:    c.Amount,
-								ConfirmBy: c.ConfirmBy,
-								ExpiresAt: c.ExpiresAt,
+		// prep deletion
+		stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
+		if err != nil {
+			return err
+		}
+		ccr = liquid.CommitmentChangeRequest{
+			AZ:          azRes.Path.AvailabilityZone,
+			InfoVersion: must.BeOK(sis.GetServiceForType(azRes.Path.ServiceType)).LiquidVersion,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				scope.Project.UUID: {
+					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(scope.Project, scope.Domain),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						azRes.Path.ResourceName: {
+							TotalConfirmedBefore:  stats.TotalConfirmed,
+							TotalConfirmedAfter:   stats.TotalConfirmed - c.Amount,
+							TotalGuaranteedBefore: stats.TotalGuaranteed,
+							TotalGuaranteedAfter:  stats.TotalGuaranteed, // TODO: change when introducing "guaranteed" commitments
+							Commitments: []liquid.Commitment{
+								{
+									UUID:      c.UUID,
+									OldStatus: Some(c.Status),
+									NewStatus: None[liquid.CommitmentStatus](),
+									Amount:    c.Amount,
+									ConfirmBy: c.ConfirmBy,
+									ExpiresAt: c.ExpiresAt,
+								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, azRes.Path.ServiceType, p.DB)
-	if err != nil {
-		return nil, err
-	}
+		}
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, azRes.Path.ServiceType, p.DB)
+		if err != nil {
+			return err
+		}
 
-	// delete
-	c.Status = util.CommitmentStatusDeleted
-	c.DeletedAt = Some(p.timeNow())
-	c.UpdatedAt = p.timeNow()
-	c.TransferStatus = limesresources.CommitmentTransferStatusNone
-	c.TransferToken = None[string]()
-	c.TransferStartedAt = None[time.Time]()
-	err = db.ProjectCommitmentStore.Update(ctx, tx, c)
-	if err != nil {
-		return nil, err
-	}
-	err = tx.Commit()
+		// delete
+		c.Status = util.CommitmentStatusDeleted
+		c.DeletedAt = Some(p.timeNow())
+		c.UpdatedAt = p.timeNow()
+		c.TransferStatus = limesresources.CommitmentTransferStatusNone
+		c.TransferToken = None[string]()
+		c.TransferStartedAt = None[time.Time]()
+		return db.ProjectCommitmentStore.Update(ctx, tx, c)
+	})
 	if err != nil {
 		return nil, err
 	}
