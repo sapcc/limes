@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 	"go.xyrillian.de/oblast"
@@ -436,8 +437,10 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	result := !commitmentChangeRequestWasRejected(ccr, w, false)
-	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
+	if retryAt, exists := ccr.RetryAt.Unpack(); exists {
+		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
+	}
+	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": ccr.RejectionReason == ""})
 }
 
 // CreateProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/new.
@@ -499,13 +502,6 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// we want to validate committable capacity in the same transaction that creates the commitment
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	// prepare commitment
 	creationContext := db.CommitmentWorkflowContext{Reason: db.CommitmentReasonCreate}
 	buf, err := json.Marshal(creationContext)
@@ -534,104 +530,106 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	dbCommitment.NotifyOnConfirm = req.NotifyOnConfirm
 	var auditEvents []audittools.Event
 
-	// we will pre-insert the commitment, because we need the db.ProjectCommitmentID to
-	// be referenced in the supersede context of the transferable commitments
-	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	if confirmBy.IsNone() {
-		// When the commitment is to be confirmed immediately, the capacity check
-		// is carried out together with the transferability check in the cache.
-		mailTemplate := None[core.MailTemplate]()
-		if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
-			mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
-		}
-		transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(ctx, tx, p.Cluster, sis, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		auditContext := audit.Context{
-			UserIdentity: token,
-			Request:      r,
-		}
-		result, err := transferableCommitmentCache.CanConfirmWithTransfers(r.Context(), dbCommitment, *dbProject, *dbDomain, true, false, auditContext, cadf.CreateAction)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		if commitmentChangeRequestWasRejected(result, w, true) {
-			return
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// we will pre-insert the commitment, because we need the db.ProjectCommitmentID to
+		// be referenced in the supersede context of the transferable commitments
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbCommitment)
+		if err != nil {
+			return err
 		}
 
-		// retrieve mails and audit event
-		auditEvents = append(auditEvents, transferableCommitmentCache.RetrieveAuditEvents()...)
-		err = transferableCommitmentCache.GenerateTransferMails(ctx, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
+		if confirmBy.IsNone() {
+			// When the commitment is to be confirmed immediately, the capacity check
+			// is carried out together with the transferability check in the cache.
+			mailTemplate := None[core.MailTemplate]()
+			if mailConfig, exists := p.Cluster.Config.MailNotifications.Unpack(); exists {
+				mailTemplate = Some(mailConfig.Templates.TransferredCommitments)
+			}
+			transferableCommitmentCache, err := datamodel.NewTransferableCommitmentCache(ctx, tx, p.Cluster, sis, *path, now, p.generateProjectCommitmentUUID, p.generateTransferToken, mailTemplate)
+			if err != nil {
+				return err
+			}
+			auditContext := audit.Context{
+				UserIdentity: token,
+				Request:      r,
+			}
+			result, err := transferableCommitmentCache.CanConfirmWithTransfers(r.Context(), dbCommitment, *dbProject, *dbDomain, true, false, auditContext, cadf.CreateAction)
+			if err != nil {
+				return err
+			}
+			err = ensureCommitmentChangeRequestAccepted(result)
+			if err != nil {
+				return err
+			}
 
-		dbCommitment.ConfirmedAt = Some(now)
-		dbCommitment.Status = liquid.CommitmentStatusConfirmed
-	} else {
-		// when the commitment is not to be confirmed immediately, we check
-		// (or inform the liquid) about the capacity independently.
-		ccr := liquid.CommitmentChangeRequest{
-			AZ:          path.AvailabilityZone,
-			InfoVersion: service.LiquidVersion,
-			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-				dbProject.UUID: {
-					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
-					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-						path.ResourceName: {
-							TotalConfirmedBefore: totalConfirmed,
-							TotalConfirmedAfter:  totalConfirmed,
-							// TODO: change when introducing "guaranteed" commitments
-							TotalGuaranteedBefore: 0,
-							TotalGuaranteedAfter:  0,
-							Commitments: []liquid.Commitment{
-								{
-									UUID:      dbCommitment.UUID,
-									OldStatus: None[liquid.CommitmentStatus](),
-									NewStatus: Some(liquid.CommitmentStatusPlanned),
-									Amount:    req.Amount,
-									ConfirmBy: confirmBy,
-									ExpiresAt: req.Duration.AddTo(confirmBy.UnwrapOr(now)),
+			// retrieve mails and audit event
+			auditEvents = append(auditEvents, transferableCommitmentCache.RetrieveAuditEvents()...)
+			err = transferableCommitmentCache.GenerateTransferMails(ctx, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API)
+			if err != nil {
+				return err
+			}
+
+			dbCommitment.ConfirmedAt = Some(now)
+			dbCommitment.Status = liquid.CommitmentStatusConfirmed
+		} else {
+			// when the commitment is not to be confirmed immediately, we check
+			// (or inform the liquid) about the capacity independently.
+			ccr := liquid.CommitmentChangeRequest{
+				AZ:          path.AvailabilityZone,
+				InfoVersion: service.LiquidVersion,
+				ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+					dbProject.UUID: {
+						ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
+						ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+							path.ResourceName: {
+								TotalConfirmedBefore: totalConfirmed,
+								TotalConfirmedAfter:  totalConfirmed,
+								// TODO: change when introducing "guaranteed" commitments
+								TotalGuaranteedBefore: 0,
+								TotalGuaranteedAfter:  0,
+								Commitments: []liquid.Commitment{
+									{
+										UUID:      dbCommitment.UUID,
+										OldStatus: None[liquid.CommitmentStatus](),
+										NewStatus: Some(liquid.CommitmentStatusPlanned),
+										Amount:    req.Amount,
+										ConfirmBy: confirmBy,
+										ExpiresAt: req.Duration.AddTo(confirmBy.UnwrapOr(now)),
+									},
 								},
 							},
 						},
 					},
 				},
-			},
-		}
-		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		if ccr.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
-			return
-		}
-		// TODO: change when introducing "guaranteed" commitments
-		dbCommitment.Status = liquid.CommitmentStatusPlanned
+			}
+			commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
+			if err != nil {
+				return err
+			}
+			if ccr.RequiresConfirmation() {
+				err = ensureCommitmentChangeRequestAccepted(commitmentChangeResponse)
+				if err != nil {
+					return err
+				}
+			}
+			// TODO: change when introducing "guaranteed" commitments
+			dbCommitment.Status = liquid.CommitmentStatusPlanned
 
-		auditEvents = append(auditEvents, audit.CommitmentEventTarget{
-			CommitmentChangeRequest: ccr,
-		}.ReplicateForAllProjectsWithDefaults(audittools.Event{
-			Time:       now,
-			Request:    r,
-			User:       token,
-			ReasonCode: http.StatusCreated,
-			Action:     cadf.CreateAction,
-		})...)
-	}
+			auditEvents = append(auditEvents, audit.CommitmentEventTarget{
+				CommitmentChangeRequest: ccr,
+			}.ReplicateForAllProjectsWithDefaults(audittools.Event{
+				Time:       now,
+				Request:    r,
+				User:       token,
+				ReasonCode: http.StatusCreated,
+				Action:     cadf.CreateAction,
+			})...)
+		}
 
-	// create commitment
-	dbCommitment.UpdatedAt = now
-	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	err = tx.Commit()
+		// create commitment
+		dbCommitment.UpdatedAt = now
+		return db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -738,13 +736,6 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
-	// Start transaction for creating new commitment and marking merged commitments as superseded
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	// Create merged template
 	now := p.timeNow()
 	dbMergedCommitment := db.ProjectCommitment{
@@ -783,79 +774,79 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 	dbMergedCommitment.CreationContextJSON = json.RawMessage(buf)
 
-	// Insert into database
-	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbMergedCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	// Mark merged commits as superseded
-	supersedeContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonMerge,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbMergedCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbMergedCommitment.UUID},
-	}
-	buf, err = json.Marshal(supersedeContext)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	for _, dbCommitment := range dbCommitments {
-		dbCommitment.UpdatedAt = now
-		dbCommitment.SupersededAt = Some(now)
-		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
-		dbCommitment.Status = liquid.CommitmentStatusSuperseded
-		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
+	// Start transaction for creating new commitment and marking merged commitments as superseded
+	var ccr liquid.CommitmentChangeRequest
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// Insert into database
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbMergedCommitment)
+		if err != nil {
+			return err
 		}
-	}
 
-	liquidCommitments := make([]liquid.Commitment, 1, len(dbCommitments)+1)
-	// new
-	liquidCommitments[0] = liquid.Commitment{
-		UUID:      dbMergedCommitment.UUID,
-		OldStatus: None[liquid.CommitmentStatus](),
-		NewStatus: Some(liquid.CommitmentStatusConfirmed),
-		Amount:    dbMergedCommitment.Amount,
-		ConfirmBy: dbMergedCommitment.ConfirmBy,
-		ExpiresAt: dbMergedCommitment.ExpiresAt,
-	}
-	// old
-	for _, dbCommitment := range dbCommitments {
-		liquidCommitments = append(liquidCommitments, liquid.Commitment{
-			UUID:      dbCommitment.UUID,
-			OldStatus: Some(liquid.CommitmentStatusConfirmed),
-			NewStatus: Some(liquid.CommitmentStatusSuperseded),
-			Amount:    dbCommitment.Amount,
-			ConfirmBy: dbCommitment.ConfirmBy,
-			ExpiresAt: dbCommitment.ExpiresAt,
-		})
-	}
-	ccr := liquid.CommitmentChangeRequest{
-		AZ:          path.AvailabilityZone,
-		InfoVersion: service.LiquidVersion,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					path.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmed,
-						// TODO: change when introducing "guaranteed" commitments
-						TotalGuaranteedBefore: 0,
-						TotalGuaranteedAfter:  0,
-						Commitments:           liquidCommitments,
+		// Mark merged commits as superseded
+		supersedeContext := db.CommitmentWorkflowContext{
+			Reason:                 db.CommitmentReasonMerge,
+			RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbMergedCommitment.ID},
+			RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbMergedCommitment.UUID},
+		}
+		buf, err = json.Marshal(supersedeContext)
+		if err != nil {
+			return err
+		}
+		for _, dbCommitment := range dbCommitments {
+			dbCommitment.UpdatedAt = now
+			dbCommitment.SupersededAt = Some(now)
+			dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
+			dbCommitment.Status = liquid.CommitmentStatusSuperseded
+			err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+			if err != nil {
+				return err
+			}
+		}
+
+		liquidCommitments := make([]liquid.Commitment, 1, len(dbCommitments)+1)
+		// new
+		liquidCommitments[0] = liquid.Commitment{
+			UUID:      dbMergedCommitment.UUID,
+			OldStatus: None[liquid.CommitmentStatus](),
+			NewStatus: Some(liquid.CommitmentStatusConfirmed),
+			Amount:    dbMergedCommitment.Amount,
+			ConfirmBy: dbMergedCommitment.ConfirmBy,
+			ExpiresAt: dbMergedCommitment.ExpiresAt,
+		}
+		// old
+		for _, dbCommitment := range dbCommitments {
+			liquidCommitments = append(liquidCommitments, liquid.Commitment{
+				UUID:      dbCommitment.UUID,
+				OldStatus: Some(liquid.CommitmentStatusConfirmed),
+				NewStatus: Some(liquid.CommitmentStatusSuperseded),
+				Amount:    dbCommitment.Amount,
+				ConfirmBy: dbCommitment.ConfirmBy,
+				ExpiresAt: dbCommitment.ExpiresAt,
+			})
+		}
+		ccr = liquid.CommitmentChangeRequest{
+			AZ:          path.AvailabilityZone,
+			InfoVersion: service.LiquidVersion,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				dbProject.UUID: {
+					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						path.ResourceName: {
+							TotalConfirmedBefore: totalConfirmed,
+							TotalConfirmedAfter:  totalConfirmed,
+							// TODO: change when introducing "guaranteed" commitments
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0,
+							Commitments:           liquidCommitments,
+						},
 					},
 				},
 			},
-		},
-	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	err = tx.Commit()
+		}
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
+		return err
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -929,122 +920,115 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create renewed commitment
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
+		c   limesresources.Commitment
+		ccr liquid.CommitmentChangeRequest
 	)
-	err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "no route to this commitment", http.StatusNotFound)
-		return
-	} else if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		var (
+			path           db.AZResourcePath
+			totalConfirmed uint64
+		)
+		err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
+			Scan(&path, &totalConfirmed)
+		if errors.Is(err, sql.ErrNoRows) {
+			return respondwith.CustomStatus(http.StatusNotFound, errors.New("no route to this commitment"))
+		} else if err != nil {
+			return err
+		}
 
-	sis := p.Cluster.SIC.GetSnapshot()
-	resource, rExists := sis.GetResourceForPath(path.Resource())
-	if !rExists { // checking the deepest level is enough
-		http.Error(w, "service or resource not found", http.StatusNotFound)
-		return
-	}
-	service := must.BeOK(sis.GetServiceForType(path.ServiceType))
+		sis := p.Cluster.SIC.GetSnapshot()
+		resource, rExists := sis.GetResourceForPath(path.Resource())
+		if !rExists { // checking the deepest level is enough
+			return respondwith.CustomStatus(http.StatusNotFound, errors.New("service or resource not found"))
+		}
+		service := must.BeOK(sis.GetServiceForType(path.ServiceType))
 
-	creationContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonRenew,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
-	}
-	buf, err := json.Marshal(creationContext)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	dbRenewedCommitment := db.ProjectCommitment{
-		UUID:                p.generateProjectCommitmentUUID(),
-		ProjectID:           dbProject.ID,
-		AZResourceID:        dbCommitment.AZResourceID,
-		Amount:              dbCommitment.Amount,
-		Duration:            dbCommitment.Duration,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-		CreatorUUID:         token.UserUUID(),
-		CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmBy:           Some(dbCommitment.ExpiresAt),
-		ExpiresAt:           dbCommitment.Duration.AddTo(dbCommitment.ExpiresAt),
-		Status:              liquid.CommitmentStatusPlanned,
-		CreationContextJSON: json.RawMessage(buf),
-	}
+		creationContext := db.CommitmentWorkflowContext{
+			Reason:                 db.CommitmentReasonRenew,
+			RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
+			RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
+		}
+		buf, err := json.Marshal(creationContext)
+		if err != nil {
+			return err
+		}
+		dbRenewedCommitment := db.ProjectCommitment{
+			UUID:                p.generateProjectCommitmentUUID(),
+			ProjectID:           dbProject.ID,
+			AZResourceID:        dbCommitment.AZResourceID,
+			Amount:              dbCommitment.Amount,
+			Duration:            dbCommitment.Duration,
+			CreatedAt:           now,
+			UpdatedAt:           now,
+			CreatorUUID:         token.UserUUID(),
+			CreatorName:         fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+			ConfirmBy:           Some(dbCommitment.ExpiresAt),
+			ExpiresAt:           dbCommitment.Duration.AddTo(dbCommitment.ExpiresAt),
+			Status:              liquid.CommitmentStatusPlanned,
+			CreationContextJSON: json.RawMessage(buf),
+		}
 
-	err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbRenewedCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &dbRenewedCommitment)
+		if err != nil {
+			return err
+		}
 
-	renewContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonRenew,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbRenewedCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbRenewedCommitment.UUID},
-	}
-	buf, err = json.Marshal(renewContext)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	dbCommitment.UpdatedAt = now
-	dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
-	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+		renewContext := db.CommitmentWorkflowContext{
+			Reason:                 db.CommitmentReasonRenew,
+			RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbRenewedCommitment.ID},
+			RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbRenewedCommitment.UUID},
+		}
+		buf, err = json.Marshal(renewContext)
+		if err != nil {
+			return err
+		}
+		dbCommitment.UpdatedAt = now
+		dbCommitment.RenewContextJSON = Some(json.RawMessage(buf))
+		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+		if err != nil {
+			return err
+		}
 
-	// TODO: for now, this is CommitmentChangeRequest.RequiresConfirmation() = false, because totalConfirmed stays and guaranteed is not used yet.
-	// when we change this, we need to evaluate the response of the liquid
-	ccr := liquid.CommitmentChangeRequest{
-		AZ:          path.AvailabilityZone,
-		InfoVersion: service.LiquidVersion,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			dbProject.UUID: {
-				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					path.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmed,
-						// TODO: change when introducing "guaranteed" commitments
-						TotalGuaranteedBefore: 0,
-						TotalGuaranteedAfter:  0,
-						Commitments: []liquid.Commitment{
-							{
-								UUID:      dbRenewedCommitment.UUID,
-								OldStatus: None[liquid.CommitmentStatus](),
-								NewStatus: Some(liquid.CommitmentStatusPlanned),
-								Amount:    dbRenewedCommitment.Amount,
-								ConfirmBy: dbRenewedCommitment.ConfirmBy,
-								ExpiresAt: dbRenewedCommitment.ExpiresAt,
+		// TODO: for now, this is CommitmentChangeRequest.RequiresConfirmation() = false, because totalConfirmed stays and guaranteed is not used yet.
+		// when we change this, we need to evaluate the response of the liquid
+		ccr = liquid.CommitmentChangeRequest{
+			AZ:          path.AvailabilityZone,
+			InfoVersion: service.LiquidVersion,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				dbProject.UUID: {
+					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						path.ResourceName: {
+							TotalConfirmedBefore: totalConfirmed,
+							TotalConfirmedAfter:  totalConfirmed,
+							// TODO: change when introducing "guaranteed" commitments
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0,
+							Commitments: []liquid.Commitment{
+								{
+									UUID:      dbRenewedCommitment.UUID,
+									OldStatus: None[liquid.CommitmentStatus](),
+									NewStatus: Some(liquid.CommitmentStatusPlanned),
+									Amount:    dbRenewedCommitment.Amount,
+									ConfirmBy: dbRenewedCommitment.ConfirmBy,
+									ExpiresAt: dbRenewedCommitment.ExpiresAt,
+								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
-	_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	err = tx.Commit()
+		}
+		c = datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, path.AvailabilityZone, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resource.Unit)
+		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
+		return err
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
 	// Create resultset and auditlogs
-	c := datamodel.ConvertCommitmentToDisplayForm(dbRenewedCommitment, path.AvailabilityZone, p.Cluster.BehaviorForResourcePath(path.Resource()).IdentityInV1API, datamodel.CanDeleteCommitment(token, dbRenewedCommitment, p.timeNow), resource.Unit)
-
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
@@ -1289,13 +1273,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		transferStartedAt = Some(p.timeNow())
 	}
 
-	// Mark whole commitment or a newly created, split one as transferable.
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	// if not split, the ccr is just used for audit logging
 	ccr := liquid.CommitmentChangeRequest{
 		AZ:          path.AvailabilityZone,
@@ -1317,118 +1294,120 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	cac := map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{}
 
-	if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
-		rcr := ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName]
-		rcr.Commitments = []liquid.Commitment{
-			// unchanged
-			{
-				UUID:      dbCommitment.UUID,
-				OldStatus: Some(dbCommitment.Status),
-				NewStatus: Some(dbCommitment.Status),
-				Amount:    dbCommitment.Amount,
-				ConfirmBy: dbCommitment.ConfirmBy,
-				ExpiresAt: dbCommitment.ExpiresAt,
-			},
-		}
-		ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName] = rcr
-		cac[dbCommitment.UUID] = audit.CommitmentAttributeChangeset{
-			OldTransferStatus: dbCommitment.TransferStatus,
-			NewTransferStatus: req.TransferStatus,
-		}
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		if req.Amount == dbCommitment.Amount || req.TransferStatus == limesresources.CommitmentTransferStatusNone {
+			rcr := ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName]
+			rcr.Commitments = []liquid.Commitment{
+				// unchanged
+				{
+					UUID:      dbCommitment.UUID,
+					OldStatus: Some(dbCommitment.Status),
+					NewStatus: Some(dbCommitment.Status),
+					Amount:    dbCommitment.Amount,
+					ConfirmBy: dbCommitment.ConfirmBy,
+					ExpiresAt: dbCommitment.ExpiresAt,
+				},
+			}
+			ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName] = rcr
+			cac[dbCommitment.UUID] = audit.CommitmentAttributeChangeset{
+				OldTransferStatus: dbCommitment.TransferStatus,
+				NewTransferStatus: req.TransferStatus,
+			}
 
-		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = transferToken
-		dbCommitment.TransferStartedAt = transferStartedAt
-		dbCommitment.UpdatedAt = p.timeNow()
-		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-	} else {
-		now := p.timeNow()
-		transferAmount := req.Amount
-		remainingAmount := dbCommitment.Amount - req.Amount
-		transferCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, transferAmount, p.timeNow(), p.generateProjectCommitmentUUID)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = transferToken
-		transferCommitment.TransferStartedAt = transferStartedAt
-		remainingCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		err = db.ProjectCommitmentStore.Insert(ctx, tx, &transferCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
+			dbCommitment.TransferStatus = req.TransferStatus
+			dbCommitment.TransferToken = transferToken
+			dbCommitment.TransferStartedAt = transferStartedAt
+			dbCommitment.UpdatedAt = p.timeNow()
+			err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+			if err != nil {
+				return err
+			}
+		} else {
+			now := p.timeNow()
+			transferAmount := req.Amount
+			remainingAmount := dbCommitment.Amount - req.Amount
+			transferCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, transferAmount, p.timeNow(), p.generateProjectCommitmentUUID)
+			if err != nil {
+				return err
+			}
+			transferCommitment.TransferStatus = req.TransferStatus
+			transferCommitment.TransferToken = transferToken
+			transferCommitment.TransferStartedAt = transferStartedAt
+			remainingCommitment, err := datamodel.BuildSplitCommitment(dbCommitment, remainingAmount, p.timeNow(), p.generateProjectCommitmentUUID)
+			if err != nil {
+				return err
+			}
+			err = db.ProjectCommitmentStore.Insert(ctx, tx, &transferCommitment)
+			if err != nil {
+				return err
+			}
+			err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
+			if err != nil {
+				return err
+			}
 
-		rcr := ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName]
-		rcr.Commitments = []liquid.Commitment{
-			// old
-			{
-				UUID:      dbCommitment.UUID,
-				OldStatus: Some(dbCommitment.Status),
-				NewStatus: Some(liquid.CommitmentStatusSuperseded),
-				Amount:    dbCommitment.Amount,
-				ConfirmBy: dbCommitment.ConfirmBy,
-				ExpiresAt: dbCommitment.ExpiresAt,
-			},
-			// new
-			{
-				UUID:      transferCommitment.UUID,
-				OldStatus: None[liquid.CommitmentStatus](),
-				NewStatus: Some(transferCommitment.Status),
-				Amount:    transferCommitment.Amount,
-				ConfirmBy: transferCommitment.ConfirmBy,
-				ExpiresAt: transferCommitment.ExpiresAt,
-			},
-			{
-				UUID:      remainingCommitment.UUID,
-				OldStatus: None[liquid.CommitmentStatus](),
-				NewStatus: Some(remainingCommitment.Status),
-				Amount:    remainingCommitment.Amount,
-				ConfirmBy: remainingCommitment.ConfirmBy,
-				ExpiresAt: remainingCommitment.ExpiresAt,
-			},
-		}
-		ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName] = rcr
-		cac[transferCommitment.UUID] = audit.CommitmentAttributeChangeset{
-			OldTransferStatus: limesresources.CommitmentTransferStatusNone,
-			NewTransferStatus: req.TransferStatus,
-		}
+			rcr := ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName]
+			rcr.Commitments = []liquid.Commitment{
+				// old
+				{
+					UUID:      dbCommitment.UUID,
+					OldStatus: Some(dbCommitment.Status),
+					NewStatus: Some(liquid.CommitmentStatusSuperseded),
+					Amount:    dbCommitment.Amount,
+					ConfirmBy: dbCommitment.ConfirmBy,
+					ExpiresAt: dbCommitment.ExpiresAt,
+				},
+				// new
+				{
+					UUID:      transferCommitment.UUID,
+					OldStatus: None[liquid.CommitmentStatus](),
+					NewStatus: Some(transferCommitment.Status),
+					Amount:    transferCommitment.Amount,
+					ConfirmBy: transferCommitment.ConfirmBy,
+					ExpiresAt: transferCommitment.ExpiresAt,
+				},
+				{
+					UUID:      remainingCommitment.UUID,
+					OldStatus: None[liquid.CommitmentStatus](),
+					NewStatus: Some(remainingCommitment.Status),
+					Amount:    remainingCommitment.Amount,
+					ConfirmBy: remainingCommitment.ConfirmBy,
+					ExpiresAt: remainingCommitment.ExpiresAt,
+				},
+			}
+			ccr.ByProject[dbProject.UUID].ByResource[path.ResourceName] = rcr
+			cac[transferCommitment.UUID] = audit.CommitmentAttributeChangeset{
+				OldTransferStatus: limesresources.CommitmentTransferStatusNone,
+				NewTransferStatus: req.TransferStatus,
+			}
 
-		_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
+			_, err = datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
+			if err != nil {
+				return err
+			}
 
-		supersedeContext := db.CommitmentWorkflowContext{
-			Reason:                 db.CommitmentReasonSplit,
-			RelatedCommitmentIDs:   []db.ProjectCommitmentID{transferCommitment.ID, remainingCommitment.ID},
-			RelatedCommitmentUUIDs: []liquid.CommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
-		}
-		buf, err := json.Marshal(supersedeContext)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
-		dbCommitment.Status = liquid.CommitmentStatusSuperseded
-		dbCommitment.SupersededAt = Some(now)
-		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
-		dbCommitment.UpdatedAt = now
-		err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
-		}
+			supersedeContext := db.CommitmentWorkflowContext{
+				Reason:                 db.CommitmentReasonSplit,
+				RelatedCommitmentIDs:   []db.ProjectCommitmentID{transferCommitment.ID, remainingCommitment.ID},
+				RelatedCommitmentUUIDs: []liquid.CommitmentUUID{transferCommitment.UUID, remainingCommitment.UUID},
+			}
+			buf, err := json.Marshal(supersedeContext)
+			if err != nil {
+				return err
+			}
+			dbCommitment.Status = liquid.CommitmentStatusSuperseded
+			dbCommitment.SupersededAt = Some(now)
+			dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
+			dbCommitment.UpdatedAt = now
+			err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+			if err != nil {
+				return err
+			}
 
-		dbCommitment = transferCommitment
-	}
-	err = tx.Commit()
+			dbCommitment = transferCommitment
+		}
+		return nil
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1611,12 +1590,6 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	_ = azResourceID // returned by the above query, but not used in this function
 
 	// validate that we have enough committable capacity on the receiving side
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	sourceTotalConfirmedAfter := sourceTotalConfirmed
 	targetTotalConfirmedAfter := targetTotalConfirmed
 	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
@@ -1681,26 +1654,26 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
-		return
-	}
 
-	// TODO: counter metric for moves by transfer_status (to see if the marketplace has any impact)
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, service.Type, tx)
+		if err != nil {
+			return err
+		}
+		err = ensureCommitmentChangeRequestAccepted(commitmentChangeResponse)
+		if err != nil {
+			return err
+		}
 
-	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = None[string]()
-	dbCommitment.TransferStartedAt = None[time.Time]()
-	dbCommitment.ProjectID = targetProject.ID
-	dbCommitment.UpdatedAt = p.timeNow()
-	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	err = tx.Commit()
+		// TODO: counter metric for moves by transfer_status (to see if the marketplace has any impact)
+
+		dbCommitment.TransferStatus = ""
+		dbCommitment.TransferToken = None[string]()
+		dbCommitment.TransferStartedAt = None[time.Time]()
+		dbCommitment.ProjectID = targetProject.ID
+		dbCommitment.UpdatedAt = p.timeNow()
+		return db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1925,12 +1898,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	var (
 		targetAZResourceID        db.AZResourceID
 		resourceAllowsCommitments bool
@@ -2033,57 +2000,57 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, sourceService.Type, tx)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
-	if ccr.RequiresConfirmation() && commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
-		return
-	}
-
-	var (
-		relatedCommitmentIDs   []db.ProjectCommitmentID
-		relatedCommitmentUUIDs []liquid.CommitmentUUID
-	)
-	if remainingAmount > 0 {
-		relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
-		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
-		err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
+	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		commitmentChangeResponse, err := datamodel.DelegateChangeCommitments(r.Context(), p.Cluster, ccr, sis, sourceService.Type, tx)
+		if err != nil {
+			return err
 		}
-	}
 
-	relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
-	relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, convertedCommitment.UUID)
-	err = db.ProjectCommitmentStore.Insert(ctx, tx, &convertedCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+		// only check acceptance by liquid when old commitment was confirmed, unconfirmed commitments can be moved without acceptance
+		if ccr.RequiresConfirmation() {
+			err = ensureCommitmentChangeRequestAccepted(commitmentChangeResponse)
+			if err != nil {
+				return err
+			}
+		}
 
-	// supersede the original commitment
-	now := p.timeNow()
-	supersedeContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonConvert,
-		RelatedCommitmentIDs:   relatedCommitmentIDs,
-		RelatedCommitmentUUIDs: relatedCommitmentUUIDs,
-	}
-	buf, err := json.Marshal(supersedeContext)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	dbCommitment.Status = liquid.CommitmentStatusSuperseded
-	dbCommitment.SupersededAt = Some(now)
-	dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
-	dbCommitment.UpdatedAt = now
-	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
+		var (
+			relatedCommitmentIDs   []db.ProjectCommitmentID
+			relatedCommitmentUUIDs []liquid.CommitmentUUID
+		)
+		if remainingAmount > 0 {
+			relatedCommitmentIDs = append(relatedCommitmentIDs, remainingCommitment.ID)
+			relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, remainingCommitment.UUID)
+			err = db.ProjectCommitmentStore.Insert(ctx, tx, &remainingCommitment)
+			if err != nil {
+				return err
+			}
+		}
 
-	err = tx.Commit()
+		relatedCommitmentIDs = append(relatedCommitmentIDs, convertedCommitment.ID)
+		relatedCommitmentUUIDs = append(relatedCommitmentUUIDs, convertedCommitment.UUID)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &convertedCommitment)
+		if err != nil {
+			return err
+		}
+
+		// supersede the original commitment
+		now := p.timeNow()
+		supersedeContext := db.CommitmentWorkflowContext{
+			Reason:                 db.CommitmentReasonConvert,
+			RelatedCommitmentIDs:   relatedCommitmentIDs,
+			RelatedCommitmentUUIDs: relatedCommitmentUUIDs,
+		}
+		buf, err := json.Marshal(supersedeContext)
+		if err != nil {
+			return err
+		}
+		dbCommitment.Status = liquid.CommitmentStatusSuperseded
+		dbCommitment.SupersededAt = Some(now)
+		dbCommitment.SupersedeContextJSON = Some(json.RawMessage(buf))
+		dbCommitment.UpdatedAt = now
+		return db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2227,7 +2194,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	dbCommitment.Duration = req.Duration
 	dbCommitment.ExpiresAt = newExpiresAt
 	dbCommitment.UpdatedAt = now
-	if commitmentChangeRequestWasRejected(commitmentChangeResponse, w, true) {
+	err = ensureCommitmentChangeRequestAccepted(commitmentChangeResponse)
+	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
@@ -2254,18 +2222,15 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
 }
 
-func commitmentChangeRequestWasRejected(response liquid.CommitmentChangeResponse, w http.ResponseWriter, withHTTPResponse bool) bool {
+func ensureCommitmentChangeRequestAccepted(response liquid.CommitmentChangeResponse) error {
 	if response.RejectionReason == "" {
-		return false
+		return nil
 	}
+	var opts []respondwith.CustomOption
 	if retryAt, exists := response.RetryAt.Unpack(); exists {
-		w.Header().Set("Retry-After", retryAt.Format(time.RFC1123))
+		opts = append(opts, respondwith.CustomHeader("Retry-After", retryAt.Format(time.RFC1123)))
 	}
-	if withHTTPResponse {
-		http.Error(w, response.RejectionReason, http.StatusConflict)
-		return true // gocritic fears missing return otherwise
-	}
-	return true
+	return respondwith.CustomStatus(http.StatusConflict, errors.New(response.RejectionReason), opts...)
 }
 
 // DeleteProjectCommitmentAsCloudAdmin handles DELETE /v1/commitments/:id.
