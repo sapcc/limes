@@ -11,7 +11,7 @@ require (
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.70.1
 	github.com/rs/cors v1.11.1
-	github.com/sapcc/go-api-declarations v1.25.0
+	github.com/sapcc/go-api-declarations v1.25.1
 	github.com/sapcc/go-bits v0.0.0-20260908173957-572b68774a1c
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.15.0
