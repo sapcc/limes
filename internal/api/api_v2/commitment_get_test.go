@@ -174,8 +174,8 @@ func TestCommitmentGetMultiple(t *testing.T) {
 
 	// make commitment 3 public via DB (no v2 API for transfer yet)
 	// TODO: use API for this update
-	s.MustDBExec(`UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE uuid = $3`,
-		limesresources.CommitmentTransferStatusPublic, test.GenerateDummyTransferToken(1), uuid3)
+	s.MustDBExec(`UPDATE project_commitments SET transfer_status = $1, transfer_token = $2, transfer_started_at = $3 WHERE uuid = $4`,
+		limesresources.CommitmentTransferStatusPublic, test.GenerateDummyTransferToken(1), s.Clock.Now(), uuid3)
 
 	// commitment 4: dresden, amount 5 (will be deleted)
 	var uuid4 string

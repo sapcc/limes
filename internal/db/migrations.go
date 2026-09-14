@@ -160,5 +160,6 @@ var sqlMigrations = map[int64]string{
 	`,
 	86: `
 		UPDATE project_commitments SET transfer_started_at = NULL WHERE transfer_status = '';
+		ALTER TABLE project_commitments ADD CONSTRAINT project_commitments_transfer_started_at_consistency CHECK ((transfer_started_at IS NULL) = (transfer_status = ''));
 	`,
 }

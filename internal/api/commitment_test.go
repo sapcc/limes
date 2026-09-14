@@ -2827,14 +2827,14 @@ func Test_MergeCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Do not merge commitments in transfer
-	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusPublic)
+	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1, transfer_started_at = $2 WHERE id = 2", limesresources.CommitmentTransferStatusPublic, s.Clock.Now())
 	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
 		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
-	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusNone)
+	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1, transfer_started_at = NULL WHERE id = 2", limesresources.CommitmentTransferStatusNone)
 
 	// Do not merge commitments with statuses other than "active"
 	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired, util.CommitmentStatusDeleted}
