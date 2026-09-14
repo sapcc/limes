@@ -19,6 +19,7 @@ import (
 // GetCluster handles GET /v1/clusters/current.
 func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/clusters/current")
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
@@ -37,8 +38,8 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cluster *limesresources.ClusterReport
-	err := db.RunOLAPQueries(p.DB, func(tx *gsql.Tx) (err error) {
-		cluster, err = reports.GetClusterResources(r.Context(), p.Cluster, p.timeNow(), tx, filter, sis)
+	err := db.RunOLAPQueries(ctx, p.DB, func(tx *gsql.Tx) (err error) {
+		cluster, err = reports.GetClusterResources(ctx, p.Cluster, p.timeNow(), tx, filter, sis)
 		return err
 	})
 	if respondwith.ObfuscatedErrorText(w, err) {

@@ -159,120 +159,107 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	// start a transaction for the rate limit updates
-	var tx *gsql.Tx
-	var dbi db.Interface
+	// if we're only simulating, just run ValidateInput() and then exit
 	if simulate {
-		dbi = p.DB
-	} else {
-		var err error
-		tx, err = p.DB.Begin()
-		if respondwith.ObfuscatedErrorText(w, err) {
+		err := updater.ValidateInput(ctx, parseTarget.Project.Services, p.DB)
+		if respondwith.ErrorText(w, err) {
 			return
 		}
-		defer sqlext.RollbackUnlessCommitted(tx)
-		dbi = tx
-	}
-
-	// validate inputs (within the DB transaction, to ensure that we do not apply
-	// inconsistent values later)
-	err := updater.ValidateInput(ctx, parseTarget.Project.Services, dbi)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	// stop now if we're only simulating
-	if simulate {
 		updater.WriteSimulationReport(w)
 		return
 	}
 
-	if !updater.IsValid() {
-		updater.CommitAuditTrail(token, r, requestTime)
-		updater.WritePutErrorResponse(w)
-		return
-	}
-
-	// get all project_rates and make them accessible quickly by ID
-	projectRateByClusterRateID, err := db.ProjectRateByRateIDIndex.IndexFrom(
-		db.ProjectRateStore.SelectWhere(ctx, tx, `project_id = $1`, updater.Project.ID),
-	)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	// check all services for resources to update
-	services, err := db.ServiceStore.Select(ctx, tx, `SELECT * FROM services ORDER BY type`).Collect()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-
-	// the db types do not have json tags, additionally the Window type serializes into a human readable format - not DB compatible.
-	type serializableProjectRate struct {
-		ProjectID db.ProjectID   `json:"project_id"`
-		RateID    db.RateID      `json:"rate_id"`
-		Limit     Option[uint64] `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
-		Window    Option[uint64] `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
-	}
-
-	var ratesToUpdate []serializableProjectRate
-	for _, srv := range services {
-		rateLimitRequests, exists := updater.Requests[srv.Type]
-		if !exists {
-			continue // no rate limits for this service
+	// start a transaction for the rate limit updates
+	err := p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// validate inputs (within the DB transaction, to ensure that we do not apply
+		// inconsistent values later)
+		err := updater.ValidateInput(ctx, parseTarget.Project.Services, tx)
+		if err != nil {
+			return err
 		}
-		rates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1 ORDER BY NAME`, srv.ID).Collect()
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
+		if !updater.IsValid() {
+			updater.CommitAuditTrail(token, r, requestTime)
+			return updater.WritePutErrorResponse(w)
 		}
 
-		for _, rate := range rates {
-			rateLimitRequest, exists := rateLimitRequests[rate.Name]
+		// get all project_rates and make them accessible quickly by ID
+		projectRateByClusterRateID, err := db.ProjectRateByRateIDIndex.IndexFrom(
+			db.ProjectRateStore.SelectWhere(ctx, tx, `project_id = $1`, updater.Project.ID),
+		)
+		if err != nil {
+			return err
+		}
+
+		// check all services for resources to update
+		services, err := db.ServiceStore.Select(ctx, tx, `SELECT * FROM services ORDER BY type`).Collect()
+		if err != nil {
+			return err
+		}
+
+		// the db types do not have json tags, additionally the Window type serializes into a human readable format - not DB compatible.
+		type serializableProjectRate struct {
+			ProjectID db.ProjectID   `json:"project_id"`
+			RateID    db.RateID      `json:"rate_id"`
+			Limit     Option[uint64] `json:"rate_limit"` // None for rates that don't have a limit (just a usage)
+			Window    Option[uint64] `json:"window_ns"`  // None for rates that don't have a limit (just a usage)
+		}
+
+		var ratesToUpdate []serializableProjectRate
+		for _, srv := range services {
+			rateLimitRequests, exists := updater.Requests[srv.Type]
 			if !exists {
-				continue // no rate limit request for this rate
+				continue // no rate limits for this service
 			}
-			var projectRate serializableProjectRate
-			if existingRate, exists := projectRateByClusterRateID[rate.ID]; exists {
-				window, wExists := existingRate.Window.Unpack()
-				serializableWindow := None[uint64]()
-				if wExists {
-					serializableWindow = Some(uint64(window))
-				}
-				projectRate = serializableProjectRate{
-					ProjectID: existingRate.ProjectID,
-					RateID:    existingRate.RateID,
-					Limit:     existingRate.Limit,
-					Window:    serializableWindow,
-				}
-			} else {
-				projectRate = serializableProjectRate{
-					ProjectID: updater.Project.ID,
-					RateID:    rate.ID,
-				}
+			rates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1 ORDER BY NAME`, srv.ID).Collect()
+			if err != nil {
+				return err
 			}
-			projectRate.Limit = Some(rateLimitRequest.NewLimit)
-			projectRate.Window = Some(uint64(rateLimitRequest.NewWindow))
-			ratesToUpdate = append(ratesToUpdate, projectRate)
+
+			for _, rate := range rates {
+				rateLimitRequest, exists := rateLimitRequests[rate.Name]
+				if !exists {
+					continue // no rate limit request for this rate
+				}
+				var projectRate serializableProjectRate
+				if existingRate, exists := projectRateByClusterRateID[rate.ID]; exists {
+					window, wExists := existingRate.Window.Unpack()
+					serializableWindow := None[uint64]()
+					if wExists {
+						serializableWindow = Some(uint64(window))
+					}
+					projectRate = serializableProjectRate{
+						ProjectID: existingRate.ProjectID,
+						RateID:    existingRate.RateID,
+						Limit:     existingRate.Limit,
+						Window:    serializableWindow,
+					}
+				} else {
+					projectRate = serializableProjectRate{
+						ProjectID: updater.Project.ID,
+						RateID:    rate.ID,
+					}
+				}
+				projectRate.Limit = Some(rateLimitRequest.NewLimit)
+				projectRate.Window = Some(uint64(rateLimitRequest.NewWindow))
+				ratesToUpdate = append(ratesToUpdate, projectRate)
+			}
 		}
-	}
-	// update the DB with the new rate limits
-	mergeStr := sqlext.SimplifyWhitespace(`
+		// update the DB with the new rate limits
+		mergeStr := sqlext.SimplifyWhitespace(`
 		MERGE INTO project_rates pr
 		USING json_to_recordset($1::json) src (project_id BIGINT, rate_id BIGINT, rate_limit BIGINT, window_ns BIGINT)
 		ON src.project_id = pr.project_id AND src.rate_id = pr.rate_id
 		WHEN MATCHED THEN UPDATE SET rate_limit = src.rate_limit, window_ns = src.window_ns
 		WHEN NOT MATCHED BY TARGET THEN INSERT (project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (src.project_id, src.rate_id, src.rate_limit, src.window_ns, 0)
 		WHEN NOT MATCHED BY SOURCE THEN DO NOTHING`)
-	buf, err := json.Marshal(ratesToUpdate)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	_, err = tx.Exec(mergeStr, string(buf))
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	err = tx.Commit()
-	if respondwith.ObfuscatedErrorText(w, err) {
+		buf, err := json.Marshal(ratesToUpdate)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(mergeStr, string(buf))
+		return err
+	})
+	if respondwith.ErrorText(w, err) { // using respondwith.ObfuscatedErrorText() breaks tests, see `TODO: should be 403` in api_test.go
 		return
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
@@ -73,84 +74,80 @@ func (c *Collector) discoverExpiringCommitments(ctx context.Context, _ prometheu
 func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitments []db.ProjectCommitment, _ prometheus.Labels) error {
 	now := c.MeasureTime()
 	cutoff := now.Add(expiringCommitmentsNoticePeriod)
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// find which commitments need a notification
-	longTermCommitmentsByID := make(map[db.ProjectCommitmentID]db.ProjectCommitment)
-	var shortTermCommitmentIDs []db.ProjectCommitmentID
-	for _, c := range commitments {
-		if c.Duration.AddTo(now).Before(cutoff) {
-			shortTermCommitmentIDs = append(shortTermCommitmentIDs, c.ID)
-		} else {
-			longTermCommitmentsByID[c.ID] = c
+	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// find which commitments need a notification
+		longTermCommitmentsByID := make(map[db.ProjectCommitmentID]db.ProjectCommitment)
+		var shortTermCommitmentIDs []db.ProjectCommitmentID
+		for _, c := range commitments {
+			if c.Duration.AddTo(now).Before(cutoff) {
+				shortTermCommitmentIDs = append(shortTermCommitmentIDs, c.ID)
+			} else {
+				longTermCommitmentsByID[c.ID] = c
+			}
 		}
-	}
 
-	// mark short-term commitments as notified without queueing them
-	_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
-	if err != nil {
-		return err
-	}
+		// mark short-term commitments as notified without queueing them
+		_, err := tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
+		if err != nil {
+			return err
+		}
 
-	// sort remaining commitments by project
-	type expiringCommitmentRecord struct {
-		ProjectID    db.ProjectID           `db:"project_id"`
-		Path         db.AZResourcePath      `db:"path"`
-		CommitmentID db.ProjectCommitmentID `db:"id"`
-	}
-	notifications := make(map[db.ProjectID][]core.CommitmentNotification)
-	err = oblast.MustNewStore[expiringCommitmentRecord](oblast.PostgresDialect()).Select(ctx, tx, locateExpiringCommitmentsQuery, pq.Array(slices.Collect(maps.Keys(longTermCommitmentsByID)))).Foreach(func(r expiringCommitmentRecord) error {
-		apiIdentity := c.Cluster.BehaviorForResourcePath(r.Path.Resource()).IdentityInV1API
-		commitment := longTermCommitmentsByID[r.CommitmentID]
-		notifications[r.ProjectID] = append(notifications[r.ProjectID], core.CommitmentNotification{
-			Resource: core.AZResourceLocationV1{
-				ServiceType:      apiIdentity.ServiceType,
-				ResourceName:     apiIdentity.Name,
-				AvailabilityZone: r.Path.AvailabilityZone,
-			},
-			Commitment: commitment,
-			DateString: commitment.ExpiresAt.Format(time.DateOnly),
+		// sort remaining commitments by project
+		type expiringCommitmentRecord struct {
+			ProjectID    db.ProjectID           `db:"project_id"`
+			Path         db.AZResourcePath      `db:"path"`
+			CommitmentID db.ProjectCommitmentID `db:"id"`
+		}
+		notifications := make(map[db.ProjectID][]core.CommitmentNotification)
+		err = oblast.MustNewStore[expiringCommitmentRecord](oblast.PostgresDialect()).Select(ctx, tx, locateExpiringCommitmentsQuery, pq.Array(slices.Collect(maps.Keys(longTermCommitmentsByID)))).Foreach(func(r expiringCommitmentRecord) error {
+			apiIdentity := c.Cluster.BehaviorForResourcePath(r.Path.Resource()).IdentityInV1API
+			commitment := longTermCommitmentsByID[r.CommitmentID]
+			notifications[r.ProjectID] = append(notifications[r.ProjectID], core.CommitmentNotification{
+				Resource: core.AZResourceLocationV1{
+					ServiceType:      apiIdentity.ServiceType,
+					ResourceName:     apiIdentity.Name,
+					AvailabilityZone: r.Path.AvailabilityZone,
+				},
+				Commitment: commitment,
+				DateString: commitment.ExpiresAt.Format(time.DateOnly),
+			})
+			return nil
 		})
+		if err != nil {
+			return err
+		}
+
+		// generate notifications ordered by project_id for deterministic behavior in unit tests
+		mailConfig := c.Cluster.Config.MailNotifications.UnwrapOrPanic("this task should not have been called if mail notifications are not configured")
+		template := mailConfig.Templates.ExpiringCommitments
+		for _, projectID := range slices.Sorted(maps.Keys(notifications)) {
+			var notification core.CommitmentGroupNotification
+			commitments := notifications[projectID]
+			err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
+			if err != nil {
+				return err
+			}
+			notification.Commitments = commitments
+			mail, err := template.Render(notification, projectID, now)
+			if err != nil {
+				return err
+			}
+
+			err = db.MailNotificationStore.Insert(ctx, tx, &mail)
+			if err != nil {
+				return err
+			}
+
+			commitmentIDs := make([]db.ProjectCommitmentID, len(commitments))
+			for idx, c := range commitments {
+				commitmentIDs[idx] = c.Commitment.ID
+			}
+			_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	// generate notifications ordered by project_id for deterministic behavior in unit tests
-	mailConfig := c.Cluster.Config.MailNotifications.UnwrapOrPanic("this task should not have been called if mail notifications are not configured")
-	template := mailConfig.Templates.ExpiringCommitments
-	for _, projectID := range slices.Sorted(maps.Keys(notifications)) {
-		var notification core.CommitmentGroupNotification
-		commitments := notifications[projectID]
-		err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
-		if err != nil {
-			return err
-		}
-		notification.Commitments = commitments
-		mail, err := template.Render(notification, projectID, now)
-		if err != nil {
-			return err
-		}
-
-		err = db.MailNotificationStore.Insert(ctx, tx, &mail)
-		if err != nil {
-			return err
-		}
-
-		commitmentIDs := make([]db.ProjectCommitmentID, len(commitments))
-		for idx, c := range commitments {
-			commitmentIDs[idx] = c.Commitment.ID
-		}
-		_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
 }
