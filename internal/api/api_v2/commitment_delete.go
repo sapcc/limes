@@ -36,13 +36,13 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 	)
 
 	// validate request contents
-	cUUID := mux.Vars(r)["commitment_uuid"]
+	cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return nil, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", liquid.CommitmentUUID(cUUID))
+	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", cUUID)
 	switch {
 	case errors.Is(err, errNoSuchCommitment):
 		return nil, nil // respond with 204 if commitment already deleted (DELETE should be idempotent)

@@ -27,7 +27,7 @@ import (
 )
 
 // Helper function for a successful commitment patch.
-func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHandlesCommitments bool, uuid string, request map[string]any, expected jsonmatch.Object, auditEvent cadf.Resource) {
+func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHandlesCommitments bool, uuid liquid.CommitmentUUID, request map[string]any, expected jsonmatch.Object, auditEvent cadf.Resource) {
 	t.Helper()
 	ctx := t.Context()
 	mockLiquid := s.LiquidClients["first"]
@@ -38,11 +38,11 @@ func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHan
 
 	// we only expect the audit event and call to the liquid here
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
-	path := "/resources/v2/commitments/" + uuid
+	path := "/resources/v2/commitments/" + string(uuid)
 	s.Handler.RespondTo(ctx, "PATCH "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusAccepted, expected)
 	if noop {
-		s.Auditor.ExpectEvents(t)
+		s.Auditor.ExpectEvents(t, nil...)
 	} else {
 		s.Auditor.ExpectEvents(t, cadf.Event{
 			Action:      "update",
@@ -51,6 +51,11 @@ func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHan
 			RequestPath: path,
 			Target:      auditEvent,
 		})
+	}
+
+	// ccr does not get send, when no duration change --> early return
+	if _, ok := request["duration"]; !ok {
+		return
 	}
 
 	if liquidHandlesCommitments && !noop {
@@ -67,17 +72,17 @@ func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHan
 	}
 }
 
-func patchCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracker, uuid string, request map[string]any, expect func(r httptest.Response)) {
+func patchCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracker, uuid liquid.CommitmentUUID, request map[string]any, expect func(r httptest.Response)) {
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "PATCH /resources/v2/commitments/" + uuid
+	methodAndPath := "PATCH /resources/v2/commitments/" + string(uuid)
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 }
 
-func commonPatchTestSetup(t *testing.T, manager string) (s test.Setup, tr *easypg.Tracker, uuid string, expiresAt time.Time, expectedJSON jsonmatch.Object) {
+func commonPatchTestSetup(t *testing.T, manager string) (s test.Setup, tr *easypg.Tracker, uuid liquid.CommitmentUUID, expiresAt time.Time, expectedJSON jsonmatch.Object) {
 	t.Helper()
 
 	srvInfoFirst := test.DefaultLiquidServiceInfo("First")
@@ -144,7 +149,7 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 	// run this test twice, once with commitments managed by Limes, and once managed by the liquid
 	for _, manager := range []string{"limes", "liquid"} {
 		t.Run("managedby="+manager, func(t *testing.T) {
-			s, tr, uuid, expiresAt, expectedJSON := commonPatchTestSetup(t, manager)
+			s, tr, uuid, initialExpiresAt, expectedJSON := commonPatchTestSetup(t, manager)
 
 			// adjust expectations and update transfer status
 			s.Clock.StepBy(time.Minute)
@@ -154,7 +159,7 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 			expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 			expectedAuditEvent := cadf.Resource{
 				TypeURI:     "service/resources/commitment",
-				ID:          uuid,
+				ID:          string(uuid),
 				DomainID:    "uuid-for-france",
 				DomainName:  "france",
 				ProjectID:   "uuid-for-paris",
@@ -167,17 +172,17 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 							ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 								"capacity": {
 									TotalConfirmedBefore: 10, TotalConfirmedAfter: 10, TotalGuaranteedBefore: 0, TotalGuaranteedAfter: 0, Commitments: []liquid.Commitment{{
-										UUID:      liquid.CommitmentUUID(uuid),
+										UUID:      uuid,
 										OldStatus: Some(liquid.CommitmentStatusConfirmed),
 										NewStatus: Some(liquid.CommitmentStatusConfirmed),
 										Amount:    10,
-										ExpiresAt: expiresAt,
+										ExpiresAt: initialExpiresAt,
 									}},
 								},
 							},
 						},
 					},
-				})), must.Return(cadf.NewJSONAttachment("context-payload", map[string]audit.CommitmentAttributeChangeset{
+				})), must.Return(cadf.NewJSONAttachment("context-payload", map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{
 					uuid: {
 						OldTransferStatus: "",
 						NewTransferStatus: "public",
@@ -210,7 +215,7 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 						transferToken = ""
 					}
 					expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
-					expectedAuditEvent.Attachments[1] = must.Return(cadf.NewJSONAttachment("context-payload", map[string]audit.CommitmentAttributeChangeset{
+					expectedAuditEvent.Attachments[1] = must.Return(cadf.NewJSONAttachment("context-payload", map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset{
 						uuid: {
 							OldTransferStatus: oldStatus,
 							NewTransferStatus: newStatus,
@@ -258,7 +263,7 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 			// check extension of duration
 			s.Clock.StepBy(time.Minute)
 			expectedJSON["duration"] = "2 hours"
-			expectedJSON["expires_at"] = expiresAt.Add(1 * time.Hour).Format(time.RFC3339)
+			expectedJSON["expires_at"] = initialExpiresAt.Add(1 * time.Hour).Format(time.RFC3339)
 			expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 			expectedAuditEvent.Attachments = []cadf.Attachment{must.Return(cadf.NewJSONAttachment("payload", liquid.CommitmentChangeRequest{
 				AZ:          "az-one",
@@ -268,12 +273,12 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 						ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 							"capacity": {
 								TotalConfirmedBefore: 10, TotalConfirmedAfter: 10, TotalGuaranteedBefore: 0, TotalGuaranteedAfter: 0, Commitments: []liquid.Commitment{{
-									UUID:         liquid.CommitmentUUID(uuid),
+									UUID:         uuid,
 									OldStatus:    Some(liquid.CommitmentStatusConfirmed),
 									NewStatus:    Some(liquid.CommitmentStatusConfirmed),
 									Amount:       10,
-									ExpiresAt:    expiresAt.Add(1 * time.Hour).UTC(),
-									OldExpiresAt: Some(expiresAt),
+									ExpiresAt:    initialExpiresAt.Add(1 * time.Hour).UTC(),
+									OldExpiresAt: Some(initialExpiresAt),
 								}},
 							},
 						},
@@ -292,11 +297,11 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			s, tr, uuidOne, expiresAt, expectedJSON := commonPatchTestSetup(t, manager)
 
 			// check permissions
-			s.TokenValidator.Enforcer.AllowCommitmentPatch = false
+			s.TokenValidator.Enforcer.AllowcommitmentUpdate = false
 			patchCommitmentAndExpectError(t, s, tr, uuidOne, map[string]any{}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusForbidden, "Forbidden\n")
 			})
-			s.TokenValidator.Enforcer.AllowCommitmentPatch = true
+			s.TokenValidator.Enforcer.AllowcommitmentUpdate = true
 
 			// non-existing commitment
 			patchCommitmentAndExpectError(t, s, tr, "bla", map[string]any{}, func(r httptest.Response) {
@@ -327,7 +332,7 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			})
 
 			// duration shortening
-			var uuidTwo string
+			var uuidTwo liquid.CommitmentUUID
 			expectedJSON["uuid"] = jsonmatch.CaptureField(&uuidTwo)
 			expectedJSON["duration"] = "2 hours"
 			expectedJSON["expires_at"] = expiresAt.Add(1 * time.Hour).Format(time.RFC3339)
@@ -347,7 +352,7 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			})
 
 			// inactive status
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+uuidTwo).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidTwo)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			patchCommitmentAndExpectError(t, s, tr, uuidTwo, map[string]any{}, func(r httptest.Response) {

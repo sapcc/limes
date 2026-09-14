@@ -22,6 +22,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/gg/options"
 
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/audit"
@@ -42,13 +43,13 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return none, err
 	}
-	cUUID := mux.Vars(r)["commitment_uuid"]
+	cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return none, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_patch", liquid.CommitmentUUID(cUUID))
+	c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_update", cUUID)
 	if err != nil {
 		return none, err
 	}
@@ -109,7 +110,7 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 	}
 	c.UpdatedAt = now
 
-	// checking the response is only relevant for extending durations
+	// sending the patch to liquid is only relevant for extending durations
 	stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
 	if err != nil {
 		return none, err
@@ -125,7 +126,7 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 						TotalConfirmedBefore:  stats.TotalConfirmed,
 						TotalConfirmedAfter:   stats.TotalConfirmed,
 						TotalGuaranteedBefore: stats.TotalGuaranteed,
-						TotalGuaranteedAfter:  stats.TotalGuaranteed, // TODO: change when introducing "guaranteed" commitments
+						TotalGuaranteedAfter:  stats.TotalGuaranteed,
 						Commitments: []liquid.Commitment{
 							{
 								UUID:         c.UUID,
@@ -133,8 +134,8 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 								NewStatus:    Some(c.Status),
 								Amount:       c.Amount,
 								ConfirmBy:    c.ConfirmBy,
-								ExpiresAt:    c.ExpiresAt,
-								OldExpiresAt: oldExpiresAt,
+								ExpiresAt:    c.ExpiresAt.UTC(),
+								OldExpiresAt: options.Map(oldExpiresAt, time.Time.UTC),
 							},
 						},
 					},
@@ -142,14 +143,16 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 			},
 		},
 	}
-	resp, err := datamodel.DelegateChangeCommitments(ctx, p.Cluster, ccr, sis, azRes.Path.ServiceType, tx)
-	if err != nil {
-		return none, err
-	}
-	if ccr.RequiresConfirmation() {
-		err = analyzeCommitmentChangeResponse(resp)
+	if req.Duration.IsSome() {
+		resp, err := datamodel.DelegateChangeCommitments(ctx, p.Cluster, ccr, sis, azRes.Path.ServiceType, tx)
 		if err != nil {
 			return none, err
+		}
+		if ccr.RequiresConfirmation() {
+			err = analyzeCommitmentChangeResponse(resp)
+			if err != nil {
+				return none, err
+			}
 		}
 	}
 
