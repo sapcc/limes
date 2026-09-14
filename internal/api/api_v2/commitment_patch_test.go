@@ -156,6 +156,7 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 			var transferToken string
 			expectedJSON["transfer_token"] = jsonmatch.CaptureField(&transferToken)
 			expectedJSON["transfer_status"] = "public"
+			expectedJSON["transfer_started_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 			expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 			expectedAuditEvent := cadf.Resource{
 				TypeURI:     "service/resources/commitment",
@@ -209,9 +210,11 @@ func TestCommitmentPatchHappyPaths(t *testing.T) {
 					if newStatus != "" {
 						expectedJSON["transfer_status"] = newStatus
 						expectedJSON["transfer_token"] = jsonmatch.CaptureField(&transferToken)
+						expectedJSON["transfer_started_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 					} else {
 						delete(expectedJSON, "transfer_status")
 						delete(expectedJSON, "transfer_token")
+						delete(expectedJSON, "transfer_started_at")
 						transferToken = ""
 					}
 					expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)

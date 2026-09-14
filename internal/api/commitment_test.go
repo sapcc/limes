@@ -1093,9 +1093,11 @@ func TestGetPublicCommitments(t *testing.T) {
 		if status == limesresources.CommitmentTransferStatusNone {
 			delete(resp1, "transfer_status")
 			delete(resp1, "transfer_token")
+			delete(resp1, "transfer_started_at")
 		} else {
 			resp1["transfer_status"] = status
 			resp1["transfer_token"] = test.GenerateDummyTransferToken(*s.CurrentTransferTokenNumber + 1)
+			resp1["transfer_started_at"] = s.Clock.Now().Unix()
 		}
 		oldassert.HTTPRequest{
 			Method:       "POST",
@@ -1376,23 +1378,24 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	}
 
 	resp1 := oldassert.JSONObject{
-		"id":                1,
-		"uuid":              "00000000-0000-0000-0000-000000000001",
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            10,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "public",
-		"transfer_token":    transferToken,
-		"status":            "confirmed",
+		"id":                  1,
+		"uuid":                "00000000-0000-0000-0000-000000000001",
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              10,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "public",
+		"transfer_token":      transferToken,
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 
 	oldassert.HTTPRequest{
@@ -1434,6 +1437,8 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// withdraw
 	delete(resp1, "transfer_status")
 	delete(resp1, "transfer_token")
+	delete(resp1, "transfer_started_at")
+
 	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
@@ -1462,23 +1467,24 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	// TransferAmount < CommitmentAmount
 	resp2 := oldassert.JSONObject{
-		"id":                3,
-		"uuid":              test.GenerateDummyCommitmentUUID(3),
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            9,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "public",
-		"transfer_token":    test.GenerateDummyTransferToken(2),
-		"status":            "confirmed",
+		"id":                  3,
+		"uuid":                test.GenerateDummyCommitmentUUID(3),
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              9,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "public",
+		"transfer_token":      test.GenerateDummyTransferToken(2),
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 
 	oldassert.HTTPRequest{
@@ -1536,6 +1542,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// test resetting a commitment to CommitmentTransferStatusNone (this will also clear out its transfer token)
 	delete(resp2, "transfer_status")
 	delete(resp2, "transfer_token")
+	delete(resp2, "transfer_started_at")
 	oldassert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/start-transfer",
@@ -1579,23 +1586,24 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		"duration":          "1 hour",
 	}
 	resp1 := oldassert.JSONObject{
-		"id":                1,
-		"uuid":              "00000000-0000-0000-0000-000000000001",
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            10,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken,
-		"status":            "confirmed",
+		"id":                  1,
+		"uuid":                "00000000-0000-0000-0000-000000000001",
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              10,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "unlisted",
+		"transfer_token":      transferToken,
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 
 	oldassert.HTTPRequest{
@@ -1644,23 +1652,24 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 
 	resp1 := oldassert.JSONObject{
-		"id":                1,
-		"uuid":              "00000000-0000-0000-0000-000000000001",
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            10,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken,
-		"status":            "confirmed",
+		"id":                  1,
+		"uuid":                "00000000-0000-0000-0000-000000000001",
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              10,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "unlisted",
+		"transfer_token":      transferToken,
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 
 	resp2 := oldassert.JSONObject{
@@ -1684,23 +1693,24 @@ func Test_TransferCommitment(t *testing.T) {
 	// Split commitment
 	transferToken2 := test.GenerateDummyTransferToken(2)
 	resp3 := oldassert.JSONObject{
-		"id":                2,
-		"uuid":              "00000000-0000-0000-0000-000000000002",
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            9,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken2,
-		"status":            "confirmed",
+		"id":                  2,
+		"uuid":                "00000000-0000-0000-0000-000000000002",
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              9,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "unlisted",
+		"transfer_token":      transferToken2,
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 	resp4 := oldassert.JSONObject{
 		"id":                2,
@@ -2817,14 +2827,14 @@ func Test_MergeCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Do not merge commitments in transfer
-	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusPublic)
+	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1, transfer_started_at = $2 WHERE id = 2", limesresources.CommitmentTransferStatusPublic, s.Clock.Now())
 	oldassert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/merge",
 		Body:         oldassert.JSONObject{"commitment_ids": []int{1, 2}},
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
-	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1 WHERE id = 2", limesresources.CommitmentTransferStatusNone)
+	s.MustDBExec("UPDATE project_commitments SET transfer_status = $1, transfer_started_at = NULL WHERE id = 2", limesresources.CommitmentTransferStatusNone)
 
 	// Do not merge commitments with statuses other than "active"
 	unmergeableStatuses := []liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusSuperseded, liquid.CommitmentStatusExpired, util.CommitmentStatusDeleted}
@@ -3105,23 +3115,24 @@ func Test_PublicCommitmentCloudAdminActions(t *testing.T) {
 	}
 
 	resp1 := oldassert.JSONObject{
-		"id":                1,
-		"uuid":              "00000000-0000-0000-0000-000000000001",
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            10,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken,
-		"status":            "confirmed",
+		"id":                  1,
+		"uuid":                "00000000-0000-0000-0000-000000000001",
+		"service_type":        "second",
+		"resource_name":       "capacity",
+		"availability_zone":   "az-two",
+		"amount":              10,
+		"unit":                "B",
+		"duration":            "1 hour",
+		"created_at":          s.Clock.Now().Unix(),
+		"creator_uuid":        "uuid-for-alice",
+		"creator_name":        "alice@Default",
+		"can_be_deleted":      true,
+		"confirmed_at":        0,
+		"expires_at":          3600,
+		"transfer_status":     "unlisted",
+		"transfer_token":      transferToken,
+		"transfer_started_at": s.Clock.Now().Unix(),
+		"status":              "confirmed",
 	}
 
 	oldassert.HTTPRequest{

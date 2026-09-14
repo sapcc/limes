@@ -45,6 +45,7 @@
       "status": "confirmed",
       "transfer_status": "public",
       "transfer_token": "dummyToken-1",
+      "transfer_started_at": "1970-01-01T01:00:00Z",
       "created_at": "1970-01-01T01:00:00Z",
       "creator_uuid": "uuid-for-alice",
       "creator_name": "alice@Default",

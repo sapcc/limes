@@ -31,9 +31,10 @@ type Commitment struct {
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 
 	Status liquid.CommitmentStatus `json:"status"`
-	// TransferStatus and TransferToken are only shown while the commitment is marked for transfer.
-	TransferStatus limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
-	TransferToken  Option[string]                          `json:"transfer_token,omitzero"`
+	// TransferStatus, TransferToken and TransferStartedAt are only shown while the commitment is marked for transfer.
+	TransferStatus    limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
+	TransferToken     Option[string]                          `json:"transfer_token,omitzero"`
+	TransferStartedAt Option[common.RFC3339EncodedTime]       `json:"transfer_started_at,omitzero"`
 
 	CreatedAt common.RFC3339EncodedTime `json:"created_at"`
 	// CreatorUUID and CreatorName identify the user who created this commitment.

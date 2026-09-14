@@ -158,4 +158,8 @@ var sqlMigrations = map[int64]string{
 		ALTER TABLE resources ALTER COLUMN category_id SET NOT NULL;
 		ALTER TABLE rates     ALTER COLUMN category_id SET NOT NULL;
 	`,
+	86: `
+		UPDATE project_commitments SET transfer_started_at = NULL WHERE transfer_status = '';
+		ALTER TABLE project_commitments ADD CONSTRAINT project_commitments_transfer_started_at_consistency CHECK ((transfer_started_at IS NULL) = (transfer_status = ''));
+	`,
 }
