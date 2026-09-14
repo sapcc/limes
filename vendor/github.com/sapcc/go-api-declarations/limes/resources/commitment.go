@@ -40,9 +40,10 @@ type Commitment struct {
 	// ConfirmedAt is only filled after the commitment was confirmed.
 	ConfirmedAt *limes.UnixEncodedTime `json:"confirmed_at,omitempty"`
 	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at"`
-	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
-	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
-	TransferToken  *string                  `json:"transfer_token,omitempty"`
+	// TransferStatus, TransferToken and TransferStartedAt are only filled while the commitment is marked for transfer.
+	TransferStatus    CommitmentTransferStatus `json:"transfer_status,omitempty"`
+	TransferToken     *string                  `json:"transfer_token,omitempty"`
+	TransferStartedAt *limes.UnixEncodedTime   `json:"transfer_started_at,omitempty"`
 	// The state can be derived from other fields, but is included for convenience.
 	// This way, API consumers won't need to follow up which combination of fields
 	// indicates which state and can use it directly for filtering, sorting, etc.

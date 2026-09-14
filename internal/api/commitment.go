@@ -1693,6 +1693,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = None[string]()
+	dbCommitment.TransferStartedAt = None[time.Time]()
 	dbCommitment.ProjectID = targetProject.ID
 	dbCommitment.UpdatedAt = p.timeNow()
 	err = db.ProjectCommitmentStore.Update(ctx, tx, dbCommitment)
