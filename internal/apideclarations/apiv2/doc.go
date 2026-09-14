@@ -93,6 +93,12 @@
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
 //
+// # Endpoint: PATCH /resources/v2/commitments/:uuid
+//
+// Alters properties of an existing commitment according to the given body, if permissions allow.
+//   - The request body payload must be of type [resourcesv2.CommitmentPatchRequest].
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
 // # Endpoint: DELETE /resources/v2/commitments/:uuid
 //
 // Deletes the specified commitment.

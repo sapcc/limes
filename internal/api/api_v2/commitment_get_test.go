@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/jsonmatch"
@@ -194,12 +193,13 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		"project_domain_id":   "uuid-for-france",
 	})
 
-	// helper: build jq modification to inject captured UUIDs into fixture
+	// helper: build jq modification to inject captured UUIDs and transfer token into fixture
 	injectUUIDs := func(f httptest.JQModifiableContent) httptest.JQModifiableContent {
 		return f.
 			Modify(fmt.Sprintf(`.commitments[0].uuid = %q`, uuid1)).
 			Modify(fmt.Sprintf(`.commitments[1].uuid = %q`, uuid2)).
 			Modify(fmt.Sprintf(`.commitments[2].uuid = %q`, uuid3)).
+			Modify(fmt.Sprintf(`.commitments[2].transfer_token = %q`, transferToken3)).
 			Modify(fmt.Sprintf(`.commitments[3].uuid = %q`, uuid4))
 	}
 
