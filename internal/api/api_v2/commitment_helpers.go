@@ -32,22 +32,26 @@ import (
 )
 
 var (
-	errAZMustNotBeAny            = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
-	errAZMustBeAny               = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
-	errCommitmentsDisabled       = errors.New("commitments are not enabled for this resource")
-	errNotDeletable              = errors.New("commitment cannot be deleted")
-	errConfirmByInPast           = errors.New("confirm_by may not be set in the past")
-	errConfirmByMissing          = errors.New("confirm_by must be set for the requested initial commitment status")
-	errConfirmByNotAllowed       = errors.New("confirm_by may not be set for the requested initial commitment status")
-	errEmptyAmount               = errors.New("amount of committed resource must be greater than zero")
-	errInvalidInitialStatus      = errors.New("initial commitment status value is invalid")
-	errInvalidResourceReference  = errors.New("reference to an unknown az resource (race condition)")
-	errNoSuchAZ                  = errors.New("no such availability zone")
-	errNoSuchResource            = errors.New("no such resource")
-	errNoSuchService             = errors.New("no such service")
-	errNoSuchCommitment          = errors.New("no such commitment")
-	errNotifyOnConfirmNotAllowed = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
-	errResourceForbidden         = errors.New("resource is not enabled in this project")
+	errAZMustNotBeAny                = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
+	errAZMustBeAny                   = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
+	errCommitmentsDisabled           = errors.New("commitments are not enabled for this resource")
+	errNotDeletable                  = errors.New("commitment cannot be deleted")
+	errConfirmByInPast               = errors.New("confirm_by may not be set in the past")
+	errConfirmByMissing              = errors.New("confirm_by must be set for the requested initial commitment status")
+	errConfirmByNotAllowed           = errors.New("confirm_by may not be set for the requested initial commitment status")
+	errEmptyAmount                   = errors.New("amount of committed resource must be greater than zero")
+	errInvalidInitialStatus          = errors.New("initial commitment status value is invalid")
+	errInvalidResourceReference      = errors.New("reference to an unknown az resource (race condition)")
+	errNoSuchAZ                      = errors.New("no such availability zone")
+	errNoSuchResource                = errors.New("no such resource")
+	errNoSuchService                 = errors.New("no such service")
+	errNoSuchCommitment              = errors.New("no such commitment")
+	errNotifyOnConfirmNotAllowed     = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
+	errResourceForbidden             = errors.New("resource is not enabled in this project")
+	errOnlyOneCommitmentModification = errors.New("only one commitment modification may be set")
+	errNoCommitmentModification      = errors.New("one commitment modification has to be set")
+	errNoDurationShortening          = errors.New("commitment duration must not be shortened")
+	errNoSuchTransferStatus          = errors.New("no such commitment transfer status")
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
@@ -178,6 +182,12 @@ func (p *v2Provider) validateStatusAttributesOnNewCommitment(attrs commitmentSta
 	}
 
 	return nil
+}
+
+var commitmentTransferStatuses = []limesresources.CommitmentTransferStatus{
+	limesresources.CommitmentTransferStatusUnlisted,
+	limesresources.CommitmentTransferStatusPublic,
+	limesresources.CommitmentTransferStatusNone,
 }
 
 // pazrCommitmentStats contains statistics about existing commitments in a specific ProjectAZResource (pazr) scope.
