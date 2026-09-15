@@ -229,11 +229,11 @@ func analyzeCommitmentChangeResponse(resp liquid.CommitmentChangeResponse) error
 // isDeletable checks whether the user with the given token is allowed to delete this commitment.
 // For that, the commitment cannot be older than 24 hours and only directly created.
 // An admin exception is also allowed.
-func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow func() time.Time) bool {
+func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow time.Time) bool {
 	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusConfirmed}, c.Status) {
 		var creationContext db.CommitmentWorkflowContext
 		err := json.Unmarshal(c.CreationContextJSON, &creationContext)
-		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow().Before(c.CreatedAt.Add(24*time.Hour)) {
+		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow.Before(c.CreatedAt.Add(24*time.Hour)) {
 			return token.Check("v2:project:commitment_delete")
 		}
 	}

@@ -36,6 +36,7 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 		none resourcesv2.Commitment
 		ctx  = r.Context()
 		sis  = p.Cluster.SIC.GetSnapshot()
+		now  = p.timeNow()
 		ccr  liquid.CommitmentChangeRequest
 		cacs map[liquid.CommitmentUUID]audit.CommitmentAttributeChangeset
 	)
@@ -53,12 +54,12 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 		}
 
 		// prep the same commitment for early return
-		deletable := isDeletable(token, c, p.timeNow)
+		deletable := isDeletable(token, c, now)
 		result = convertCommitmentToDisplayForm(c, azRes.Path, scope.Project.UUID, deletable)
 
 		// validate request and do according modifications
 		var (
-			now          = p.timeNow()
+			now          = now
 			oldExpiresAt = None[time.Time]()
 			behavior     = p.Cluster.CommitmentBehaviorForResourcePath(azRes.Path.Resource()).ForDomain(scope.Domain.Name)
 		)
@@ -169,7 +170,7 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 			CommitmentChangeRequest:       ccr,
 			CommitmentAttributeChangesets: cacs,
 		}.ReplicateForAllProjectsWithDefaults(audittools.Event{
-			Time:       p.timeNow(),
+			Time:       now,
 			Request:    r,
 			User:       token,
 			ReasonCode: http.StatusAccepted,

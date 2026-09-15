@@ -61,7 +61,7 @@ func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpol
 		// defense in depth, the referenced AZResource should exist
 		return none, errInvalidResourceReference
 	}
-	deletable := isDeletable(token, c, p.timeNow)
+	deletable := isDeletable(token, c, p.timeNow())
 	result := convertCommitmentToDisplayForm(c, azRes.Path, scope.Project.UUID, deletable)
 	return result, nil
 }
@@ -127,7 +127,7 @@ func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherp
 			// defense in depth, the referenced AZResource should exist
 			return errInvalidResourceReference
 		}
-		deletable := isDeletable(token, c.ProjectCommitment, p.timeNow)
+		deletable := isDeletable(token, c.ProjectCommitment, p.timeNow())
 
 		// redact project_uuids if the user is not allowed to see them
 		authorized, ok := authByProject[c.ProjectUUID]

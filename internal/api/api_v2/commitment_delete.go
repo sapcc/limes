@@ -34,6 +34,7 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 		ctx = r.Context()
 		sis = p.Cluster.SIC.GetSnapshot()
 		ccr liquid.CommitmentChangeRequest
+		now = p.timeNow()
 	)
 
 	err := p.DB.WithinTransaction(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *gsql.Tx) error {
@@ -46,7 +47,7 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 		case err != nil:
 			return err
 		}
-		deletable := isDeletable(token, c, p.timeNow)
+		deletable := isDeletable(token, c, now)
 		if !deletable {
 			err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)
 			return err
@@ -91,8 +92,8 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 
 		// delete
 		c.Status = util.CommitmentStatusDeleted
-		c.DeletedAt = Some(p.timeNow())
-		c.UpdatedAt = p.timeNow()
+		c.DeletedAt = Some(now)
+		c.UpdatedAt = now
 		c.TransferStatus = limesresources.CommitmentTransferStatusNone
 		c.TransferToken = None[string]()
 		c.TransferStartedAt = None[time.Time]()
@@ -106,7 +107,7 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
-		Time:       p.timeNow(),
+		Time:       now,
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusNoContent,
