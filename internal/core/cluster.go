@@ -300,75 +300,70 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		}
 	}
 
-	// do the whole consistency check for one connection in a transaction to avoid inconsistent DB state
-	tx, err := dbm.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	// do the whole update in a transaction to avoid inconsistent DB state
+	return dbm.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// collect existing service and the wanted service
+		dbServices, err := db.ServiceStore.SelectWhere(ctx, tx, `type = $1`, serviceType).Collect()
+		if err != nil {
+			return fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
+		}
+		var wantedServices = []db.ServiceType{serviceType}
 
-	// collect existing service and the wanted service
-	dbServices, err := db.ServiceStore.SelectWhere(ctx, tx, `type = $1`, serviceType).Collect()
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing service %s: %w", serviceType, err)
-	}
-	var wantedServices = []db.ServiceType{serviceType}
+		// do update for service (as set update, for convenience)
+		cmf, err := util.RenderMapToJSON("capacity_metric_families", serviceInfo.CapacityMetricFamilies)
+		if err != nil {
+			return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
+		}
+		umf, err := util.RenderMapToJSON("usage_metric_families", serviceInfo.UsageMetricFamilies)
+		if err != nil {
+			return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
+		}
+		serviceUpdate := db.SetUpdate[db.Service, db.ServiceType]{
+			ExistingRecords: dbServices,
+			WantedKeys:      wantedServices,
+			KeyForRecord: func(service db.Service) db.ServiceType {
+				return service.Type
+			},
+			Create: func(serviceType db.ServiceType) (db.Service, error) {
+				if !ReduceLogSpam {
+					logg.Info("SaveServiceInfoToDB: creating Service %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
+				}
+				return db.Service{
+					NextScrapeAt:                           timeNow,
+					Type:                                   serviceType,
+					LiquidVersion:                          serviceInfo.Version,
+					DisplayName:                            serviceInfo.DisplayName,
+					CapacityMetricFamiliesJSON:             cmf,
+					UsageMetricFamiliesJSON:                umf,
+					UsageReportNeedsProjectMetadata:        serviceInfo.UsageReportNeedsProjectMetadata,
+					QuotaUpdateNeedsProjectMetadata:        serviceInfo.QuotaUpdateNeedsProjectMetadata,
+					CommitmentHandlingNeedsProjectMetadata: serviceInfo.CommitmentHandlingNeedsProjectMetadata,
+				}, nil
+			},
+			Update: func(service *db.Service) (err error) {
+				if !ReduceLogSpam && service.LiquidVersion != serviceInfo.Version {
+					logg.Info("SaveServiceInfoToDB: updating Service %s from LiquidVersion = %d to %d", service.Type, service.LiquidVersion, serviceInfo.Version)
+				}
+				service.LiquidVersion = serviceInfo.Version
+				service.DisplayName = serviceInfo.DisplayName
+				service.CapacityMetricFamiliesJSON = cmf
+				service.UsageMetricFamiliesJSON = umf
+				service.UsageReportNeedsProjectMetadata = serviceInfo.UsageReportNeedsProjectMetadata
+				service.QuotaUpdateNeedsProjectMetadata = serviceInfo.QuotaUpdateNeedsProjectMetadata
+				service.CommitmentHandlingNeedsProjectMetadata = serviceInfo.CommitmentHandlingNeedsProjectMetadata
+				return nil
+			},
+			PreDelete: Some(generateDeleteFunc(dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
+		}
+		dbServices, err = serviceUpdate.Execute(ctx, tx, db.ServiceStore)
+		if err != nil {
+			return fmt.Errorf("update services failed for %s: %w", serviceType, err)
+		}
+		srv := dbServices[0]
 
-	// do update for service (as set update, for convenience)
-	cmf, err := util.RenderMapToJSON("capacity_metric_families", serviceInfo.CapacityMetricFamilies)
-	if err != nil {
-		return fmt.Errorf("cannot serialize CapacityMetricFamilies for %s: %w", serviceType, err)
-	}
-	umf, err := util.RenderMapToJSON("usage_metric_families", serviceInfo.UsageMetricFamilies)
-	if err != nil {
-		return fmt.Errorf("cannot serialize UsageMetricFamilies for %s: %w", serviceType, err)
-	}
-	serviceUpdate := db.SetUpdate[db.Service, db.ServiceType]{
-		ExistingRecords: dbServices,
-		WantedKeys:      wantedServices,
-		KeyForRecord: func(service db.Service) db.ServiceType {
-			return service.Type
-		},
-		Create: func(serviceType db.ServiceType) (db.Service, error) {
-			if !ReduceLogSpam {
-				logg.Info("SaveServiceInfoToDB: creating Service %s with LiquidVersion = %d", serviceType, serviceInfo.Version)
-			}
-			return db.Service{
-				NextScrapeAt:                           timeNow,
-				Type:                                   serviceType,
-				LiquidVersion:                          serviceInfo.Version,
-				DisplayName:                            serviceInfo.DisplayName,
-				CapacityMetricFamiliesJSON:             cmf,
-				UsageMetricFamiliesJSON:                umf,
-				UsageReportNeedsProjectMetadata:        serviceInfo.UsageReportNeedsProjectMetadata,
-				QuotaUpdateNeedsProjectMetadata:        serviceInfo.QuotaUpdateNeedsProjectMetadata,
-				CommitmentHandlingNeedsProjectMetadata: serviceInfo.CommitmentHandlingNeedsProjectMetadata,
-			}, nil
-		},
-		Update: func(service *db.Service) (err error) {
-			if !ReduceLogSpam && service.LiquidVersion != serviceInfo.Version {
-				logg.Info("SaveServiceInfoToDB: updating Service %s from LiquidVersion = %d to %d", service.Type, service.LiquidVersion, serviceInfo.Version)
-			}
-			service.LiquidVersion = serviceInfo.Version
-			service.DisplayName = serviceInfo.DisplayName
-			service.CapacityMetricFamiliesJSON = cmf
-			service.UsageMetricFamiliesJSON = umf
-			service.UsageReportNeedsProjectMetadata = serviceInfo.UsageReportNeedsProjectMetadata
-			service.QuotaUpdateNeedsProjectMetadata = serviceInfo.QuotaUpdateNeedsProjectMetadata
-			service.CommitmentHandlingNeedsProjectMetadata = serviceInfo.CommitmentHandlingNeedsProjectMetadata
-			return nil
-		},
-		PreDelete: Some(generateDeleteFunc(dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
-	}
-	dbServices, err = serviceUpdate.Execute(ctx, tx, db.ServiceStore)
-	if err != nil {
-		return fmt.Errorf("update services failed for %s: %w", serviceType, err)
-	}
-	srv := dbServices[0]
-
-	// create or update wanted categories (cannot delete unnecessary categories yet,
-	// we need to update `resources.category_id` or `rates.category_id` first)
-	categoryMergeQuery := sqlext.SimplifyWhitespace(`
+		// create or update wanted categories (cannot delete unnecessary categories yet,
+		// we need to update `resources.category_id` or `rates.category_id` first)
+		categoryMergeQuery := sqlext.SimplifyWhitespace(`
 		MERGE INTO categories AS c
 		USING json_each($1::json) AS src
 		   ON c.name = src.key AND c.service_id = $2
@@ -376,316 +371,316 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		      VALUES (src.key, src.value ->> 'displayName', $2)
 		 WHEN MATCHED THEN UPDATE set display_name = src.value ->> 'displayName';
 	`)
-	categoriesJSON, err := json.Marshal(serviceInfo.Categories)
-	if err != nil {
-		return fmt.Errorf("cannot serialize serviceInfo.Categories for %s to JSON: %w", serviceType, err)
-	}
-	if bytes.Equal(categoriesJSON, []byte(`null`)) {
-		categoriesJSON = []byte(`{}`)
-	}
-	_, err = tx.ExecContext(ctx, categoryMergeQuery, categoriesJSON, srv.ID)
-	if err != nil {
-		return fmt.Errorf("cannot create/update categories for %s: %w", serviceType, err)
-	}
-	categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID))
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
-	}
-
-	// collect existing resources and the wanted resources
-	dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
-	}
-	wantedResources := slices.Sorted(maps.Keys(serviceInfo.Resources))
-
-	// for unit changes, we need to have some special handling, else we will interpret
-	// the old values from the database with the new unit!
-
-	type unitChange struct {
-		oldUnit limes.Unit
-		newUnit limes.Unit
-	}
-	unitChangesByResourceID := make(map[db.ResourceID]unitChange)
-
-	// do update for resources
-	resourceUpdate := db.SetUpdate[db.Resource, liquid.ResourceName]{
-		ExistingRecords: dbResources,
-		WantedKeys:      wantedResources,
-		KeyForRecord: func(resource db.Resource) liquid.ResourceName {
-			return resource.Name
-		},
-		Create: func(resourceName liquid.ResourceName) (db.Resource, error) {
-			if !ReduceLogSpam {
-				logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
-			}
-			resInfo := serviceInfo.Resources[resourceName]
-			return db.Resource{
-				ServiceID:           srv.ID,
-				Name:                resourceName,
-				DisplayName:         resInfo.DisplayName,
-				CategoryID:          categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID,
-				Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
-				LiquidVersion:       serviceInfo.Version,
-				Unit:                resInfo.Unit,
-				Topology:            resInfo.Topology,
-				HasCapacity:         resInfo.HasCapacity,
-				NeedsResourceDemand: resInfo.NeedsResourceDemand,
-				HasQuota:            resInfo.HasQuota,
-				AttributesJSON:      string(resInfo.Attributes),
-				HandlesCommitments:  resInfo.HandlesCommitments,
-			}, nil
-		},
-		Update: func(res *db.Resource) (err error) {
-			if !ReduceLogSpam && res.LiquidVersion != serviceInfo.Version {
-				logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
-			}
-			res.LiquidVersion = serviceInfo.Version
-			resInfo := serviceInfo.Resources[res.Name]
-			if res.Unit != resInfo.Unit {
-				unitChangesByResourceID[res.ID] = unitChange{
-					oldUnit: res.Unit,
-					newUnit: resInfo.Unit,
-				}
-			}
-			res.DisplayName = resInfo.DisplayName
-			res.CategoryID = categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID
-			res.Unit = resInfo.Unit
-			res.Topology = resInfo.Topology
-			res.HasCapacity = resInfo.HasCapacity
-			res.NeedsResourceDemand = resInfo.NeedsResourceDemand
-			res.HasQuota = resInfo.HasQuota
-			res.AttributesJSON = string(resInfo.Attributes)
-			res.HandlesCommitments = resInfo.HandlesCommitments
-			return nil
-		},
-		PreDelete: Some(generateDeleteFunc(dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
-	}
-	dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
-	if err != nil {
-		return err
-	}
-
-	// do resource unit updates if applicable
-	for resID, units := range unitChangesByResourceID {
-		oldBaseUnit, oldFactor := units.oldUnit.Base()
-		newBaseUnit, newFactor := units.newUnit.Base()
-		if oldBaseUnit != newBaseUnit {
-			// the mitigation for this failing is probably to delete the resources from the database and read them fresh?
-			return fmt.Errorf("cannot change unit of resource with id %d from %q to %q, because the base units differ", resID, units.oldUnit, units.newUnit)
+		categoriesJSON, err := json.Marshal(serviceInfo.Categories)
+		if err != nil {
+			return fmt.Errorf("cannot serialize serviceInfo.Categories for %s to JSON: %w", serviceType, err)
+		}
+		if bytes.Equal(categoriesJSON, []byte(`null`)) {
+			categoriesJSON = []byte(`{}`)
+		}
+		_, err = tx.ExecContext(ctx, categoryMergeQuery, categoriesJSON, srv.ID)
+		if err != nil {
+			return fmt.Errorf("cannot create/update categories for %s: %w", serviceType, err)
+		}
+		categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID))
+		if err != nil {
+			return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
 		}
 
-		// For all values which change with the next scrape or from config, we assume rounding is okay.
-		// For commitments, our strategy cannot be rounding, because this has billing impact.
-		// Therefore, we block it - any operation where we would have to round prevents the unit change.
-		// We use integer modulo arithmetic to avoid floating-point precision issues.
-		nonConvertibleEntries, err := db.SelectOneValue[int](tx, sqlext.SimplifyWhitespace(`SELECT COUNT(*)
+		// collect existing resources and the wanted resources
+		dbResources, err := db.ResourceStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
+		if err != nil {
+			return fmt.Errorf("cannot inspect existing resources for %s: %w", serviceType, err)
+		}
+		wantedResources := slices.Sorted(maps.Keys(serviceInfo.Resources))
+
+		// for unit changes, we need to have some special handling, else we will interpret
+		// the old values from the database with the new unit!
+
+		type unitChange struct {
+			oldUnit limes.Unit
+			newUnit limes.Unit
+		}
+		unitChangesByResourceID := make(map[db.ResourceID]unitChange)
+
+		// do update for resources
+		resourceUpdate := db.SetUpdate[db.Resource, liquid.ResourceName]{
+			ExistingRecords: dbResources,
+			WantedKeys:      wantedResources,
+			KeyForRecord: func(resource db.Resource) liquid.ResourceName {
+				return resource.Name
+			},
+			Create: func(resourceName liquid.ResourceName) (db.Resource, error) {
+				if !ReduceLogSpam {
+					logg.Info("SaveServiceInfoToDB: creating Resource %s/%s with LiquidVersion = %d", serviceType, resourceName, serviceInfo.Version)
+				}
+				resInfo := serviceInfo.Resources[resourceName]
+				return db.Resource{
+					ServiceID:           srv.ID,
+					Name:                resourceName,
+					DisplayName:         resInfo.DisplayName,
+					CategoryID:          categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID,
+					Path:                db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName},
+					LiquidVersion:       serviceInfo.Version,
+					Unit:                resInfo.Unit,
+					Topology:            resInfo.Topology,
+					HasCapacity:         resInfo.HasCapacity,
+					NeedsResourceDemand: resInfo.NeedsResourceDemand,
+					HasQuota:            resInfo.HasQuota,
+					AttributesJSON:      string(resInfo.Attributes),
+					HandlesCommitments:  resInfo.HandlesCommitments,
+				}, nil
+			},
+			Update: func(res *db.Resource) (err error) {
+				if !ReduceLogSpam && res.LiquidVersion != serviceInfo.Version {
+					logg.Info("SaveServiceInfoToDB: updating Resource %s/%s from LiquidVersion = %d to %d", serviceType, res.Name, res.LiquidVersion, serviceInfo.Version)
+				}
+				res.LiquidVersion = serviceInfo.Version
+				resInfo := serviceInfo.Resources[res.Name]
+				if res.Unit != resInfo.Unit {
+					unitChangesByResourceID[res.ID] = unitChange{
+						oldUnit: res.Unit,
+						newUnit: resInfo.Unit,
+					}
+				}
+				res.DisplayName = resInfo.DisplayName
+				res.CategoryID = categoryByName[resInfo.Category.UnwrapOr(defaultCategoryName)].ID
+				res.Unit = resInfo.Unit
+				res.Topology = resInfo.Topology
+				res.HasCapacity = resInfo.HasCapacity
+				res.NeedsResourceDemand = resInfo.NeedsResourceDemand
+				res.HasQuota = resInfo.HasQuota
+				res.AttributesJSON = string(resInfo.Attributes)
+				res.HandlesCommitments = resInfo.HandlesCommitments
+				return nil
+			},
+			PreDelete: Some(generateDeleteFunc(dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
+		}
+		dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
+		if err != nil {
+			return err
+		}
+
+		// do resource unit updates if applicable
+		for resID, units := range unitChangesByResourceID {
+			oldBaseUnit, oldFactor := units.oldUnit.Base()
+			newBaseUnit, newFactor := units.newUnit.Base()
+			if oldBaseUnit != newBaseUnit {
+				// the mitigation for this failing is probably to delete the resources from the database and read them fresh?
+				return fmt.Errorf("cannot change unit of resource with id %d from %q to %q, because the base units differ", resID, units.oldUnit, units.newUnit)
+			}
+
+			// For all values which change with the next scrape or from config, we assume rounding is okay.
+			// For commitments, our strategy cannot be rounding, because this has billing impact.
+			// Therefore, we block it - any operation where we would have to round prevents the unit change.
+			// We use integer modulo arithmetic to avoid floating-point precision issues.
+			nonConvertibleEntries, err := db.SelectOneValue[int](tx, sqlext.SimplifyWhitespace(`SELECT COUNT(*)
 			FROM project_commitments pc
 			JOIN az_resources azr ON pc.az_resource_id = azr.id
 			WHERE (pc.amount::NUMERIC * $1) % $2 != 0 AND azr.resource_id = $3`), oldFactor, newFactor, resID)
-		if err != nil {
-			return fmt.Errorf("error while retrieving non-convertible project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
-		}
-		if nonConvertibleEntries > 0 {
-			return fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
-		}
-		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
+			if err != nil {
+				return fmt.Errorf("error while retrieving non-convertible project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			}
+			if nonConvertibleEntries > 0 {
+				return fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
+			}
+			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
 			SET amount = pc.amount * $1 / $2, updated_at = $4
 			FROM az_resources azr
 			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID, timeNow)
-		if err != nil {
-			return fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
-		}
+			if err != nil {
+				return fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			}
 
-		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE az_resources
+			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE az_resources
 			SET raw_capacity = ROUND(raw_capacity * $1 / $2),
 			usage = ROUND(usage * $1 / $2),
 			last_nonzero_raw_capacity = ROUND(last_nonzero_raw_capacity * $1 / $2)
 			WHERE resource_id = $3`), oldFactor, newFactor, resID)
-		if err != nil {
-			return fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
-		}
-		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_resources
+			if err != nil {
+				return fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			}
+			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_resources
 			SET max_quota_from_outside_admin = ROUND(max_quota_from_outside_admin * $1 / $2),
 			override_quota_from_config = ROUND(override_quota_from_config * $1 / $2)
 			WHERE resource_id = $3`), oldFactor, newFactor, resID)
-		if err != nil {
-			return fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
-		}
-		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
+			if err != nil {
+				return fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			}
+			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
 			SET quota = ROUND(pazr.quota * $1 / $2),
 			usage = ROUND(pazr.usage * $1 / $2),
 			physical_usage = ROUND(pazr.physical_usage * $1 / $2),
 			backend_quota = ROUND(pazr.backend_quota * $1 / $2)
 			FROM az_resources azr
 			WHERE pazr.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID)
-		if err != nil {
-			return fmt.Errorf("error while updating project_az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			if err != nil {
+				return fmt.Errorf("error while updating project_az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
+			}
 		}
-	}
 
-	// for az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
-	dbAZResourcesByResourceID, err := db.AZResourceByResourceIDIndex.PartitionFrom(
-		db.AZResourceStore.Select(ctx, tx, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID),
-	)
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
-	}
-	for _, res := range dbResources {
-		// depending on the topology, we can construct the various necessary AZs
-		var wantedKeys []limes.AvailabilityZone
-		switch res.Topology {
-		case liquid.FlatTopology:
-			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny, liquid.AvailabilityZoneTotal}
-		case liquid.AZAwareTopology:
-			wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny, liquid.AvailabilityZoneTotal, limes.AvailabilityZoneUnknown}
-		default:
-			wantedKeys = []limes.AvailabilityZone{liquid.AvailabilityZoneTotal, limes.AvailabilityZoneUnknown}
+		// for az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
+		dbAZResourcesByResourceID, err := db.AZResourceByResourceIDIndex.PartitionFrom(
+			db.AZResourceStore.Select(ctx, tx, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID),
+		)
+		if err != nil {
+			return fmt.Errorf("cannot inspect existing AZ resources for %s: %w", serviceType, err)
 		}
-		if res.Topology != liquid.FlatTopology {
-			wantedKeys = append(wantedKeys, availabilityZones...)
-			slices.Sort(wantedKeys)
-		}
-		setUpdate := db.SetUpdate[db.AZResource, liquid.AvailabilityZone]{
-			ExistingRecords: dbAZResourcesByResourceID[res.ID],
-			WantedKeys:      wantedKeys,
-			KeyForRecord: func(azRes db.AZResource) liquid.AvailabilityZone {
-				return azRes.AvailabilityZone
-			},
-			Create: func(az liquid.AvailabilityZone) (db.AZResource, error) {
-				return db.AZResource{
-					ResourceID:       res.ID,
-					AvailabilityZone: az,
-					Path: db.AZResourcePath{
-						ServiceType:      res.Path.ServiceType,
-						ResourceName:     res.Path.ResourceName,
+		for _, res := range dbResources {
+			// depending on the topology, we can construct the various necessary AZs
+			var wantedKeys []limes.AvailabilityZone
+			switch res.Topology {
+			case liquid.FlatTopology:
+				wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny, liquid.AvailabilityZoneTotal}
+			case liquid.AZAwareTopology:
+				wantedKeys = []limes.AvailabilityZone{limes.AvailabilityZoneAny, liquid.AvailabilityZoneTotal, limes.AvailabilityZoneUnknown}
+			default:
+				wantedKeys = []limes.AvailabilityZone{liquid.AvailabilityZoneTotal, limes.AvailabilityZoneUnknown}
+			}
+			if res.Topology != liquid.FlatTopology {
+				wantedKeys = append(wantedKeys, availabilityZones...)
+				slices.Sort(wantedKeys)
+			}
+			setUpdate := db.SetUpdate[db.AZResource, liquid.AvailabilityZone]{
+				ExistingRecords: dbAZResourcesByResourceID[res.ID],
+				WantedKeys:      wantedKeys,
+				KeyForRecord: func(azRes db.AZResource) liquid.AvailabilityZone {
+					return azRes.AvailabilityZone
+				},
+				Create: func(az liquid.AvailabilityZone) (db.AZResource, error) {
+					return db.AZResource{
+						ResourceID:       res.ID,
 						AvailabilityZone: az,
-					},
+						Path: db.AZResourcePath{
+							ServiceType:      res.Path.ServiceType,
+							ResourceName:     res.Path.ResourceName,
+							AvailabilityZone: az,
+						},
+					}, nil
+				},
+				Update: func(azRes *db.AZResource) error {
+					// we don't know more than the existence of the AZ, so we don't update anything
+					return nil
+				},
+				PreDelete: Some(generateDeleteFunc(dbm, func(azr db.AZResource) string { return azr.Path.String() })),
+			}
+			_, err = setUpdate.Execute(ctx, tx, db.AZResourceStore)
+			if err != nil {
+				return err
+			}
+		}
+
+		// collect existing rates and the wanted rates
+		dbRates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
+		if err != nil {
+			return fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
+		}
+		for _, rateLimit := range rateLimits.Global {
+			rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
+			if !ok {
+				return fmt.Errorf("configuration declares a global rate limit for %s/%s which is not declared by the liquid",
+					serviceType, rateLimit.Name)
+			}
+			if rateLimit.Unit != rateInfo.Unit {
+				return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
+					rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
+			}
+		}
+		for _, rateLimit := range rateLimits.ProjectDefault {
+			rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
+			if !ok {
+				return fmt.Errorf("configuration declares a project-default rate limit for %s/%s which is not declared by the liquid",
+					serviceType, rateLimit.Name)
+			}
+			if rateLimit.Unit != rateInfo.Unit {
+				return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
+					rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
+			}
+		}
+
+		// for unit changes, we need to have some special handling, else we will interpret
+		// the old values from the database with the new unit!
+		unitChangesByRateID := make(map[db.RateID]unitChange)
+
+		// do update for rates
+		rateUpdate := db.SetUpdate[db.Rate, liquid.RateName]{
+			ExistingRecords: dbRates,
+			WantedKeys:      slices.Sorted(maps.Keys(serviceInfo.Rates)),
+			KeyForRecord: func(rate db.Rate) liquid.RateName {
+				return rate.Name
+			},
+			Create: func(rateName liquid.RateName) (db.Rate, error) {
+				rateInfo := serviceInfo.Rates[rateName]
+				return db.Rate{
+					ServiceID:     dbServices[0].ID,
+					Name:          rateName,
+					DisplayName:   rateInfo.DisplayName,
+					CategoryID:    categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID,
+					Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
+					LiquidVersion: serviceInfo.Version,
+					Unit:          rateInfo.Unit,
+					Topology:      rateInfo.Topology,
+					HasUsage:      rateInfo.HasUsage,
 				}, nil
 			},
-			Update: func(azRes *db.AZResource) error {
-				// we don't know more than the existence of the AZ, so we don't update anything
+			Update: func(rate *db.Rate) (err error) {
+				rateInfo := serviceInfo.Rates[rate.Name]
+
+				rate.LiquidVersion = serviceInfo.Version
+				rate.DisplayName = rateInfo.DisplayName
+				rate.CategoryID = categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID
+				rate.Topology = rateInfo.Topology
+				rate.HasUsage = rateInfo.HasUsage
+
+				if rate.Unit != rateInfo.Unit {
+					unitChangesByRateID[rate.ID] = unitChange{
+						oldUnit: rate.Unit,
+						newUnit: rateInfo.Unit,
+					}
+					rate.Unit = rateInfo.Unit
+				}
+
 				return nil
 			},
-			PreDelete: Some(generateDeleteFunc(dbm, func(azr db.AZResource) string { return azr.Path.String() })),
 		}
-		_, err = setUpdate.Execute(ctx, tx, db.AZResourceStore)
+		_, err = rateUpdate.Execute(ctx, tx, db.RateStore)
 		if err != nil {
 			return err
 		}
-	}
 
-	// collect existing rates and the wanted rates
-	dbRates, err := db.RateStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID).Collect()
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing rates for %s: %w", serviceType, err)
-	}
-	for _, rateLimit := range rateLimits.Global {
-		rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
-		if !ok {
-			return fmt.Errorf("configuration declares a global rate limit for %s/%s which is not declared by the liquid",
-				serviceType, rateLimit.Name)
-		}
-		if rateLimit.Unit != rateInfo.Unit {
-			return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
-				rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
-		}
-	}
-	for _, rateLimit := range rateLimits.ProjectDefault {
-		rateInfo, ok := serviceInfo.Rates[rateLimit.Name]
-		if !ok {
-			return fmt.Errorf("configuration declares a project-default rate limit for %s/%s which is not declared by the liquid",
-				serviceType, rateLimit.Name)
-		}
-		if rateLimit.Unit != rateInfo.Unit {
-			return fmt.Errorf("configuration uses unit %q for rate %s/%s, but liquid declared unit %q",
-				rateLimit.Unit, serviceType, rateLimit.Name, rateInfo.Unit)
-		}
-	}
-
-	// for unit changes, we need to have some special handling, else we will interpret
-	// the old values from the database with the new unit!
-	unitChangesByRateID := make(map[db.RateID]unitChange)
-
-	// do update for rates
-	rateUpdate := db.SetUpdate[db.Rate, liquid.RateName]{
-		ExistingRecords: dbRates,
-		WantedKeys:      slices.Sorted(maps.Keys(serviceInfo.Rates)),
-		KeyForRecord: func(rate db.Rate) liquid.RateName {
-			return rate.Name
-		},
-		Create: func(rateName liquid.RateName) (db.Rate, error) {
-			rateInfo := serviceInfo.Rates[rateName]
-			return db.Rate{
-				ServiceID:     dbServices[0].ID,
-				Name:          rateName,
-				DisplayName:   rateInfo.DisplayName,
-				CategoryID:    categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID,
-				Path:          db.RatePath{ServiceType: serviceType, RateName: rateName},
-				LiquidVersion: serviceInfo.Version,
-				Unit:          rateInfo.Unit,
-				Topology:      rateInfo.Topology,
-				HasUsage:      rateInfo.HasUsage,
-			}, nil
-		},
-		Update: func(rate *db.Rate) (err error) {
-			rateInfo := serviceInfo.Rates[rate.Name]
-
-			rate.LiquidVersion = serviceInfo.Version
-			rate.DisplayName = rateInfo.DisplayName
-			rate.CategoryID = categoryByName[rateInfo.Category.UnwrapOr(defaultCategoryName)].ID
-			rate.Topology = rateInfo.Topology
-			rate.HasUsage = rateInfo.HasUsage
-
-			if rate.Unit != rateInfo.Unit {
-				unitChangesByRateID[rate.ID] = unitChange{
-					oldUnit: rate.Unit,
-					newUnit: rateInfo.Unit,
-				}
-				rate.Unit = rateInfo.Unit
+		// do rate unit updates if applicable
+		for rateID, units := range unitChangesByRateID {
+			oldBaseUnit, oldFactor := units.oldUnit.Base()
+			newBaseUnit, newFactor := units.newUnit.Base()
+			if oldBaseUnit != newBaseUnit {
+				// the mitigation for this failing is probably to delete the rates from the database and read them fresh?
+				return fmt.Errorf("cannot change unit of rate with id %d from %q to %q, because the base units differ", rateID, units.oldUnit, units.newUnit)
 			}
 
-			return nil
-		},
-	}
-	_, err = rateUpdate.Execute(ctx, tx, db.RateStore)
-	if err != nil {
-		return err
-	}
-
-	// do rate unit updates if applicable
-	for rateID, units := range unitChangesByRateID {
-		oldBaseUnit, oldFactor := units.oldUnit.Base()
-		newBaseUnit, newFactor := units.newUnit.Base()
-		if oldBaseUnit != newBaseUnit {
-			// the mitigation for this failing is probably to delete the rates from the database and read them fresh?
-			return fmt.Errorf("cannot change unit of rate with id %d from %q to %q, because the base units differ", rateID, units.oldUnit, units.newUnit)
+			// For all values which change with the next scrape or from config, we assume rounding is okay.
+			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_rates
+				SET rate_limit = ROUND(rate_limit * $1 / $2),
+				usage_as_bigint = ROUND(usage_as_bigint::BIGINT * $1 / $2)::TEXT
+				WHERE rate_id = $3`), oldFactor, newFactor, rateID)
+			if err != nil {
+				return fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
+			}
 		}
 
-		// For all values which change with the next scrape or from config, we assume rounding is okay.
-		_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_rates
-			SET rate_limit = ROUND(rate_limit * $1 / $2),
-			usage_as_bigint = ROUND(usage_as_bigint::BIGINT * $1 / $2)::TEXT
-			WHERE rate_id = $3`), oldFactor, newFactor, rateID)
+		// remove unneeded categories (could not be done earlier because of `resources.category_id` and `rates.category_id` foreign keys)
+		// TODO: remove the `AND category_id IS NOT NULL` part once we add NOT NULL constraints on these columns
+		_, err = tx.ExecContext(ctx, sqlext.SimplifyWhitespace(`
+			DELETE FROM categories WHERE service_id = $1 AND id NOT IN (
+				SELECT DISTINCT category_id FROM resources WHERE service_id = $1 AND category_id IS NOT NULL
+				UNION
+				SELECT DISTINCT category_id FROM rates WHERE service_id = $1 AND category_id IS NOT NULL
+			)
+		`), srv.ID)
 		if err != nil {
-			return fmt.Errorf("error while updating project_rates with rate_id %d when changing unit from %q to %q: %w", rateID, units.oldUnit, units.newUnit, err)
+			return fmt.Errorf("while cleaning up unneeded categories for %s: %w", serviceType, err)
 		}
-	}
-
-	// remove unneeded categories (could not be done earlier because of `resources.category_id` and `rates.category_id` foreign keys)
-	// TODO: remove the `AND category_id IS NOT NULL` part once we add NOT NULL constraints on these columns
-	_, err = tx.ExecContext(ctx, sqlext.SimplifyWhitespace(`
-		DELETE FROM categories WHERE service_id = $1 AND id NOT IN (
-			SELECT DISTINCT category_id FROM resources WHERE service_id = $1 AND category_id IS NOT NULL
-			UNION
-			SELECT DISTINCT category_id FROM rates WHERE service_id = $1 AND category_id IS NOT NULL
-		)
-	`), srv.ID)
-	if err != nil {
-		return fmt.Errorf("while cleaning up unneeded categories for %s: %w", serviceType, err)
-	}
-
-	return tx.Commit()
+		return nil
+	})
 }
 
 func usesDefaultCategory(serviceInfo liquid.ServiceInfo) bool {

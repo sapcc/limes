@@ -5,6 +5,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -203,7 +204,8 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 
 // WritePutErrorResponse produces a negative HTTP response for this PUT request.
 // It may only be used when `u.IsValid()` is false.
-func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
+// The response is returned as an error to be consumed by respondwith.ErrorText().
+func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) error {
 	var lines []string
 	hasSubstatus := make(map[int]bool)
 
@@ -231,7 +233,7 @@ func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 			status = s
 		}
 	}
-	http.Error(w, msg, status)
+	return respondwith.CustomStatus(status, errors.New(msg))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

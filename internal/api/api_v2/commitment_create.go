@@ -4,7 +4,9 @@
 package api_v2
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -17,7 +19,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
@@ -110,7 +111,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	// its ID (for use in the SupersedeContext of consumed commitments),
 	// but we need to be able to revert this insertion if the CommitmentChangeRequest is rejected
 	var auditEvents []audittools.Event
-	err = withinDryRunnableTx(p.DB, req.DryRun, func(tx db.Interface) error {
+	err = withinDryRunnableTx(ctx, p.DB, req.DryRun, func(tx db.Interface) error {
 		stats, err := getCommitmentStats(tx, scope.Project.ID, azResource.ID)
 		if err != nil {
 			return err
@@ -240,19 +241,20 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 
 // withinDryRunnableTx starts a transaction such that the type system helps enforce that a dry run is not accidentally committed:
 // Within `action`, `tx` is only a generic interface handle that does not allow calling `tx.Commit()` directly.
-func withinDryRunnableTx(dbm *gsql.DB, dryRun bool, action func(tx db.Interface) error) error {
-	tx, err := dbm.Begin()
-	if err != nil {
-		return err
+func withinDryRunnableTx(ctx context.Context, dbm *gsql.DB, dryRun bool, action func(db.Interface) error) error {
+	errForceRollback := errors.New("force rollback because of dryRun=true")
+	err := dbm.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		err := action(tx)
+		if err != nil {
+			return err
+		}
+		if dryRun {
+			return errForceRollback
+		}
+		return nil
+	})
+	if err == errForceRollback { //nolint:errorlint // this error can never be wrapped because of how this function is written
+		return nil
 	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-	err = action(tx)
-	if err != nil {
-		return err
-	}
-	if dryRun {
-		return tx.Rollback()
-	} else {
-		return tx.Commit()
-	}
+	return err
 }

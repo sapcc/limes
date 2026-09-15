@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/core"
@@ -290,169 +291,165 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 	}
 	enrichUsageReportTotals(&resourceData, sis, serviceType)
 
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return fmt.Errorf("while beginning transaction: %w", err)
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// we have seen UPDATEs in this transaction getting stuck in the past, this
-	// should hopefully prevent this (or at least cause loud complaints when it
-	// happens)
-	//
-	// TODO: consider setting this for the entire connection if it helps
-	_, err = tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
-	if err != nil {
-		return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
-	}
-
-	// we only need to ensure existence of project_resources - the values don't impact this operation
-	err = datamodel.ProjectResourceUpdate{
-		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
-			if !rExists {
-				return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
-			}
-			if resource.HasQuota {
-				res.Forbidden = resourceData.Resources[resName].Forbidden
-			}
-			return nil
-		},
-	}.Run(ctx, tx, dbProject, sis, serviceType)
-	if err != nil {
-		return err
-	}
-
-	// For inserting the project_az_resources, we need to find the project_az_resources availabilityZone
-	projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceIDIndex.IndexFrom(
-		db.ProjectAZResourceStore.Select(ctx, tx,
-			`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
-			service.ID, dbProject.ID,
-		),
-	)
-	if err != nil {
-		return err
-	}
-
-	// update project_az_resources for each resource
-	hasBackendQuotaDrift := false
-	for _, resourceName := range slices.Sorted(resources.Keys()) {
-		resource := resources.GetOrZero(resourceName)
-		filteredAZResources := sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
-		usageData := resourceData.Resources[resourceName].PerAZ
-		projectAZResources := make([]db.ProjectAZResource, 0, filteredAZResources.Len())
-		for _, azResource := range filteredAZResources.All() {
-			projectAZResources = append(projectAZResources, projectAZResourcesByAZResourceID[azResource.ID])
-		}
-		wantedKeys := make([]db.AZResourceID, 0, len(usageData))
-		for _, az := range slices.Sorted(maps.Keys(usageData)) {
-			wantedKeys = append(wantedKeys, filteredAZResources.GetOrZero(az).ID)
+	err := c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// we have seen UPDATEs in this transaction getting stuck in the past, this
+		// should hopefully prevent this (or at least cause loud complaints when it
+		// happens)
+		//
+		// TODO: consider setting this for the entire connection if it helps
+		_, err := tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
+		if err != nil {
+			return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 		}
 
-		setUpdate := db.SetUpdate[db.ProjectAZResource, db.AZResourceID]{
-			ExistingRecords: projectAZResources,
-			WantedKeys:      wantedKeys,
-			KeyForRecord: func(azRes db.ProjectAZResource) db.AZResourceID {
-				return azRes.AZResourceID
-			},
-			Create: func(id db.AZResourceID) (db.ProjectAZResource, error) {
-				return db.ProjectAZResource{
-					ProjectID:    dbProject.ID,
-					AZResourceID: id,
-				}, nil
-			},
-			Update: func(projectAZRes *db.ProjectAZResource) (err error) {
-				azRes, ok := sis.GetAZResourceForID(projectAZRes.AZResourceID)
-				if !ok { // defense in depth: referential integrity
-					return fmt.Errorf("no data found in ServiceInfoCache for az_resource.id %d", projectAZRes.AZResourceID)
+		// we only need to ensure existence of project_resources - the values don't impact this operation
+		err = datamodel.ProjectResourceUpdate{
+			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+				resource, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+				if !rExists {
+					return fmt.Errorf("no data found in ServiceInfoCache for %s", db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
 				}
-				az := azRes.AvailabilityZone
-				data := usageData[az]
-				projectAZRes.Usage = data.Usage
-				projectAZRes.PhysicalUsage = data.PhysicalUsage
-
-				// for the quota values, we want to
-				// a) reset both to None when HasQuota is false
-				// b) set a default quota of 0 if not set previously
-				// c) set backendQuota for the applicable cases according to topology, otherwise set None (important for topology switch)
-				// d) check for backendQuota drift
-				if !resource.HasQuota {
-					projectAZRes.BackendQuota = None[int64]()
-					projectAZRes.Quota = None[uint64]()
-				} else {
-					if datamodel.AZHasQuotaForTopology(resource.Topology, az) && projectAZRes.Quota.IsNone() {
-						// this branch will only be taken for new projects (where ACPQ has not computed a quota yet),
-						// so most likely `usage = 0` and thus `quota = 0`; but some resources have non-zero default usage
-						// (currently only Neutron, which auto-provisions a default security group with a few rules for each new project)
-						projectAZRes.Quota = Some[uint64](projectAZRes.Usage)
-					}
-					if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
-						projectAZRes.BackendQuota = data.Quota
-					} else {
-						projectAZRes.BackendQuota = None[int64]()
-					}
-					if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
-						// check if we need to arrange for SetQuotaJob to look at this project service
-						backendQuota := projectAZRes.BackendQuota.UnwrapOr(-1)
-						quota := projectAZRes.Quota.UnwrapOr(0)
-						if backendQuota < 0 || uint64(backendQuota) != quota {
-							hasBackendQuotaDrift = true
-						}
-					}
+				if resource.HasQuota {
+					res.Forbidden = resourceData.Resources[resName].Forbidden
 				}
-
-				// warn when the backend is inconsistent with itself
-				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
-					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
-						dbProject.UUID, service.Type, resourceName, az,
-						data.Usage, len(data.Subresources),
-					)
-				}
-
-				projectAZRes.SubresourcesJSON, err = util.RenderListToJSON("subresources", data.Subresources)
-				if err != nil {
-					return err
-				}
-
-				// track historical usage if required (only required for AutogrowQuotaDistribution)
-				autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(service.Type, resourceName).Autogrow.Unpack()
-				if ok {
-					ts, err := util.ParseTimeSeries[uint64](projectAZRes.HistoricalUsageJSON)
-					if err != nil {
-						return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
-					}
-					err = ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
-					if err != nil {
-						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
-					}
-					ts.PruneOldValues(task.Timing.FinishedAt, autogrowCfg.UsageDataRetentionPeriod.Into())
-					projectAZRes.HistoricalUsageJSON, err = ts.Serialize()
-					if err != nil {
-						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
-					}
-				} else {
-					projectAZRes.HistoricalUsageJSON = ""
-				}
-
 				return nil
 			},
-		}
-		_, err := setUpdate.Execute(ctx, tx, db.ProjectAZResourceStore)
+		}.Run(ctx, tx, dbProject, sis, serviceType)
 		if err != nil {
 			return err
 		}
-	}
-	if hasBackendQuotaDrift {
-		query := `UPDATE project_services ps SET quota_desynced_at = $1 WHERE ps.id = $2 AND quota_desynced_at IS NULL`
-		_, err := tx.Exec(query, c.MeasureTime(), task.ProjectService.ID)
-		if err != nil {
-			return fmt.Errorf("while scheduling backend sync for %s quotas: %w", serviceType, err)
-		}
-	}
 
-	err = tx.Commit()
+		// For inserting the project_az_resources, we need to find the project_az_resources availabilityZone
+		projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceIDIndex.IndexFrom(
+			db.ProjectAZResourceStore.Select(ctx, tx,
+				`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
+				service.ID, dbProject.ID,
+			),
+		)
+		if err != nil {
+			return err
+		}
+
+		// update project_az_resources for each resource
+		hasBackendQuotaDrift := false
+		for _, resourceName := range slices.Sorted(resources.Keys()) {
+			resource := resources.GetOrZero(resourceName)
+			filteredAZResources := sis.GetAZResourcesForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
+			usageData := resourceData.Resources[resourceName].PerAZ
+			projectAZResources := make([]db.ProjectAZResource, 0, filteredAZResources.Len())
+			for _, azResource := range filteredAZResources.All() {
+				projectAZResources = append(projectAZResources, projectAZResourcesByAZResourceID[azResource.ID])
+			}
+			wantedKeys := make([]db.AZResourceID, 0, len(usageData))
+			for _, az := range slices.Sorted(maps.Keys(usageData)) {
+				wantedKeys = append(wantedKeys, filteredAZResources.GetOrZero(az).ID)
+			}
+
+			setUpdate := db.SetUpdate[db.ProjectAZResource, db.AZResourceID]{
+				ExistingRecords: projectAZResources,
+				WantedKeys:      wantedKeys,
+				KeyForRecord: func(azRes db.ProjectAZResource) db.AZResourceID {
+					return azRes.AZResourceID
+				},
+				Create: func(id db.AZResourceID) (db.ProjectAZResource, error) {
+					return db.ProjectAZResource{
+						ProjectID:    dbProject.ID,
+						AZResourceID: id,
+					}, nil
+				},
+				Update: func(projectAZRes *db.ProjectAZResource) (err error) {
+					azRes, ok := sis.GetAZResourceForID(projectAZRes.AZResourceID)
+					if !ok { // defense in depth: referential integrity
+						return fmt.Errorf("no data found in ServiceInfoCache for az_resource.id %d", projectAZRes.AZResourceID)
+					}
+					az := azRes.AvailabilityZone
+					data := usageData[az]
+					projectAZRes.Usage = data.Usage
+					projectAZRes.PhysicalUsage = data.PhysicalUsage
+
+					// for the quota values, we want to
+					// a) reset both to None when HasQuota is false
+					// b) set a default quota of 0 if not set previously
+					// c) set backendQuota for the applicable cases according to topology, otherwise set None (important for topology switch)
+					// d) check for backendQuota drift
+					if !resource.HasQuota {
+						projectAZRes.BackendQuota = None[int64]()
+						projectAZRes.Quota = None[uint64]()
+					} else {
+						if datamodel.AZHasQuotaForTopology(resource.Topology, az) && projectAZRes.Quota.IsNone() {
+							// this branch will only be taken for new projects (where ACPQ has not computed a quota yet),
+							// so most likely `usage = 0` and thus `quota = 0`; but some resources have non-zero default usage
+							// (currently only Neutron, which auto-provisions a default security group with a few rules for each new project)
+							projectAZRes.Quota = Some[uint64](projectAZRes.Usage)
+						}
+						if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
+							projectAZRes.BackendQuota = data.Quota
+						} else {
+							projectAZRes.BackendQuota = None[int64]()
+						}
+						if datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
+							// check if we need to arrange for SetQuotaJob to look at this project service
+							backendQuota := projectAZRes.BackendQuota.UnwrapOr(-1)
+							quota := projectAZRes.Quota.UnwrapOr(0)
+							if backendQuota < 0 || uint64(backendQuota) != quota {
+								hasBackendQuotaDrift = true
+							}
+						}
+					}
+
+					// warn when the backend is inconsistent with itself
+					if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
+						logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
+							dbProject.UUID, service.Type, resourceName, az,
+							data.Usage, len(data.Subresources),
+						)
+					}
+
+					projectAZRes.SubresourcesJSON, err = util.RenderListToJSON("subresources", data.Subresources)
+					if err != nil {
+						return err
+					}
+
+					// track historical usage if required (only required for AutogrowQuotaDistribution)
+					autogrowCfg, ok := c.Cluster.QuotaDistributionConfigForResource(service.Type, resourceName).Autogrow.Unpack()
+					if ok {
+						ts, err := util.ParseTimeSeries[uint64](projectAZRes.HistoricalUsageJSON)
+						if err != nil {
+							return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
+						}
+						err = ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
+						if err != nil {
+							return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
+						}
+						ts.PruneOldValues(task.Timing.FinishedAt, autogrowCfg.UsageDataRetentionPeriod.Into())
+						projectAZRes.HistoricalUsageJSON, err = ts.Serialize()
+						if err != nil {
+							return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
+						}
+					} else {
+						projectAZRes.HistoricalUsageJSON = ""
+					}
+
+					return nil
+				},
+			}
+			_, err := setUpdate.Execute(ctx, tx, db.ProjectAZResourceStore)
+			if err != nil {
+				return err
+			}
+		}
+		if hasBackendQuotaDrift {
+			query := `UPDATE project_services ps SET quota_desynced_at = $1 WHERE ps.id = $2 AND quota_desynced_at IS NULL`
+			_, err := tx.Exec(query, c.MeasureTime(), task.ProjectService.ID)
+			if err != nil {
+				return fmt.Errorf("while scheduling backend sync for %s quotas: %w", serviceType, err)
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("while committing transaction: %w", err)
+		return err
 	}
 
 	if task.Timing.Duration() > 5*time.Minute {
@@ -470,164 +467,153 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 	}
 	rates := sis.GetRatesForType(serviceType) // can have no rates
 
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// For updating project_rates, we need to find the project_rates' rate_name
+		ratesByID := db.RateByIDIndex.Index(slices.Collect(rates.Values()))
 
-	// For updating project_rates, we need to find the project_rates' rate_name
-	ratesByID := db.RateByIDIndex.Index(slices.Collect(rates.Values()))
-
-	// update existing project_rates entries
-	rateExists := make(map[liquid.RateName]bool)
-	projectRates, err := db.ProjectRateStore.Select(ctx, tx,
-		`SELECT pra.* FROM project_rates pra JOIN rates ra ON pra.rate_id = ra.id WHERE ra.service_id = $1 AND pra.project_id = $2 ORDER BY ra.name`,
-		service.ID, projectService.ProjectID,
-	).Collect()
-	if err != nil {
-		return err
-	}
-
-	if len(projectRates) > 0 {
-		stmt, err := tx.Prepare(`UPDATE project_rates SET usage_as_bigint = $1 WHERE id = $2`)
+		// update existing project_rates entries
+		rateExists := make(map[liquid.RateName]bool)
+		projectRates, err := db.ProjectRateStore.Select(ctx, tx,
+			`SELECT pra.* FROM project_rates pra JOIN rates ra ON pra.rate_id = ra.id WHERE ra.service_id = $1 AND pra.project_id = $2 ORDER BY ra.name`,
+			service.ID, projectService.ProjectID,
+		).Collect()
 		if err != nil {
 			return err
 		}
-		defer stmt.Close()
 
-		for _, projectRate := range projectRates {
-			rateName := ratesByID[projectRate.RateID].Name
-			rateExists[rateName] = true
+		if len(projectRates) > 0 {
+			stmt, err := tx.Prepare(`UPDATE project_rates SET usage_as_bigint = $1 WHERE id = $2`)
+			if err != nil {
+				return err
+			}
+			defer stmt.Close()
+
+			for _, projectRate := range projectRates {
+				rateName := ratesByID[projectRate.RateID].Name
+				rateExists[rateName] = true
+
+				usageAsBigint := ""
+				if usage, exists := rateData[rateName]; exists {
+					usageAsBigint = usage.String()
+				}
+				if usageAsBigint != projectRate.UsageAsBigint {
+					_, err := stmt.Exec(usageAsBigint, projectRate.ID)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// insert missing project_rates entries
+		for _, rateName := range slices.Sorted(rates.Keys()) {
+			rate := rates.GetOrZero(rateName)
+			if _, exists := rateExists[rateName]; exists {
+				continue
+			}
 
 			usageAsBigint := ""
 			if usage, exists := rateData[rateName]; exists {
 				usageAsBigint = usage.String()
 			}
-			if usageAsBigint != projectRate.UsageAsBigint {
-				_, err := stmt.Exec(usageAsBigint, projectRate.ID)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
 
-	// insert missing project_rates entries
-	for _, rateName := range slices.Sorted(rates.Keys()) {
-		rate := rates.GetOrZero(rateName)
-		if _, exists := rateExists[rateName]; exists {
-			continue
-		}
-
-		usageAsBigint := ""
-		if usage, exists := rateData[rateName]; exists {
-			usageAsBigint = usage.String()
-		}
-
-		err = db.ProjectRateStore.Insert(ctx, tx, &db.ProjectRate{
-			ProjectID:     projectService.ProjectID,
-			RateID:        rate.ID,
-			UsageAsBigint: usageAsBigint,
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
-}
-
-func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Project, serviceType db.ServiceType) error {
-	// Rationale: This is called when we first try to scrape a project service,
-	// and the scraping fails (most likely due to some internal error in the
-	// backend service). We used to just not touch the database at this point,
-	// thus resuming scraping of the same project service in the next loop
-	// iteration of c.Scrape(). However, when the backend service is down for some
-	// time, this means that project_services in new projects are stuck without
-	// project_resources, which is an unexpected state that confuses the API.
-	//
-	// To avoid this situation, this method creates dummy project_resources for an
-	// unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
-	// 00:00:00 UTC) to make the scraper come back to it after dealing with all
-	// new and stale project_services.
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-	sis := c.Cluster.SIC.GetSnapshot()
-	service, sExists := sis.GetServiceForType(serviceType)
-	resources := sis.GetResourcesForType(serviceType) // can have no resources
-	if !sExists {                                     // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
-		return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
-	}
-
-	// create all project_resources, but do not set any particular values
-	err = datamodel.ProjectResourceUpdate{
-		UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-			// until we know better, we will assume Forbidden = true to ensure that
-			// quota does not get distributed into projects that cannot accept it
-			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
-			if resource.HasQuota {
-				res.Forbidden = true
-			}
-			return nil
-		},
-	}.Run(ctx, tx, dbProject, sis, serviceType)
-	if err != nil {
-		return err
-	}
-
-	for _, resName := range slices.Sorted(resources.Keys()) {
-		resource := resources.GetOrZero(resName)
-		resByAZ := sis.GetAZResourcesForPath(resource.Path)
-		for _, az := range slices.Sorted(resByAZ.Keys()) {
-			azResource := resByAZ.GetOrZero(az)
-			if az == limes.AvailabilityZoneUnknown {
-				// we don't write dummy entries for unknown - this should just exist, when there is real usage
-				continue
-			}
-			//  this replicates the logic from writeResourceScrapeResult with the infinite backendQuota (-1)
-			backendQuota := None[int64]()
-			quota := None[uint64]()
-			if resource.HasQuota && datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
-				backendQuota = Some(int64(-1))
-			}
-			if resource.HasQuota && datamodel.AZHasQuotaForTopology(resource.Topology, az) {
-				quota = Some[uint64](0)
-			}
-			err := db.ProjectAZResourceStore.Insert(ctx, tx, &db.ProjectAZResource{
-				ProjectID:    dbProject.ID,
-				AZResourceID: azResource.ID,
-				Usage:        0,
-				BackendQuota: backendQuota,
-				Quota:        quota,
+			err = db.ProjectRateStore.Insert(ctx, tx, &db.ProjectRate{
+				ProjectID:     projectService.ProjectID,
+				RateID:        rate.ID,
+				UsageAsBigint: usageAsBigint,
 			})
 			if err != nil {
 				return err
 			}
 		}
-	}
 
-	// TODO: Do we still want to find a way to make the datamodel work without dummy resources?
-	// with the total-AZ, we are kind of getting away from this desire, so at some point, we should discuss this again.
+		return nil
+	})
+}
 
-	// update scraped_at timestamp and reset stale flag to make sure that we do
-	// not scrape this service again immediately afterwards if there are other
-	// stale services to cover first
-	dummyScrapedAt := time.Unix(0, 0).UTC()
-	_, err = tx.Exec(
-		`UPDATE project_services
+func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Project, serviceType db.ServiceType) error {
+	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// Rationale: This is called when we first try to scrape a project service,
+		// and the scraping fails (most likely due to some internal error in the
+		// backend service). We used to just not touch the database at this point,
+		// thus resuming scraping of the same project service in the next loop
+		// iteration of c.Scrape(). However, when the backend service is down for some
+		// time, this means that project_services in new projects are stuck without
+		// project_resources, which is an unexpected state that confuses the API.
+		//
+		// To avoid this situation, this method creates dummy project_resources for an
+		// unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
+		// 00:00:00 UTC) to make the scraper come back to it after dealing with all
+		// new and stale project_services.
+		sis := c.Cluster.SIC.GetSnapshot()
+		service, sExists := sis.GetServiceForType(serviceType)
+		resources := sis.GetResourcesForType(serviceType) // can have no resources
+		if !sExists {                                     // defense in depth: when we get here, the scrape never happened, so the sic must be up to date
+			return fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
+		}
+
+		// create all project_resources, but do not set any particular values
+		err := datamodel.ProjectResourceUpdate{
+			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+				// until we know better, we will assume Forbidden = true to ensure that
+				// quota does not get distributed into projects that cannot accept it
+				resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resName})
+				if resource.HasQuota {
+					res.Forbidden = true
+				}
+				return nil
+			},
+		}.Run(ctx, tx, dbProject, sis, serviceType)
+		if err != nil {
+			return err
+		}
+
+		for _, resName := range slices.Sorted(resources.Keys()) {
+			resource := resources.GetOrZero(resName)
+			resByAZ := sis.GetAZResourcesForPath(resource.Path)
+			for _, az := range slices.Sorted(resByAZ.Keys()) {
+				azResource := resByAZ.GetOrZero(az)
+				if az == limes.AvailabilityZoneUnknown {
+					// we don't write dummy entries for unknown - this should just exist, when there is real usage
+					continue
+				}
+				//  this replicates the logic from writeResourceScrapeResult with the infinite backendQuota (-1)
+				backendQuota := None[int64]()
+				quota := None[uint64]()
+				if resource.HasQuota && datamodel.AZHasBackendQuotaForTopology(resource.Topology, az) {
+					backendQuota = Some(int64(-1))
+				}
+				if resource.HasQuota && datamodel.AZHasQuotaForTopology(resource.Topology, az) {
+					quota = Some[uint64](0)
+				}
+				err := db.ProjectAZResourceStore.Insert(ctx, tx, &db.ProjectAZResource{
+					ProjectID:    dbProject.ID,
+					AZResourceID: azResource.ID,
+					Usage:        0,
+					BackendQuota: backendQuota,
+					Quota:        quota,
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		// TODO: Do we still want to find a way to make the datamodel work without dummy resources?
+		// with the total-AZ, we are kind of getting away from this desire, so at some point, we should discuss this again.
+
+		// update scraped_at timestamp and reset stale flag to make sure that we do
+		// not scrape this service again immediately afterwards if there are other
+		// stale services to cover first
+		dummyScrapedAt := time.Unix(0, 0).UTC()
+		_, err = tx.Exec(
+			`UPDATE project_services
 			SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, quota_desynced_at = NULL
 			WHERE service_id = $4 AND project_id = $5`,
-		dummyScrapedAt, 0.0, false, service.ID, dbProject.ID,
-	)
-	if err != nil {
+			dummyScrapedAt, 0.0, false, service.ID, dbProject.ID,
+		)
 		return err
-	}
-
-	return tx.Commit()
+	})
 }
 
 func enrichUsageReportTotals(value *liquid.ServiceUsageReport, sis core.ServiceInfoSnapshot, serviceType db.ServiceType) {

@@ -17,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
@@ -190,60 +191,52 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	enrichCapacityReportTotals(&capacityData)
 
 	// do the following in a transaction to avoid inconsistent DB state
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// az_resources should be there - enumerate the data and complain if they don't match (with exceptions)
-	for _, res := range resources.All() {
-		resourceData, resExists := capacityData.Resources[res.Name]
-		if !resExists {
-			logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
-			continue
-		}
-
-		_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
-		for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
-			azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
-			// az=unknown and az=any do not have to exist
-			// specific AZs do not need capacity when az=any has capacity (sum should be correct)
-			if !azResExists && !slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, azRes.AvailabilityZone) && res.Topology != liquid.FlatTopology && !anyAZexists {
-				logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, azRes.AvailabilityZone, service.Type)
-			}
-			// the unknown AZ is the only one which can vanish from the report, we treat this as capacity=0 and usage=NULL
-			if !azResExists && azRes.AvailabilityZone == liquid.AvailabilityZoneUnknown {
-				azResExists = true
-				azResourceData = &liquid.AZResourceCapacityReport{}
-			}
-			// exit if no data
-			if !azResExists {
+	err = c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// az_resources should be there - enumerate the data and complain if they don't match (with exceptions)
+		for _, res := range resources.All() {
+			resourceData, resExists := capacityData.Resources[res.Name]
+			if !resExists {
+				logg.Error("could not find resource %s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, service.Type)
 				continue
 			}
 
-			azRes.RawCapacity = azResourceData.Capacity
-			if azResourceData.Capacity > 0 && azRes.AvailabilityZone != liquid.AvailabilityZoneTotal {
-				azRes.LastNonzeroRawCapacity = Some(azResourceData.Capacity)
-			}
+			_, anyAZexists := resourceData.PerAZ[liquid.AvailabilityZoneAny]
+			for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
+				azResourceData, azResExists := resourceData.PerAZ[azRes.AvailabilityZone]
+				// az=unknown and az=any do not have to exist
+				// specific AZs do not need capacity when az=any has capacity (sum should be correct)
+				if !azResExists && !slices.Contains([]liquid.AvailabilityZone{liquid.AvailabilityZoneAny, liquid.AvailabilityZoneUnknown}, azRes.AvailabilityZone) && res.Topology != liquid.FlatTopology && !anyAZexists {
+					logg.Error("could not find AZ resource %s/%s in capacity data of %s, either version was not bumped correctly or capacity configuration is incomplete", res.Name, azRes.AvailabilityZone, service.Type)
+				}
+				// the unknown AZ is the only one which can vanish from the report, we treat this as capacity=0 and usage=NULL
+				if !azResExists && azRes.AvailabilityZone == liquid.AvailabilityZoneUnknown {
+					azResExists = true
+					azResourceData = &liquid.AZResourceCapacityReport{}
+				}
+				// exit if no data
+				if !azResExists {
+					continue
+				}
 
-			azRes.Usage = azResourceData.Usage
-			azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", azResourceData.Subcapacities)
-			if err != nil {
-				return err
-			}
-			err := db.AZResourceStore.Update(ctx, tx, azRes)
-			if err != nil {
-				return err
+				azRes.RawCapacity = azResourceData.Capacity
+				if azResourceData.Capacity > 0 && azRes.AvailabilityZone != liquid.AvailabilityZoneTotal {
+					azRes.LastNonzeroRawCapacity = Some(azResourceData.Capacity)
+				}
+
+				azRes.Usage = azResourceData.Usage
+				azRes.SubcapacitiesJSON, err = util.RenderListToJSON("subcapacities", azResourceData.Subcapacities)
+				if err != nil {
+					return err
+				}
+				err := db.AZResourceStore.Update(ctx, tx, azRes)
+				if err != nil {
+					return err
+				}
 			}
 		}
-	}
 
-	err = db.ServiceStore.Update(ctx, tx, service)
-	if err != nil {
-		return err
-	}
-	err = tx.Commit()
+		return db.ServiceStore.Update(ctx, tx, service)
+	})
 	if err != nil {
 		return err
 	}
@@ -313,36 +306,33 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(ctx context.Context, re
 		return nil
 	}
 
-	tx, err := c.DB.Begin()
+	var auditEvents []audittools.Event
+	err := c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		committableAZs := c.Cluster.Config.AvailabilityZones
+		if resource.Topology == liquid.FlatTopology {
+			committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
+		}
+		for _, az := range committableAZs {
+			path := resource.Path.InAZ(az)
+			auditContext := audit.Context{
+				UserIdentity: audit.CollectorUserInfo{
+					TaskName: "capacity-scrape",
+				},
+				Request: audit.CollectorDummyRequest,
+			}
+			azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, path, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
+			if err != nil {
+				return err
+			}
+			auditEvents = append(auditEvents, azAuditEvents...)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer sqlext.RollbackUnlessCommitted(tx)
 
-	committableAZs := c.Cluster.Config.AvailabilityZones
-	if resource.Topology == liquid.FlatTopology {
-		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
-	}
-	var auditevents []audittools.Event
-	for _, az := range committableAZs {
-		path := resource.Path.InAZ(az)
-		auditContext := audit.Context{
-			UserIdentity: audit.CollectorUserInfo{
-				TaskName: "capacity-scrape",
-			},
-			Request: audit.CollectorDummyRequest,
-		}
-		azAuditEvents, err := datamodel.ConfirmPendingCommitments(ctx, path, c.Cluster, tx, now, c.GenerateProjectCommitmentUUID, c.GenerateTransferToken, auditContext)
-		if err != nil {
-			return err
-		}
-		auditevents = append(auditevents, azAuditEvents...)
-	}
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	for _, ae := range auditevents {
+	for _, ae := range auditEvents {
 		c.Auditor.Record(ae)
 	}
 	return nil

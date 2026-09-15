@@ -18,6 +18,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -227,33 +228,24 @@ var initProjectServicesQuery = sqlext.SimplifyWhitespace(`
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
 func (c *Collector) initProject(ctx context.Context, domain db.Domain, project core.KeystoneProject) error {
-	// do this in a transaction to avoid half-initialized projects
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		// add record to `projects` table
+		dbProject := db.Project{
+			DomainID:   domain.ID,
+			Name:       project.Name,
+			UUID:       project.UUID,
+			ParentUUID: project.ParentUUID,
+		}
+		err := db.ProjectStore.Insert(ctx, tx, &dbProject)
+		if err != nil {
+			return err
+		}
 
-	// add record to `projects` table
-	dbProject := db.Project{
-		DomainID:   domain.ID,
-		Name:       project.Name,
-		UUID:       project.UUID,
-		ParentUUID: project.ParentUUID,
-	}
-	err = db.ProjectStore.Insert(ctx, tx, &dbProject)
-	if err != nil {
+		// add records to `project_services` table
+		allServiceTypes := slices.Collect(maps.Keys(c.Cluster.Config.Liquids))
+		_, err = tx.Exec(initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
 		return err
-	}
-
-	// add records to `project_services` table
-	allServiceTypes := slices.Collect(maps.Keys(c.Cluster.Config.Liquids))
-	_, err = tx.Exec(initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	})
 }
 
 var (
@@ -271,31 +263,23 @@ var (
 // This requires special care because some constraints are "ON DELETE RESTRICT".
 func (c *Collector) deleteProject(ctx context.Context, project db.Project) error {
 	// do this in a transaction to avoid commitment deletions going through unless actually necessary
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		result, err := db.SelectOneValue[int64](tx, deleteProjectCheckBlockingCommitmentsQuery, project.ID)
+		if err != nil {
+			return err
+		}
+		if result > 0 {
+			return errors.New("project has commitments which are not superseded, expired or deleted")
+		}
 
-	result, err := db.SelectOneValue[int64](tx, deleteProjectCheckBlockingCommitmentsQuery, project.ID)
-	if err != nil {
-		return err
-	}
-	if result > 0 {
-		return errors.New("project has commitments which are not superseded, expired or deleted")
-	}
+		// it is fine to delete a project that only has superseded and expired commitments on it
+		// (if there are commitments in any other status, the `DELETE FROM projects` below will fail
+		// and rollback the full transaction)
+		_, err = tx.Exec(deleteProjectRemoveNonblockingCommitmentsQuery, project.ID)
+		if err != nil {
+			return err
+		}
 
-	// it is fine to delete a project that only has superseded and expired commitments on it
-	// (if there are commitments in any other status, the `DELETE FROM projects` below will fail
-	// and rollback the full transaction)
-	_, err = tx.Exec(deleteProjectRemoveNonblockingCommitmentsQuery, project.ID)
-	if err != nil {
-		return err
-	}
-
-	err = db.ProjectStore.Delete(ctx, tx, project)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
+		return db.ProjectStore.Delete(ctx, tx, project)
+	})
 }

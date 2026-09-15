@@ -16,7 +16,7 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
@@ -253,37 +253,32 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// write requested values to DB
-	tx, err := p.DB.Begin()
-	if respondwith.ObfuscatedErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	err := p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+			service, _ := sis.GetServiceForType(serviceType)
+			requestedInService, exists := requested[service.Type]
+			if !exists {
+				continue
+			}
 
-	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
-		service, _ := sis.GetServiceForType(serviceType)
-		requestedInService, exists := requested[service.Type]
-		if !exists {
-			continue
-		}
-
-		// when we got here, we can be sure the service exists
-		err := datamodel.ProjectResourceUpdate{
-			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-				requestedChange := requestedInService[resName]
-				if requestedChange != nil {
-					requestedChange.OldValue = res.MaxQuotaFromOutsideAdmin // remember for audit event
-					res.MaxQuotaFromOutsideAdmin = requestedChange.NewValue
+			// when we got here, we can be sure the service exists
+			err := datamodel.ProjectResourceUpdate{
+				UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+					requestedChange := requestedInService[resName]
+					if requestedChange != nil {
+						requestedChange.OldValue = res.MaxQuotaFromOutsideAdmin // remember for audit event
+						res.MaxQuotaFromOutsideAdmin = requestedChange.NewValue
+						return nil
+					}
 					return nil
-				}
-				return nil
-			},
-		}.Run(ctx, tx, *dbProject, sis, serviceType)
-		if respondwith.ObfuscatedErrorText(w, err) {
-			return
+				},
+			}.Run(ctx, tx, *dbProject, sis, serviceType)
+			if err != nil {
+				return err
+			}
 		}
-	}
-
-	err = tx.Commit()
+		return nil
+	})
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -394,36 +389,31 @@ func (p *v1Provider) PutQuotaAutogrowth(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// write requested values to DB
-	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
+	err := p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+		for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+			service, _ := sis.GetServiceForType(serviceType)
+			requestedInService, exists := requested[service.Type]
+			if !exists {
+				continue
+			}
 
-	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
-		service, _ := sis.GetServiceForType(serviceType)
-		requestedInService, exists := requested[service.Type]
-		if !exists {
-			continue
-		}
-
-		// when we got here, we can be sure the service exists
-		err := datamodel.ProjectResourceUpdate{
-			UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
-				requestedChange := requestedInService[resName]
-				if requestedChange != nil {
-					res.ForbidAutogrowth = requestedChange.ForbidAutogrowth
+			// when we got here, we can be sure the service exists
+			err := datamodel.ProjectResourceUpdate{
+				UpdateResource: func(res *db.ProjectResource, resName liquid.ResourceName) error {
+					requestedChange := requestedInService[resName]
+					if requestedChange != nil {
+						res.ForbidAutogrowth = requestedChange.ForbidAutogrowth
+						return nil
+					}
 					return nil
-				}
-				return nil
-			},
-		}.Run(ctx, tx, *dbProject, sis, serviceType)
-		if respondwith.ErrorText(w, err) {
-			return
+				},
+			}.Run(ctx, tx, *dbProject, sis, serviceType)
+			if err != nil {
+				return err
+			}
 		}
-	}
-
-	err = tx.Commit()
+		return nil
+	})
 	if respondwith.ErrorText(w, err) {
 		return
 	}

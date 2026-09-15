@@ -73,31 +73,22 @@ var olapSemaphore = syncext.NewSemaphore(2)
 //
 // This should only be used sparingly; each process is only allowed to run two
 // such queries at the same time to limit the total memory usage on the DB server.
-func RunOLAPQueries(db *gsql.DB, action func(tx *gsql.Tx) error) error {
+func RunOLAPQueries(ctx context.Context, db *gsql.DB, action func(tx *gsql.Tx) error) error {
 	return olapSemaphore.RunFallible(func() error {
 		// since we don't have direct control over the connections which live in
 		// database/sql.Conn's connection pool, we can only limit the effect of the
 		// `SET work_mem TO ...` statement to the intended action by wrapping it in a
 		// transaction
-		tx, err := db.Begin()
-		if err != nil {
-			return err
-		}
-		defer sqlext.RollbackUnlessCommitted(tx)
+		return db.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
+			// the SET statement does not accept a placeholder for its argument, so we
+			// need to do the ugly thing and escape by hand
+			workMemStr := osext.GetenvOrDefault("LIMES_DB_WORKMEM_FOR_OLAP", "128MB")
+			_, err := tx.Exec(fmt.Sprintf(`SET LOCAL work_mem TO '%s'`, strings.ReplaceAll(workMemStr, "'", "''")))
+			if err != nil {
+				return fmt.Errorf("could not set work_mem = %q for OLAP query: %w", workMemStr, err)
+			}
 
-		// the SET statement does not accept a placeholder for its argument, so we
-		// need to do the ugly thing and escape by hand
-		workMemStr := osext.GetenvOrDefault("LIMES_DB_WORKMEM_FOR_OLAP", "128MB")
-		_, err = tx.Exec(fmt.Sprintf(`SET LOCAL work_mem TO '%s'`, strings.ReplaceAll(workMemStr, "'", "''")))
-		if err != nil {
-			return fmt.Errorf("could not set work_mem = %q for OLAP query: %w", workMemStr, err)
-		}
-
-		err = action(tx)
-		if err != nil {
-			return err
-		}
-
-		return tx.Rollback()
+			return action(tx)
+		})
 	})
 }
