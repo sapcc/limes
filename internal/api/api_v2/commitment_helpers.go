@@ -52,6 +52,9 @@ var (
 	errNoCommitmentModification      = errors.New("one commitment modification has to be set")
 	errNoDurationShortening          = errors.New("commitment duration must not be shortened")
 	errNoSuchTransferStatus          = errors.New("no such commitment transfer status")
+	errSplitInTwoOrMore              = errors.New("commitment has to be split in two or more commitments")
+	errAmountMismatch                = errors.New("sum of split amounts must equal the original commitment amount")
+	errNoTransferSplit               = errors.New(`commitment in transfer must not be split`)
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
