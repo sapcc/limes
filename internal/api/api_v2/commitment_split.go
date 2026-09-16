@@ -42,18 +42,20 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return none, err
 	}
+	if len(req.Amounts) < 2 {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errSplitInTwoOrMore)
+	}
+
 	err = p.DB.WithinTransaction(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *gsql.Tx) error {
 		cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
-		c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_create", cUUID)
+		commitments, azRes, scope, err := p.selectCommitmentsIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_create", []liquid.CommitmentUUID{cUUID})
 		if err != nil {
 			return err
 		}
+		c := commitments[0]
 		deletable := isDeletable(token, c, now)
 
-		// validate request
-		if len(req.Amounts) < 2 {
-			return respondwith.CustomStatus(http.StatusBadRequest, errSplitInTwoOrMore)
-		}
+		// validate sum of amounts
 		newSum := uint64(0)
 		for _, amount := range req.Amounts {
 			newSum += amount

@@ -55,6 +55,11 @@ var (
 	errSplitInTwoOrMore              = errors.New("commitment has to be split in two or more commitments")
 	errAmountMismatch                = errors.New("sum of split amounts must equal the original commitment amount")
 	errNoTransferSplit               = errors.New(`commitment in transfer must not be split`)
+	errMergeInTwoOrMore              = errors.New("commitment merge requires at least two commitments")
+	errOnlyConfirmedMergeable        = errors.New("only confirmed commitments may be merged")
+	errNoTransferMerge               = errors.New("commitments in transfer cannot be merged")
+	errDifferentProjects             = errors.New("all commitments must belong to the same project")
+	errDifferentAZResources          = errors.New("all commitments must be on the same resource and AZ")
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
@@ -251,28 +256,45 @@ var findActiveCommitmentQuery = db.ProjectCommitmentStore.MustPrepareSelectQuery
 	)),
 )
 
-func (p *v2Provider) selectCommitmentIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUID liquid.CommitmentUUID) (_ db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
-	c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
-		return
-	case err != nil:
-		return
+func (p *v2Provider) selectCommitmentsIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUIDs []liquid.CommitmentUUID) (_ []db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+	commitments := make([]db.ProjectCommitment, len(cUUIDs))
+	for i, cUUID := range cUUIDs {
+		c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
+			return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+		case err != nil:
+			return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+		}
+
+		// all commitments must belong to the same project and AZ resource
+		if i > 0 {
+			if c.ProjectID != commitments[0].ProjectID {
+				err = respondwith.CustomStatus(http.StatusConflict, errDifferentProjects)
+				return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+			}
+			if c.AZResourceID != commitments[0].AZResourceID {
+				err = respondwith.CustomStatus(http.StatusConflict, errDifferentAZResources)
+				return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+			}
+		}
+
+		commitments[i] = c
 	}
 
-	// obtain service ref
-	azRes, ok := sis.GetAZResourceForID(c.AZResourceID)
+	// obtain service ref (using the first commitment's AZResourceID, since all are the same)
+	azRes, ok := sis.GetAZResourceForID(commitments[0].AZResourceID)
 	if !ok {
 		err = errInvalidResourceReference
 		// defense in depth, the referenced AZResource should exist
-		return
+		return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
 	}
 
-	// check auth
-	scope, err := p.checkProjectAccessByID(ctx, token, c.ProjectID, policyRule)
+	// check auth (using the first commitment's ProjectID, since all are the same)
+	scope, err := p.checkProjectAccessByID(ctx, token, commitments[0].ProjectID, policyRule)
 	if err != nil {
-		return
+		return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
 	}
-	return c, azRes, scope, nil
+	return commitments, azRes, scope, nil
 }

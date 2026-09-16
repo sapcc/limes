@@ -232,13 +232,13 @@ func TestCommitmentSplitErrors(t *testing.T) {
 
 			// check permissions
 			s.TokenValidator.Enforcer.AllowCommitmentCreate = false
-			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{}, func(r httptest.Response) {
+			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"amounts": []uint64{2, 2}}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusForbidden, "Forbidden\n")
 			})
 			s.TokenValidator.Enforcer.AllowCommitmentCreate = true
 
 			// non-existing commitment
-			splitCommitmentAndExpectError(t, s, tr, "bla", map[string]any{}, func(r httptest.Response) {
+			splitCommitmentAndExpectError(t, s, tr, "bla", map[string]any{"amounts": []uint64{2, 2}}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusNotFound, "no such commitment\n")
 			})
 

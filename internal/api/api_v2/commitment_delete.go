@@ -40,13 +40,14 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 	err := p.DB.WithinTransaction(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *gsql.Tx) error {
 		// validate request contents
 		cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
-		c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", cUUID)
+		commitments, azRes, scope, err := p.selectCommitmentsIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_delete", []liquid.CommitmentUUID{cUUID})
 		switch {
 		case errors.Is(err, errNoSuchCommitment):
 			return nil // respond with 204 if commitment already deleted (DELETE should be idempotent)
 		case err != nil:
 			return err
 		}
+		c := commitments[0]
 		deletable := isDeletable(token, c, now)
 		if !deletable {
 			err = respondwith.CustomStatus(http.StatusForbidden, errNotDeletable)

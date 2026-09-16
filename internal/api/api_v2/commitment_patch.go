@@ -48,10 +48,11 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 	}
 	err = p.DB.WithinTransaction(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *gsql.Tx) error {
 		cUUID := liquid.CommitmentUUID(mux.Vars(r)["commitment_uuid"])
-		c, azRes, scope, err := p.selectCommitmentIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_update", cUUID)
+		commitments, azRes, scope, err := p.selectCommitmentsIfPermittedAndAlive(ctx, tx, sis, token, "v2:project:commitment_update", []liquid.CommitmentUUID{cUUID})
 		if err != nil {
 			return err
 		}
+		c := commitments[0]
 
 		// prep the same commitment for early return
 		deletable := isDeletable(token, c, now)
