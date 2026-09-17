@@ -24,7 +24,7 @@ import (
 )
 
 // Helper function for a successful commitment split.
-func splitCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCommitments bool, uuid liquid.CommitmentUUID, request map[string]any, expected jsonmatch.Object, auditEventFunc func() cadf.Resource) {
+func splitCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCommitments bool, uuid liquid.CommitmentUUID, request map[string]any, expected jsonmatch.Object, getAuditTarget func() cadf.Resource) {
 	t.Helper()
 	ctx := t.Context()
 	mockLiquid := s.LiquidClients["first"]
@@ -38,13 +38,13 @@ func splitCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCo
 	path := "/resources/v2/commitments/" + string(uuid) + "/split"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
-	ae := auditEventFunc()
+	target := getAuditTarget()
 	s.Auditor.ExpectEvents(t, cadf.Event{
 		Action:      "create",
 		Outcome:     "success",
 		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "201"},
 		RequestPath: path,
-		Target:      ae,
+		Target:      target,
 	})
 
 	if liquidHandlesCommitments {
@@ -52,7 +52,7 @@ func splitCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCo
 		// (the same as inside the audit event payload)
 		actualCCR := must.Return(json.Marshal(mockLiquid.LastCommitmentChangeRequest))
 		var expectedCCR jsonmatch.Object
-		must.SucceedT(t, json.Unmarshal([]byte(ae.Attachments[0].Content.(string)), &expectedCCR))
+		must.SucceedT(t, json.Unmarshal([]byte(target.Attachments[0].Content.(string)), &expectedCCR))
 		for _, diff := range expectedCCR.DiffAgainst(actualCCR) {
 			t.Error("in MockLiquid.LastCommitmentChangeRequest: " + diff.String())
 		}
@@ -106,7 +106,7 @@ func TestCommitmentSplitHappyPaths(t *testing.T) {
 			o3["uuid"] = jsonmatch.CaptureField(&uuidNew3)
 			o3["amount"] = 6
 			expectedJSON := jsonmatch.Object{"commitments": jsonmatch.Array{o1, o2, o3}}
-			expectedAuditEventFunc := func() cadf.Resource {
+			auditTargetFunc := func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
 					ID:          string(uuidOriginal),
@@ -150,7 +150,7 @@ func TestCommitmentSplitHappyPaths(t *testing.T) {
 					}))},
 				}
 			}
-			splitCommitmentAndExpectSuccess(t, s, manager == "liquid", uuidOriginal, map[string]any{"amounts": []uint64{1, 3, 6}}, expectedJSON, expectedAuditEventFunc)
+			splitCommitmentAndExpectSuccess(t, s, manager == "liquid", uuidOriginal, map[string]any{"amounts": []uint64{1, 3, 6}}, expectedJSON, auditTargetFunc)
 			tr.DBChanges().AssertEqualf(`
 				UPDATE project_commitments SET status = 'superseded', superseded_at = %[5]d, supersede_context_json = '{"reason": "split", "related_ids": [2, 3, 4], "related_uuids": ["%[2]s", "%[3]s", "%[4]s"]}', updated_at = %[5]d WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = NULL;
 				INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json, updated_at) VALUES (2, '%[2]s', 3, 2, 'confirmed', 1, '1 hour', %[5]d, 'uuid-for-alice', 'alice@Default', %[6]d, %[7]d, '{"reason": "split", "related_ids": [1], "related_uuids": ["%[1]s"]}', %[5]d);
@@ -175,7 +175,7 @@ func TestCommitmentSplitHappyPaths(t *testing.T) {
 			o3["created_at"] = newCreatedAt.Format(time.RFC3339)
 			o3["updated_at"] = newCreatedAt.Format(time.RFC3339)
 			expectedJSON = jsonmatch.Object{"commitments": jsonmatch.Array{o1, o2, o3}}
-			expectedAuditEventFunc = func() cadf.Resource {
+			auditTargetFunc = func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
 					ID:          string(uuidNew3),
@@ -219,7 +219,7 @@ func TestCommitmentSplitHappyPaths(t *testing.T) {
 					}))},
 				}
 			}
-			splitCommitmentAndExpectSuccess(t, s, manager == "liquid", uuidNew3, map[string]any{"amounts": []uint64{2, 2, 2}}, expectedJSON, expectedAuditEventFunc)
+			splitCommitmentAndExpectSuccess(t, s, manager == "liquid", uuidNew3, map[string]any{"amounts": []uint64{2, 2, 2}}, expectedJSON, auditTargetFunc)
 		})
 	}
 }

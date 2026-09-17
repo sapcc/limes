@@ -63,7 +63,7 @@ func commonMergeCommitmentsSetup(t *testing.T, manager string) (s test.Setup, tr
 }
 
 // Helper function for a successful commitment merge.
-func mergeCommitmentsAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCommitments bool, request map[string]any, expected jsonmatch.Object, auditEventFunc func() cadf.Resource) {
+func mergeCommitmentsAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCommitments bool, request map[string]any, expected jsonmatch.Object, getAuditTarget func() cadf.Resource) {
 	t.Helper()
 	ctx := t.Context()
 	mockLiquid := s.LiquidClients["first"]
@@ -75,19 +75,19 @@ func mergeCommitmentsAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesC
 	path := "/resources/v2/commitments/merge"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
-	ae := auditEventFunc()
+	target := getAuditTarget()
 	s.Auditor.ExpectEvents(t, cadf.Event{
 		Action:      "create",
 		Outcome:     "success",
 		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "201"},
 		RequestPath: path,
-		Target:      ae,
+		Target:      target,
 	})
 
 	if liquidHandlesCommitments {
 		actualCCR := must.Return(json.Marshal(mockLiquid.LastCommitmentChangeRequest))
 		var expectedCCR jsonmatch.Object
-		must.SucceedT(t, json.Unmarshal([]byte(ae.Attachments[0].Content.(string)), &expectedCCR))
+		must.SucceedT(t, json.Unmarshal([]byte(target.Attachments[0].Content.(string)), &expectedCCR))
 		for _, diff := range expectedCCR.DiffAgainst(actualCCR) {
 			t.Error("in MockLiquid.LastCommitmentChangeRequest: " + diff.String())
 		}
@@ -121,7 +121,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			expectedJSON["confirmed_at"] = mergeTime.Format(time.RFC3339)
 			expectedJSON["updated_at"] = mergeTime.Format(time.RFC3339)
 
-			expectedAuditEventFunc := func() cadf.Resource {
+			auditTargetFunc := func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
 					ID:          string(uuid1),
@@ -163,7 +163,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			}
 			mergeCommitmentsAndExpectSuccess(t, s, manager == "liquid",
 				map[string]any{"commitment_uuids": []string{string(uuid1), string(uuid2)}},
-				expectedJSON, expectedAuditEventFunc)
+				expectedJSON, auditTargetFunc)
 			tr.DBChanges().AssertEqualf(`
 				UPDATE project_commitments SET status = 'superseded', superseded_at = %[4]d, supersede_context_json = '{"reason": "merge", "related_ids": [5], "related_uuids": ["%[3]s"]}', updated_at = %[4]d WHERE id = 1 AND uuid = '%[1]s' AND transfer_token = NULL;
 				UPDATE project_commitments SET status = 'superseded', superseded_at = %[4]d, supersede_context_json = '{"reason": "merge", "related_ids": [5], "related_uuids": ["%[3]s"]}', updated_at = %[4]d WHERE id = 2 AND uuid = '%[2]s' AND transfer_token = NULL;
@@ -182,7 +182,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			expectedJSON["updated_at"] = mergeTime2.Format(time.RFC3339)
 			expectedJSON["expires_at"] = initialExpiresAt.Add(1 * time.Hour)
 
-			expectedAuditEventFunc = func() cadf.Resource {
+			auditTargetFunc = func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
 					ID:          string(uuidMerged1),
@@ -230,7 +230,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			}
 			mergeCommitmentsAndExpectSuccess(t, s, manager == "liquid",
 				map[string]any{"commitment_uuids": []string{string(uuidMerged1), string(uuid3), string(uuid4)}},
-				expectedJSON, expectedAuditEventFunc)
+				expectedJSON, auditTargetFunc)
 			tr.DBChanges().AssertEqualf(`
 				UPDATE project_commitments SET status = 'superseded', superseded_at = %[5]d, supersede_context_json = '{"reason": "merge", "related_ids": [6], "related_uuids": ["%[4]s"]}', updated_at = %[5]d WHERE id = 3 AND uuid = '%[2]s' AND transfer_token = NULL;
 				UPDATE project_commitments SET status = 'superseded', superseded_at = %[5]d, supersede_context_json = '{"reason": "merge", "related_ids": [6], "related_uuids": ["%[4]s"]}', updated_at = %[5]d WHERE id = 4 AND uuid = '%[3]s' AND transfer_token = NULL;
