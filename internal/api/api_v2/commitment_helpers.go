@@ -54,6 +54,7 @@ var (
 	errNoSuchTransferStatus          = errors.New("no such commitment transfer status")
 	errSplitInTwoOrMore              = errors.New("commitment has to be split in two or more commitments")
 	errAmountMismatch                = errors.New("sum of split amounts must equal the original commitment amount")
+	errAmountOverflow                = errors.New("sum of amounts must not overflow uint64")
 	errNoTransferSplit               = errors.New(`commitment in transfer must not be split`)
 	errMergeInTwoOrMore              = errors.New("commitment merge requires at least two commitments")
 	errOnlyConfirmedMergeable        = errors.New("only confirmed commitments may be merged")

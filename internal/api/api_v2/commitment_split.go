@@ -58,6 +58,9 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		// validate sum of amounts
 		newSum := uint64(0)
 		for _, amount := range req.Amounts {
+			if newSum+amount < newSum {
+				return respondwith.CustomStatus(http.StatusBadRequest, errAmountOverflow)
+			}
 			newSum += amount
 		}
 		if newSum != c.Amount {
@@ -72,9 +75,17 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		if err != nil {
 			return err
 		}
-		splitLiquidCommitments := make([]liquid.Commitment, len(splitCommitments))
+		commitmentsForCCR := make([]liquid.Commitment, len(splitCommitments)+1)
+		commitmentsForCCR[0] = liquid.Commitment{
+			UUID:      c.UUID,
+			OldStatus: Some(c.Status),
+			NewStatus: Some(liquid.CommitmentStatusSuperseded),
+			Amount:    c.Amount,
+			ConfirmBy: c.ConfirmBy,
+			ExpiresAt: c.ExpiresAt.UTC(),
+		}
 		for i, splitCommitment := range splitCommitments {
-			splitLiquidCommitments[i] = liquid.Commitment{
+			commitmentsForCCR[i+1] = liquid.Commitment{
 				UUID:      splitCommitment.UUID,
 				NewStatus: Some(splitCommitment.Status),
 				Amount:    splitCommitment.Amount,
@@ -88,16 +99,6 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		if err != nil {
 			return err
 		}
-		ccrCommitments := append([]liquid.Commitment{
-			{
-				UUID:      c.UUID,
-				OldStatus: Some(c.Status),
-				NewStatus: Some(liquid.CommitmentStatusSuperseded),
-				Amount:    c.Amount,
-				ConfirmBy: c.ConfirmBy,
-				ExpiresAt: c.ExpiresAt.UTC(),
-			},
-		}, splitLiquidCommitments...)
 		ccr = liquid.CommitmentChangeRequest{
 			AZ:          azRes.Path.AvailabilityZone,
 			InfoVersion: must.BeOK(sis.GetServiceForType(azRes.Path.ServiceType)).LiquidVersion,
@@ -110,7 +111,7 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 							TotalConfirmedAfter:   stats.TotalConfirmed,
 							TotalGuaranteedBefore: stats.TotalGuaranteed,
 							TotalGuaranteedAfter:  stats.TotalGuaranteed,
-							Commitments:           ccrCommitments,
+							Commitments:           commitmentsForCCR,
 						},
 					},
 				},
@@ -152,12 +153,7 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		c.Status = liquid.CommitmentStatusSuperseded
 		c.SupersededAt = Some(now)
 		c.UpdatedAt = now
-		err = db.ProjectCommitmentStore.Update(ctx, tx, c)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return db.ProjectCommitmentStore.Update(ctx, tx, c)
 	})
 	if err != nil {
 		return none, err

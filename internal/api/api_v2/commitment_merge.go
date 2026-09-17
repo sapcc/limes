@@ -57,7 +57,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		// * collect IDs for context
 		commitmentIDs := make([]db.ProjectCommitmentID, len(commitments))
 		commitmentUUIDs := make([]liquid.CommitmentUUID, len(commitments))
-		liquidCommitments := make([]liquid.Commitment, 0, len(commitments)+1)
+		commitmentsForCCR := make([]liquid.Commitment, len(commitments)+1)
 		var (
 			totalAmount    uint64
 			latestDuration = commitments[0].Duration
@@ -74,14 +74,14 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 			commitmentIDs[i] = c.ID
 			commitmentUUIDs[i] = c.UUID
 			totalAmount += c.Amount
-			liquidCommitments = append(liquidCommitments, liquid.Commitment{
+			commitmentsForCCR[i] = liquid.Commitment{
 				UUID:      c.UUID,
 				OldStatus: Some(liquid.CommitmentStatusConfirmed),
 				NewStatus: Some(liquid.CommitmentStatusSuperseded),
 				Amount:    c.Amount,
 				ConfirmBy: c.ConfirmBy,
 				ExpiresAt: c.ExpiresAt,
-			})
+			}
 			if c.ExpiresAt.After(latestExpiry) {
 				latestExpiry = c.ExpiresAt
 				latestDuration = c.Duration
@@ -97,7 +97,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		if err != nil {
 			return err
 		}
-		mergedCommitment := &db.ProjectCommitment{
+		mergedCommitment := db.ProjectCommitment{
 			UUID:                datamodel.GenerateProjectCommitmentUUID(),
 			ProjectID:           commitments[0].ProjectID,
 			AZResourceID:        commitments[0].AZResourceID,
@@ -114,13 +114,13 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		}
 
 		// inform liquid
-		liquidCommitments = append(liquidCommitments, liquid.Commitment{
+		commitmentsForCCR[len(commitmentsForCCR)-1] = liquid.Commitment{
 			UUID:      mergedCommitment.UUID,
 			NewStatus: Some(liquid.CommitmentStatusConfirmed),
 			Amount:    mergedCommitment.Amount,
 			ConfirmBy: mergedCommitment.ConfirmBy,
 			ExpiresAt: mergedCommitment.ExpiresAt,
-		})
+		}
 		stats, err := getCommitmentStats(p.DB, commitments[0].ProjectID, commitments[0].AZResourceID)
 		if err != nil {
 			return err
@@ -137,7 +137,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 							TotalConfirmedAfter:   stats.TotalConfirmed,
 							TotalGuaranteedBefore: stats.TotalGuaranteed,
 							TotalGuaranteedAfter:  stats.TotalGuaranteed,
-							Commitments:           liquidCommitments,
+							Commitments:           commitmentsForCCR,
 						},
 					},
 				},
@@ -155,7 +155,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		}
 
 		// do insert and then extract the related IDs for the updates
-		err = db.ProjectCommitmentStore.Insert(ctx, tx, mergedCommitment)
+		err = db.ProjectCommitmentStore.Insert(ctx, tx, &mergedCommitment)
 		if err != nil {
 			return err
 		}
@@ -180,8 +180,8 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		}
 
 		// assemble result
-		deletable := isDeletable(token, *mergedCommitment, now)
-		result = convertCommitmentToDisplayForm(*mergedCommitment, azRes.Path, scope.Project.UUID, deletable)
+		deletable := isDeletable(token, mergedCommitment, now)
+		result = convertCommitmentToDisplayForm(mergedCommitment, azRes.Path, scope.Project.UUID, deletable)
 		return nil
 	})
 	if err != nil {

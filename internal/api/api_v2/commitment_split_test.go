@@ -257,6 +257,11 @@ func TestCommitmentSplitErrors(t *testing.T) {
 				r.ExpectText(t, http.StatusBadRequest, "sum of split amounts must equal the original commitment amount\n")
 			})
 
+			// amount overflow
+			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"amounts": []uint64{5 + (1 << 63), 5 + (1 << 63)}}, func(r httptest.Response) {
+				r.ExpectText(t, http.StatusBadRequest, "sum of amounts must not overflow uint64\n")
+			})
+
 			// commitment in transfer cannot be split
 			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectStatus(t, http.StatusAccepted)
