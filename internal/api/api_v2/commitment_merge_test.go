@@ -247,11 +247,11 @@ func TestCommitmentMergeErrors(t *testing.T) {
 			s, tr, uuid1, uuid2, _, _, _, _, _ := commonMergeCommitmentsSetup(t, manager)
 
 			// check permissions
-			s.TokenValidator.Enforcer.AllowcommitmentUpdate = false
+			s.TokenValidator.Enforcer.AllowCommitmentUpdate = false
 			mergeCommitmentsAndExpectError(t, s, tr, map[string]any{"commitment_uuids": []string{string(uuid1), string(uuid2)}}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusForbidden, "Forbidden\n")
 			})
-			s.TokenValidator.Enforcer.AllowcommitmentUpdate = true
+			s.TokenValidator.Enforcer.AllowCommitmentUpdate = true
 
 			// non-existing commitment
 			mergeCommitmentsAndExpectError(t, s, tr, map[string]any{"commitment_uuids": []string{string(uuid1), "nonexistent-uuid"}}, func(r httptest.Response) {

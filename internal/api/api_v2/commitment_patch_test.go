@@ -236,11 +236,11 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			s, tr, uuidOne, _, expiresAt, expectedJSON := commonExistingCommitmentSetup(t, manager)
 
 			// check permissions
-			s.TokenValidator.Enforcer.AllowcommitmentUpdate = false
+			s.TokenValidator.Enforcer.AllowCommitmentUpdate = false
 			patchCommitmentAndExpectError(t, s, tr, uuidOne, map[string]any{}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusForbidden, "Forbidden\n")
 			})
-			s.TokenValidator.Enforcer.AllowcommitmentUpdate = true
+			s.TokenValidator.Enforcer.AllowCommitmentUpdate = true
 
 			// non-existing commitment
 			patchCommitmentAndExpectError(t, s, tr, "bla", map[string]any{}, func(r httptest.Response) {
