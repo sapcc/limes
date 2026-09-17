@@ -97,6 +97,16 @@ type CommitmentPatchRequest struct {
 	Duration       Option[limesresources.CommitmentDuration]       `json:"duration,omitzero"` // may only be used to increase duration, not decrease it
 }
 
+// CommitmentSplitRequest is the request payload format for POST /v2/commitments/:uuid/split.
+type CommitmentSplitRequest struct {
+	Amounts []uint64 `json:"amounts"` // must sum to the amount of the existing commitment
+}
+
+// CommitmentMergeRequest is the request payload format for POST /v2/commitments/merge.
+type CommitmentMergeRequest struct {
+	CommitmentUUIDs []liquid.CommitmentUUID `json:"commitment_uuids"` // all must be in the same project AZ resource
+}
+
 // CommitmentConfiguration describes how commitments are configured for a given resource.
 //
 // This appears as a field on resource reports, if the respective resource allows commitments.

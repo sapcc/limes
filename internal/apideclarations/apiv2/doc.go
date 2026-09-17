@@ -97,6 +97,21 @@
 //
 // Alters properties of an existing commitment according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentPatchRequest].
+//   - On success, status code 202 (Accepted) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/split
+//
+// Splits an existing commitment into two or more commitments according to the given body, if permissions allow.
+//   - The request body payload must be of type [resourcesv2.CommitmentSplitRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
+//
+// # Endpoint: POST /resources/v2/commitments/merge
+//
+// Merges two or more existing commitments according to the given body, if permissions allow.
+//   - The request body payload must be of type [resourcesv2.CommitmentMergeRequest].
+//   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
 // # Endpoint: DELETE /resources/v2/commitments/:uuid

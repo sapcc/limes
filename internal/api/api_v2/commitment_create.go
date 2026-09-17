@@ -37,6 +37,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 		none resourcesv2.Commitment // used on error return paths only
 		ctx  = r.Context()
 		sis  = p.Cluster.SIC.GetSnapshot()
+		now  = p.timeNow()
 	)
 
 	// parse request
@@ -54,7 +55,6 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 		ConfirmBy:       options.Map(req.ConfirmBy, common.FromRFC3339EncodedTime),
 		NotifyOnConfirm: req.NotifyOnConfirm,
 	}
-	now := p.timeNow()
 
 	// validate request contents
 	scope, err := p.checkProjectAccess(ctx, token, req.ProjectUUID, "v2:project:commitment_create")
@@ -231,7 +231,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 		}
 	}
 
-	deletable := isDeletable(token, c, p.timeNow)
+	deletable := isDeletable(token, c, now)
 	result := convertCommitmentToDisplayForm(c, path, scope.Project.UUID, deletable)
 	if req.DryRun {
 		result.UUID = "00000000-0000-0000-0000-000000000000"
