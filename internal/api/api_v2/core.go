@@ -71,6 +71,7 @@ func (p *v2Provider) AddTo(c *httpapi.Composer) {
 	resRouter.Methods("PATCH").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handlePatchCommitment))
 	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/split").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleSplitCommitment))
 	resRouter.Methods("POST").Path("/commitments/merge").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleMergeCommitments))
+	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/renew").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handleRenewCommitment))
 	resRouter.Methods("GET").Path("/commitments").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentMultiple))
 	resRouter.Methods("GET").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentSingle))
 

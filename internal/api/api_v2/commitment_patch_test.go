@@ -267,7 +267,7 @@ func TestCommitmentPatchErrors(t *testing.T) {
 
 			// non-existing duration
 			patchCommitmentAndExpectError(t, s, tr, uuidOne, map[string]any{"duration": "1000 days"}, func(r httptest.Response) {
-				r.ExpectText(t, http.StatusBadRequest, "unacceptable commitment duration for this resource; acceptable values: [\"1 hour\",\"2 hours\"]\n")
+				r.ExpectText(t, http.StatusBadRequest, "unacceptable commitment duration for this resource; acceptable values: [\"1 hour\",\"2 hours\",\"1 year\"]\n")
 			})
 
 			// duration shortening

@@ -61,6 +61,11 @@ var (
 	errNoTransferMerge               = errors.New("commitments in transfer cannot be merged")
 	errDifferentProjects             = errors.New("all commitments must belong to the same project")
 	errDifferentAZResources          = errors.New("all commitments must be on the same resource and AZ")
+	errRenewalStatusMustBeConfirmed  = errors.New("commitment renewal is only allowed for confirmed commitments")
+	errRenewalInTransferNotAllowed   = errors.New("commitment renewal is only allowed for commitments which are not in transfer")
+	errRenewalMustNotBeExpired       = errors.New("commitment renewal is not allowed for expired commitments")
+	errRenewalMustNotBeEarly         = errors.New("commitment renewal is only possible in a certain timespan before expiry")
+	errRenewalAlreadyDone            = errors.New("commitment was already renewed")
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
