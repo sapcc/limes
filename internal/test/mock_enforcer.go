@@ -30,7 +30,7 @@ type PolicyEnforcer struct {
 	AllowCommitmentGet         bool
 	AllowCommitmentGetPublic   bool
 	AllowCommitmentGetUnscoped bool
-	AllowcommitmentUpdate      bool
+	AllowCommitmentUpdate      bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
 	ForbidWithHistoricalUsage bool
 	ForbidWithObsolete        bool
@@ -100,7 +100,7 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 	case "commitment_get_unscoped":
 		return e.AllowCommitmentGetUnscoped
 	case "commitment_update":
-		return e.AllowcommitmentUpdate
+		return e.AllowCommitmentUpdate
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
 	case "with_obsolete":

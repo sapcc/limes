@@ -34,11 +34,11 @@ var commitmentCreateConfigJSON = string(must.Return(httptest.NewJQModifiableJSON
 					{
 						"key": "capacity",
 						"value": {
-							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}]
-						}
-					},
-					{
-						"key": "things",
+					"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours", "1 year"]}]
+					}
+				},
+				{
+					"key": "things",
 						"value": {
 							"durations_per_domain": [{"key": ".*", "value": ["1 hour", "2 hours"]}],
 							"min_confirm_date": "1970-01-08T00:00:00Z" // one week after start of mock.Clock
@@ -546,7 +546,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"availability_zone": "az-one",
 		"status":            "pending",
 	}, func(r httptest.Response) {
-		r.ExpectText(t, http.StatusUnprocessableEntity, "unacceptable commitment duration for this resource; acceptable values: [\"1 hour\",\"2 hours\"]\n")
+		r.ExpectText(t, http.StatusUnprocessableEntity, "unacceptable commitment duration for this resource; acceptable values: [\"1 hour\",\"2 hours\",\"1 year\"]\n")
 	})
 
 	// invalid choice of status

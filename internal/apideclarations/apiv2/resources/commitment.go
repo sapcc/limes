@@ -107,6 +107,12 @@ type CommitmentMergeRequest struct {
 	CommitmentUUIDs []liquid.CommitmentUUID `json:"commitment_uuids"` // all must be in the same project AZ resource
 }
 
+// CommitmentRenewRequest is the request payload format for POST /v2/commitments/:uuid/renew.
+type CommitmentRenewRequest struct {
+	Duration        limesresources.CommitmentDuration `json:"duration"`
+	NotifyOnConfirm bool                              `json:"notify_on_confirm,omitempty"`
+}
+
 // CommitmentConfiguration describes how commitments are configured for a given resource.
 //
 // This appears as a field on resource reports, if the respective resource allows commitments.

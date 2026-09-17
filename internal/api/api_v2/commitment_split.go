@@ -163,7 +163,7 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 	auditEvents := audit.CommitmentEventTarget{
 		CommitmentChangeRequest: ccr,
 	}.ReplicateForAllProjectsWithDefaults(audittools.Event{
-		Time:       p.timeNow(),
+		Time:       now,
 		Request:    r,
 		User:       token,
 		ReasonCode: http.StatusCreated,

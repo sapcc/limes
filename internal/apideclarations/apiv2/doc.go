@@ -114,6 +114,13 @@
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
+// # Endpoint: POST /resources/v2/commitments/:uuid/renew
+//
+// Creates a new commitment for the time when the old one will expire, if permissions allow
+//   - The request body payload must be of type [resourcesv2.CommitmentRenewRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
 // # Endpoint: DELETE /resources/v2/commitments/:uuid
 //
 // Deletes the specified commitment.
