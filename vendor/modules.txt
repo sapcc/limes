@@ -18,7 +18,7 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/gophercloud/gophercloud/v2 v2.14.0
+# github.com/gophercloud/gophercloud/v2 v2.15.0
 ## explicit; go 1.25.0
 github.com/gophercloud/gophercloud/v2
 github.com/gophercloud/gophercloud/v2/openstack
@@ -112,7 +112,7 @@ github.com/prometheus/client_golang/prometheus/promhttp/internal
 # github.com/prometheus/client_model v0.6.2
 ## explicit; go 1.22.0
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.70.1
+# github.com/prometheus/common v0.71.0
 ## explicit; go 1.25.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/model
@@ -168,7 +168,7 @@ github.com/sapcc/go-bits/syncext
 # github.com/sergi/go-diff v1.4.0
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
-# go.xyrillian.de/gg v1.15.0
+# go.xyrillian.de/gg v1.16.0
 ## explicit; go 1.26
 go.xyrillian.de/gg/assert
 go.xyrillian.de/gg/errext
@@ -178,11 +178,12 @@ go.xyrillian.de/gg/internal/path
 go.xyrillian.de/gg/is
 go.xyrillian.de/gg/jsonmatch
 go.xyrillian.de/gg/microprom
+go.xyrillian.de/gg/oblast
 go.xyrillian.de/gg/option
 go.xyrillian.de/gg/options
 go.xyrillian.de/gg/pgruntime
 go.xyrillian.de/gg/testcapture
-# go.xyrillian.de/oblast v0.14.0
+# go.xyrillian.de/oblast v0.17.0
 ## explicit; go 1.26
 go.xyrillian.de/oblast
 # go.xyrillian.de/schwift/v2 v2.2.1
@@ -194,7 +195,7 @@ go.xyrillian.de/schwift/v2/gopherschwift
 ## explicit; go 1.25.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# google.golang.org/protobuf v1.36.11
+# google.golang.org/protobuf v1.36.12
 ## explicit; go 1.23
 google.golang.org/protobuf/encoding/protodelim
 google.golang.org/protobuf/encoding/prototext
