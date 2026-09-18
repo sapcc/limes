@@ -162,4 +162,8 @@ var sqlMigrations = map[int64]string{
 		UPDATE project_commitments SET transfer_started_at = NULL WHERE transfer_status = '';
 		ALTER TABLE project_commitments ADD CONSTRAINT project_commitments_transfer_started_at_consistency CHECK ((transfer_started_at IS NULL) = (transfer_status = ''));
 	`,
+	87: `
+		ALTER TABLE services ADD COLUMN acpq_duration_secs REAL NOT NULL DEFAULT 0;
+		ALTER TABLE project_az_resources ADD COLUMN safe_mode_used BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

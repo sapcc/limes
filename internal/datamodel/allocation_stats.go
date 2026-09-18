@@ -39,7 +39,7 @@ type clusterAZAllocationStats struct {
 // Returns two separate opinions:
 //   - Whether growth quota overcommit is allowed in this AZ, and
 //   - whether this AZ is fine with allowing base quota overcommit in the `any` AZ.
-func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) (allowsGrowth, allowsBase bool) {
+func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) (allowsGrowth, allowsBase, safeModeUsed bool) {
 	usedCapacity := uint64(0)
 	for _, stats := range c.ProjectStats {
 		usedCapacity += max(stats.Committed, stats.Usage)
@@ -50,12 +50,13 @@ func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 		// But we do not block base quota overcommit in some specific scenarios:
 		// - when the AZ never had any capacity (either because this resource is just not available here, or because it is still in buildup)
 		// - when there is no usage either (e.g. during decommissioning)
-		return false, !c.ObservedNonzeroCapacityBefore || usedCapacity == 0
+		return false, !c.ObservedNonzeroCapacityBefore || usedCapacity == 0, false
 	} else {
 		// If there is a reliable capacity measurement, we can voice a strong opinion.
 		usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
-		result := usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
-		return result, result
+		allowsOvercommit := usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
+		safeModeUsed = !allowsOvercommit && cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0
+		return allowsOvercommit, allowsOvercommit, safeModeUsed
 	}
 }
 
