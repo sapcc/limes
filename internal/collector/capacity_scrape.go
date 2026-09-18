@@ -55,8 +55,9 @@ func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.
 
 type capacityScrapeTask struct {
 	// do not use the db.Service directly, as it might get updated during the scrape operation
-	ServiceType db.ServiceType
-	Timing      TaskTiming
+	ServiceType  db.ServiceType
+	ScrapeTiming TaskTiming
+	ACPQTiming   TaskTiming
 }
 
 var (
@@ -107,11 +108,11 @@ var (
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
-	task.Timing.StartedAt = c.MeasureTime()
+	task.ScrapeTiming.StartedAt = c.MeasureTime()
 	// CheckConsistencyJob will ensure that all services are present in the DB. Before it runs,
 	// we might have a service entry without a corresponding LiquidConnection or vise versa.
 
-	str, err := db.SelectOneValue[string](c.DB, findServiceForScrapeQuery, task.Timing.StartedAt)
+	str, err := db.SelectOneValue[string](c.DB, findServiceForScrapeQuery, task.ScrapeTiming.StartedAt)
 	if err != nil {
 		return task, err
 	}
@@ -147,9 +148,9 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// if service is not in the LiquidConnections, do nothing
 	connection := c.Cluster.LiquidConnections[serviceType]
 	if connection == nil {
-		task.Timing.FinishedAt = c.MeasureTimeAtEnd()
+		task.ScrapeTiming.FinishedAt = c.MeasureTimeAtEnd()
 		service, _ := c.Cluster.SIC.GetSnapshot().GetServiceForType(serviceType)
-		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
+		service.NextScrapeAt = task.ScrapeTiming.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		err := db.ServiceStore.Update(ctx, c.DB, service)
 		if err != nil {
 			err = fmt.Errorf("error while skipping scrape for %s: %w", service.Type, err)
@@ -167,18 +168,18 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 	resources := sis.GetResourcesForType(serviceType) // might have no resources
 
-	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
+	task.ScrapeTiming.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
-		service.ScrapedAt = Some(task.Timing.FinishedAt)
-		service.ScrapeDurationSecs = task.Timing.Duration().Seconds()
+		service.ScrapedAt = Some(task.ScrapeTiming.FinishedAt)
+		service.ScrapeDurationSecs = task.ScrapeTiming.Duration().Seconds()
 		service.SerializedMetrics = string(serializedMetrics)
-		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
+		service.NextScrapeAt = task.ScrapeTiming.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		service.ScrapeErrorMessage = ""
 		// NOTE: in this case, we continue below, with the resources update
 		// the services row will be updated at the end of the tx
 	} else {
 		err = gophercloudext.UnpackError(err)
-		service.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
+		service.NextScrapeAt = task.ScrapeTiming.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
 		service.ScrapeErrorMessage = err.Error()
 
 		updateErr := db.ServiceStore.Update(ctx, c.DB, service)
@@ -265,6 +266,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, recompute project quotas if necessary
+	task.ACPQTiming.StartedAt = c.MeasureTime()
 	for _, res := range resources.All() {
 		now := c.MeasureTime()
 		err := datamodel.ApplyComputedProjectQuota(ctx, sis, res, c.Cluster, now)
@@ -272,8 +274,10 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 			return err
 		}
 	}
+	task.ACPQTiming.FinishedAt = c.MeasureTimeAtEnd()
+	service.ACPQDurationSecs = task.ACPQTiming.Duration().Seconds()
 
-	return nil
+	return db.ServiceStore.Update(ctx, c.DB, service)
 }
 
 func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis core.ServiceInfoSnapshot, err error) {
