@@ -2385,3 +2385,157 @@ func TestCommitmentConfirmationTakesOverMultipleSmallCommitments(t *testing.T) {
 		%[9]s
 	`, createdAt[0].Unix(), createdAt[1].Unix(), createdAt[2].Unix(), expiresAt[0].Unix(), expiresAt[1].Unix(), expiresAt[2].Unix(), confirmedAt1.Unix(), confirmedAt2.Unix(), timestampUpdates())
 }
+
+func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
+	// This E2E test verifies the full ACPQ (ApplyComputedProjectQuota) flow
+	// for a flat-topology resource with autogrow quota distribution:
+	//
+	// 1. A capacity scrape creates az_resources but ACPQ is a no-op (no project data yet).
+	// 2. A project scrape creates project_az_resources with quota = 0 (not usage!).
+	//    This is the key regression check for the reverted "avoid quota desync on first scrape" change.
+	// 3. A quota override (larger than base quota) is applied to one project.
+	// 4. A second capacity scrape triggers ACPQ which assigns the correct quota:
+	//    - the overridden project gets exactly the override value (not base quota, not usage+override)
+	//    - the other projects get the base quota
+
+	srvInfo := liquid.ServiceInfo{
+		Version:     1,
+		DisplayName: "Shared",
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"things": {
+				DisplayName: "Things",
+				Unit:        liquid.UnitPiece,
+				Topology:    liquid.FlatTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+		},
+	}
+
+	cfgJSON := testScanCapacitySingleLiquidConfigJSON[:len(testScanCapacitySingleLiquidConfigJSON)-1] + `,
+		"quota_distribution_configs": [
+			{"resource": "shared/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+		]
+	}`
+
+	s := test.NewSetup(t,
+		test.WithConfig(cfgJSON),
+		test.WithMockLiquidClient("shared", srvInfo),
+		test.WithLiquidConnections,
+		test.WithInitialDiscovery,
+	)
+
+	capacityJob := s.Collector.CapacityScrapeJob(s.Registry)
+
+	// set up the capacity report (cluster-level: capacity 100, usage 15 = 3 projects * 5)
+	s.LiquidClients["shared"].CapacityReport.Set(liquid.ServiceCapacityReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceCapacityReport{
+			"things": {
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{
+					Capacity: 100,
+					Usage:    Some[uint64](15),
+				}),
+			},
+		},
+	})
+
+	// set up the usage report (per-project: usage 5 on "things"; same report for all projects)
+	s.LiquidClients["shared"].UsageReport.Set(liquid.ServiceUsageReport{
+		InfoVersion: 1,
+		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
+			"things": {
+				Quota: Some[int64](0),
+				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 5}),
+			},
+		},
+	})
+
+	// check baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
+	tr0.AssertEqualf(`
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (1, 1, 'any', 0, 'shared/things/any');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, path) VALUES (2, 1, 'total', 0, 'shared/things/total');
+		INSERT INTO categories (id, name, display_name, service_id) VALUES (1, 'shared', 'Shared', 1);
+		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
+		INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
+		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (1, 1, 1, TRUE, %[1]d);
+		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (2, 2, 1, TRUE, %[1]d);
+		INSERT INTO project_services (id, project_id, service_id, stale, next_scrape_at) VALUES (3, 3, 1, TRUE, %[1]d);
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (3, 2, 'paris', 'uuid-for-paris', 'uuid-for-france');
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path, display_name, category_id) VALUES (1, 1, 'things', 1, 'piece', 'flat', TRUE, TRUE, 'shared/things', 'Things', 1);
+		INSERT INTO services (id, type, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 1, 'Shared');
+	`, s.Clock.Now().Unix())
+
+	// Step 1: capacity scrape #1
+	// This creates az_resources with the reported capacity/usage.
+	// ACPQ runs but is a no-op because no project_az_resources rows exist yet.
+	setClusterCapacitorsStale(t, s)
+	must.SucceedT(t, jobloop.ProcessMany(capacityJob, s.Ctx, len(s.Cluster.LiquidConnections)))
+
+	scrapedAt := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET raw_capacity = 100, usage = 15, last_nonzero_raw_capacity = 100 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 100, usage = 15 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
+		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+	`, scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix())
+
+	// Step 2: project scrape
+	// This creates project_resources and project_az_resources with quota = 5, because usage = 5.
+	scrapeJob := s.Collector.ScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "shared")
+	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // berlin
+	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // dresden
+	must.SucceedT(t, scrapeJob.ProcessOne(s.Ctx, withLabel)) // paris
+
+	scrapedAt1 := s.Clock.Now().Add(-10 * time.Second) // berlin
+	scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)  // dresden
+	scrapedAt3 := s.Clock.Now()                        // paris
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (1, 1, 1, 0, 5, '{"t":[%[1]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (2, 1, 2, 0, 5, '{"t":[%[1]d],"v":[5]}', 0);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (3, 2, 1, 0, 5, '{"t":[%[2]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (4, 2, 2, 0, 5, '{"t":[%[2]d],"v":[5]}', 0);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (5, 3, 1, 0, 5, '{"t":[%[3]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (6, 3, 2, 0, 5, '{"t":[%[3]d],"v":[5]}', 0);
+		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
+		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 2, 1);
+		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 3, 1);
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[1]d, next_scrape_at = %[4]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		UPDATE project_services SET scraped_at = %[2]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[2]d, next_scrape_at = %[5]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[3]d, next_scrape_at = %[6]d WHERE id = 3 AND project_id = 3 AND service_id = 1;
+	`,
+		scrapedAt1.Unix(), scrapedAt2.Unix(), scrapedAt3.Unix(),
+		scrapedAt1.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt2.Add(collector.ScrapeInterval).Unix(),
+		scrapedAt3.Add(collector.ScrapeInterval).Unix(),
+	)
+
+	// Apply a quota override for berlin (project_id=1) that is larger than the base quota.
+	s.MustDBExec(`UPDATE project_resources SET override_quota_from_config = 20 WHERE project_id = 1 AND resource_id = 1`)
+	tr.DBChanges().Ignore()
+
+	// Step 3: capacity scrape #2
+	// Now ACPQ has project_az_resources to work with and assigns the correct quota.
+	// - berlin (project_id=1): override_quota = 20 > base_quota = 10;
+	//   ACPQ distributes: az=any gets quota (20), the same as az=total,
+	// - dresden (project_id=2) and paris (project_id=3): no override, so quota = base_quota = 10
+	setClusterCapacitorsStale(t, s)
+	must.SucceedT(t, jobloop.ProcessMany(capacityJob, s.Ctx, len(s.Cluster.LiquidConnections)))
+
+	acpqTime := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET quota = 20 WHERE id = 1 AND project_id = 1 AND az_resource_id = 1;
+		UPDATE project_az_resources SET quota = 20 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 3 AND project_id = 2 AND az_resource_id = 1;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 4 AND project_id = 2 AND az_resource_id = 2;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 5 AND project_id = 3 AND az_resource_id = 1;
+		UPDATE project_az_resources SET quota = 10 WHERE id = 6 AND project_id = 3 AND az_resource_id = 2;
+		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
+		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 3 AND project_id = 3 AND service_id = 1;
+		UPDATE services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+	`, acpqTime.Unix(), acpqTime.Add(15*time.Minute).Unix())
+}

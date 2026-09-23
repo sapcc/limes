@@ -1225,6 +1225,52 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 	}, db.Resource{Topology: liquid.AZAwareTopology})
 }
 
+func TestACPQFlatTopologyWithOverrideQuotaAndUsage(t *testing.T) {
+	// This test reproduces a production scenario for a flat-topology resource where:
+	// - there is existing usage on az=any (e.g. 844)
+	// - a quota override is configured that is larger than the base quota (1200 > 1000)
+	// - growth multiplier is 1.0 (no growth)
+	//
+	// The override should be the sole determinant of the total quota.
+	// In particular, usage on az=any must NOT be added on top of the override.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		liquid.AvailabilityZoneAny: {
+			Capacity: 10000, // capacity is not a limiting factor
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				// 401 has significant usage and an override quota larger than base quota
+				401: constantUsage(844),
+				// 402 has no usage but also gets the override
+				402: constantUsage(0),
+				// 403 has usage but no override (just base quota)
+				403: constantUsage(500),
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.0,
+		ProjectBaseQuota: 1000,
+		AllowQuotaOvercommitUntilAllocatedPercent: 10000,
+	}
+	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
+		// override_quota_from_config = 1200 sets both MinQuota and MaxQuota to 1200
+		401: {MinQuota: Some[uint64](1200), MaxQuota: Some[uint64](1200)},
+		402: {MinQuota: Some[uint64](1200), MaxQuota: Some[uint64](1200)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		liquid.AvailabilityZoneAny: {
+			401: {Allocated: 1200}, // override quota, NOT usage+override
+			402: {Allocated: 1200}, // override quota
+			403: {Allocated: 1000}, // base quota (usage 500 < base quota 1000)
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 1200}, // must equal az=any, NOT 1200+844
+			402: {Allocated: 1200},
+			403: {Allocated: 1000},
+		},
+	}, db.Resource{Topology: liquid.FlatTopology})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
