@@ -2494,18 +2494,18 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 	scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)  // dresden
 	scrapedAt3 := s.Clock.Now()                        // paris
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (1, 1, 1, 0, 5, '{"t":[%[1]d],"v":[5]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (2, 1, 2, 0, 5, '{"t":[%[1]d],"v":[5]}', 0);
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (3, 2, 1, 0, 5, '{"t":[%[2]d],"v":[5]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (4, 2, 2, 0, 5, '{"t":[%[2]d],"v":[5]}', 0);
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (5, 3, 1, 0, 5, '{"t":[%[3]d],"v":[5]}');
-		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (6, 3, 2, 0, 5, '{"t":[%[3]d],"v":[5]}', 0);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (1, 1, 1, 5, 5, '{"t":[%[1]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (2, 1, 2, 5, 5, '{"t":[%[1]d],"v":[5]}', 0);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (3, 2, 1, 5, 5, '{"t":[%[2]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (4, 2, 2, 5, 5, '{"t":[%[2]d],"v":[5]}', 0);
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage) VALUES (5, 3, 1, 5, 5, '{"t":[%[3]d],"v":[5]}');
+		INSERT INTO project_az_resources (id, project_id, az_resource_id, quota, usage, historical_usage, backend_quota) VALUES (6, 3, 2, 5, 5, '{"t":[%[3]d],"v":[5]}', 0);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (1, 1, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (2, 2, 1);
 		INSERT INTO project_resources (id, project_id, resource_id) VALUES (3, 3, 1);
-		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[1]d, next_scrape_at = %[4]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
-		UPDATE project_services SET scraped_at = %[2]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[2]d, next_scrape_at = %[5]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
-		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[3]d, next_scrape_at = %[6]d WHERE id = 3 AND project_id = 3 AND service_id = 1;
+		UPDATE project_services SET scraped_at = %[1]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[1]d, next_scrape_at = %[4]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
+		UPDATE project_services SET scraped_at = %[2]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[2]d, next_scrape_at = %[5]d, quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
+		UPDATE project_services SET scraped_at = %[3]d, stale = FALSE, scrape_duration_secs = 5, serialized_metrics = '{}', checked_at = %[3]d, next_scrape_at = %[6]d, quota_desynced_at = %[3]d WHERE id = 3 AND project_id = 3 AND service_id = 1;
 	`,
 		scrapedAt1.Unix(), scrapedAt2.Unix(), scrapedAt3.Unix(),
 		scrapedAt1.Add(collector.ScrapeInterval).Unix(),
@@ -2533,9 +2533,6 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 		UPDATE project_az_resources SET quota = 10 WHERE id = 4 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 10 WHERE id = 5 AND project_id = 3 AND az_resource_id = 1;
 		UPDATE project_az_resources SET quota = 10 WHERE id = 6 AND project_id = 3 AND az_resource_id = 2;
-		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
-		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 2 AND project_id = 2 AND service_id = 1;
-		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 3 AND project_id = 3 AND service_id = 1;
 		UPDATE services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`, acpqTime.Unix(), acpqTime.Add(15*time.Minute).Unix())
 }
