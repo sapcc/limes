@@ -137,7 +137,7 @@ func collectAZAllocationStats(ctx context.Context, sis core.ServiceInfoSnapshot,
 	// get capacity
 	overcommitFactor := cluster.BehaviorForResourcePath(resourcePath).OvercommitFactor
 	for azRes := range sis.GetAZResourcesForPath(resourcePath).Values() {
-		if az, exists := azFilter.Unpack(); exists && azRes.AvailabilityZone != az && azRes.AvailabilityZone != liquid.AvailabilityZoneTotal {
+		if az, exists := azFilter.Unpack(); (exists && azRes.AvailabilityZone != az) || azRes.AvailabilityZone == liquid.AvailabilityZoneTotal {
 			continue
 		}
 		result[azRes.AvailabilityZone] = clusterAZAllocationStats{
