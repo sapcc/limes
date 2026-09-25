@@ -69,8 +69,8 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 						azRes.Path.ResourceName: {
 							TotalConfirmedBefore:  stats.TotalConfirmed,
 							TotalConfirmedAfter:   stats.TotalConfirmed - c.Amount,
-							TotalGuaranteedBefore: stats.TotalGuaranteed,
-							TotalGuaranteedAfter:  stats.TotalGuaranteed, // TODO: change when introducing "guaranteed" commitments
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0, // TODO: change when introducing "guaranteed" commitments
 							Commitments: []liquid.Commitment{
 								{
 									UUID:      c.UUID,
