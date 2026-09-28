@@ -484,7 +484,7 @@ func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
 }
 
 func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
-	// This scenario has a resource that has its capacity 85% allocated to usage and commitments.
+	// This scenario has a resource that has its capacity 85% allocated to usage and commitments in az-one.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 100,
@@ -492,6 +492,18 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 				401: constantUsage(30),
 				402: {Committed: 50, Usage: 10, MinHistoricalUsage: 10, MaxHistoricalUsage: 10},
 				403: constantUsage(5),
+				// some more empty projects to make sure that we try to distribute more than the available capacity
+				404: constantUsage(0),
+				405: constantUsage(0),
+			},
+		},
+		// The second az has much lower utilization to show that they behave independently for all topologies
+		"az-two": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+				403: constantUsage(1),
 				// some more empty projects to make sure that we try to distribute more than the available capacity
 				404: constantUsage(0),
 				405: constantUsage(0),
@@ -524,10 +536,17 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {},
 			405: {},
 		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+			403: {Allocated: 2}, // 1  * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth)
+			404: {},
+			405: {},
+		},
 		liquid.AvailabilityZoneAny: {
 			401: {},
 			402: {},
-			403: {Allocated: 4},
+			403: {Allocated: 2},
 			404: {Allocated: 10},
 			405: {Allocated: 10},
 		},
@@ -540,30 +559,37 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 		},
 	}, db.Resource{Topology: liquid.AZAwareTopology})
 
-	// test with quota overcommit forbidden (85% allocation is above 80%)
+	// test with quota overcommit forbidden = "safe mode" in az-one (85% allocation is above 80%)
 	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 80
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
-			401: {Allocated: 35}, // 30 * 1.2 = 36, but fair distribution gives only 35
-			402: {Allocated: 59}, // 50 * 1.2 = 60, but fair distribution gives only 59
-			403: {Allocated: 6},  //  5 * 1.2 =  6
+			401: {Allocated: 35, SafeModeUsed: true}, // 30 * 1.2 = 36, but fair distribution gives only 35
+			402: {Allocated: 59, SafeModeUsed: true}, // 50 * 1.2 = 60, but fair distribution gives only 59
+			403: {Allocated: 6, SafeModeUsed: true},  //  5 * 1.2 =  6
+			404: {SafeModeUsed: true},
+			405: {SafeModeUsed: true},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+			403: {Allocated: 2}, // 1  * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth)
 			404: {},
 			405: {},
 		},
 		liquid.AvailabilityZoneAny: {
-			// there is no capacity left over after growth quota, so base quota is not given out
+			// we get base quota in sum, because az-two still has capacity
 			401: {},
 			402: {},
-			403: {},
-			404: {},
-			405: {},
+			403: {Allocated: 2},
+			404: {Allocated: 10},
+			405: {Allocated: 10},
 		},
 		liquid.AvailabilityZoneTotal: {
 			401: {Allocated: 35},
 			402: {Allocated: 59},
-			403: {Allocated: 6},
-			404: {},
-			405: {},
+			403: {Allocated: 10},
+			404: {Allocated: 10},
+			405: {Allocated: 10},
 		},
 	}, db.Resource{Topology: liquid.AZAwareTopology})
 }
