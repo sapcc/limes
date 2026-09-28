@@ -11,15 +11,15 @@
             "unit": "B",
             "category": "foo_category",
             "quota_distribution_model": "autogrow",
-            "capacity": 0,
+            "capacity": 10,
             "per_az": {
               "az-one": {
-                "capacity": 0,
+                "capacity": 5,
                 "projects_usage": 1,
                 "uncommitted_usage": 1
               },
               "az-two": {
-                "capacity": 0,
+                "capacity": 5,
                 "projects_usage": 1,
                 "uncommitted_usage": 1
               }
@@ -27,14 +27,14 @@
             "per_availability_zone": [
               {
                 "name": "az-one",
-                "capacity": 0
+                "capacity": 5
               },
               {
                 "name": "az-two",
-                "capacity": 0
+                "capacity": 5
               }
             ],
-            "domains_quota": 0,
+            "domains_quota": 10,
             "usage": 2
           }
         ],
