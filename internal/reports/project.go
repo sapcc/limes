@@ -240,12 +240,10 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, domain db.D
 			}
 
 			if !resReport.NoQuota && r.Quota != nil {
-				if resource.Topology != liquid.AZSeparatedTopology {
-					resReport.Quota = r.Quota
-					resReport.UsableQuota = r.Quota
-					if r.BackendQuota != nil && (*r.BackendQuota < 0 || uint64(*r.BackendQuota) != *r.Quota) {
-						resReport.BackendQuota = r.BackendQuota
-					}
+				resReport.Quota = r.Quota
+				resReport.UsableQuota = r.Quota
+				if r.BackendQuota != nil && (*r.BackendQuota < 0 || uint64(*r.BackendQuota) != *r.Quota) {
+					resReport.BackendQuota = r.BackendQuota
 				}
 				if r.MaxQuotaFromOutsideAdmin != nil {
 					resReport.MaxQuota = r.MaxQuotaFromOutsideAdmin

@@ -25,7 +25,8 @@
                   "uncommitted_usage": 1
                 }
               },
-              "quota": 0,
+              "quota": 10,
+              "projects_quota": 10,
               "usage": 2
             }
           ],

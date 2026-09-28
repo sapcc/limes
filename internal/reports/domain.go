@@ -156,7 +156,6 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 
 		if r.AZ == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, it will appear with empty values
-			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.DBServiceType, ResourceName: r.DBResourceName})
 			serviceReport.MaxScrapedAt = mergeMaxTime(serviceReport.MaxScrapedAt, r.MaxScrapedAt)
 			serviceReport.MinScrapedAt = mergeMinTime(serviceReport.MinScrapedAt, r.MinScrapedAt)
 
@@ -164,7 +163,7 @@ func GetDomains(ctx context.Context, cluster *core.Cluster, domainID *db.DomainI
 				resourceReport.Usage = *r.Usage
 			}
 			if !resourceReport.NoQuota {
-				if r.Quota != nil && resource.Topology != liquid.AZSeparatedTopology {
+				if r.Quota != nil {
 					resourceReport.ProjectsQuota = r.Quota
 					resourceReport.DomainQuota = r.Quota
 					if r.BackendQuota != nil && *r.Quota != *r.BackendQuota {

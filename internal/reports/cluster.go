@@ -159,9 +159,8 @@ func GetClusterResources(ctx context.Context, cluster *core.Cluster, now time.Ti
 
 		if *r.AvailabilityZone == liquid.AvailabilityZoneTotal {
 			// we ignore when a resource can't be found in the app layer yet, we will set the quota here
-			resource, _ := sis.GetResourceForPath(db.ResourcePath{ServiceType: r.ServiceType, ResourceName: r.ResourceName})
 			resourceReport.Usage = *r.Usage
-			if r.Quota != nil && !resourceReport.NoQuota && resource.Topology != liquid.AZSeparatedTopology {
+			if r.Quota != nil && !resourceReport.NoQuota {
 				// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
 				// the sum of all project quotas, since quotas only exist on project level by now.
 				resourceReport.DomainsQuota = r.Quota

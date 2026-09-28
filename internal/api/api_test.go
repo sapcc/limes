@@ -1644,6 +1644,8 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 			SELECT id FROM az_resources WHERE az = $1
 		)
 	`, liquid.AvailabilityZoneTotal)
+	s.MustDBExec(`UPDATE az_resources SET raw_capacity = 10 WHERE az = $1`, liquid.AvailabilityZoneTotal)
+	s.MustDBExec(`UPDATE az_resources SET raw_capacity = 5 WHERE az IN ('az-one', 'az-two')`)
 
 	// This test ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
 	oldassert.HTTPRequest{
@@ -1654,6 +1656,10 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		ExpectBody:   oldassert.JSONFixtureFile("fixtures/cluster-get-az-separated.json"),
 	}.Check(t, s.Handler)
 
+	// cluster query without "per_az" header.
+	s.Handler.RespondTo(t.Context(), "GET /v1/clusters/current").ExpectJSON(t, http.StatusOK, httptest.NewJQModifiableJSONFixture("./fixtures/cluster-get-az-separated.json", "cluster").
+		Modify("del(.cluster.services[].resources[].per_az)"))
+
 	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
@@ -1662,6 +1668,11 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/domain-list-az-separated.json"),
 	}.Check(t, s.Handler)
 
+	// domain query without "per_az" header.
+	s.Handler.RespondTo(t.Context(), "GET /v1/domains").
+		ExpectJSON(t, 200, httptest.NewJQModifiableJSONFixture("./fixtures/domain-list-az-separated.json", "domain").
+			Modify("del(.domains[].services[].resources[].per_az)"))
+
 	oldassert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects",
@@ -1669,6 +1680,11 @@ func Test_SeparatedTopologyOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   oldassert.JSONFixtureFile("./fixtures/project-list-az-separated.json"),
 	}.Check(t, s.Handler)
+
+	// project query without "per_az" header.
+	s.Handler.RespondTo(t.Context(), "GET /v1/domains/uuid-for-germany/projects").
+		ExpectJSON(t, 200, httptest.NewJQModifiableJSONFixture("./fixtures/project-list-az-separated.json", "project").
+			Modify("del(.projects[].services[].resources[].per_az)"))
 
 	oldassert.HTTPRequest{
 		Method:       "GET",
