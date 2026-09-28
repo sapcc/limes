@@ -81,14 +81,14 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		if sourceScope.Project.ID == targetScope.Project.ID {
 			return respondwith.CustomStatus(http.StatusBadRequest, errReceiveSourceTargetEqual)
 		}
-		receivedAmount, amountSpecified := req.Amount.Unpack()
-		if amountSpecified && receivedAmount > c.Amount {
+		receivedAmount, amountIsSpecified := req.Amount.Unpack()
+		if amountIsSpecified && receivedAmount > c.Amount {
 			return respondwith.CustomStatus(http.StatusBadRequest, errReceiveAmountTooHigh)
 		}
-		if amountSpecified && receivedAmount == 0 {
+		if amountIsSpecified && receivedAmount == 0 {
 			return respondwith.CustomStatus(http.StatusBadRequest, errReceiveAmountTooLow)
 		}
-		needsSplit := amountSpecified && receivedAmount < c.Amount
+		needsSplit := amountIsSpecified && receivedAmount < c.Amount
 		if !needsSplit {
 			receivedAmount = c.Amount
 		}
