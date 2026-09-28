@@ -32,40 +32,45 @@ import (
 )
 
 var (
-	errAZMustNotBeAny                = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
-	errAZMustBeAny                   = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
-	errCommitmentsDisabled           = errors.New("commitments are not enabled for this resource")
-	errNotDeletable                  = errors.New("commitment cannot be deleted")
-	errConfirmByInPast               = errors.New("confirm_by may not be set in the past")
-	errConfirmByMissing              = errors.New("confirm_by must be set for the requested initial commitment status")
-	errConfirmByNotAllowed           = errors.New("confirm_by may not be set for the requested initial commitment status")
-	errEmptyAmount                   = errors.New("amount of committed resource must be greater than zero")
-	errInvalidInitialStatus          = errors.New("initial commitment status value is invalid")
-	errInvalidResourceReference      = errors.New("reference to an unknown az resource (race condition)")
-	errNoSuchAZ                      = errors.New("no such availability zone")
-	errNoSuchResource                = errors.New("no such resource")
-	errNoSuchService                 = errors.New("no such service")
-	errNoSuchCommitment              = errors.New("no such commitment")
-	errNotifyOnConfirmNotAllowed     = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
-	errResourceForbidden             = errors.New("resource is not enabled in this project")
-	errOnlyOneCommitmentModification = errors.New("only one commitment modification may be set")
-	errNoCommitmentModification      = errors.New("one commitment modification has to be set")
-	errNoDurationShortening          = errors.New("commitment duration must not be shortened")
-	errNoSuchTransferStatus          = errors.New("no such commitment transfer status")
-	errSplitInTwoOrMore              = errors.New("commitment has to be split in two or more commitments")
-	errAmountMismatch                = errors.New("sum of split amounts must equal the original commitment amount")
-	errAmountOverflow                = errors.New("sum of amounts must not overflow uint64")
-	errNoTransferSplit               = errors.New(`commitment in transfer must not be split`)
-	errMergeInTwoOrMore              = errors.New("commitment merge requires at least two commitments")
-	errOnlyConfirmedMergeable        = errors.New("only confirmed commitments may be merged")
-	errNoTransferMerge               = errors.New("commitments in transfer cannot be merged")
-	errDifferentProjects             = errors.New("all commitments must belong to the same project")
-	errDifferentAZResources          = errors.New("all commitments must be on the same resource and AZ")
-	errRenewalStatusMustBeConfirmed  = errors.New("commitment renewal is only allowed for confirmed commitments")
-	errRenewalInTransferNotAllowed   = errors.New("commitment renewal is only allowed for commitments which are not in transfer")
-	errRenewalMustNotBeExpired       = errors.New("commitment renewal is not allowed for expired commitments")
-	errRenewalMustNotBeEarly         = errors.New("commitment renewal is only possible in a certain timespan before expiry")
-	errRenewalAlreadyDone            = errors.New("commitment was already renewed")
+	errAZMustNotBeAny                  = errors.New(`resource is AZ-aware, so the AZ may not be set to "any"`)
+	errAZMustBeAny                     = errors.New(`resource does not accept AZ-aware commitments, so the AZ must be set to "any"`)
+	errCommitmentsDisabled             = errors.New("commitments are not enabled for this resource")
+	errNotDeletable                    = errors.New("commitment cannot be deleted")
+	errConfirmByInPast                 = errors.New("confirm_by may not be set in the past")
+	errConfirmByMissing                = errors.New("confirm_by must be set for the requested initial commitment status")
+	errConfirmByNotAllowed             = errors.New("confirm_by may not be set for the requested initial commitment status")
+	errEmptyAmount                     = errors.New("amount of committed resource must be greater than zero")
+	errInvalidInitialStatus            = errors.New("initial commitment status value is invalid")
+	errInvalidResourceReference        = errors.New("reference to an unknown az resource (race condition)")
+	errNoSuchAZ                        = errors.New("no such availability zone")
+	errNoSuchResource                  = errors.New("no such resource")
+	errNoSuchService                   = errors.New("no such service")
+	errNoSuchCommitment                = errors.New("no such commitment")
+	errNotifyOnConfirmNotAllowed       = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
+	errResourceForbidden               = errors.New("resource is not enabled in this project")
+	errOnlyOneCommitmentModification   = errors.New("only one commitment modification may be set")
+	errNoCommitmentModification        = errors.New("one commitment modification has to be set")
+	errNoDurationShortening            = errors.New("commitment duration must not be shortened")
+	errNoSuchTransferStatus            = errors.New("no such commitment transfer status")
+	errSplitInTwoOrMore                = errors.New("commitment has to be split in two or more commitments")
+	errAmountMismatch                  = errors.New("sum of split amounts must equal the original commitment amount")
+	errAmountOverflow                  = errors.New("sum of amounts must not overflow uint64")
+	errNoTransferSplit                 = errors.New(`commitment in transfer must not be split`)
+	errMergeInTwoOrMore                = errors.New("commitment merge requires at least two commitments")
+	errOnlyConfirmedMergeable          = errors.New("only confirmed commitments may be merged")
+	errNoTransferMerge                 = errors.New("commitments in transfer cannot be merged")
+	errDifferentProjects               = errors.New("all commitments must belong to the same project")
+	errDifferentAZResources            = errors.New("all commitments must be on the same resource and AZ")
+	errRenewalStatusMustBeConfirmed    = errors.New("commitment renewal is only allowed for confirmed commitments")
+	errRenewalInTransferNotAllowed     = errors.New("commitment renewal is only allowed for commitments which are not in transfer")
+	errRenewalMustNotBeExpired         = errors.New("commitment renewal is not allowed for expired commitments")
+	errRenewalMustNotBeEarly           = errors.New("commitment renewal is only possible in a certain timespan before expiry")
+	errRenewalAlreadyDone              = errors.New("commitment was already renewed")
+	errReceiveNotInTransfer            = errors.New("commitment to receive is not in transfer")
+	errReceiveTransferTokenNotMatching = errors.New("transfer_token does not match to commitment to receive")
+	errReceiveAmountTooHigh            = errors.New("cannot receive more amount than commitment in transfer has")
+	errReceiveAmountTooLow             = errors.New("cannot receive amount of 0")
+	errReceiveSourceTargetEqual        = errors.New("source and target project are equal")
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
@@ -247,7 +252,7 @@ func isDeletable(token *gopherpolicy.Token, c db.ProjectCommitment, timeNow time
 	if slices.Contains([]liquid.CommitmentStatus{liquid.CommitmentStatusPlanned, liquid.CommitmentStatusPending, liquid.CommitmentStatusConfirmed}, c.Status) {
 		var creationContext db.CommitmentWorkflowContext
 		err := json.Unmarshal(c.CreationContextJSON, &creationContext)
-		if err == nil && creationContext.Reason == db.CommitmentReasonCreate && timeNow.Before(c.CreatedAt.Add(24*time.Hour)) {
+		if err == nil && (creationContext.Reason == db.CommitmentReasonCreate || creationContext.Reason == db.CommitmentReasonReceive) && timeNow.Before(c.CreatedAt.Add(24*time.Hour)) {
 			return token.Check("v2:project:commitment_delete")
 		}
 	}
@@ -262,27 +267,27 @@ var findActiveCommitmentQuery = db.ProjectCommitmentStore.MustPrepareSelectQuery
 	)),
 )
 
-func (p *v2Provider) selectCommitmentsIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUIDs []liquid.CommitmentUUID) (_ []db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+func (p *v2Provider) selectCommitmentsIfAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, cUUIDs []liquid.CommitmentUUID) (_ []db.ProjectCommitment, _ db.AZResource, err error) {
 	commitments := make([]db.ProjectCommitment, len(cUUIDs))
 	for i, cUUID := range cUUIDs {
 		c, err := findActiveCommitmentQuery.SelectOne(ctx, dbi, cUUID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchCommitment)
-			return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+			return nil, db.AZResource{}, err
 		case err != nil:
-			return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+			return nil, db.AZResource{}, err
 		}
 
 		// all commitments must belong to the same project and AZ resource
 		if i > 0 {
 			if c.ProjectID != commitments[0].ProjectID {
 				err = respondwith.CustomStatus(http.StatusConflict, errDifferentProjects)
-				return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+				return nil, db.AZResource{}, err
 			}
 			if c.AZResourceID != commitments[0].AZResourceID {
 				err = respondwith.CustomStatus(http.StatusConflict, errDifferentAZResources)
-				return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
+				return nil, db.AZResource{}, err
 			}
 		}
 
@@ -294,6 +299,14 @@ func (p *v2Provider) selectCommitmentsIfPermittedAndAlive(ctx context.Context, d
 	if !ok {
 		err = errInvalidResourceReference
 		// defense in depth, the referenced AZResource should exist
+		return nil, db.AZResource{}, err
+	}
+	return commitments, azRes, nil
+}
+
+func (p *v2Provider) selectCommitmentsIfPermittedAndAlive(ctx context.Context, dbi db.Interface, sis core.ServiceInfoReader, token *gopherpolicy.Token, policyRule string, cUUIDs []liquid.CommitmentUUID) (_ []db.ProjectCommitment, _ db.AZResource, _ reports_v2.ProjectScope, err error) {
+	commitments, azRes, err := p.selectCommitmentsIfAlive(ctx, dbi, sis, cUUIDs)
+	if err != nil {
 		return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
 	}
 

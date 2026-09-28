@@ -228,23 +228,25 @@ type richCommitmentEventTarget struct {
 
 // Render implements the audittools.Target interface.
 func (t richCommitmentEventTarget) Render() cadf.Resource {
-	var firstCommitment liquid.Commitment
+	// An audit event can have only one target, but a CCR can contain multiple commitments.
+	// To make this most meaningful, we will apply the following logic:
+	// we take the first one from the target project, else we take any (no such case known, yet)
+	var firstID liquid.CommitmentUUID
 outer:
-	for _, pcc := range t.CommitmentChangeRequest.ByProject {
+	for project, pcc := range t.CommitmentChangeRequest.ByProject {
 		for _, rcc := range pcc.ByResource {
 			for _, commitment := range rcc.Commitments {
-				firstCommitment = commitment
-				break outer
+				firstID = commitment.UUID
+				if t.ProjectID == project {
+					break outer
+				}
 			}
 		}
-	}
-	if firstCommitment.UUID == "" {
-		panic("commitmentEventTarget must contain at least one commitment")
 	}
 
 	res := cadf.Resource{
 		TypeURI:     "service/resources/commitment",
-		ID:          string(firstCommitment.UUID),
+		ID:          string(firstID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   string(t.ProjectID),
