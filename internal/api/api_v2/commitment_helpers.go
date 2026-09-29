@@ -39,7 +39,7 @@ var (
 	errConfirmByInPast                 = errors.New("confirm_by may not be set in the past")
 	errConfirmByMissing                = errors.New("confirm_by must be set for the requested initial commitment status")
 	errConfirmByNotAllowed             = errors.New("confirm_by may not be set for the requested initial commitment status")
-	errEmptyAmount                     = errors.New("amount of committed resource must be greater than zero")
+	errEmptyAmount                     = errors.New("amount must be greater than zero")
 	errInvalidInitialStatus            = errors.New("initial commitment status value is invalid")
 	errInvalidResourceReference        = errors.New("reference to an unknown az resource (race condition)")
 	errNoSuchAZ                        = errors.New("no such availability zone")
