@@ -58,6 +58,9 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		// validate sum of amounts
 		newSum := uint64(0)
 		for _, amount := range req.Amounts {
+			if amount == 0 {
+				return respondwith.CustomStatus(http.StatusBadRequest, errEmptyAmount)
+			}
 			if newSum+amount < newSum {
 				return respondwith.CustomStatus(http.StatusBadRequest, errAmountOverflow)
 			}
