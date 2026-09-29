@@ -166,4 +166,17 @@ var sqlMigrations = map[int64]string{
 		ALTER TABLE services ADD COLUMN acpq_duration_secs REAL NOT NULL DEFAULT 0;
 		ALTER TABLE project_az_resources ADD COLUMN safe_mode_used BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
+	// Replace project_services_stale_idx with indexes shaped for the actual
+	// hot-path queries (see findProjectForScrapeQuery and quotaSyncDiscoverQuery).
+	88: `
+		DROP INDEX project_services_stale_idx;
+		CREATE INDEX project_services_by_next_scrape_idx
+			ON project_services (service_id, next_scrape_at, id);
+		CREATE INDEX project_services_stale_idx
+			ON project_services (service_id, next_scrape_at, id)
+			WHERE stale;
+		CREATE INDEX project_services_quota_sync_idx
+			ON project_services (service_id, quota_desynced_at, id)
+			WHERE quota_desynced_at IS NOT NULL;
+	`,
 }

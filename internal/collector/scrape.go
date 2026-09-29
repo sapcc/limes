@@ -36,17 +36,34 @@ const (
 )
 
 var (
-	// find the next project that needs to have resources scraped
+	// Find the next project that needs to have resources scraped.
+	//
+	// This query is split into two ordered LIMIT-1 branches combined with UNION ALL
+	// rather than a single query with (stale OR next_scrape_at <= $2),
+	// because the OR prevents Postgres from performing an ordered index walk that terminates at LIMIT 1.
+	// Splitting the branches lets each one use the appropriate index in ORDER BY order and stop after one row.
+	// See migration 88 for the supporting indexes.
 	findProjectForScrapeQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.* FROM project_services ps
-		JOIN services s ON ps.service_id = s.id
-		-- filter by service type
-		WHERE s.type = $1
-		-- filter by need to be updated (because of user request, or because of scheduled scrape)
-		AND (ps.stale OR ps.next_scrape_at <= $2)
-		-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
-		ORDER BY ps.stale DESC, ps.next_scrape_at ASC, ps.id ASC
-		-- find only one project to scrape per iteration
+		WITH svc AS (SELECT id FROM services WHERE type = $1)
+		SELECT id, project_id, service_id, scraped_at, stale, scrape_duration_secs,
+		  serialized_scrape_state, serialized_metrics, checked_at, scrape_error_message,
+		  next_scrape_at, quota_desynced_at, quota_sync_duration_secs
+		FROM (
+			(
+				SELECT ps.*, 0 AS prio FROM project_services ps
+				WHERE ps.service_id = (SELECT id FROM svc) AND ps.stale
+				ORDER BY ps.next_scrape_at ASC, ps.id ASC
+				LIMIT 1
+			)
+			UNION ALL
+			(
+				SELECT ps.*, 1 AS prio FROM project_services ps
+				WHERE ps.service_id = (SELECT id FROM svc) AND ps.next_scrape_at <= $2
+				ORDER BY ps.next_scrape_at ASC, ps.id ASC
+				LIMIT 1
+			)
+		) u
+		ORDER BY prio, next_scrape_at, id
 		LIMIT 1
 	`)
 
