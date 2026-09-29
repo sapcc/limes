@@ -73,7 +73,78 @@
                       "2 hours"
                     ],
                     "min_confirm_by": "1970-01-08T00:00:00Z"
-                  }
+                  },
+                  "commitment_conversion_targets": [
+                    {
+                      "from": 2,
+                      "to": 3,
+                      "target_service": "second",
+                      "target_resource": "capacity_big",
+                      "one_way": true
+                    },
+                    {
+                      "from": 1,
+                      "to": 1,
+                      "target_service": "second",
+                      "target_resource": "capacity_small",
+                      "allow_rounding": true
+                    }
+                  ]
+                },
+                "capacity_big": {
+                  "display_name": "Capacity Big",
+                  "unit": "B",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true,
+                  "commitment_config": {
+                    "durations": [
+                      "1 hour",
+                      "2 hours"
+                    ]
+                  },
+                  "commitment_conversion_targets": [
+                    {
+                      "from": 2,
+                      "to": 3,
+                      "target_service": "second",
+                      "target_resource": "capacity"
+                    },
+                    {
+                      "from": 2,
+                      "to": 3,
+                      "target_service": "second",
+                      "target_resource": "capacity_small",
+                      "allow_rounding": true
+                    }
+                  ]
+                },
+                "capacity_small": {
+                  "display_name": "Capacity Small",
+                  "unit": "B",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true,
+                  "commitment_config": {
+                    "durations": [
+                      "1 hour",
+                      "2 hours"
+                    ]
+                  },
+                  "commitment_conversion_targets": [
+                    {
+                      "from": 1,
+                      "to": 1,
+                      "target_service": "second",
+                      "target_resource": "capacity"
+                    },
+                    {
+                      "from": 3,
+                      "to": 2,
+                      "target_service": "second",
+                      "target_resource": "capacity_big"
+                    }
+                  ]
                 }
               }
             }
