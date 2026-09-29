@@ -30,7 +30,9 @@ type CommitmentBehavior struct {
 	// If DurationsPerDomain.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
 	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `json:"durations_per_domain"`
 
-	MinConfirmDate  Option[time.Time]                                     `json:"min_confirm_date"`
+	MinConfirmDate Option[time.Time] `json:"min_confirm_date"`
+	// TODO: MaxConfirmDate for phasing out resources
+	// If we remove a CommitmentBehavior completely, it becomes non-convertible and non-transferable
 	UntilPercent    Option[float64]                                       `json:"until_percent"`
 	ConversionRules map[ConversionRuleIdentifier]CommitmentConversionRule `json:"conversion_rules"`
 }
@@ -161,6 +163,7 @@ type CommitmentConversionRate struct {
 	FromAmount    uint64
 	ToAmount      uint64
 	AllowRounding bool
+	OneWay        bool
 }
 
 // GetConversionRateTo checks whether this resource can be converted into the given resource.
@@ -234,6 +237,7 @@ outer:
 				FromAmount:    fromAmount,
 				ToAmount:      toAmount,
 				AllowRounding: targetRule.AllowRounding,
+				OneWay:        sourceRule.OnlySource,
 			})
 		}
 	}

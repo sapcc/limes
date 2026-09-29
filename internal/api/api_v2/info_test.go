@@ -40,13 +40,30 @@ var infoConfigJSON = string(must.Return(httptest.NewJQModifiableJSONString(`
 			},
 			"second": {
 				"area": "second",
-				"commitment_behavior_per_resource": [{
-					"key": "capacity",
-					"value": {
-						"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
-						"min_confirm_date": "1970-01-08T00:00:00Z"
+				"commitment_behavior_per_resource": [
+					{
+						"key": "capacity",
+						"value": {
+							"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
+							"min_confirm_date": "1970-01-08T00:00:00Z",
+							"conversion_rules": {"conv1": {"weight": "3 piece", "only_source": true}, "conv2": {"weight": "2 piece"}}
+						}
+					},
+					{
+						"key": "capacity_big",
+						"value": {
+							"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
+							"conversion_rules": {"conv1": {"weight": "2 piece"}, "conv2": {"weight": "3 piece"}}
+						}
+					},
+					{
+						"key": "capacity_small",
+						"value": {
+							"durations_per_domain": [{"key": "germany", "value": ["1 hour", "2 hours"]}],
+							"conversion_rules": {"conv2": {"weight": "2 piece", "allow_rounding": true}}
+						}
 					}
-				}]
+				]
 			}
 		}
 	}`, "infoConfigJSON").
@@ -62,17 +79,37 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		"objects:update": {Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
 	}
 
+	srvInfoSecond := test.DefaultLiquidServiceInfo("Second")
+	srvInfoSecond.Resources["capacity_big"] = liquid.ResourceInfo{
+		DisplayName: "Capacity Big",
+		Category:    Some(liquid.CategoryName("foo_category")),
+		Unit:        liquid.UnitBytes,
+		Topology:    liquid.AZAwareTopology,
+		HasCapacity: true,
+		HasQuota:    true,
+	}
+	srvInfoSecond.Resources["capacity_small"] = liquid.ResourceInfo{
+		DisplayName: "Capacity Small",
+		Category:    Some(liquid.CategoryName("foo_category")),
+		Unit:        liquid.UnitBytes,
+		Topology:    liquid.AZAwareTopology,
+		HasCapacity: true,
+		HasQuota:    true,
+	}
+
 	s := test.NewSetup(t,
 		test.WithConfig(infoConfigJSON),
 		test.WithPersistedServiceInfo("first", srvInfoFirst),
-		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+		test.WithPersistedServiceInfo("second", srvInfoSecond),
 		test.WithInitialDiscovery,
 		test.WithEmptyResourceRecordsAsNeeded,
 		test.WithEmptyRateRecordsAsNeeded,
 	)
 	firstCapacity := s.GetResourceID("first", "capacity")
+	secondCapacityBig := s.GetResourceID("second", "capacity_big")
 	berlin := s.GetProjectID("berlin")
 	paris := s.GetProjectID("paris")
+	dresden := s.GetProjectID("dresden")
 	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, berlin, firstCapacity)
 	fixturePath := "./fixtures/resource-info.json"
 
@@ -92,10 +129,12 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
 		"domain_id": "uuid-for-france", "domain_name": "france",
 	})
-	pathToModify := ".service_areas.second.services.second.categories.foo_category.resources.capacity"
+	pathToModify := ".service_areas.second.services.second.categories.foo_category.resources"
 	commitmentMod := []string{
-		fmt.Sprintf("del(%s.commitment_config)", pathToModify),
-		pathToModify + ".has_quota = true",
+		fmt.Sprintf("del(%s.capacity.commitment_config)", pathToModify),
+		pathToModify + ".capacity.has_quota = true",
+		fmt.Sprintf("del(%s.capacity_big.commitment_config)", pathToModify),
+		fmt.Sprintf("del(%s.capacity_small.commitment_config)", pathToModify),
 	}
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-commitments-disabled").
@@ -122,6 +161,14 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	})
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-dresden"))
+
+	// now a project admin with a project scoped token where one resource is forbidden, commitments enabled --> this modifies the conversion targets, too
+	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, dresden, secondCapacityBig)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "filtered_conversions").
+			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_big)").
+			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity.commitment_conversion_targets[0])").
+			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_small.commitment_conversion_targets[1])"))
 
 	// now a project admin with a project scoped token where a resource is forbidden, commitments still enabled
 	s.UpdateMockUserIdentity(map[string]string{"project_id": "uuid-for-berlin", "project_name": "berlin"})
