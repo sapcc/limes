@@ -109,8 +109,8 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 						azRes.Path.ResourceName: {
 							TotalConfirmedBefore:  stats.TotalConfirmed,
 							TotalConfirmedAfter:   stats.TotalConfirmed,
-							TotalGuaranteedBefore: stats.TotalGuaranteed,
-							TotalGuaranteedAfter:  stats.TotalGuaranteed,
+							TotalGuaranteedBefore: 0,
+							TotalGuaranteedAfter:  0,
 							Commitments:           commitmentsForCCR,
 						},
 					},

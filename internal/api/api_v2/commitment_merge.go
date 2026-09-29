@@ -74,7 +74,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 			commitmentIDs[i] = c.ID
 			commitmentUUIDs[i] = c.UUID
 			totalAmount += c.Amount
-			commitmentsForCCR[i] = liquid.Commitment{
+			commitmentsForCCR[i+1] = liquid.Commitment{
 				UUID:      c.UUID,
 				OldStatus: Some(liquid.CommitmentStatusConfirmed),
 				NewStatus: Some(liquid.CommitmentStatusSuperseded),
@@ -114,7 +114,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 		}
 
 		// inform liquid
-		commitmentsForCCR[len(commitmentsForCCR)-1] = liquid.Commitment{
+		commitmentsForCCR[0] = liquid.Commitment{
 			UUID:      mergedCommitment.UUID,
 			NewStatus: Some(liquid.CommitmentStatusConfirmed),
 			Amount:    mergedCommitment.Amount,

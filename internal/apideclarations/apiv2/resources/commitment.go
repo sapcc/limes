@@ -113,6 +113,13 @@ type CommitmentRenewRequest struct {
 	NotifyOnConfirm bool                              `json:"notify_on_confirm,omitempty"`
 }
 
+// CommitmentReceiveRequest is the request payload format for POST /v2/commitments/:uuid/receive.
+type CommitmentReceiveRequest struct {
+	TargetProjectUUID liquid.ProjectUUID `json:"target_project_id"` // token scope must cover this project
+	TransferToken     string             `json:"transfer_token"`    // may be empty if token scope covers source project
+	Amount            Option[uint64]     `json:"amount"`            // if set, split the commitment and only transfer this portion (TODO: only allow for TransferStatusPublic?)
+}
+
 // CommitmentConfiguration describes how commitments are configured for a given resource.
 //
 // This appears as a field on resource reports, if the respective resource allows commitments.

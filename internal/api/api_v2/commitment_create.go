@@ -171,8 +171,8 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 							path.ResourceName: {
 								TotalConfirmedBefore:  stats.TotalConfirmed,
 								TotalConfirmedAfter:   stats.TotalConfirmed,
-								TotalGuaranteedBefore: stats.TotalGuaranteed,
-								TotalGuaranteedAfter:  stats.TotalGuaranteed, // TODO: change when introducing "guaranteed" commitments
+								TotalGuaranteedBefore: 0,
+								TotalGuaranteedAfter:  0, // TODO: change when introducing "guaranteed" commitments
 								Commitments: []liquid.Commitment{
 									{
 										UUID:      c.UUID,

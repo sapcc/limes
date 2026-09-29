@@ -347,6 +347,7 @@ const (
 	CommitmentReasonMerge   CommitmentReason = "merge"
 	CommitmentReasonRenew   CommitmentReason = "renew"
 	CommitmentReasonConsume CommitmentReason = "consume"
+	CommitmentReasonReceive CommitmentReason = "receive"
 )
 
 // MailNotification contains a record from the `project_mail_notifications` table.

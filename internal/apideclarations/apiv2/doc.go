@@ -116,8 +116,16 @@
 //
 // # Endpoint: POST /resources/v2/commitments/:uuid/renew
 //
-// Creates a new commitment for the time when the old one will expire, if permissions allow
+// Creates a new commitment for the time when the old one will expire, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentRenewRequest].
+//   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/receive
+//
+// Receives a commitment or a part of it in the specified target project, if permissions allow.
+//   - If the given token is a scoped to the source project, no transfer_token has to be supplied.
+//   - The request body payload must be of type [resourcesv2.CommitmentReceiveRequest].
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //

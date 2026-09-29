@@ -124,7 +124,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			auditTargetFunc := func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
-					ID:          string(uuid1),
+					ID:          string(uuidMerged1),
 					DomainID:    "uuid-for-france",
 					DomainName:  "france",
 					ProjectID:   "uuid-for-paris",
@@ -137,6 +137,11 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 								ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 									"capacity": {
 										TotalConfirmedBefore: 24, TotalConfirmedAfter: 24, TotalGuaranteedBefore: 0, TotalGuaranteedAfter: 0, Commitments: []liquid.Commitment{{
+											UUID:      uuidMerged1,
+											NewStatus: Some(liquid.CommitmentStatusConfirmed),
+											Amount:    15,
+											ExpiresAt: initialExpiresAt,
+										}, {
 											UUID:      uuid1,
 											OldStatus: Some(liquid.CommitmentStatusConfirmed),
 											NewStatus: Some(liquid.CommitmentStatusSuperseded),
@@ -147,11 +152,6 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 											OldStatus: Some(liquid.CommitmentStatusConfirmed),
 											NewStatus: Some(liquid.CommitmentStatusSuperseded),
 											Amount:    5,
-											ExpiresAt: initialExpiresAt,
-										}, {
-											UUID:      uuidMerged1,
-											NewStatus: Some(liquid.CommitmentStatusConfirmed),
-											Amount:    15,
 											ExpiresAt: initialExpiresAt,
 										}},
 									},
@@ -185,7 +185,7 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 			auditTargetFunc = func() cadf.Resource {
 				return cadf.Resource{
 					TypeURI:     "service/resources/commitment",
-					ID:          string(uuidMerged1),
+					ID:          string(uuidMerged2),
 					DomainID:    "uuid-for-france",
 					DomainName:  "france",
 					ProjectID:   "uuid-for-paris",
@@ -198,6 +198,11 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 								ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 									"capacity": {
 										TotalConfirmedBefore: 24, TotalConfirmedAfter: 24, TotalGuaranteedBefore: 0, TotalGuaranteedAfter: 0, Commitments: []liquid.Commitment{{
+											UUID:      uuidMerged2,
+											NewStatus: Some(liquid.CommitmentStatusConfirmed),
+											Amount:    24,
+											ExpiresAt: expiresAt3,
+										}, {
 											UUID:      uuidMerged1,
 											OldStatus: Some(liquid.CommitmentStatusConfirmed),
 											NewStatus: Some(liquid.CommitmentStatusSuperseded),
@@ -214,11 +219,6 @@ func TestCommitmentMergeHappyPaths(t *testing.T) {
 											OldStatus: Some(liquid.CommitmentStatusConfirmed),
 											NewStatus: Some(liquid.CommitmentStatusSuperseded),
 											Amount:    3,
-											ExpiresAt: expiresAt3,
-										}, {
-											UUID:      uuidMerged2,
-											NewStatus: Some(liquid.CommitmentStatusConfirmed),
-											Amount:    24,
 											ExpiresAt: expiresAt3,
 										}},
 									},
