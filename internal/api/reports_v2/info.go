@@ -4,12 +4,15 @@
 package reports_v2
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"slices"
 	"time"
 
+	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/oblast"
 
@@ -103,17 +106,29 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherp
 		return none, err
 	}
 
-	// assemble the report
+	// first pass: collect all behaviors to re-use later
+	allBehaviors := make(map[db.ResourcePath]core.ScopedCommitmentBehavior)
+	services := sis.GetServices()
+	for serviceType := range services.Keys() {
+		for resource := range sis.GetResourcesForType(serviceType).Values() {
+			commitmentBehavior := cluster.CommitmentBehaviorForResource(serviceType, resource.Name)
+			if domainUUID == "" {
+				allBehaviors[resource.Path] = commitmentBehavior.ForCluster()
+			} else {
+				allBehaviors[resource.Path] = commitmentBehavior.ForDomain(domainName)
+			}
+		}
+	}
+
+	// second pass: assemble the report, including conversion targets
 	report := resourcesv2.InfoReport{
 		AllAZs: cluster.Config.AvailabilityZones,
 		Areas:  make(map[string]resourcesv2.AreaInfoReport),
 	}
-	services := sis.GetServices()
-
 	for _, serviceType := range slices.Sorted(services.Keys()) {
 		service := services.GetOrZero(serviceType)
 		categories := sis.GetCategoriesForType(serviceType)
-		resources := sis.GetResourcesForType(serviceType) // can have no resources
+		resources := sis.GetResourcesForType(serviceType)
 		// skip non-allowed resources for this user, if any
 		allowedResources, serviceTypeOK := allowedResourcesByService[serviceType]
 		if !serviceTypeOK {
@@ -157,22 +172,42 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherp
 					Resources:   make(map[liquid.ResourceName]resourcesv2.ResourceInfoReport),
 				}
 			}
-			commitmentBehavior := cluster.CommitmentBehaviorForResource(serviceType, resourceName)
-			var scopedCommitmentBehavior core.ScopedCommitmentBehavior
 
-			if domainUUID == "" {
-				scopedCommitmentBehavior = commitmentBehavior.ForCluster()
-			} else {
-				scopedCommitmentBehavior = commitmentBehavior.ForDomain(domainName)
-			}
-			serviceReport.Categories[category.Name].Resources[resourceName] = resourcesv2.ResourceInfoReport{
+			sourceBehavior := allBehaviors[resource.Path]
+			resourceReport := resourcesv2.ResourceInfoReport{
 				DisplayName:      resource.DisplayName,
 				Unit:             resource.Unit,
 				Topology:         resource.Topology,
 				HasCapacity:      resource.HasCapacity,
 				HasQuota:         resource.HasQuota,
-				CommitmentConfig: scopedCommitmentBehavior.ForV2API(timeNow),
+				CommitmentConfig: sourceBehavior.ForV2API(timeNow),
 			}
+
+			// compute conversion targets using behaviors collected in first pass
+			for _, targetPath := range slices.SortedFunc(maps.Keys(allBehaviors), func(a, b db.ResourcePath) int {
+				return cmp.Compare(a.String(), b.String())
+			}) {
+				targetBehavior := allBehaviors[targetPath]
+				if resource.Path == targetPath {
+					continue
+				}
+				targetResource := must.BeOK(sis.GetResourceForPath(targetPath))
+				if _, resNameOK := allowedResources[targetResource.Name]; !resNameOK {
+					continue
+				}
+				maybeConversion := sourceBehavior.GetConversionRateTo(targetBehavior, resource.Unit, targetResource.Unit)
+				if conversion, ok := maybeConversion.Unpack(); ok {
+					resourceReport.CommitmentConversionTargets = append(resourceReport.CommitmentConversionTargets, resourcesv2.CommitmentConversionTarget{
+						FromAmount:     conversion.FromAmount,
+						ToAmount:       conversion.ToAmount,
+						TargetService:  targetResource.Path.ServiceType,
+						TargetResource: targetResource.Path.ResourceName,
+						OneWay:         conversion.OneWay,
+					})
+				}
+			}
+
+			serviceReport.Categories[category.Name].Resources[resourceName] = resourceReport
 		}
 	}
 	return report, nil
