@@ -47,6 +47,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		"share_networks": {
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: l.CapacityCalculation.ShareNetworks}),
 		},
+		"share_server_replicas": {
+			PerAZ: liquid.InAnyAZ(liquid.AZResourceCapacityReport{Capacity: l.CapacityCalculation.ShareServerReplicas}),
+		},
 	}
 	for _, vst := range l.VirtualShareTypes {
 		shareCapacityDemand := convertToRawDemand(req.DemandByResource[vst.shareCapacityResourceName()])

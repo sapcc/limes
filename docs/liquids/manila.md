@@ -18,6 +18,7 @@ This liquid provides support for the shared file system storage service Manila.
 | `capacity_calculation` | object | Various options relating to capacity calculation. [See "Capacity calculation" for details.](#capacity-calculation) |
 | `capacity_calculation.capacity_balance` | float64 | A ratio describing how unused capacity will be distributed between shares and snapshots. |
 | `capacity_calculation.share_networks` | uint64 | The reported capacity value for the `share_networks` resource. |
+| `capacity_calculation.share_server_replicas` | uint64 | The reported capacity value for the `share_server_replicas` resource. |
 | `capacity_calculation.shares_per_pool` | uint64 | A multiplicative factor for computing capacity for the `shares_$TYPE` resources. |
 | `capacity_calculation.snapshots_per_share` | uint64 | A multiplicative factor for computing capacity for the `snapshots_$TYPE` resources. |
 | `capacity_calculation.with_subcapacities` | boolean | If set to true, subcapacities will be reported on all resources that have "capacity" in their name. |
@@ -40,11 +41,12 @@ The two `prometheus_api_...` objects may contain the following fields (if they a
 
 ## Resources
 
-One resource is always reported:
+Two resources are always reported:
 
-| Resource         | Unit | Capabilities                        |
-| ---------------- | ---- | ----------------------------------- |
-| `share_networks` | GiB  | HasCapacity = true, HasQuota = true |
+| Resource                | Unit | Capabilities                        |
+| ----------------------- | ---- | ----------------------------------- |
+| `share_networks`        | None | HasCapacity = true, HasQuota = true |
+| `share_server_replicas` | None | HasCapacity = true, HasQuota = true |
 
 For each configured share type, the following resources are reported:
 
