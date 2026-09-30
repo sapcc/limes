@@ -228,25 +228,14 @@ type richCommitmentEventTarget struct {
 
 // Render implements the audittools.Target interface.
 func (t richCommitmentEventTarget) Render() cadf.Resource {
-	// An audit event can have only one target, but a CCR can contain multiple commitments.
-	// To make this most meaningful, we will apply the following logic:
-	// we take the first one from the target project, else we take any (no such case known, yet)
-	var firstID liquid.CommitmentUUID
-outer:
-	for project, pcc := range t.CommitmentChangeRequest.ByProject {
-		for _, rcc := range pcc.ByResource {
-			for _, commitment := range rcc.Commitments {
-				firstID = commitment.UUID
-				if t.ProjectID == project {
-					break outer
-				}
-			}
-		}
+	targetUUID := t.targetUUID()
+	if targetUUID == "" {
+		panic("attempted to render CommitmentEventTarget without a single commitment")
 	}
 
 	res := cadf.Resource{
 		TypeURI:     "service/resources/commitment",
-		ID:          string(firstID),
+		ID:          string(targetUUID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   string(t.ProjectID),
@@ -261,6 +250,36 @@ outer:
 	}
 
 	return res
+}
+
+// targetUUID determines the right liquid.CommitmentUUID as target of this audit event.
+// An audit event can have only one target, but a CCR can contain multiple commitments.
+// To make this most meaningful, we will apply the following logic:
+// If we have only one affected project with one affected resource, choose the first commitment.
+// If we have one affected project with multiple resources, we choose the first commitment from the resource that was existing. (e.g. conversion)
+// For this case, the richCommitmentEventTarget should be constructed so that the first commitment is the most meaningful.
+// If we have multiple projects, we take the first commitment from the target project.
+// Else we take any (no such case known, yet)
+func (t richCommitmentEventTarget) targetUUID() (result liquid.CommitmentUUID) {
+	onlyOneProject := len(t.CommitmentChangeRequest.ByProject) == 1
+	for project, pcc := range t.CommitmentChangeRequest.ByProject {
+		onlyOneResource := len(pcc.ByResource) == 1
+		for _, rcc := range pcc.ByResource {
+			for i, commitment := range rcc.Commitments {
+				result = commitment.UUID
+				if onlyOneProject && onlyOneResource && i == 0 {
+					return result
+				}
+				if onlyOneProject && !onlyOneResource && i == 0 && commitment.OldStatus.IsSome() && commitment.NewStatus.IsSome() {
+					return result
+				}
+				if !onlyOneProject && t.ProjectID == project {
+					return result
+				}
+			}
+		}
+	}
+	return result
 }
 
 // CollectorUserInfo is an audittools.UserInfo representing a
