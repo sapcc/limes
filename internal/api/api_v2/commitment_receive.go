@@ -92,7 +92,7 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		if !needsSplit {
 			receivedAmount = c.Amount
 		}
-		_, _, err = p.validateCommittability(azRes.Path, targetScope, c.Duration, sis)
+		_, _, err = p.validateCommittability(azRes.Path, targetScope, c.Duration, sis, "in target project: ")
 		if err != nil {
 			return err
 		}
@@ -147,35 +147,10 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		var splitCommitment db.ProjectCommitment
 		if needsSplit {
 			// leftover
-			splitContext := db.CommitmentWorkflowContext{
-				Reason:                 db.CommitmentReasonSplit,
-				RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
-				RelatedCommitmentUUIDs: []liquid.CommitmentUUID{c.UUID},
-			}
-			buf, err = json.Marshal(splitContext)
+			splitCommitments, err := buildSplitCommitments(c, []uint64{c.Amount - receivedAmount}, now)
+			splitCommitment = *splitCommitments[0]
 			if err != nil {
 				return err
-			}
-			splitCommitment = db.ProjectCommitment{
-				UUID:                  datamodel.GenerateProjectCommitmentUUID(),
-				ProjectID:             c.ProjectID,
-				AZResourceID:          azRes.ID,
-				Amount:                c.Amount - receivedAmount,
-				Duration:              c.Duration,
-				CreatedAt:             now,
-				UpdatedAt:             now,
-				CreatorUUID:           token.UserUUID(),
-				CreatorName:           fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-				ConfirmBy:             c.ConfirmBy,
-				ConfirmedAt:           c.ConfirmedAt,
-				ExpiresAt:             c.ExpiresAt,
-				CreationContextJSON:   buf,
-				Status:                c.Status,
-				NotifyOnConfirm:       c.NotifyOnConfirm,
-				NotifiedForExpiration: c.NotifiedForExpiration,
-				TransferStatus:        c.TransferStatus,
-				TransferToken:         Some(datamodel.GenerateTransferToken()),
-				TransferStartedAt:     Some(now),
 			}
 			sourceCommitmentsForCCR = append(sourceCommitmentsForCCR, liquid.Commitment{
 				UUID:      splitCommitment.UUID,
@@ -191,11 +166,11 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		}
 
 		// inform liquid
-		sourceStats, err := getCommitmentStats(p.DB, sourceScope.Project.ID, c.AZResourceID)
+		sourceStats, err := getCommitmentStats(tx, sourceScope.Project.ID, c.AZResourceID)
 		if err != nil {
 			return err
 		}
-		targetStats, err := getCommitmentStats(p.DB, targetScope.Project.ID, c.AZResourceID)
+		targetStats, err := getCommitmentStats(tx, targetScope.Project.ID, c.AZResourceID)
 		if err != nil {
 			return err
 		}
