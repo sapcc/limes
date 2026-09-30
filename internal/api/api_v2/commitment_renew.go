@@ -109,7 +109,7 @@ func (p *v2Provider) handleRenewCommitment(r *http.Request, token *gopherpolicy.
 		}
 
 		// inform liquid
-		stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
+		stats, err := getCommitmentStats(tx, c.ProjectID, c.AZResourceID)
 		if err != nil {
 			return err
 		}
