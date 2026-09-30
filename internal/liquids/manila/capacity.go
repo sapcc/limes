@@ -205,7 +205,9 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst virtualShareType, azCount uint
 	params := l.CapacityCalculation
 	var result azCapacityForShareType
 	result.Shares = liquid.AZResourceCapacityReport{
-		Capacity: liquidapi.SaturatingSub(params.SharesPerPool*poolCount, params.ShareNetworks/azCount),
+		// share networks and share server replicas both consume backend resources
+		// that would otherwise be available for shares
+		Capacity: liquidapi.SaturatingSub(params.SharesPerPool*poolCount, (params.ShareNetworks+params.ShareServerReplicas)/azCount),
 	}
 	result.Snapshots = liquid.AZResourceCapacityReport{
 		Capacity: result.Shares.Capacity * params.SnapshotsPerShare,
