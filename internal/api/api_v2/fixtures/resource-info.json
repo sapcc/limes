@@ -63,7 +63,7 @@
               "resources": {
                 "capacity": {
                   "display_name": "Capacity",
-                  "unit": "B",
+                  "unit": "GiB",
                   "topology": "az-aware",
                   "has_capacity": true,
                   "has_quota": true,
@@ -76,52 +76,24 @@
                   },
                   "commitment_conversion_targets": [
                     {
-                      "from": 2,
-                      "to": 3,
+                      "from": 32,
+                      "to": 1,
                       "target_service": "second",
-                      "target_resource": "capacity_big",
+                      "target_resource": "capacity_32",
+                      "allow_rounding": true
+                    },
+                    {
+                      "from": 80,
+                      "to": 1,
+                      "target_service": "second",
+                      "target_resource": "capacity_80",
                       "one_way": true
-                    },
-                    {
-                      "from": 1,
-                      "to": 1,
-                      "target_service": "second",
-                      "target_resource": "capacity_small",
-                      "allow_rounding": true
                     }
                   ]
                 },
-                "capacity_big": {
-                  "display_name": "Capacity Big",
-                  "unit": "B",
-                  "topology": "az-aware",
-                  "has_capacity": true,
-                  "has_quota": true,
-                  "commitment_config": {
-                    "durations": [
-                      "1 hour",
-                      "2 hours"
-                    ]
-                  },
-                  "commitment_conversion_targets": [
-                    {
-                      "from": 2,
-                      "to": 3,
-                      "target_service": "second",
-                      "target_resource": "capacity"
-                    },
-                    {
-                      "from": 2,
-                      "to": 3,
-                      "target_service": "second",
-                      "target_resource": "capacity_small",
-                      "allow_rounding": true
-                    }
-                  ]
-                },
-                "capacity_small": {
-                  "display_name": "Capacity Small",
-                  "unit": "B",
+                "capacity_80": {
+                  "display_name": "Capacity 80",
+                  "unit": "80 GiB",
                   "topology": "az-aware",
                   "has_capacity": true,
                   "has_quota": true,
@@ -134,15 +106,43 @@
                   "commitment_conversion_targets": [
                     {
                       "from": 1,
-                      "to": 1,
+                      "to": 80,
                       "target_service": "second",
                       "target_resource": "capacity"
                     },
                     {
-                      "from": 3,
+                      "from": 2,
+                      "to": 5,
+                      "target_service": "second",
+                      "target_resource": "capacity_32",
+                      "allow_rounding": true
+                    }
+                  ]
+                },
+                "capacity_32": {
+                  "display_name": "Capacity 32",
+                  "unit": "32 GiB",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true,
+                  "commitment_config": {
+                    "durations": [
+                      "1 hour",
+                      "2 hours"
+                    ]
+                  },
+                  "commitment_conversion_targets": [
+                    {
+                      "from": 1,
+                      "to": 32,
+                      "target_service": "second",
+                      "target_resource": "capacity"
+                    },
+                    {
+                      "from": 5,
                       "to": 2,
                       "target_service": "second",
-                      "target_resource": "capacity_big"
+                      "target_resource": "capacity_80"
                     }
                   ]
                 }

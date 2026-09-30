@@ -82,3 +82,44 @@ func commonExistingCommitmentSetup(t *testing.T, manager string) (s test.Setup, 
 	tr0.Ignore()
 	return
 }
+
+// ServiceInfoSecondForCommitmentConversion returns a liquid.ServiceInfo for
+// the common_fixtures.LiquidSecondWithConversions.
+func ServiceInfoSecondForCommitmentConversion() liquid.ServiceInfo {
+	return liquid.ServiceInfo{
+		Version:     1,
+		DisplayName: "Second",
+		Categories: map[liquid.CategoryName]liquid.CategoryInfo{
+			"foo_category": {
+				DisplayName: "Foo Category",
+			},
+		},
+		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity": {
+				DisplayName:         "Capacity",
+				Category:            Some(liquid.CategoryName("foo_category")),
+				Unit:                liquid.UnitGibibytes,
+				Topology:            liquid.AZAwareTopology,
+				HasCapacity:         true,
+				HasQuota:            true,
+				NeedsResourceDemand: true,
+			},
+			"capacity_80": {
+				DisplayName: "Capacity 80",
+				Category:    Some(liquid.CategoryName("foo_category")),
+				Unit:        must.Return(liquid.UnitGibibytes.MultiplyBy(80)),
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+			"capacity_32": {
+				DisplayName: "Capacity 32",
+				Category:    Some(liquid.CategoryName("foo_category")),
+				Unit:        must.Return(liquid.UnitGibibytes.MultiplyBy(32)),
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
+		},
+	}
+}
