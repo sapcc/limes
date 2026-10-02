@@ -148,7 +148,7 @@ func (l *Logic) scanCapacityForShareType(ctx context.Context, vst virtualShareTy
 			result.SnapmirrorCapacity.PerAZ[az] = &liquid.AZResourceCapacityReport{}
 			continue
 		}
-		azResult, err := l.scanCapacityForShareTypeAndAZ(vst, uint64(len(allAZs)), az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az], snapmirrorCapacityDemand[az])
+		azResult, err := l.scanCapacityForShareTypeAndAZ(vst, az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az], snapmirrorCapacityDemand[az])
 		if err != nil {
 			return capacityForShareType{}, err
 		}
@@ -162,7 +162,7 @@ func (l *Logic) scanCapacityForShareType(ctx context.Context, vst virtualShareTy
 	return result, nil
 }
 
-func (l *Logic) scanCapacityForShareTypeAndAZ(vst virtualShareType, azCount uint64, az liquid.AvailabilityZone, pools []*Pool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand liquid.ResourceDemandInAZ) (azCapacityForShareType, error) {
+func (l *Logic) scanCapacityForShareTypeAndAZ(vst virtualShareType, az liquid.AvailabilityZone, pools []*Pool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand liquid.ResourceDemandInAZ) (azCapacityForShareType, error) {
 	// count pools and sum their capacities if they are included
 	var (
 		poolCount           uint64
@@ -205,9 +205,7 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst virtualShareType, azCount uint
 	params := l.CapacityCalculation
 	var result azCapacityForShareType
 	result.Shares = liquid.AZResourceCapacityReport{
-		// share networks and share server replicas both consume backend resources
-		// that would otherwise be available for shares
-		Capacity: liquidapi.SaturatingSub(params.SharesPerPool*poolCount, (params.ShareNetworks+params.ShareServerReplicas)/azCount),
+		Capacity: params.SharesPerPool * poolCount,
 	}
 	result.Snapshots = liquid.AZResourceCapacityReport{
 		Capacity: result.Shares.Capacity * params.SnapshotsPerShare,

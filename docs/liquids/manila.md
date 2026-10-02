@@ -143,11 +143,9 @@ For example, a capacity balance of 2 will result in twice as much capacity given
 Within each AZ, the countable resources are assigned capacity as follows:
 
 ```
-shares := max(0, shares_per_pool * number of pools - (share_networks + share_server_replicas) / number of AZs)
+shares := shares_per_pool * number of pools
 snapshots := snapshots_per_share * shares
 ```
-
-Share networks and share server replicas are subtracted here because each of them consumes backend resources that would otherwise be available for shares.
 
 If `with_subcapacities` is set, the share capacity resource will have one subcapacity for each pool, with the following fields:
 
