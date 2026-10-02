@@ -21,6 +21,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
 	. "go.xyrillian.de/gg/option"
+	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -45,10 +46,7 @@ var (
 	// See migration 88 for the supporting indexes.
 	findProjectForScrapeQuery = sqlext.SimplifyWhitespace(`
 		WITH svc AS (SELECT id FROM services WHERE type = $1)
-		SELECT id, project_id, service_id, scraped_at, stale, scrape_duration_secs,
-		  serialized_scrape_state, serialized_metrics, checked_at, scrape_error_message,
-		  next_scrape_at, quota_desynced_at, quota_sync_duration_secs
-		FROM (
+		SELECT * FROM (
 			(
 				SELECT ps.*, 0 AS prio FROM project_services ps
 				WHERE ps.service_id = (SELECT id FROM svc) AND ps.stale
@@ -140,7 +138,12 @@ func (c *Collector) discoverScrapeTask(ctx context.Context, labels prometheus.La
 		return projectScrapeTask{}, fmt.Errorf("no data found in ServiceInfoCache for type %s", serviceType)
 	}
 
-	task.ProjectService, err = db.ProjectServiceStore.SelectOne(ctx, c.DB, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
+	type projectServiceWithPrio struct {
+		db.ProjectService
+		Priority int `db:"prio"`
+	}
+	record, err := oblast.MustNewStore[projectServiceWithPrio](oblast.PostgresDialect()).SelectOne(ctx, c.DB, findProjectForScrapeQuery, serviceType, task.Timing.StartedAt)
+	task.ProjectService = record.ProjectService
 	return task, err
 }
 
