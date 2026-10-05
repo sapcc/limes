@@ -179,4 +179,8 @@ var sqlMigrations = map[int64]string{
 			ON project_services (service_id, quota_desynced_at, id)
 			WHERE quota_desynced_at IS NOT NULL;
 	`,
+	// this index helps `projectReportCommitmentsQuery` in internal/reports/project.go
+	89: `
+		CREATE INDEX ON project_commitments (project_id);
+	`,
 }
