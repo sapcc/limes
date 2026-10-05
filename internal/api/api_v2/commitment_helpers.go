@@ -73,6 +73,12 @@ var (
 	errReceiveAmountTooHigh            = errors.New("cannot receive more amount than commitment in transfer has")
 	errReceiveAmountTooLow             = errors.New("cannot receive amount of 0")
 	errReceiveSourceTargetEqual        = errors.New("source and target project are equal")
+	errConversionSameResource          = errors.New("commitment conversion is only allowed to a different resource")
+	errNoSuchConversion                = errors.New("no such conversion available")
+	errConversionNoRounding            = errors.New("for this conversion, no rounding is allowed and there would be a remainder on the target side")
+	errConversionTargetZero            = errors.New("target amount would be zero")
+	errNoTransferConversion            = errors.New(`commitment in transfer must not be converted`)
+	errConversionOverflow              = errors.New(`the resulting value would exceed the amounts maximum value of 2^63-1`)
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {

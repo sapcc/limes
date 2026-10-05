@@ -88,8 +88,8 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		if amountIsSpecified && receivedAmount == 0 {
 			return respondwith.CustomStatus(http.StatusBadRequest, errReceiveAmountTooLow)
 		}
-		needsSplit := amountIsSpecified && receivedAmount < c.Amount
-		if !needsSplit {
+		hasLeftover := amountIsSpecified && receivedAmount < c.Amount
+		if !hasLeftover {
 			receivedAmount = c.Amount
 		}
 		_, _, err = p.validateCommittability(azRes.Path, targetScope, c.Duration, sis, "in target project: ")
@@ -144,24 +144,24 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 			OldTransferStatus: c.TransferStatus,
 			NewTransferStatus: limesresources.CommitmentTransferStatusNone,
 		}
-		var splitCommitment db.ProjectCommitment
-		if needsSplit {
+		var leftoverCommitment db.ProjectCommitment
+		if hasLeftover {
 			// leftover
 			splitCommitments, err := buildSplitCommitments(c, []uint64{c.Amount - receivedAmount}, now)
-			splitCommitment = *splitCommitments[0]
+			leftoverCommitment = *splitCommitments[0]
 			if err != nil {
 				return err
 			}
 			sourceCommitmentsForCCR = append(sourceCommitmentsForCCR, liquid.Commitment{
-				UUID:      splitCommitment.UUID,
-				NewStatus: Some(splitCommitment.Status),
-				Amount:    splitCommitment.Amount,
-				ConfirmBy: splitCommitment.ConfirmBy,
-				ExpiresAt: splitCommitment.ExpiresAt,
+				UUID:      leftoverCommitment.UUID,
+				NewStatus: Some(leftoverCommitment.Status),
+				Amount:    leftoverCommitment.Amount,
+				ConfirmBy: leftoverCommitment.ConfirmBy,
+				ExpiresAt: leftoverCommitment.ExpiresAt,
 			})
-			cacs[splitCommitment.UUID] = audit.CommitmentAttributeChangeset{
+			cacs[leftoverCommitment.UUID] = audit.CommitmentAttributeChangeset{
 				OldTransferStatus: limesresources.CommitmentTransferStatusNone,
-				NewTransferStatus: splitCommitment.TransferStatus,
+				NewTransferStatus: leftoverCommitment.TransferStatus,
 			}
 		}
 
@@ -243,13 +243,13 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		}
 		supersedeCommitmentIDs := []db.ProjectCommitmentID{receivedCommitment.ID}
 		supersedeCommitmentUUIDs := []liquid.CommitmentUUID{receivedCommitment.UUID}
-		if needsSplit {
-			err = db.ProjectCommitmentStore.Insert(ctx, tx, &splitCommitment)
+		if hasLeftover {
+			err = db.ProjectCommitmentStore.Insert(ctx, tx, &leftoverCommitment)
 			if err != nil {
 				return err
 			}
-			supersedeCommitmentIDs = append(supersedeCommitmentIDs, splitCommitment.ID)
-			supersedeCommitmentUUIDs = append(supersedeCommitmentUUIDs, splitCommitment.UUID)
+			supersedeCommitmentIDs = append(supersedeCommitmentIDs, leftoverCommitment.ID)
+			supersedeCommitmentUUIDs = append(supersedeCommitmentUUIDs, leftoverCommitment.UUID)
 		}
 		supersedeContext := db.CommitmentWorkflowContext{
 			Reason:                 db.CommitmentReasonReceive,
