@@ -183,4 +183,8 @@ var sqlMigrations = map[int64]string{
 	89: `
 		CREATE INDEX ON project_commitments (project_id);
 	`,
+	90: `
+		ALTER TABLE project_az_resources DROP COLUMN safe_mode_used;
+		ALTER TABLE az_resources ADD COLUMN safe_mode_used BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }

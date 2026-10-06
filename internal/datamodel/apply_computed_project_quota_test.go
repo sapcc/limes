@@ -563,11 +563,11 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 80
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
-			401: {Allocated: 35, SafeModeUsed: true}, // 30 * 1.2 = 36, but fair distribution gives only 35
-			402: {Allocated: 59, SafeModeUsed: true}, // 50 * 1.2 = 60, but fair distribution gives only 59
-			403: {Allocated: 6, SafeModeUsed: true},  //  5 * 1.2 =  6
-			404: {SafeModeUsed: true},
-			405: {SafeModeUsed: true},
+			401: {Allocated: 35}, // 30 * 1.2 = 36, but fair distribution gives only 35
+			402: {Allocated: 59}, // 50 * 1.2 = 60, but fair distribution gives only 59
+			403: {Allocated: 6},  //  5 * 1.2 =  6
+			404: {},
+			405: {},
 		},
 		"az-two": {
 			401: {Allocated: 0},
@@ -591,7 +591,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 			404: {Allocated: 10},
 			405: {Allocated: 10},
 		},
-	}, db.Resource{Topology: liquid.AZAwareTopology})
+	}, db.Resource{Topology: liquid.AZAwareTopology}, "az-one")
 }
 
 func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
@@ -1311,9 +1311,9 @@ func withCommitted(committed uint64, stats projectAZAllocationStats) projectAZAl
 	return stats
 }
 
-func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, expected acpqGlobalTarget, resource db.Resource) {
+func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, expected acpqGlobalTarget, resource db.Resource, expectedSafeModeAZs ...limes.AvailabilityZone) {
 	t.Helper()
-	actual, _ := acpqComputeQuotas(input, cfg, constraints, resource.Topology)
+	actual, _, actualSafeModeUsed := acpqComputeQuotas(input, cfg, constraints, resource.Topology)
 	// normalize away any left-over intermediate values
 	for _, azTarget := range actual {
 		for _, projectTarget := range azTarget {
@@ -1325,4 +1325,13 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 		t.Logf("config was %#v", cfg)
 		t.Logf("input was %s", must.ReturnT(json.Marshal(input))(t))
 	}
+
+	expectedSafeModeUsed := make(map[limes.AvailabilityZone]bool, len(actualSafeModeUsed))
+	for az := range actualSafeModeUsed {
+		expectedSafeModeUsed[az] = false
+	}
+	for _, az := range expectedSafeModeAZs {
+		expectedSafeModeUsed[az] = true
+	}
+	assert.Equal(t, actualSafeModeUsed, expectedSafeModeUsed)
 }

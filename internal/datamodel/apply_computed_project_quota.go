@@ -42,8 +42,13 @@ var (
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources
-		SET quota = $1, safe_mode_used = $2
-		WHERE project_id = $3 AND az_resource_id = $4 AND quota IS DISTINCT FROM $1
+		SET quota = $1
+		WHERE project_id = $2 AND az_resource_id = $3 AND quota IS DISTINCT FROM $1
+	`)
+	acpqUpdateSafeModeQuery = sqlext.SimplifyWhitespace(`
+		UPDATE az_resources
+		SET safe_mode_used = $1
+		WHERE id = $2 AND safe_mode_used IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -145,7 +150,7 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 			buf, _ := json.Marshal(constraints) //nolint:errcheck
 			logg.Debug("ACPQ for %s: constraints = %s", resource.Path, string(buf))
 		}
-		target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
+		target, allowsQuotaOvercommit, safeModeUsed := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
 		if logg.ShowDebug {
 			logg.Debug("ACPQ for %s: allowsQuotaOvercommit = %#v", resource.Path, allowsQuotaOvercommit)
 			buf, _ := json.Marshal(target) //nolint:errcheck
@@ -161,7 +166,7 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 				}
 				for projectID, projectTarget := range azTarget {
-					result, err := stmt.Exec(projectTarget.Allocated, projectTarget.SafeModeUsed, projectID, azRes.ID)
+					result, err := stmt.Exec(projectTarget.Allocated, projectID, azRes.ID)
 					if err != nil {
 						return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 					}
@@ -179,6 +184,24 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 		})
 		if err != nil {
 			return fmt.Errorf("while writing updated %s AZ quotas to DB: %w", resource.Path, err)
+		}
+
+		// write safe_mode_used on az_resources (this is an AZ-level property, not per-project)
+		err = sqlext.WithPreparedStatement(tx, acpqUpdateSafeModeQuery, func(stmt *sql.Stmt) error {
+			for az, safeMode := range safeModeUsed {
+				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
+				if !exists {
+					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
+				}
+				_, err := stmt.Exec(safeMode, azRes.ID)
+				if err != nil {
+					return fmt.Errorf("while updating safe_mode_used for %s/%s: %w", resource.Path, az, err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("while writing safe_mode_used for %s: %w", resource.Path, err)
 		}
 
 		// mark project services with changed quota for SyncQuotaToBackendJob
@@ -200,9 +223,8 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 
 // Calculation space for a single project AZ resource.
 type acpqProjectAZTarget struct {
-	Allocated    uint64
-	Desired      uint64
-	SafeModeUsed bool
+	Allocated uint64
+	Desired   uint64
 }
 
 // MarshalJSON implements the json.Marshaler interface.
@@ -251,7 +273,7 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, topology liquid.Topology) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, topology liquid.Topology) (target acpqGlobalTarget, allowsQuotaOvercommit, safeModeUsed map[limes.AvailabilityZone]bool) {
 	// in order to be able to handle usage in az=unknown via constraint (see below), we always initialize the map
 	if constraints == nil {
 		constraints = make(map[db.ProjectID]projectLocalQuotaConstraints)
@@ -298,7 +320,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// enumerate which AZs allow quota overcommit
 	allowsQuotaOvercommit = make(map[limes.AvailabilityZone]bool)
-	safeModeUsed := make(map[limes.AvailabilityZone]bool)
+	safeModeUsed = make(map[limes.AvailabilityZone]bool)
 	isAZAware := false
 	allowsQuotaOvercommitInAny := true
 	for az := range isRelevantAZ {
@@ -334,8 +356,6 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				Allocated: max(projectAZStats.Committed, projectAZStats.Usage),
 				// phase 2: try granting soft minimum quota
 				Desired: projectAZStats.MaxHistoricalUsage,
-				// copy the safe mode info once
-				SafeModeUsed: safeModeUsed[az],
 			}
 		}
 	}
@@ -406,7 +426,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 
-	return target, allowsQuotaOvercommit
+	return target, allowsQuotaOvercommit, safeModeUsed
 }
 
 // EnforceConstraints decreases Desired in order to fit into project-local quota constraints

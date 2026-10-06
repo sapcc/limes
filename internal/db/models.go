@@ -95,6 +95,8 @@ type AZResource struct {
 	// from existing AZs with faulty capacity recording that should block base quota overcommit.
 	// None for az=total
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
+	// This indicates whether this resource was in safe mode, when the quotas were last adjusted.
+	SafeModeUsed bool `db:"safe_mode_used"`
 }
 
 // AZResourceStore is the [oblast.Store] for the `az_resources` table.
@@ -222,8 +224,6 @@ type ProjectAZResource struct {
 	AZResourceID AZResourceID        `db:"az_resource_id"`
 	// None if hasQuota=false OR (az=total AND topology=az-separated) OR az=unknown
 	Quota Option[uint64] `db:"quota"`
-	// indicates whether this resource was in safe mode, when the quota was last adjusted
-	SafeModeUsed bool `db:"safe_mode_used"`
 	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
 	BackendQuota  Option[int64]  `db:"backend_quota"`
 	Usage         uint64         `db:"usage"`
