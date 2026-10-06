@@ -20,6 +20,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/is"
@@ -846,24 +847,6 @@ func (d *DataMetricsV2Reporter) Handler() http.Handler {
 
 var (
 	// dmv2 = data metrics v2
-	dmv2ResourceInfoQuery = sqlext.SimplifyWhitespace(`
-		SELECT s.type AS service_type, c.name AS category_name, r.*
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  LEFT OUTER JOIN categories c ON r.category_id = c.id
-	`)
-	dmv2ClusterResourceDataQuery = sqlext.SimplifyWhitespace(`
-		SELECT azr.id AS az_resource_id, s.type AS service_type, r.name AS resource_name, azr.az, r.topology, azr.raw_capacity, azr.safe_mode_used
-		  FROM services s
-		  JOIN resources r ON r.service_id = s.id
-		  JOIN az_resources azr ON azr.resource_id = r.id
-	`)
-	dmv2RateInfoQuery = sqlext.SimplifyWhitespace(`
-		SELECT s.type AS service_type, c.name AS category_name, ra.*
-		  FROM services s
-		  JOIN rates ra ON ra.service_id = s.id
-		  LEFT OUTER JOIN categories c ON ra.category_id = c.id
-	`)
 	dmv2ProjectInfoQuery = sqlext.SimplifyWhitespace(`
 		SELECT p.id AS project_id, p.name AS project_name, p.uuid AS project_uuid, d.name AS domain_name, d.uuid AS domain_uuid
 		  FROM domains d
@@ -894,189 +877,169 @@ var (
 )
 
 func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *microprom.MetricSet) error {
-	// fetch resource info
-	type resourceRecord struct {
-		ServiceType  db.ServiceType              `db:"service_type"`
-		CategoryName Option[liquid.CategoryName] `db:"category_name"`
-		db.Resource
-	}
+	sis := d.Cluster.SIC.GetSnapshot()
+
+	// emit resource metadata from the ServiceInfoCache
 	overcommitFactors := make(map[db.ServiceType]map[liquid.ResourceName]liquid.OvercommitFactor)
-	err := oblast.MustNewStore[resourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ResourceInfoQuery).Foreach(func(record resourceRecord) error {
-		srvType, res := record.ServiceType, record.Resource
-
-		// remember overcommit factor for capacity calculations below (want to avoid calling BehaviorForResource multiple times)
-		overcommitFactor := d.Cluster.BehaviorForResource(srvType, res.Name).OvercommitFactor
-		if overcommitFactor == 0 {
-			overcommitFactor = 1
-		}
-		srvOvercommitFactors := overcommitFactors[srvType]
-		if srvOvercommitFactors == nil {
-			srvOvercommitFactors = make(map[liquid.ResourceName]liquid.OvercommitFactor)
-			overcommitFactors[srvType] = srvOvercommitFactors
-		}
-		srvOvercommitFactors[res.Name] = overcommitFactor
-
-		// emit limitas_resource_info
-		qdConfig := d.Cluster.QuotaDistributionConfigForResource(srvType, res.Name)
-		qdmLabel := string(qdConfig.Model)
-		if !res.HasQuota {
-			qdmLabel = ""
-		}
-		labels := ms.FormatLabels(dmv2ResourceInfoLabelNames,
-			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
-			res.DisplayName, strconv.FormatBool(res.HasQuota),
-			qdmLabel, string(res.Name), string(srvType), string(res.Topology), res.Unit.String(),
-		)
-		ms.Add("limitas_resource_info", labels, 1)
-
-		// emit limitas_resource_overcommit_factor and limitas_resource_autogrow_*
-		// (those metrics are batched together here because they share the same `labels`)
-		labels = ms.FormatLabels(dmv2ResourceLabelNames,
-			string(res.Name), string(srvType),
-		)
-		ms.Add("limitas_resource_overcommit_factor", labels, float64(overcommitFactor))
-
-		autogrowCfg, ok := qdConfig.Autogrow.Unpack()
-		if ok {
-			ms.Add("limitas_resource_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
-
-			ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
-		}
-
-		// emit limitas_resource_unit_multiplier
-		baseUnit, multiplier := res.Unit.Base()
-		labels = ms.FormatLabels(dmv2ResourceUnitLabelNames,
-			baseUnit.String(), string(res.Name), string(srvType),
-		)
-		ms.Add("limitas_resource_unit_multiplier", labels, float64(multiplier))
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("in dmv2ResourceInfoQuery: %w", err)
-	}
-
-	// fetch cluster-scoped data (while also building a cached mapping of AZResourceID => ServiceType/ResourceName/AvailabilityZone for later)
-	type clusterResourceRecord struct {
-		AZResourceID     db.AZResourceID        `db:"az_resource_id"`
-		ServiceType      db.ServiceType         `db:"service_type"`
-		ResourceName     liquid.ResourceName    `db:"resource_name"`
-		AvailabilityZone limes.AvailabilityZone `db:"az"`
-		Topology         liquid.Topology        `db:"topology"`
-		RawCapacity      uint64                 `db:"raw_capacity"`
-		SafeModeUsed     bool                   `db:"safe_mode_used"`
-	}
-	clusterResourceRecordsByID := make(map[db.AZResourceID]clusterResourceRecord)
-	err = oblast.MustNewStore[clusterResourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ClusterResourceDataQuery).Foreach(func(crr clusterResourceRecord) error {
-		clusterResourceRecordsByID[crr.AZResourceID] = crr
-
-		// emit limitas_cluster_resource_safe_mode_used for all AZs except total and unknown
-		if crr.AvailabilityZone != liquid.AvailabilityZoneTotal && crr.AvailabilityZone != liquid.AvailabilityZoneUnknown {
-			safeModeLabels := ms.FormatLabels(dmv2AZResourceLabelNames,
-				string(crr.AvailabilityZone), string(crr.ResourceName), string(crr.ServiceType),
-			)
-			safeModeValue := float64(0)
-			if crr.SafeModeUsed {
-				safeModeValue = 1
+	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+		for resName, res := range sis.GetResourcesForType(serviceType).All() {
+			// remember overcommit factor for capacity calculations below (want to avoid calling BehaviorForResource multiple times)
+			overcommitFactor := d.Cluster.BehaviorForResource(serviceType, res.Name).OvercommitFactor
+			if overcommitFactor == 0 {
+				overcommitFactor = 1
 			}
-			ms.Add("limitas_cluster_resource_safe_mode_used", safeModeLabels, safeModeValue)
+			srvOvercommitFactors := overcommitFactors[serviceType]
+			if srvOvercommitFactors == nil {
+				srvOvercommitFactors = make(map[liquid.ResourceName]liquid.OvercommitFactor)
+				overcommitFactors[serviceType] = srvOvercommitFactors
+			}
+			srvOvercommitFactors[res.Name] = overcommitFactor
+
+			// emit limitas_resource_info
+			categoryName := liquid.CategoryName(serviceType)
+			if cat, ok := sis.GetCategoryForID(res.CategoryID); ok {
+				categoryName = cat.Name
+			}
+			qdConfig := d.Cluster.QuotaDistributionConfigForResource(serviceType, resName)
+			qdmLabel := string(qdConfig.Model)
+			if !res.HasQuota {
+				qdmLabel = ""
+			}
+			labels := ms.FormatLabels(dmv2ResourceInfoLabelNames,
+				string(categoryName),
+				res.DisplayName, strconv.FormatBool(res.HasQuota),
+				qdmLabel, string(res.Name), string(serviceType), string(res.Topology), res.Unit.String(),
+			)
+			ms.Add("limitas_resource_info", labels, 1)
+
+			// emit limitas_resource_overcommit_factor and limitas_resource_autogrow_*
+			// (those metrics are batched together here because they share the same `labels`)
+			labels = ms.FormatLabels(dmv2ResourceLabelNames,
+				string(res.Name), string(serviceType),
+			)
+			ms.Add("limitas_resource_overcommit_factor", labels, float64(overcommitFactor))
+
+			autogrowCfg, ok := qdConfig.Autogrow.Unpack()
+			if ok {
+				ms.Add("limitas_resource_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
+
+				ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
+			}
+
+			// emit limitas_resource_unit_multiplier
+			baseUnit, multiplier := res.Unit.Base()
+			labels = ms.FormatLabels(dmv2ResourceUnitLabelNames,
+				baseUnit.String(), string(res.Name), string(serviceType),
+			)
+			ms.Add("limitas_resource_unit_multiplier", labels, float64(multiplier))
 		}
+	}
 
-		// skip reporting AZ "total"
-		//
-		// If we were to report it, it would need to be in a separate metric family
-		// (e.g. `limitas_cluster_resource_capacity_total`) because otherwise intuitive expressions like
-		// `sum (limitas_cluster_resource_capacity) by (service, resource)` would produce unexpected results
-		// through double counting. But then this separate metric family can just be an aggregation rule in Prometheus.
-		if crr.AvailabilityZone == liquid.AvailabilityZoneTotal {
-			return nil
+	// emit cluster-scoped data from the ServiceInfoCache
+	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+		for res := range sis.GetResourcesForType(serviceType).Values() {
+			for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
+				// emit limitas_cluster_resource_safe_mode_used for all AZs except total and unknown
+				if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
+					safeModeLabels := ms.FormatLabels(dmv2AZResourceLabelNames,
+						string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
+					)
+					safeModeValue := float64(0)
+					if azRes.SafeModeUsed {
+						safeModeValue = 1
+					}
+					ms.Add("limitas_cluster_resource_safe_mode_used", safeModeLabels, safeModeValue)
+				}
+
+				// skip reporting AZ "total"
+				//
+				// If we were to report it, it would need to be in a separate metric family
+				// (e.g. `limitas_cluster_resource_capacity_total`) because otherwise intuitive expressions like
+				// `sum (limitas_cluster_resource_capacity) by (service, resource)` would produce unexpected results
+				// through double counting. But then this separate metric family can just be an aggregation rule in Prometheus.
+				if azRes.AvailabilityZone == liquid.AvailabilityZoneTotal {
+					continue
+				}
+
+				// skip reporting AZ "unknown" unless it actually holds capacity
+				if azRes.RawCapacity == 0 && azRes.AvailabilityZone == liquid.AvailabilityZoneUnknown {
+					continue
+				}
+
+				// skip az_resources records that only exist as scaffolding and do not hold capacity
+				// (e.g. on AZAwareTopology, AvailabilityZoneAny is irrelevant for capacity metrics,
+				// but exists in the DB because it needs to hold quota on the project level)
+				if azRes.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(res.Topology, azRes.AvailabilityZone) {
+					continue
+				}
+
+				// emit limitas_cluster_resource_raw_capacity
+				labels := ms.FormatLabels(dmv2AZResourceLabelNames,
+					string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
+				)
+				ms.Add("limitas_cluster_resource_raw_capacity", labels, float64(azRes.RawCapacity))
+
+				// emit limitas_cluster_resource_capacity
+				capacity := overcommitFactors[serviceType][res.Name].ApplyTo(azRes.RawCapacity)
+				ms.Add("limitas_cluster_resource_capacity", labels, float64(capacity))
+			}
 		}
-
-		// skip reporting AZ "unknown" unless it actually holds capacity
-		if crr.RawCapacity == 0 && crr.AvailabilityZone == liquid.AvailabilityZoneUnknown {
-			return nil
-		}
-
-		// skip az_resources records that only exist as scaffolding and do not hold capacity
-		// (e.g. on AZAwareTopology, AvailabilityZoneAny is irrelevant for capacity metrics,
-		// but exists in the DB because it needs to hold quota on the project level)
-		if crr.RawCapacity == 0 && !datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
-			return nil
-		}
-
-		// emit limitas_cluster_resource_raw_capacity
-		labels := ms.FormatLabels(dmv2AZResourceLabelNames,
-			string(crr.AvailabilityZone), string(crr.ResourceName), string(crr.ServiceType),
-		)
-		ms.Add("limitas_cluster_resource_raw_capacity", labels, float64(crr.RawCapacity))
-
-		// emit limitas_cluster_resource_capacity
-		capacity := overcommitFactors[crr.ServiceType][crr.ResourceName].ApplyTo(crr.RawCapacity)
-		ms.Add("limitas_cluster_resource_capacity", labels, float64(capacity))
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("in dmv2ClusterResourceDataQuery: %w", err)
 	}
 
 	// emit ACPQ duration per service
-	sis := d.Cluster.SIC.GetSnapshot()
 	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
 		service, _ := sis.GetServiceForType(serviceType)
 		labels := ms.FormatLabels(dmv2ServiceLabelNames, string(serviceType))
 		ms.Add("limitas_cluster_acpq_duration_secs", labels, service.ACPQDurationSecs)
 	}
 
-	// fetch rate info
-	type rateRecord struct {
-		ServiceType  db.ServiceType              `db:"service_type"`
-		CategoryName Option[liquid.CategoryName] `db:"category_name"`
-		db.Rate
-	}
+	// emit rate metadata from the ServiceInfoCache
 	type rateInfo struct {
 		Path           db.RatePath
 		ProjectDefault Option[core.RateLimitConfiguration]
 	}
 	rateInfoByID := make(map[db.RateID]rateInfo)
-	err = oblast.MustNewStore[rateRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2RateInfoQuery).Foreach(func(record rateRecord) error {
-		srvType, rate := record.ServiceType, record.Rate
-		lcfg, ok := d.Cluster.Config.GetLiquidConfigurationForType(srvType)
+	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+		lcfg, ok := d.Cluster.Config.GetLiquidConfigurationForType(serviceType)
 		if !ok {
-			return fmt.Errorf("got rate with unexpected service type: %s/%s", srvType, rate.Name)
+			continue
 		}
-		labels := ms.FormatLabels(dmv2RateLabelNames,
-			string(rate.Name), string(srvType),
-		)
+		for _, rate := range sis.GetRatesForType(serviceType).All() {
+			labels := ms.FormatLabels(dmv2RateLabelNames,
+				string(rate.Name), string(serviceType),
+			)
 
-		if cfg, ok := lcfg.RateLimits.GetGlobalRateLimit(rate.Name).Unpack(); ok {
-			// emit limitas_cluster_rate_global_limit
-			ms.Add("limitas_cluster_rate_global_limit", labels, float64(cfg.Limit))
+			if cfg, ok := lcfg.RateLimits.GetGlobalRateLimit(rate.Name).Unpack(); ok {
+				// emit limitas_cluster_rate_global_limit
+				ms.Add("limitas_cluster_rate_global_limit", labels, float64(cfg.Limit))
 
-			// emit limitas_cluster_rate_global_window_seconds
-			ms.Add("limitas_cluster_rate_global_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
+				// emit limitas_cluster_rate_global_window_seconds
+				ms.Add("limitas_cluster_rate_global_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
+			}
+
+			projectDefault := lcfg.RateLimits.GetProjectDefaultRateLimit(rate.Name)
+			if cfg, ok := projectDefault.Unpack(); ok {
+				// emit limitas_rate_default_limit
+				ms.Add("limitas_rate_default_limit", labels, float64(cfg.Limit))
+
+				// emit limitas_rate_default_window_seconds
+				ms.Add("limitas_rate_default_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
+			}
+
+			// emit limitas_rate_info
+			categoryName := liquid.CategoryName(serviceType)
+			if cat, ok := sis.GetCategoryForID(rate.CategoryID); ok {
+				categoryName = cat.Name
+			}
+			labels = ms.FormatLabels(dmv2RateInfoLabelNames,
+				string(categoryName),
+				rate.DisplayName, strconv.FormatBool(projectDefault.IsSome()), strconv.FormatBool(rate.HasUsage),
+				string(rate.Name), string(serviceType), string(rate.Topology), rate.Unit.String(),
+			)
+			ms.Add("limitas_rate_info", labels, 1)
+
+			rateInfoByID[rate.ID] = rateInfo{Path: rate.Path, ProjectDefault: projectDefault}
 		}
-
-		projectDefault := lcfg.RateLimits.GetProjectDefaultRateLimit(rate.Name)
-		if cfg, ok := projectDefault.Unpack(); ok {
-			// emit limitas_rate_default_limit
-			ms.Add("limitas_rate_default_limit", labels, float64(cfg.Limit))
-
-			// emit limitas_rate_default_window_seconds
-			ms.Add("limitas_rate_default_window_seconds", labels, float64(cfg.Window)/float64(limesrates.WindowSeconds))
-		}
-
-		// emit limitas_rate_info
-		labels = ms.FormatLabels(dmv2RateInfoLabelNames,
-			string(record.CategoryName.UnwrapOr(liquid.CategoryName(srvType))),
-			rate.DisplayName, strconv.FormatBool(projectDefault.IsSome()), strconv.FormatBool(rate.HasUsage),
-			string(rate.Name), string(srvType), string(rate.Topology), rate.Unit.String(),
-		)
-		ms.Add("limitas_rate_info", labels, 1)
-
-		rateInfoByID[rate.ID] = rateInfo{Path: rate.Path, ProjectDefault: projectDefault}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("in dmv2RateInfoQuery: %w", err)
 	}
 
 	// fetch project metadata:
@@ -1094,14 +1057,19 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		projectInfoRecordsByID             = make(map[db.ProjectID]projectInfoRecord)
 		isResourceCommittableForDomainName = make(map[string]map[db.AZResourceID]bool)
 	)
-	err = oblast.MustNewStore[projectInfoRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectInfoQuery).Foreach(func(pir projectInfoRecord) error {
+	err := oblast.MustNewStore[projectInfoRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectInfoQuery).Foreach(func(pir projectInfoRecord) error {
 		projectInfoRecordsByID[pir.ProjectID] = pir
 
 		if _, ok := isResourceCommittableForDomainName[pir.DomainName]; !ok {
-			result := make(map[db.AZResourceID]bool, len(clusterResourceRecordsByID))
-			for _, crr := range clusterResourceRecordsByID {
-				cb := d.Cluster.CommitmentBehaviorForResource(crr.ServiceType, crr.ResourceName).ForDomain(pir.DomainName)
-				result[crr.AZResourceID] = len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(d.TimeNow()))
+			result := make(map[db.AZResourceID]bool)
+			for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
+				for _, res := range sis.GetResourcesForType(serviceType).All() {
+					cb := d.Cluster.CommitmentBehaviorForResource(serviceType, res.Name).ForDomain(pir.DomainName)
+					committable := len(cb.Durations) > 0 && cb.MinConfirmDate.IsNoneOr(is.Before(d.TimeNow()))
+					for _, azRes := range sis.GetAZResourcesForPath(res.Path).All() {
+						result[azRes.ID] = committable
+					}
+				}
 			}
 			isResourceCommittableForDomainName[pir.DomainName] = result
 		}
@@ -1123,7 +1091,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 	}
 	confirmedCommitmentSums := make(map[db.AZResourceID]map[db.ProjectID]uint64)
 	err = oblast.MustNewStore[projectCommitmentRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectCommitmentDataQuery).Foreach(func(pcr projectCommitmentRecord) error {
-		crr, ok := clusterResourceRecordsByID[pcr.AZResourceID]
+		azRes, ok := sis.GetAZResourceForID(pcr.AZResourceID)
 		if !ok {
 			return fmt.Errorf("saw unexpected AZResourceID %d", pcr.AZResourceID)
 		}
@@ -1135,9 +1103,9 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 
 		labels := ms.FormatLabels(dmv2ProjectCommitmentLabelNames,
-			string(crr.AvailabilityZone),
+			string(azRes.AvailabilityZone),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
-			string(crr.ResourceName), string(crr.ServiceType),
+			string(azRes.Path.ResourceName), string(azRes.Path.ServiceType),
 			string(pcr.Status), string(pcr.TransferStatus), string(pcr.UUID),
 		)
 
@@ -1171,10 +1139,11 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		PhysicalUsage Option[uint64]  `db:"physical_usage"`
 	}
 	err = oblast.MustNewStore[projectResourceRecord](oblast.PostgresDialect()).Select(ctx, d.DB, dmv2ProjectResourceDataQuery).Foreach(func(prr projectResourceRecord) error {
-		crr, ok := clusterResourceRecordsByID[prr.AZResourceID]
+		azRes, ok := sis.GetAZResourceForID(prr.AZResourceID)
 		if !ok {
 			return fmt.Errorf("saw unexpected AZResourceID %d", prr.AZResourceID)
 		}
+		res := must.BeOK(sis.GetResourceForID(azRes.ResourceID)) // the SIC is consistent in itself
 		pir, ok := projectInfoRecordsByID[prr.ProjectID]
 		if !ok {
 			// if a project is being created while this function is going through its motions,
@@ -1183,12 +1152,12 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 
 		labels := ms.FormatLabels(dmv2ProjectAZResourceLabelNames,
-			string(crr.AvailabilityZone), strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
+			string(azRes.AvailabilityZone), strconv.FormatBool(isResourceCommittableForDomainName[pir.DomainName][prr.AZResourceID]),
 			pir.DomainName, pir.DomainUUID, pir.ProjectName, pir.ProjectUUID,
-			string(crr.ResourceName), string(crr.ServiceType),
+			string(azRes.Path.ResourceName), string(azRes.Path.ServiceType),
 		)
 
-		if datamodel.AZHasLiquidReportForTopology(crr.Topology, crr.AvailabilityZone) {
+		if datamodel.AZHasLiquidReportForTopology(res.Topology, azRes.AvailabilityZone) {
 			// emit limitas_project_resource_allocation
 			committed := confirmedCommitmentSums[prr.AZResourceID][prr.ProjectID]
 			if allocated := max(committed, prr.Usage); allocated != 0 {
@@ -1207,7 +1176,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 
 		// emit limitas_project_resource_quota
-		if crr.AvailabilityZone != liquid.AvailabilityZoneTotal {
+		if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal {
 			if quota, ok := prr.Quota.Unpack(); ok && quota != 0 {
 				ms.Add("limitas_project_resource_quota", labels, float64(quota))
 			}
