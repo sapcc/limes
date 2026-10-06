@@ -216,6 +216,7 @@ func Test_ScanCapacity(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
@@ -325,6 +326,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_metrics.prom")
 	expectedContentType := resp.Header().Get("Content-Type")
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	resp = dmrV1.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
@@ -417,6 +419,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
