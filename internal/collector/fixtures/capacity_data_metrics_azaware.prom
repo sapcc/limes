@@ -14,11 +14,11 @@ limes_cluster_capacity{resource="things",service="shared",service_name="shared"}
 # TYPE limes_cluster_capacity_per_az gauge
 limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 15
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 15
-# HELP limes_cluster_safe_mode_used Whether the ACPQ algorithm was in safe mode for a Limes resource in a specific availability zone. 1 if safe mode was used, 0 otherwise.
-# TYPE limes_cluster_safe_mode_used gauge
-limes_cluster_safe_mode_used{availability_zone="any",resource="things",service="shared",service_name="shared"} 0
-limes_cluster_safe_mode_used{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 0
-limes_cluster_safe_mode_used{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 0
+# HELP limes_cluster_resource_allows_quota_overcommit Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.
+# TYPE limes_cluster_resource_allows_quota_overcommit gauge
+limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="things",service="shared",service_name="shared"} 0
+limes_cluster_resource_allows_quota_overcommit{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 0
+limes_cluster_resource_allows_quota_overcommit{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 0
 # HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
 # TYPE limes_cluster_usage_per_az gauge
 limes_cluster_usage_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 3

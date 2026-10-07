@@ -187,4 +187,7 @@ var sqlMigrations = map[int64]string{
 		ALTER TABLE project_az_resources DROP COLUMN safe_mode_used;
 		ALTER TABLE az_resources ADD COLUMN safe_mode_used BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
+	91: `
+		ALTER TABLE az_resources RENAME COLUMN safe_mode_used TO allows_quota_overcommit;
+	`,
 }

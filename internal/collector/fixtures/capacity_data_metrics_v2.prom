@@ -1,3 +1,7 @@
+# HELP limitas_az_resource_info Info metric for AZ resources. The value is always 1, and information can be found in labels.
+# TYPE limitas_az_resource_info gauge
+limitas_az_resource_info{allows_quota_overcommit="true",az="any",resource="capacity",service="unshared"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="any",resource="things",service="shared"} 1
 # HELP limitas_cluster_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.
 # TYPE limitas_cluster_acpq_duration_secs gauge
 limitas_cluster_acpq_duration_secs{service="shared"} 5
@@ -10,10 +14,6 @@ limitas_cluster_resource_capacity{az="any",resource="things",service="shared"} 2
 # TYPE limitas_cluster_resource_raw_capacity gauge
 limitas_cluster_resource_raw_capacity{az="any",resource="capacity",service="unshared"} 42
 limitas_cluster_resource_raw_capacity{az="any",resource="things",service="shared"} 23
-# HELP limitas_cluster_resource_safe_mode_used Whether the ACPQ algorithm was in safe mode for this resource and AZ, i.e. quota overcommit was disabled because the allocated amount reached the configured threshold. 1 if safe mode was used, 0 otherwise.
-# TYPE limitas_cluster_resource_safe_mode_used gauge
-limitas_cluster_resource_safe_mode_used{az="any",resource="capacity",service="unshared"} 0
-limitas_cluster_resource_safe_mode_used{az="any",resource="things",service="shared"} 0
 # HELP limitas_resource_autogrow_growth_multiplier For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unshared"} 1

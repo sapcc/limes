@@ -1,3 +1,11 @@
+# HELP limitas_az_resource_info Info metric for AZ resources. The value is always 1, and information can be found in labels.
+# TYPE limitas_az_resource_info gauge
+limitas_az_resource_info{allows_quota_overcommit="true",az="any",resource="capacity",service="unittest"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="any",resource="things",service="unittest"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="az-one",resource="capacity",service="unittest"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="az-one",resource="things",service="unittest"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="az-two",resource="capacity",service="unittest"} 1
+limitas_az_resource_info{allows_quota_overcommit="true",az="az-two",resource="things",service="unittest"} 1
 # HELP limitas_cluster_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.
 # TYPE limitas_cluster_acpq_duration_secs gauge
 limitas_cluster_acpq_duration_secs{service="unittest"} 0
@@ -21,14 +29,6 @@ limitas_cluster_resource_raw_capacity{az="az-one",resource="things",service="uni
 limitas_cluster_resource_raw_capacity{az="az-two",resource="capacity",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="az-two",resource="things",service="unittest"} 0
 limitas_cluster_resource_raw_capacity{az="unknown",resource="capacity",service="unittest"} 617
-# HELP limitas_cluster_resource_safe_mode_used Whether the ACPQ algorithm was in safe mode for this resource and AZ, i.e. quota overcommit was disabled because the allocated amount reached the configured threshold. 1 if safe mode was used, 0 otherwise.
-# TYPE limitas_cluster_resource_safe_mode_used gauge
-limitas_cluster_resource_safe_mode_used{az="any",resource="capacity",service="unittest"} 0
-limitas_cluster_resource_safe_mode_used{az="any",resource="things",service="unittest"} 0
-limitas_cluster_resource_safe_mode_used{az="az-one",resource="capacity",service="unittest"} 0
-limitas_cluster_resource_safe_mode_used{az="az-one",resource="things",service="unittest"} 0
-limitas_cluster_resource_safe_mode_used{az="az-two",resource="capacity",service="unittest"} 0
-limitas_cluster_resource_safe_mode_used{az="az-two",resource="things",service="unittest"} 0
 # HELP limitas_project_rate_limit For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).
 # TYPE limitas_project_rate_limit gauge
 limitas_project_rate_limit{az="any",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",rate="rateWithProjectLimit",service="unittest"} 50

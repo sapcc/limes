@@ -356,7 +356,7 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 			"limes_available_commitment_duration":               gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
 			"limes_cluster_capacity":                            gauge(`Reported capacity of a Limes resource for an OpenStack cluster.`),
 			"limes_cluster_capacity_per_az":                     gauge("Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone."),
-			"limes_cluster_safe_mode_used":                      gauge(`Whether the ACPQ algorithm was in safe mode for a Limes resource in a specific availability zone. 1 if safe mode was used, 0 otherwise.`),
+			"limes_cluster_resource_allows_quota_overcommit":    gauge(`Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.`),
 			"limes_cluster_usage_per_az":                        gauge("Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone."),
 			"limes_domain_quota":                                gauge(`Assigned quota of a Limes resource for an OpenStack domain.`),
 			"limes_project_backendquota":                        gauge(`Actual quota of a Limes resource for an OpenStack project.`),
@@ -375,7 +375,7 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity) AS capacity_per_az_json, JSON_OBJECT_AGG(azr.az, azr.usage) AS usage_per_az_json, JSON_OBJECT_AGG(azr.az, azr.safe_mode_used) AS safe_mode_per_az_json
+	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity) AS capacity_per_az_json, JSON_OBJECT_AGG(azr.az, azr.usage) AS usage_per_az_json, JSON_OBJECT_AGG(azr.az, azr.allows_quota_overcommit) AS allows_quota_overcommit_per_az_json
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -470,18 +470,18 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 
 	// fetch values for cluster level
 	type clusterCapacityRecord struct {
-		ServiceType       db.ServiceType      `db:"type"`
-		ResourceName      liquid.ResourceName `db:"name"`
-		CapacityPerAZJSON string              `db:"capacity_per_az_json"`
-		UsagePerAZJSON    string              `db:"usage_per_az_json"`
-		SafeModePerAZJSON string              `db:"safe_mode_per_az_json"`
+		ServiceType                    db.ServiceType      `db:"type"`
+		ResourceName                   liquid.ResourceName `db:"name"`
+		CapacityPerAZJSON              string              `db:"capacity_per_az_json"`
+		UsagePerAZJSON                 string              `db:"usage_per_az_json"`
+		AllowsQuotaOvercommitPerAZJSON string              `db:"allows_quota_overcommit_per_az_json"`
 	}
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
 	err := oblast.MustNewStore[clusterCapacityRecord](oblast.PostgresDialect()).Select(ctx, d.DB, clusterMetricsQuery).Foreach(func(r clusterCapacityRecord) error {
 		var (
-			capacityPerAZ map[liquid.AvailabilityZone]uint64
-			usagePerAZ    map[liquid.AvailabilityZone]*uint64
-			safeModePerAZ map[liquid.AvailabilityZone]bool
+			capacityPerAZ              map[liquid.AvailabilityZone]uint64
+			usagePerAZ                 map[liquid.AvailabilityZone]*uint64
+			allowsQuotaOvercommitPerAZ map[liquid.AvailabilityZone]bool
 		)
 		err := json.Unmarshal([]byte(r.CapacityPerAZJSON), &capacityPerAZ)
 		if err != nil {
@@ -491,7 +491,7 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal([]byte(r.SafeModePerAZJSON), &safeModePerAZ)
+		err = json.Unmarshal([]byte(r.AllowsQuotaOvercommitPerAZJSON), &allowsQuotaOvercommitPerAZ)
 		if err != nil {
 			return err
 		}
@@ -503,19 +503,19 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		behavior := behaviorCache.Get(r.ServiceType, r.ResourceName)
 		apiIdentity := behavior.IdentityInV1API
 
-		// emit safe mode metric for all AZs except unknown (which can never be true)
-		for az, safeMode := range safeModePerAZ {
+		// emit allows_quota_overcommit metric for all AZs except unknown (which can never be true)
+		for az, allowsQuotaOvercommit := range allowsQuotaOvercommitPerAZ {
 			if az == liquid.AvailabilityZoneUnknown {
 				continue
 			}
-			safeModeLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
+			allowsQuotaOvercommitLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
 				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
-			safeModeValue := float64(0)
-			if safeMode {
-				safeModeValue = 1
+			quotaOvercommitValue := float64(0)
+			if allowsQuotaOvercommit {
+				quotaOvercommitValue = 1
 			}
-			ms.Add("limes_cluster_safe_mode_used", safeModeLabels, safeModeValue)
+			ms.Add("limes_cluster_resource_allows_quota_overcommit", allowsQuotaOvercommitLabels, quotaOvercommitValue)
 		}
 
 		for az, azCapacity := range capacityPerAZ {
@@ -823,7 +823,7 @@ func (d *DataMetricsV2Reporter) Handler() http.Handler {
 			"limitas_cluster_rate_global_window_seconds":                   gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_cluster_resource_capacity":                            gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
 			"limitas_cluster_resource_raw_capacity":                        gauge(`Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`),
-			"limitas_cluster_resource_safe_mode_used":                      gauge(`Whether the ACPQ algorithm was in safe mode for this resource and AZ, i.e. quota overcommit was disabled because the allocated amount reached the configured threshold. 1 if safe mode was used, 0 otherwise.`),
+			"limitas_az_resource_info":                                     gauge(`Info metric for AZ resources. The value is always 1, and information can be found in labels.`),
 			"limitas_project_rate_limit":                                   gauge(`For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_project_rate_usage":                                   counter(`For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`),
 			"limitas_project_rate_window_seconds":                          gauge(`For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
@@ -862,11 +862,12 @@ var (
 		  FROM project_az_resources
 	`)
 
-	dmv2ResourceLabelNames     = microprom.NewLabelNames("resource", "service")
-	dmv2ResourceInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
-	dmv2ResourceUnitLabelNames = microprom.NewLabelNames("base_unit", "resource", "service")
-	dmv2ServiceLabelNames      = microprom.NewLabelNames("service")
-	dmv2AZResourceLabelNames   = microprom.NewLabelNames("az", "resource", "service")
+	dmv2ResourceLabelNames       = microprom.NewLabelNames("resource", "service")
+	dmv2ResourceInfoLabelNames   = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
+	dmv2ResourceUnitLabelNames   = microprom.NewLabelNames("base_unit", "resource", "service")
+	dmv2ServiceLabelNames        = microprom.NewLabelNames("service")
+	dmv2AZResourceLabelNames     = microprom.NewLabelNames("az", "resource", "service")
+	dmv2AZResourceInfoLabelNames = microprom.NewLabelNames("allows_quota_overcommit", "az", "resource", "service")
 
 	dmv2RateLabelNames     = microprom.NewLabelNames("rate", "service")
 	dmv2RateInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit")
@@ -939,16 +940,12 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
 		for res := range sis.GetResourcesForType(serviceType).Values() {
 			for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
-				// emit limitas_cluster_resource_safe_mode_used for all AZs except total and unknown
+				// emit limitas_az_resource_info for all AZs except total and unknown
 				if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
-					safeModeLabels := ms.FormatLabels(dmv2AZResourceLabelNames,
-						string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
+					azResInfoLabels := ms.FormatLabels(dmv2AZResourceInfoLabelNames,
+						strconv.FormatBool(!azRes.AllowsQuotaOvercommit), string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
 					)
-					safeModeValue := float64(0)
-					if azRes.SafeModeUsed {
-						safeModeValue = 1
-					}
-					ms.Add("limitas_cluster_resource_safe_mode_used", safeModeLabels, safeModeValue)
+					ms.Add("limitas_az_resource_info", azResInfoLabels, 1)
 				}
 
 				// skip reporting AZ "total"

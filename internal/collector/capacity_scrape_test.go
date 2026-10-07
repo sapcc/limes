@@ -475,6 +475,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -496,6 +497,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = FALSE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -517,6 +519,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';

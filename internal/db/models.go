@@ -95,8 +95,8 @@ type AZResource struct {
 	// from existing AZs with faulty capacity recording that should block base quota overcommit.
 	// None for az=total
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
-	// This indicates whether this resource was in safe mode, when the quotas were last adjusted.
-	SafeModeUsed bool `db:"safe_mode_used"`
+	// This indicates whether this resource allowed quota overcommit when the quotas were last adjusted.
+	AllowsQuotaOvercommit bool `db:"allows_quota_overcommit"`
 }
 
 // AZResourceStore is the [oblast.Store] for the `az_resources` table.
