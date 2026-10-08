@@ -108,7 +108,7 @@ type ProjectHistoricalReport struct {
 	Duration limesrates.Window `json:"duration"`
 }
 
-// ProjectResourceMaxQuotaRequest is the request payload format for POST /resources/v2/projects/:project_uuid/max-quota.
+// ProjectResourceMaxQuotaRequest is the request payload format for PUT /resources/v2/projects/:project_uuid/max-quota.
 type ProjectResourceMaxQuotaRequest struct {
 	// Service/ Resource identification
 	ServiceType  db.ServiceType      `json:"service_type"`
@@ -118,7 +118,7 @@ type ProjectResourceMaxQuotaRequest struct {
 	MaxQuotaUnit Option[limes.Unit] `json:"unit,omitzero"`      // has to be Some() when MaxQuota.IsSome()
 }
 
-// ProjectResourceForbidAutogrowthRequest is the request payload format for POST /resources/v2/projects/:project_uuid/forbid-autogrowth.
+// ProjectResourceForbidAutogrowthRequest is the request payload format for PUT /resources/v2/projects/:project_uuid/forbid-autogrowth.
 type ProjectResourceForbidAutogrowthRequest struct {
 	// Service/ Resource identification
 	ServiceType  db.ServiceType      `json:"service_type"`

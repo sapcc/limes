@@ -8,16 +8,24 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/sapcc/go-api-declarations/cadf"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-api-declarations/opts"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
+
+	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
+	"github.com/sapcc/limes/internal/audit"
+	"github.com/sapcc/limes/internal/db"
 )
 
 // handleGetResourcesProjects handles GET /resources/v2/projects.
@@ -141,4 +149,184 @@ func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, to
 // checkAuthZForReportWithSingleProject handles AuthZ for GET /{resources,rates}/v2/projects/:project_uuid.
 func (p *v2Provider) checkAuthZForReportWithSingleProject(ctx context.Context, token *gopherpolicy.Token) (reports_v2.Scope, error) {
 	return p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:report_single")
+}
+
+// (p *v2Provider) handlePutMaxQuota handles PUT /resources/v2/projects/:project_uuid/max-quota.
+func (p *v2Provider) handlePutMaxQuota(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
+	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid/max-quota")
+	var (
+		ctx = r.Context()
+		sis = p.Cluster.SIC.GetSnapshot()
+		now = p.timeNow()
+	)
+
+	scope, err := p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:max_quota_update")
+	if err != nil {
+		return none, err
+	}
+
+	// validate request contents
+	req, err := parseRequestBodyAs[resourcesv2.ProjectResourceMaxQuotaRequest](r)
+	if err != nil {
+		return none, err
+	}
+	_, sExists := sis.GetServiceForType(req.ServiceType)
+	if !sExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	res, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: req.ServiceType, ResourceName: req.ResourceName})
+	if !rExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchResource)
+	}
+	if !res.HasQuota {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotTrackQuota)
+	}
+	if req.MaxQuota.IsSome() != req.MaxQuotaUnit.IsSome() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("unit should be set when max_quota is set"))
+	}
+
+	// get projectResource
+	projectResources, err := db.ProjectResourceStore.SelectWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID).Collect()
+	if err != nil {
+		return none, err
+	}
+	if len(projectResources) == 0 {
+		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
+	}
+	projectResource := projectResources[0]
+	if projectResource.Forbidden {
+		return none, respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
+	}
+
+	// modifications
+	oldValue := projectResource.MaxQuotaFromOutsideAdmin
+	if maxQuota, ok := req.MaxQuota.Unpack(); ok {
+		unit := must.BeOK(req.MaxQuotaUnit.Unpack()) // already checked above
+		converted, err := limes.ValueWithUnit{
+			Unit:  unit,
+			Value: maxQuota,
+		}.ConvertTo(res.Unit)
+		if err != nil {
+			return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("given unit was not convertible to the resources unit"))
+		}
+		projectResource.MaxQuotaFromOutsideAdmin = Some(converted.Value)
+	} else {
+		projectResource.MaxQuotaFromOutsideAdmin = None[uint64]()
+	}
+
+	// early return or update
+	if oldValue == projectResource.MaxQuotaFromOutsideAdmin {
+		return none, nil
+	}
+	err = db.ProjectResourceStore.Update(ctx, p.DB, projectResource)
+	if err != nil {
+		return none, err
+	}
+
+	// audit log entry
+	p.auditor.Record(audittools.Event{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.UpdateAction,
+		Target: audit.V2MaxQuotaEventTarget{
+			DomainID:     scope.Domain.UUID,
+			DomainName:   scope.Domain.Name,
+			ProjectID:    scope.Project.UUID,
+			ProjectName:  scope.Project.Name,
+			ServiceType:  req.ServiceType,
+			ResourceName: req.ResourceName,
+			RequestedChange: audit.MaxQuotaChange{
+				OldValue: oldValue,
+				NewValue: projectResource.MaxQuotaFromOutsideAdmin,
+			},
+		},
+	})
+
+	return none, nil
+}
+
+// (p *v2Provider) handlePutForbidAutogrowth handles PUT /resources/v2/projects/:project_uuid/forbid-autogrowth.
+func (p *v2Provider) handlePutForbidAutogrowth(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
+	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid/forbid-autogrowth")
+	var (
+		ctx = r.Context()
+		sis = p.Cluster.SIC.GetSnapshot()
+		now = p.timeNow()
+	)
+
+	scope, err := p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:forbid_autogrowth_update")
+	if err != nil {
+		return none, err
+	}
+
+	// validate request contents
+	req, err := parseRequestBodyAs[resourcesv2.ProjectResourceForbidAutogrowthRequest](r)
+	if err != nil {
+		return none, err
+	}
+	_, sExists := sis.GetServiceForType(req.ServiceType)
+	if !sExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	res, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: req.ServiceType, ResourceName: req.ResourceName})
+	if !rExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchResource)
+	}
+	if !res.HasQuota {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotTrackQuota)
+	}
+	behavior := p.Cluster.CommitmentBehaviorForResourcePath(res.Path).ForDomain(scope.Domain.Name)
+	if len(behavior.Durations) == 0 {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotHaveCommitments)
+	}
+
+	// get projectResource
+	projectResources, err := db.ProjectResourceStore.SelectWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID).Collect()
+	if err != nil {
+		return none, err
+	}
+	if len(projectResources) == 0 {
+		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
+	}
+	projectResource := projectResources[0]
+	if projectResource.Forbidden {
+		return none, respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
+	}
+
+	// modifications
+	oldValue := projectResource.ForbidAutogrowth
+	projectResource.ForbidAutogrowth = req.ForbidAutogrowth
+
+	// early return or update
+	if oldValue == projectResource.ForbidAutogrowth {
+		return none, nil
+	}
+	err = db.ProjectResourceStore.Update(ctx, p.DB, projectResource)
+	if err != nil {
+		return none, err
+	}
+
+	// audit log entry
+	p.auditor.Record(audittools.Event{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.UpdateAction,
+		Target: audit.V2AutogrowthEventTarget{
+			DomainID:     scope.Domain.UUID,
+			DomainName:   scope.Domain.Name,
+			ProjectID:    scope.Project.UUID,
+			ProjectName:  scope.Project.Name,
+			ServiceType:  req.ServiceType,
+			ResourceName: req.ResourceName,
+			AutogrowthChange: audit.AutogrowthChange{
+				ForbidAutogrowth: projectResource.ForbidAutogrowth,
+			},
+		},
+	})
+
+	return none, nil
 }
