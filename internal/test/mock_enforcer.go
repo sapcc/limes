@@ -21,15 +21,17 @@ type PolicyEnforcer struct {
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
 	// flags by v2 action
-	AllowReportSingle          bool
-	AllowReportMultiple        bool
-	AllowCommitmentCreate      bool
-	AllowCommitmentDelete      bool
-	AllowCommitmentDeleteAdmin bool
-	AllowCommitmentGet         bool
-	AllowCommitmentGetPublic   bool
-	AllowCommitmentGetUnscoped bool
-	AllowCommitmentUpdate      bool
+	AllowReportSingle           bool
+	AllowReportMultiple         bool
+	AllowCommitmentCreate       bool
+	AllowCommitmentDelete       bool
+	AllowCommitmentDeleteAdmin  bool
+	AllowCommitmentGet          bool
+	AllowCommitmentGetPublic    bool
+	AllowCommitmentGetUnscoped  bool
+	AllowCommitmentUpdate       bool
+	AllowMaxQuotaUpdate         bool
+	AllowForbidAutogrowthUpdate bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
 	ForbidWithHistoricalUsage bool
 	ForbidWithObsolete        bool
@@ -98,6 +100,10 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowCommitmentGetUnscoped
 	case "commitment_update":
 		return e.AllowCommitmentUpdate
+	case "max_quota_update":
+		return e.AllowMaxQuotaUpdate
+	case "forbid_autogrowth_update":
+		return e.AllowForbidAutogrowthUpdate
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
 	case "with_obsolete":

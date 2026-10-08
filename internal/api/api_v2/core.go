@@ -66,6 +66,8 @@ func (p *v2Provider) AddTo(c *httpapi.Composer) {
 	resRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
 	resRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
 	resRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
+	resRouter.Methods("PUT").Path("/projects/{project_uuid}/max-quota").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePutMaxQuota))
+	resRouter.Methods("PUT").Path("/projects/{project_uuid}/forbid-autogrowth").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePutForbidAutogrowth))
 	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
 	resRouter.Methods("DELETE").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
 	resRouter.Methods("PATCH").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handlePatchCommitment))
