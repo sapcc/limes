@@ -63,6 +63,24 @@
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [resourcesv2.ProjectGetResponse].
 //
+// # Endpoint: PUT /resources/v2/projects/:project_uuid/max-quota
+//
+// Updates the user-specified max-quota-forbid-autogrowth for a project, if permissions allow.
+// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
+// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter.
+// A cloud-admin token can always access this path.
+//   - The request body payload must be of type [resourcesv2.ProjectResourceMaxQuotaRequest].
+//   - On success, status code 204 (No Content) will be returned.
+//
+// # Endpoint: PUT /resources/v2/projects/:project_uuid/forbid-autogrowth
+//
+// Updates the user-specified forbid-autogrowth-setting for a project, if permissions allow.
+// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
+// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter.
+// A cloud-admin token can always access this path.
+//   - The request body payload must be of type [resourcesv2.ProjectResourceForbidAutogrowthRequest].
+//   - On success, status code 204 (No Content) will be returned.
+//
 // # Endpoint: GET /resources/v2/availability
 //
 // TODO: fill when implemented

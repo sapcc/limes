@@ -69,9 +69,11 @@ The v2 API uses the policy rules listed below.
 | `v2:project:commitment_get_public` | none | `GET /resources/v2/commitments?only_public=true` |
 | `v2:project:commitment_get_unscoped` | none | `GET /resources/v2/commitments` without `domain_uuid` and `project_uuid` filters |
 | `v2:project:commitment_update` | `domain_uuid`, `project_uuid` | `PATCH /resources/v2/commitments/:commitment_uuid` |
+| `v2:project:forbid_autogrowth_update` | `project_uuid` | `PUT /resources/v2/projects/:project_uuid/forbid-autogrowth` |
 | `v2:cluster:info` | none | `GET /{rates,resources}/v2/info` for whole cluster and `?with=info` in cluster-level reports |
 | `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
+| `v2:project:max_quota_update` | `project_uuid` | `PUT /resources/v2/projects/:project_uuid/max-quota` |
 | `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
 | `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
 | `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster` |
