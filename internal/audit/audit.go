@@ -18,6 +18,8 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 // MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -52,6 +54,32 @@ func (t MaxQuotaEventTarget) Render() cadf.Resource {
 	}
 }
 
+// V2MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event of the v2 API.
+type V2MaxQuotaEventTarget struct {
+	DomainID        string
+	DomainName      string
+	ProjectID       liquid.ProjectUUID
+	ProjectName     string
+	ServiceType     db.ServiceType
+	ResourceName    liquid.ResourceName
+	RequestedChange MaxQuotaChange
+}
+
+// Render implements the audittools.Target interface.
+func (t V2MaxQuotaEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
+		},
+	}
+}
+
 // AutogrowthEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding the forbid-autogrowth flag.
 type AutogrowthEventTarget struct {
@@ -71,6 +99,33 @@ type AutogrowthChange struct {
 
 // Render implements the audittools.Target interface.
 func (t AutogrowthEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.AutogrowthChange)),
+		},
+	}
+}
+
+// V2AutogrowthEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding the forbid-autogrowth flag.
+type V2AutogrowthEventTarget struct {
+	DomainID         string
+	DomainName       string
+	ProjectID        liquid.ProjectUUID
+	ProjectName      string
+	ServiceType      db.ServiceType
+	ResourceName     liquid.ResourceName
+	AutogrowthChange AutogrowthChange
+}
+
+// Render implements the audittools.Target interface.
+func (t V2AutogrowthEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),

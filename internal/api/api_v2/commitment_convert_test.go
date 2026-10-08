@@ -369,7 +369,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 				"target_service_type":  "second",
 				"target_resource_name": "capacity_80",
 			}, func(r httptest.Response) {
-				r.ExpectText(t, http.StatusUnprocessableEntity, "in target resource: resource is not enabled in this project\n")
+				r.ExpectText(t, http.StatusForbidden, "in target resource: resource is not enabled in this project\n")
 			})
 			s.MustDBExec(`UPDATE project_resources SET forbidden = $1 WHERE project_id = $2 AND resource_id = $3`, false, berlinID, capacity80ResID)
 			tr.DBChanges().Ignore()
