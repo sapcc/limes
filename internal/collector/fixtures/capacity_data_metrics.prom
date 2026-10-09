@@ -1,7 +1,7 @@
-# HELP limes_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.
+# HELP limes_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.
 # TYPE limes_acpq_duration_secs gauge
-limes_acpq_duration_secs{service="shared",service_name="shared"} 5
-limes_acpq_duration_secs{service="unshared",service_name="unshared"} 5
+limes_acpq_duration_secs{resource="capacity",service="unshared",service_name="unshared"} 0
+limes_acpq_duration_secs{resource="things",service="shared",service_name="shared"} 0
 # HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
 # TYPE limes_autogrow_growth_multiplier gauge
 limes_autogrow_growth_multiplier{resource="capacity",service="unshared",service_name="unshared"} 1

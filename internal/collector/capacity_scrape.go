@@ -57,7 +57,6 @@ type capacityScrapeTask struct {
 	// do not use the db.Service directly, as it might get updated during the scrape operation
 	ServiceType  db.ServiceType
 	ScrapeTiming TaskTiming
-	ACPQTiming   TaskTiming
 }
 
 var (
@@ -266,18 +265,23 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, recompute project quotas if necessary
-	task.ACPQTiming.StartedAt = c.MeasureTime()
 	for _, res := range resources.All() {
+		acpqStartedAt := c.MeasureTime()
 		now := c.MeasureTime()
 		err := datamodel.ApplyComputedProjectQuota(ctx, sis, res, c.Cluster, now)
 		if err != nil {
 			return err
 		}
+		acpqFinishedAt := c.MeasureTime()
+		res.ACPQDurationSecs = acpqFinishedAt.Sub(acpqStartedAt).Seconds()
+		err = db.ResourceStore.Update(ctx, c.DB, res)
+		if err != nil {
+			return err
+		}
 	}
-	task.ACPQTiming.FinishedAt = c.MeasureTimeAtEnd()
-	service.ACPQDurationSecs = task.ACPQTiming.Duration().Seconds()
+	c.MeasureTimeAtEnd()
 
-	return db.ServiceStore.Update(ctx, c.DB, service)
+	return nil
 }
 
 func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis core.ServiceInfoSnapshot, err error) {

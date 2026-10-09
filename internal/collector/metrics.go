@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -350,7 +349,7 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 		Collect:    d.collectMetrics,
 		SortOutput: testing.Testing(),
 		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
-			"limes_acpq_duration_secs":                          gauge(`Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.`),
+			"limes_acpq_duration_secs":                          gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
 			"limes_autogrow_growth_multiplier":                  gauge(`For resources with quota distribution model "autogrow", reports the configured growth multiplier.`),
 			"limes_autogrow_quota_overcommit_threshold_percent": gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`),
 			"limes_available_commitment_duration":               gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
@@ -451,7 +450,6 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 var (
 	// dmv1 = data metrics v1
-	dmv1ServiceLabelNames            = microprom.NewLabelNames("service", "service_name")
 	dmv1ResourceLabelNames           = microprom.NewLabelNames("resource", "service", "service_name")
 	dmv1AZResourceLabelNames         = microprom.NewLabelNames("availability_zone", "resource", "service", "service_name")
 	dmv1CommitmentDurationLabelNames = microprom.NewLabelNames("duration", "resource", "service", "service_name")
@@ -569,21 +567,15 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 	}
 
-	// emit ACPQ duration per service
+	// emit ACPQ duration per resource
 	for _, serviceType := range slices.Sorted(services.Keys()) {
-		service, _ := sis.GetServiceForType(serviceType)
-		var apiServiceType limes.ServiceType
-		for resName := range sis.GetResourcesForType(serviceType).Keys() {
-			apiServiceType = behaviorCache.Get(serviceType, resName).IdentityInV1API.ServiceType
-			break
+		for res := range sis.GetResourcesForType(serviceType).Values() {
+			apiIdentity := behaviorCache.Get(serviceType, res.Name).IdentityInV1API
+			labels := ms.FormatLabels(dmv1ResourceLabelNames,
+				string(apiIdentity.Name), string(apiIdentity.ServiceType), string(serviceType),
+			)
+			ms.Add("limes_acpq_duration_secs", labels, res.ACPQDurationSecs)
 		}
-		if apiServiceType == "" {
-			apiServiceType = limes.ServiceType(serviceType)
-		}
-		labels := ms.FormatLabels(dmv1ServiceLabelNames,
-			string(apiServiceType), string(serviceType),
-		)
-		ms.Add("limes_acpq_duration_secs", labels, service.ACPQDurationSecs)
 	}
 
 	// fetch values for domain level
@@ -818,7 +810,7 @@ func (d *DataMetricsV2Reporter) Handler() http.Handler {
 		Collect:    d.collectMetrics,
 		SortOutput: testing.Testing(),
 		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
-			"limitas_cluster_acpq_duration_secs":                           gauge(`Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.`),
+			"limitas_cluster_resource_acpq_duration_secs":                  gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
 			"limitas_cluster_rate_global_limit":                            gauge(`The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_cluster_rate_global_window_seconds":                   gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_cluster_resource_capacity":                            gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
@@ -865,7 +857,6 @@ var (
 	dmv2ResourceLabelNames       = microprom.NewLabelNames("resource", "service")
 	dmv2ResourceInfoLabelNames   = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
 	dmv2ResourceUnitLabelNames   = microprom.NewLabelNames("base_unit", "resource", "service")
-	dmv2ServiceLabelNames        = microprom.NewLabelNames("service")
 	dmv2AZResourceLabelNames     = microprom.NewLabelNames("az", "resource", "service")
 	dmv2AZResourceInfoLabelNames = microprom.NewLabelNames("allows_quota_overcommit", "az", "resource", "service")
 
@@ -983,11 +974,12 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 		}
 	}
 
-	// emit ACPQ duration per service
+	// emit ACPQ duration per resource
 	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
-		service, _ := sis.GetServiceForType(serviceType)
-		labels := ms.FormatLabels(dmv2ServiceLabelNames, string(serviceType))
-		ms.Add("limitas_cluster_acpq_duration_secs", labels, service.ACPQDurationSecs)
+		for res := range sis.GetResourcesForType(serviceType).Values() {
+			labels := ms.FormatLabels(dmv2ResourceLabelNames, string(res.Name), string(serviceType))
+			ms.Add("limitas_cluster_resource_acpq_duration_secs", labels, res.ACPQDurationSecs)
+		}
 	}
 
 	// emit rate metadata from the ServiceInfoCache

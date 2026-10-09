@@ -22,7 +22,6 @@ type Service struct {
 	DisplayName        string            `db:"display_name"`
 	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
-	ACPQDurationSecs   float64           `db:"acpq_duration_secs"`
 	SerializedMetrics  string            `db:"serialized_metrics"`
 	NextScrapeAt       time.Time         `db:"next_scrape_at"`
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
@@ -63,6 +62,7 @@ type Resource struct {
 	HasQuota            bool            `db:"has_quota"`
 	AttributesJSON      string          `db:"attributes_json"`
 	HandlesCommitments  bool            `db:"handles_commitments"`
+	ACPQDurationSecs    float64         `db:"acpq_duration_secs"`
 }
 
 // ResourceStore is the [oblast.Store] for the `resources` table.

@@ -6,15 +6,16 @@ limitas_az_resource_info{allows_quota_overcommit="true",az="az-one",resource="ca
 limitas_az_resource_info{allows_quota_overcommit="true",az="az-one",resource="things",service="unittest"} 1
 limitas_az_resource_info{allows_quota_overcommit="true",az="az-two",resource="capacity",service="unittest"} 1
 limitas_az_resource_info{allows_quota_overcommit="true",az="az-two",resource="things",service="unittest"} 1
-# HELP limitas_cluster_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this service, in seconds.
-# TYPE limitas_cluster_acpq_duration_secs gauge
-limitas_cluster_acpq_duration_secs{service="unittest"} 0
 # HELP limitas_cluster_rate_global_limit The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).
 # TYPE limitas_cluster_rate_global_limit gauge
 limitas_cluster_rate_global_limit{rate="rateWithClusterLimit",service="unittest"} 5000
 # HELP limitas_cluster_rate_global_window_seconds The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).
 # TYPE limitas_cluster_rate_global_window_seconds gauge
 limitas_cluster_rate_global_window_seconds{rate="rateWithClusterLimit",service="unittest"} 1
+# HELP limitas_cluster_resource_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.
+# TYPE limitas_cluster_resource_acpq_duration_secs gauge
+limitas_cluster_resource_acpq_duration_secs{resource="capacity",service="unittest"} 0
+limitas_cluster_resource_acpq_duration_secs{resource="things",service="unittest"} 0
 # HELP limitas_cluster_resource_capacity Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.
 # TYPE limitas_cluster_resource_capacity gauge
 limitas_cluster_resource_capacity{az="az-one",resource="capacity",service="unittest"} 0

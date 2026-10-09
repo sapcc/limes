@@ -190,4 +190,8 @@ var sqlMigrations = map[int64]string{
 	91: `
 		ALTER TABLE az_resources RENAME COLUMN safe_mode_used TO allows_quota_overcommit;
 	`,
+	92: `
+		ALTER TABLE resources ADD COLUMN acpq_duration_secs REAL NOT NULL DEFAULT 0;
+		ALTER TABLE services DROP COLUMN acpq_duration_secs;
+	`,
 }
