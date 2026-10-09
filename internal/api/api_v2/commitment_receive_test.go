@@ -413,7 +413,7 @@ func TestCommitmentReceiveErrors(t *testing.T) {
 			receiveCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{
 				"target_project_id": "uuid-for-berlin",
 			}, func(r httptest.Response) {
-				r.ExpectText(t, http.StatusUnprocessableEntity, "resource is not enabled in this project\n")
+				r.ExpectText(t, http.StatusUnprocessableEntity, "in target project: resource is not enabled in this project\n")
 			})
 			s.MustDBExec(`UPDATE project_resources SET forbidden = $1 WHERE project_id = $2 AND resource_id = $3`, false, berlinID, firstCapacityID)
 			tr.DBChanges().Ignore()

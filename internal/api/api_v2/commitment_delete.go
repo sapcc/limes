@@ -55,7 +55,7 @@ func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy
 		}
 
 		// prep deletion
-		stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
+		stats, err := getCommitmentStats(tx, c.ProjectID, c.AZResourceID)
 		if err != nil {
 			return err
 		}

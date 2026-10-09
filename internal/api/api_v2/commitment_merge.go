@@ -121,7 +121,7 @@ func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy
 			ConfirmBy: mergedCommitment.ConfirmBy,
 			ExpiresAt: mergedCommitment.ExpiresAt,
 		}
-		stats, err := getCommitmentStats(p.DB, commitments[0].ProjectID, commitments[0].AZResourceID)
+		stats, err := getCommitmentStats(tx, commitments[0].ProjectID, commitments[0].AZResourceID)
 		if err != nil {
 			return err
 		}
