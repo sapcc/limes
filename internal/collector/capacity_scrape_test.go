@@ -136,8 +136,8 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 2 AND az = 'any' AND path = 'unshared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 2 AND az = 'total' AND path = 'unshared/capacity/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 915, acpq_duration_secs = 5 WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 905 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = 915 WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 	`, insertTime.Add(5*time.Second).Unix(), insertTime.Add(15*time.Second).Unix())
 
 	// we don't set anything stale, so we want to expect sql.ErrNoRows
@@ -208,14 +208,15 @@ func Test_ScanCapacity(t *testing.T) {
 		DELETE FROM resources WHERE id = 3 AND service_id = 2 AND name = 'unknown' AND path = 'unshared/unknown';
 		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path, display_name, category_id) VALUES (4, 1, 'things', 2, 'piece', 'flat', TRUE, TRUE, 'shared/things', 'Things', 1);
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (1, 'shared', %d, 5, '{}', %d, 2, 'Shared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %d, 5, '{}', %d, 2, 'Shared');
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (2, 'unshared', %d, 5, '{}', %d, 2, 'Unshared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', %d, 5, '{}', %d, 2, 'Unshared');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
@@ -291,7 +292,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -325,6 +326,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_metrics.prom")
 	expectedContentType := resp.Header().Get("Content-Type")
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	resp = dmrV1.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
@@ -392,7 +394,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -417,6 +419,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
@@ -472,12 +475,13 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET usage = 0 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -493,6 +497,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = FALSE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -514,6 +519,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -563,7 +569,7 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 15, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 6, usage = 0, last_nonzero_raw_capacity = 6 WHERE id = 5 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -632,7 +638,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -655,7 +661,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2, 'Shared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2, 'Shared');
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -724,7 +730,7 @@ func Test_ScanManualCapacity(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 84, usage = 16 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 1000000 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -996,8 +1002,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			))
 		}
 		return strings.TrimSpace(fmt.Sprintf(`
-				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
+				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 			`,
 			scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -1241,7 +1247,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		DELETE FROM resources WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'first/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'first/things';
 		DELETE FROM services WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, commitment_handling_needs_project_metadata, acpq_duration_secs) VALUES (1, 'first', 1216965, 5, '{}', 1217865, 2, 'First', TRUE, 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, commitment_handling_needs_project_metadata) VALUES (1, 'first', 1216965, 5, '{}', 1217865, 2, 'First', TRUE);
 		UPDATE services SET scraped_at = 1216975, next_scrape_at = 1217875 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 	`)
 
@@ -2479,7 +2485,7 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 100, usage = 15, last_nonzero_raw_capacity = 100 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 100, usage = 15 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`, scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix())
 
 	// Step 2: project scrape

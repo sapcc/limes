@@ -42,8 +42,13 @@ var (
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources
-		SET quota = $1, safe_mode_used = $2
-		WHERE project_id = $3 AND az_resource_id = $4 AND quota IS DISTINCT FROM $1
+		SET quota = $1
+		WHERE project_id = $2 AND az_resource_id = $3 AND quota IS DISTINCT FROM $1
+	`)
+	acpqUpdateAllowsQuotaOvercommit = sqlext.SimplifyWhitespace(`
+		UPDATE az_resources
+		SET allows_quota_overcommit = $1
+		WHERE id = $2 AND allows_quota_overcommit IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -161,7 +166,7 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 				}
 				for projectID, projectTarget := range azTarget {
-					result, err := stmt.Exec(projectTarget.Allocated, projectTarget.SafeModeUsed, projectID, azRes.ID)
+					result, err := stmt.Exec(projectTarget.Allocated, projectID, azRes.ID)
 					if err != nil {
 						return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 					}
@@ -179,6 +184,24 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 		})
 		if err != nil {
 			return fmt.Errorf("while writing updated %s AZ quotas to DB: %w", resource.Path, err)
+		}
+
+		// write allows_quota_overcommit on az_resources (this is an AZ-level property, not per-project)
+		err = sqlext.WithPreparedStatement(tx, acpqUpdateAllowsQuotaOvercommit, func(stmt *sql.Stmt) error {
+			for az, allowsQuotaOvercommit := range allowsQuotaOvercommit {
+				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
+				if !exists {
+					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
+				}
+				_, err := stmt.Exec(allowsQuotaOvercommit, azRes.ID)
+				if err != nil {
+					return fmt.Errorf("while updating allows_quota_overcommit for %s/%s: %w", resource.Path, az, err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("while writing allows_quota_overcommit for %s: %w", resource.Path, err)
 		}
 
 		// mark project services with changed quota for SyncQuotaToBackendJob
@@ -200,9 +223,8 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 
 // Calculation space for a single project AZ resource.
 type acpqProjectAZTarget struct {
-	Allocated    uint64
-	Desired      uint64
-	SafeModeUsed bool
+	Allocated uint64
+	Desired   uint64
 }
 
 // MarshalJSON implements the json.Marshaler interface.
@@ -298,12 +320,10 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 	// enumerate which AZs allow quota overcommit
 	allowsQuotaOvercommit = make(map[limes.AvailabilityZone]bool)
-	safeModeUsed := make(map[limes.AvailabilityZone]bool)
 	isAZAware := false
 	allowsQuotaOvercommitInAny := true
 	for az := range isRelevantAZ {
-		allowsGrowthQuotaOvercommit, allowsBaseQuotaOvercommit, safeMode := stats[az].allowsQuotaOvercommit(cfg)
-		safeModeUsed[az] = safeMode
+		allowsGrowthQuotaOvercommit, allowsBaseQuotaOvercommit := stats[az].allowsQuotaOvercommit(cfg)
 		allowsQuotaOvercommit[az] = allowsGrowthQuotaOvercommit
 		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
 			isAZAware = true
@@ -334,8 +354,6 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				Allocated: max(projectAZStats.Committed, projectAZStats.Usage),
 				// phase 2: try granting soft minimum quota
 				Desired: projectAZStats.MaxHistoricalUsage,
-				// copy the safe mode info once
-				SafeModeUsed: safeModeUsed[az],
 			}
 		}
 	}

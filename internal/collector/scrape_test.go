@@ -510,6 +510,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 		OvercommitFactor:   2,
 	}}
 
+	// refresh the SIC after the manual DB changes above
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
+
 	// run ACPQ in order to be able to test how data metrics reporters handle project quota
 	sis := s.Cluster.SIC.GetSnapshot()
 	val := sis.GetResourcesForType("unittest")

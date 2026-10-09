@@ -22,7 +22,6 @@ type Service struct {
 	DisplayName        string            `db:"display_name"`
 	ScrapedAt          Option[time.Time] `db:"scraped_at"` // None if never scraped so far
 	ScrapeDurationSecs float64           `db:"scrape_duration_secs"`
-	ACPQDurationSecs   float64           `db:"acpq_duration_secs"`
 	SerializedMetrics  string            `db:"serialized_metrics"`
 	NextScrapeAt       time.Time         `db:"next_scrape_at"`
 	ScrapeErrorMessage string            `db:"scrape_error_message"`
@@ -63,6 +62,7 @@ type Resource struct {
 	HasQuota            bool            `db:"has_quota"`
 	AttributesJSON      string          `db:"attributes_json"`
 	HandlesCommitments  bool            `db:"handles_commitments"`
+	ACPQDurationSecs    float64         `db:"acpq_duration_secs"`
 }
 
 // ResourceStore is the [oblast.Store] for the `resources` table.
@@ -95,6 +95,8 @@ type AZResource struct {
 	// from existing AZs with faulty capacity recording that should block base quota overcommit.
 	// None for az=total
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
+	// This indicates whether this resource allowed quota overcommit when the quotas were last adjusted.
+	AllowsQuotaOvercommit bool `db:"allows_quota_overcommit"`
 }
 
 // AZResourceStore is the [oblast.Store] for the `az_resources` table.
@@ -222,8 +224,6 @@ type ProjectAZResource struct {
 	AZResourceID AZResourceID        `db:"az_resource_id"`
 	// None if hasQuota=false OR (az=total AND topology=az-separated) OR az=unknown
 	Quota Option[uint64] `db:"quota"`
-	// indicates whether this resource was in safe mode, when the quota was last adjusted
-	SafeModeUsed bool `db:"safe_mode_used"`
 	// None if hasQuota=false OR (az=total AND topology=az-separated) OR (az!=total AND topology!=az-separated) OR az=unknown
 	BackendQuota  Option[int64]  `db:"backend_quota"`
 	Usage         uint64         `db:"usage"`

@@ -1,3 +1,6 @@
+# HELP limes_acpq_duration_secs Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.
+# TYPE limes_acpq_duration_secs gauge
+limes_acpq_duration_secs{resource="things",service="shared",service_name="shared"} 0
 # HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
 # TYPE limes_autogrow_growth_multiplier gauge
 limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="shared"} 1
@@ -11,6 +14,11 @@ limes_cluster_capacity{resource="things",service="shared",service_name="shared"}
 # TYPE limes_cluster_capacity_per_az gauge
 limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 15
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 15
+# HELP limes_cluster_resource_allows_quota_overcommit Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.
+# TYPE limes_cluster_resource_allows_quota_overcommit gauge
+limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="things",service="shared",service_name="shared"} 0
+limes_cluster_resource_allows_quota_overcommit{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 0
+limes_cluster_resource_allows_quota_overcommit{availability_zone="az-two",resource="things",service="shared",service_name="shared"} 0
 # HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
 # TYPE limes_cluster_usage_per_az gauge
 limes_cluster_usage_per_az{availability_zone="az-one",resource="things",service="shared",service_name="shared"} 3
