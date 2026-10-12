@@ -4,10 +4,15 @@
 package nova
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"encoding/json/jsontext"
+	json_v2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"regexp"
 	"slices"
@@ -21,6 +26,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -52,6 +58,7 @@ type Logic struct {
 	hasPooledResource  liquidapi.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
 	hwVersionResources liquidapi.State[[]liquid.ResourceName]                   `json:"-"`
 	delegatedInfo      liquidapi.State[liquid.ServiceInfo]                      `json:"-"`
+	setUnlimitedQuota  liquidapi.State[map[liquid.ResourceName]bool]            `json:"-"`
 }
 
 type categoryDeclaration struct {
@@ -273,12 +280,21 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			}
 			result.Categories[categoryName] = category
 		}
+
+		setUnlimitedQuota := make(map[liquid.ResourceName]bool)
 		for resourceName, resource := range delegatedInfo.Resources {
 			if _, exists := result.Resources[resourceName]; exists {
 				return liquid.ServiceInfo{}, fmt.Errorf("cannot merge ServiceInfo from %s: resource %q is owned by us", l.DelegationEndpoint, resourceName)
 			}
+			if extractSetUnlimitedQuotaFlag(&resource.Attributes, resourceName) {
+				if resource.HasQuota {
+					return liquid.ServiceInfo{}, fmt.Errorf(`cannot merge ServiceInfo from %s: resource %q may not have both HasQuota and the "liquid-nova:set-unlimited-quota" attribute set to "true"`, l.DelegationEndpoint, resourceName)
+				}
+				setUnlimitedQuota[resourceName] = true
+			}
 			result.Resources[resourceName] = resource
 		}
+
 		result.Rates = delegatedInfo.Rates // no merge checks necessary here, liquid-nova itself does not define any rates
 		result.CapacityMetricFamilies = delegatedInfo.CapacityMetricFamilies
 		result.UsageMetricFamilies = delegatedInfo.UsageMetricFamilies
@@ -287,22 +303,74 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		result.CommitmentHandlingNeedsProjectMetadata = delegatedInfo.CommitmentHandlingNeedsProjectMetadata
 
 		l.delegatedInfo.Set(delegatedInfo)
+		l.setUnlimitedQuota.Set(setUnlimitedQuota)
 	}
 
 	return result, nil
 }
 
+// Returns whether the given `resource.Attributes` message contains `{"liquid-nova:set-unlimited-quota":true}`.
+// If so, the attributes message is amended such that this attribute is removed, because we do not want to expose it to API users.
+// This attribute is only used for communication between liquid-nova and its delegate.
+func extractSetUnlimitedQuotaFlag(rawAttributes *json.RawMessage, resName liquid.ResourceName) bool {
+	const key = "liquid-nova:set-unlimited-quota"
+
+	// ignore (without logging) resources that do not have attributes at all
+	if len(bytes.TrimSpace(*rawAttributes)) == 0 {
+		return false
+	}
+
+	// do not touch attributes that are not object-typed
+	dec := jsontext.NewDecoder(bytes.NewReader([]byte(*rawAttributes)))
+	if dec.PeekKind() != jsontext.KindBeginObject {
+		logg.Info("extractSetUnlimitedQuotaFlag: not touching %q because attributes are not object-typed", resName)
+		return false
+	}
+
+	// check if `liquid-nova:set-unlimited-quota` attribute is bool-typed as per our expectation, otherwise do not touch it
+	var attrs map[string]json.RawMessage
+	err := json_v2.UnmarshalDecode(dec, &attrs)
+	if err != nil {
+		logg.Info("extractSetUnlimitedQuotaFlag: not touching %q because attributes could not be unmarshaled", resName)
+		return false
+	}
+	var result bool
+	err = json_v2.Unmarshal([]byte(attrs[key]), &result)
+	if err != nil {
+		logg.Info("extractSetUnlimitedQuotaFlag: not touching %q because attribute %q does not exist or is not a bool", resName, key)
+		return false
+	}
+
+	// extract attribute and re-serialize the rest
+	delete(attrs, key)
+	buf, err := json_v2.Marshal(attrs)
+	if err != nil {
+		logg.Info("extractSetUnlimitedQuotaFlag: not touching %q because attributes could not be marshaled after removing %q", resName, key)
+		return false
+	}
+	*rawAttributes = json.RawMessage(buf)
+	return result
+}
+
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	delegatedInfo := l.delegatedInfo.Get()
+	setUnlimitedQuota := l.setUnlimitedQuota.Get()
 
 	// split quota request into one for Nova and one for the delegate (if any)
 	delegatedRequests := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(delegatedInfo.Resources))
 	novaUpdateOpts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
 	for resName, resInfo := range serviceInfo.Resources {
 		if !resInfo.HasQuota {
+			// special handling for resources with the "liquid-nova:set-unlimited-quota" attribute:
+			// explicitly configure unlimited quota for these resources in Nova as requested by the delegate
+			if _, exists := delegatedInfo.Resources[resName]; exists && setUnlimitedQuota[resName] {
+				novaUpdateOpts[string(resName)] = -1
+			}
 			continue
 		}
+
+		quotaForNova := req.Resources[resName].Quota
 		if _, exists := delegatedInfo.Resources[resName]; exists {
 			delegatedRequests[resName] = req.Resources[resName]
 			// special handling for hw_version-only regions (with liquid delegation):
@@ -316,18 +384,20 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 					sum += azRequest.Quota
 				}
 			}
-			sumConverted := sum
+			quotaForNova = sum
 			if resInfo.Unit != liquid.UnitPiece && resInfo.Unit != liquid.UnitMebibytes {
 				result, err := limes.ValueWithUnit{Value: sum, Unit: resInfo.Unit}.ConvertTo(liquid.UnitMebibytes)
 				if err != nil {
 					return fmt.Errorf("while converting quota for %s to MiB: %w", resName, err)
 				}
-				sumConverted = result.Value
+				quotaForNova = result.Value
 			}
-			novaUpdateOpts[string(resName)] = sumConverted
-		} else {
-			novaUpdateOpts[string(resName)] = req.Resources[resName].Quota
 		}
+
+		if quotaForNova > math.MaxInt64 {
+			return fmt.Errorf("quota value %d overflows int64", quotaForNova)
+		}
+		novaUpdateOpts[string(resName)] = int64(quotaForNova)
 	}
 
 	// forward requests into the respective backend systems (unless they're empty)
@@ -378,7 +448,7 @@ func (l *Logic) isIgnoredFlavor(flavorName string) bool {
 ////////////////////////////////////////////////////////////////////////////////
 // custom types for OpenStack APIs
 
-type novaQuotaUpdateOpts map[string]uint64
+type novaQuotaUpdateOpts map[string]int64
 
 // ToComputeQuotaUpdateMap implements the quotasets.UpdateOptsBuilder interface.
 func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
