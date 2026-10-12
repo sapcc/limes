@@ -4,6 +4,7 @@
 package collector
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
@@ -57,7 +58,6 @@ type capacityScrapeTask struct {
 	// do not use the db.Service directly, as it might get updated during the scrape operation
 	ServiceType  db.ServiceType
 	ScrapeTiming TaskTiming
-	ACPQTiming   TaskTiming
 }
 
 var (
@@ -266,18 +266,30 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, recompute project quotas if necessary
-	task.ACPQTiming.StartedAt = c.MeasureTime()
-	for _, res := range resources.All() {
+	//
+	// (need to do this ordered by name for deterministic test behavior:
+	// timestamps are different based on when an operation executes because
+	// MeasureTimeAtEnd advances the mocked wall clock)
+	allResources := slices.Collect(resources.Values())
+	slices.SortFunc(allResources, func(lhs, rhs db.Resource) int {
+		return cmp.Compare(lhs.Name, rhs.Name)
+	})
+	for _, res := range allResources {
+		acpqStartedAt := c.MeasureTime()
 		now := c.MeasureTime()
 		err := datamodel.ApplyComputedProjectQuota(ctx, sis, res, c.Cluster, now)
 		if err != nil {
 			return err
 		}
+		acpqFinishedAt := c.MeasureTimeAtEnd()
+		res.ACPQDurationSecs = acpqFinishedAt.Sub(acpqStartedAt).Seconds()
+		err = db.ResourceStore.Update(ctx, c.DB, res)
+		if err != nil {
+			return err
+		}
 	}
-	task.ACPQTiming.FinishedAt = c.MeasureTimeAtEnd()
-	service.ACPQDurationSecs = task.ACPQTiming.Duration().Seconds()
 
-	return db.ServiceStore.Update(ctx, c.DB, service)
+	return nil
 }
 
 func (c *Collector) scrapeLiquidCapacity(ctx context.Context, connection *core.LiquidConnection) (capacityData liquid.ServiceCapacityReport, serializedMetrics []byte, sis core.ServiceInfoSnapshot, err error) {

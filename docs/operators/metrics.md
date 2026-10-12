@@ -60,11 +60,13 @@ The data metrics service will report the following metrics:
 
 | Type | Metric | Labels |
 | --- | --- | --- |
+| Gauge | `limes_acpq_duration_secs` | `service`, `resource` |
 | Gauge | `limes_autogrow_growth_multiplier` | `service`, `resource` |
 | Gauge | `limes_autogrow_quota_overcommit_threshold_percent` | `service`, `resource` |
 | Gauge | `limes_available_commitment_duration` | `service`, `resource` |
 | Gauge | `limes_cluster_capacity` | `service`, `resource` |
 | Gauge | `limes_cluster_capacity_per_az` | `service`, `resource`, `availabilityZone` |
+| Gauge | `limes_cluster_resource_allows_quota_overcommit` | `service`, `resource`, `availabilityZone` |
 | Gauge | `limes_cluster_usage_per_az` | `service`, `resource`, `availabilityZone` |
 | Gauge | `limes_domain_quota` | `service`, `resource`, `domain`, `domain_id` |
 | Gauge | `limes_project_backendquota` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
@@ -87,11 +89,13 @@ The data metrics service v2 will report the following metrics (all of type `Gaug
 | --- | --- | --- |
 | `limitas_cluster_rate_global_limit` | `rate`, `service` | The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see `limitas_cluster_rate_global_window_seconds`). Only shown for rates that have limits (not for those that just track usage). |
 | `limitas_cluster_rate_global_window_seconds` | `rate`, `service` | The window for the global limit for this rate. All users together may spend their limit (see `limitas_cluster_rate_global_limit`) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage). |
+| `limitas_cluster_resource_acpq_duration_secs` | `resource`, `service` | Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds. |
 | `limitas_project_rate_limit` | `domain`, `domain_id`, `project`, `project_id`, `rate`, `service` | For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see `limitas_project_rate_window_seconds`). Only shown for rates that have limits (not for those that just track usage). |
 | `limitas_project_rate_usage_total` | `domain`, `domain_id`, `project`, `project_id`, `rate`, `service` | For each project and rate, the total amount of usage incurred for this rate in this project. As the `_total` name suffix indicates, this is an ever-growing metric that never resets. |
 | `limitas_project_rate_window_seconds` | `domain`, `domain_id`, `project`, `project_id`, `rate`, `service` | For each project and rate, the window for the current rate limit. The project may spend its limit (see `limitas_project_rate_limit`) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage). |
 | `limitas_cluster_resource_capacity` | `az`, `resource`, `service` | Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly. Metrics with `az="unknown"` will appear only when they have a non-zero value. |
 | `limitas_cluster_resource_raw_capacity` | `az`, `resource`, `service` | Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ). Metrics with `az="unknown"` will appear only when they have a non-zero value. |
+| `limitas_az_resource_info` | `allows_quota_overcommit`, `az`, `resource`, `service` | Info metric for AZ resources. The value is always 1, and information can be found in labels. |
 | `limitas_project_resource_allocation` | `az`, `committable`, `domain`, `domain_id`, `project`, `project_id`, `resource`, `service` | For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported. |
 | `limitas_project_resource_commitment_amount` | `az`, `domain`, `domain_id`, `project`, `project_id`, `resource`, `service`, `status`, `transfer_status`, `uuid` | For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit. |
 | `limitas_project_resource_commitment_expires_at` | `az`, `domain`, `domain_id`, `project`, `project_id`, `resource`, `service`, `status`, `transfer_status`, `uuid` | For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API. |

@@ -136,8 +136,10 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 2 AND az = 'any' AND path = 'unshared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 2 AND az = 'total' AND path = 'unshared/capacity/total';
-		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		UPDATE services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[4]d, acpq_duration_secs = 5 WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
+		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[4]d WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
 	`,
 		insertTime.Add(5*time.Second).Unix(), insertTime.Add(5*time.Second+15*time.Minute).Unix(),
 		insertTime.Add(15*time.Second).Unix(), insertTime.Add(15*time.Second+15*time.Minute).Unix(),
@@ -209,16 +211,17 @@ func Test_ScanCapacity(t *testing.T) {
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, path) VALUES (7, 4, 'total', 23, 4, 'shared/things/total');
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		DELETE FROM resources WHERE id = 3 AND service_id = 2 AND name = 'unknown' AND path = 'unshared/unknown';
-		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path, display_name, category_id) VALUES (4, 1, 'things', 2, 'piece', 'flat', TRUE, TRUE, 'shared/things', 'Things', 1);
+		INSERT INTO resources (id, service_id, name, liquid_version, unit, topology, has_capacity, has_quota, path, display_name, category_id, acpq_duration_secs) VALUES (4, 1, 'things', 2, 'piece', 'flat', TRUE, TRUE, 'shared/things', 'Things', 1, 5);
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (1, 'shared', %d, 5, '{}', %d, 2, 'Shared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %d, 5, '{}', %d, 2, 'Shared');
 		DELETE FROM services WHERE id = 2 AND type = 'unshared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (2, 'unshared', %d, 5, '{}', %d, 2, 'Unshared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (2, 'unshared', %d, 5, '{}', %d, 2, 'Unshared');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics.prom")
 
@@ -294,7 +297,8 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -328,6 +332,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 	resp.ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_metrics.prom")
 	expectedContentType := resp.Header().Get("Content-Type")
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	resp = dmrV1.RespondTo(s.Ctx, "GET /metrics")
 	assert.Equal(t, resp.Header().Get("Content-Type"), expectedContentType)
@@ -395,7 +400,8 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
 		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
@@ -420,6 +426,7 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix(),
 	)
 
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, None[db.ServiceType]()))
 	dmrV1 := httptest.NewHandler((&collector.DataMetricsV1Reporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}).Handler())
 	dmrV1.RespondTo(s.Ctx, "GET /metrics").ExpectBodyAsInFixture(t, http.StatusOK, "fixtures/capacity_data_metrics_azaware.prom")
 
@@ -475,14 +482,17 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET usage = 0 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Add(-10*time.Second).Unix(), s.Clock.Now().Add(-10*time.Second).Add(15*time.Minute).Unix(),
 	)
 
 	// when the capacity report shows non-zero capacity and usage...
@@ -496,6 +506,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = FALSE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -503,7 +514,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Add(-10*time.Second).Unix(), s.Clock.Now().Add(-10*time.Second).Add(15*time.Minute).Unix(),
 	)
 
 	// when the capacity report once again shows zero capacity and usage afterwards...
@@ -517,6 +528,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
@@ -524,7 +536,7 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Add(-10*time.Second).Unix(), s.Clock.Now().Add(-10*time.Second).Add(15*time.Minute).Unix(),
 	)
 }
 
@@ -566,7 +578,8 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 15, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 6, usage = 0, last_nonzero_raw_capacity = 6 WHERE id = 5 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
 		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
 	)
@@ -635,9 +648,9 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 
 	// rerun also works
@@ -647,7 +660,7 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE services SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 
 	// now we bump the version, so that the services and resources are reconciled
@@ -658,9 +671,9 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM services WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, acpq_duration_secs) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2, 'Shared', 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name) VALUES (1, 'shared', %[1]d, 5, '{}', %[2]d, 2, 'Shared');
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
 }
 
@@ -727,9 +740,11 @@ func Test_ScanManualCapacity(t *testing.T) {
 		UPDATE az_resources SET raw_capacity = 84, usage = 16 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 1000000 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
-		s.Clock.Now().Add(-5*time.Second).Unix(), s.Clock.Now().Add(-5*time.Second).Add(15*time.Minute).Unix(),
+		s.Clock.Now().Add(-10*time.Second).Unix(), s.Clock.Now().Add(-10*time.Second).Add(15*time.Minute).Unix(),
 	)
 }
 
@@ -987,8 +1002,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func(initMetrics bool) string {
-		scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-		scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+		scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 		if !initMetrics {
 			return strings.TrimSpace(fmt.Sprintf(`
 				UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
@@ -999,8 +1014,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 			))
 		}
 		return strings.TrimSpace(fmt.Sprintf(`
-				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d, acpq_duration_secs = 5 WHERE id = 2 AND type = 'second' AND liquid_version = 1;
+				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
+				UPDATE services SET scraped_at = %d, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 			`,
 			scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -1017,8 +1032,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// pretty much just setting `quota = usage`, i.e. `quota = 0` in this case.
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	desyncedAt1 := s.Clock.Now().Add(-15 * time.Second)
-	desyncedAt2 := s.Clock.Now().Add(-5 * time.Second)
+	desyncedAt1 := s.Clock.Now().Add(-25 * time.Second)
+	desyncedAt2 := s.Clock.Now().Add(-10 * time.Second)
 	// total project_az_resources: 4, 10, 11
 	// the total az get's a default value of quota=0 so that all reports work, so they are not updated here
 	tr.DBChanges().AssertEqualf(`
@@ -1046,6 +1061,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
 		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 3 AND project_id = 2 AND service_id = 1;
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 4 AND project_id = 2 AND service_id = 2;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'first/capacity';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'first/things';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 3 AND service_id = 2 AND name = 'capacity' AND path = 'second/capacity';
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 4 AND service_id = 2 AND name = 'things' AND path = 'second/things';
 		%s
 	`, desyncedAt1.Unix(), desyncedAt2.Unix(), timestampUpdates(true))
 
@@ -1055,7 +1074,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
+	scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 10 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 260 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
@@ -1070,8 +1089,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt1 = s.Clock.Now().Add(-25 * time.Second)
+	scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 110 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 360 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
@@ -1089,7 +1108,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 0 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
 		UPDATE project_az_resources SET quota = 20 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
@@ -1107,7 +1126,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
+	scrapedAt1 = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 300 WHERE id = 3 AND project_id = 1 AND az_resource_id = 3;
 		UPDATE project_az_resources SET quota = 410 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
@@ -1124,7 +1143,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 22 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
 		UPDATE project_az_resources SET quota = 23 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
@@ -1138,7 +1157,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
 		UPDATE project_az_resources SET quota = 10 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
@@ -1186,8 +1205,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// all are expired, 10 remains active
 	s.Clock.StepBy(9 * 24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt1 = s.Clock.Now().Add(-25 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 7 WHERE id = 22 AND project_id = 2 AND az_resource_id = 8;
@@ -1219,8 +1238,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
-	scrapedAt1 = s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt1 = s.Clock.Now().Add(-20 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'first/capacity/any';
 		DELETE FROM az_resources WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'first/capacity/az-one';
@@ -1246,7 +1265,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		DELETE FROM resources WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'first/capacity';
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'first/things';
 		DELETE FROM services WHERE id = 1 AND type = 'first' AND liquid_version = 1;
-		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, commitment_handling_needs_project_metadata, acpq_duration_secs) VALUES (1, 'first', %[1]d, 5, '{}', %[2]d, 2, 'First', TRUE, 5);
+		INSERT INTO services (id, type, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at, liquid_version, display_name, commitment_handling_needs_project_metadata) VALUES (1, 'first', %[1]d, 5, '{}', %[2]d, 2, 'First', TRUE);
 		UPDATE services SET scraped_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
@@ -1310,8 +1329,8 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func() string {
-		scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-		scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+		scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 		return strings.TrimSpace(fmt.Sprintf(`
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
@@ -1357,7 +1376,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// both commitments get confirmed
-	now := s.Clock.Now().Add(-15 * time.Second)
+	now := s.Clock.Now().Add(-25 * time.Second)
 	confirmation := now
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 17 AND project_id = 2 AND az_resource_id = 3;
@@ -1389,7 +1408,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// no change to transfer commitment, other one confirmed
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 3 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 3 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
@@ -1411,7 +1430,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// no change to transfer commitment, other one confirmed
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 4 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 5 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1433,7 +1452,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// complete takeover, so transfer commitment is marked as superseded - the quota for the taken over commitment is reduced
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 5 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 6 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1480,7 +1499,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	// transfer commitment superseded and split in the process - unconsumed amount=1 remains
 	// 2 consuming commitments are confirmed
 	// quota will be 5+6=11 in the project dresden and be 2+1=3 in berlin, because of unconsumed amount=1
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	confirmation = now
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 11 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
@@ -1510,7 +1529,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// the takeover to the new commitment shifts the quota's by 1
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 12 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 13 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1547,7 +1566,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 15 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 16 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1582,7 +1601,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 16 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 17 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1647,7 +1666,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// now uuid16 is confirmed - as the confirmation of uuid18 is later, nothing else happens
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	confirmation = now
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 5 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
@@ -1661,7 +1680,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 
 	// now the time progresses, uuid17 becomes pending and takes over amount=2 from uuid16 --> quota in berlin reduces by 2
 	// a leftover for amount=1 is created for the not-taken-over part of uuid16
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	confirmation2 := now
 	creation3 := now
 
@@ -1682,7 +1701,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 
 	// now the time progresses again, uuid18 becomes pending, but takes over an amount=1 from uuid17 because it was posted earlier
 	// this leads to quota on project=paris
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	creation2 := now
 
 	tr.DBChanges().AssertEqualf(`
@@ -1719,7 +1738,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 16 WHERE id = 16 AND project_id = 2 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 17 WHERE id = 18 AND project_id = 2 AND az_resource_id = 4;
@@ -1744,7 +1763,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 4 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
@@ -1778,7 +1797,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	confirmation = s.Clock.Now().Add(-15 * time.Second)
+	confirmation = s.Clock.Now().Add(-25 * time.Second)
 	creation2 = s.Clock.Now()
 	expiry2 = s.Clock.Now().Add(10 * oneDay)
 	add(db.ProjectCommitment{
@@ -1812,7 +1831,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 24 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
@@ -1856,7 +1875,7 @@ func Test_ScanCapacityWithCommitmentTakeover(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// we expect both commitments to be confirmed, but the first one to be still in transfer (no change)
-	now = s.Clock.Now().Add(-15 * time.Second)
+	now = s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 3 AND project_id = 1 AND az_resource_id = 3;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 31 AND project_id = 3 AND az_resource_id = 3;
@@ -1880,8 +1899,8 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func() string {
-		scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-		scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+		scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 		return strings.TrimSpace(fmt.Sprintf(`
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
@@ -1944,7 +1963,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json, updated_at) VALUES (1, '00000000-0000-0000-0000-000000000001', 1, 9, 'confirmed', 10, '10 days', %[1]d, 'dummy-1', 'dummy-1', %[2]d, %[3]d, '{}', %[2]d);
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 1 AND service_id = 2;
 		%[4]s
-	`, now.Unix(), now.Add(15*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
+	`, now.Unix(), now.Add(20*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
 
 	s.Clock.StepBy(1 * time.Hour)
 	now = s.Clock.Now()
@@ -2001,7 +2020,7 @@ func TestScanCapacityWithCommitmentsChecksLiquidForCapacity(t *testing.T) {
 		INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, creation_context_json, updated_at) VALUES (4, '00000000-0000-0000-0000-000000000004', 1, 9, 'confirmed', 2, '10 days', %[1]d, 'dummy-4', 'dummy-4', %[3]d, %[4]d, '{}', %[3]d);
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND service_id = 1;
 		%[5]s
-	`, now.Unix(), now.Add(5*time.Second).Unix(), now.Add(15*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
+	`, now.Unix(), now.Add(5*time.Second).Unix(), now.Add(20*time.Second).Unix(), now.Add(10*24*time.Hour).Unix(), timestampUpdates())
 }
 
 func TestScanCapacityWithMailNotification(t *testing.T) {
@@ -2031,8 +2050,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func() string {
-		scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-		scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+		scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 		return strings.TrimSpace(fmt.Sprintf(`
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
@@ -2073,8 +2092,8 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-	scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+	scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 10 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
@@ -2116,7 +2135,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s.Clock.StepBy(36 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
 		UPDATE project_az_resources SET quota = 2 WHERE id = 25 AND project_id = 2 AND az_resource_id = 11;
@@ -2155,7 +2174,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 1 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 9 AND project_id = 1 AND az_resource_id = 9;
@@ -2198,7 +2217,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	s.Clock.StepBy(24 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 2 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 11 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
@@ -2236,7 +2255,7 @@ func TestScanCapacityWithMailNotification(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	prevScrapedAt2 := scrapedAt2
-	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now().Add(-10 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 5 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
 		UPDATE project_az_resources SET quota = 8 WHERE id = 23 AND project_id = 2 AND az_resource_id = 9;
@@ -2304,8 +2323,8 @@ func TestCommitmentConfirmationTakesOverMultipleSmallCommitments(t *testing.T) {
 
 	// in each of the test steps below, the timestamp updates on services will always be the same
 	timestampUpdates := func() string {
-		scrapedAt1 := s.Clock.Now().Add(-15 * time.Second)
-		scrapedAt2 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt1 := s.Clock.Now().Add(-25 * time.Second)
+		scrapedAt2 := s.Clock.Now().Add(-10 * time.Second)
 		return strings.TrimSpace(fmt.Sprintf(`
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'first' AND liquid_version = 1;
 					UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 2 AND type = 'second' AND liquid_version = 1;
@@ -2353,7 +2372,7 @@ func TestCommitmentConfirmationTakesOverMultipleSmallCommitments(t *testing.T) {
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
 	// all three commitments get confirmed
-	confirmedAt1 := s.Clock.Now().Add(-15 * time.Second)
+	confirmedAt1 := s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 6 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 6 WHERE id = 4 AND project_id = 1 AND az_resource_id = 4;
@@ -2377,7 +2396,7 @@ func TestCommitmentConfirmationTakesOverMultipleSmallCommitments(t *testing.T) {
 	s.Clock.StepBy(1 * time.Hour)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 
-	confirmedAt2 := s.Clock.Now().Add(-15 * time.Second)
+	confirmedAt2 := s.Clock.Now().Add(-25 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET quota = 0 WHERE id = 2 AND project_id = 1 AND az_resource_id = 2;
 		UPDATE project_az_resources SET quota = 40 WHERE id = 30 AND project_id = 3 AND az_resource_id = 2;
@@ -2488,7 +2507,8 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 100, usage = 15, last_nonzero_raw_capacity = 100 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 100, usage = 15 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d, acpq_duration_secs = 5 WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
+		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
+		UPDATE services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %[2]d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`, scrapedAt.Unix(), scrapedAt.Add(15*time.Minute).Unix())
 
 	// Step 2: project scrape
