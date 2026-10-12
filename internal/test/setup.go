@@ -225,6 +225,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	s.t = t
 
+	// force tests to not hardcode timestamps by setting the start time randomly
+	// s.Clock.StepBy(rand.N[time.Duration](1000) * time.Second)
+	//
+	// ^ TODO: enable this after moving all uses of fixtures/*.sql to AssertEqualf() where measured timestamps can be interpolated
+
 	s.DB, s.DBConnectionTarget = pgruntime.StdConnector("postgres").ConnectForTest(t, db.Configuration())
 
 	// Cluster.Connect() needs to use our MockLiquidClient instances instead of real LIQUID clients
