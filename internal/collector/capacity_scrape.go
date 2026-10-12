@@ -4,6 +4,7 @@
 package collector
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
@@ -265,21 +266,28 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	}
 
 	// for all resources thus updated, recompute project quotas if necessary
-	for _, res := range resources.All() {
+	//
+	// (need to do this ordered by name for deterministic test behavior:
+	// timestamps are different based on when an operation executes because
+	// MeasureTimeAtEnd advances the mocked wall clock)
+	allResources := slices.Collect(resources.Values())
+	slices.SortFunc(allResources, func(lhs, rhs db.Resource) int {
+		return cmp.Compare(lhs.Name, rhs.Name)
+	})
+	for _, res := range allResources {
 		acpqStartedAt := c.MeasureTime()
 		now := c.MeasureTime()
 		err := datamodel.ApplyComputedProjectQuota(ctx, sis, res, c.Cluster, now)
 		if err != nil {
 			return err
 		}
-		acpqFinishedAt := c.MeasureTime()
+		acpqFinishedAt := c.MeasureTimeAtEnd()
 		res.ACPQDurationSecs = acpqFinishedAt.Sub(acpqStartedAt).Seconds()
 		err = db.ResourceStore.Update(ctx, c.DB, res)
 		if err != nil {
 			return err
 		}
 	}
-	c.MeasureTimeAtEnd()
 
 	return nil
 }
