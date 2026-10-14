@@ -101,10 +101,6 @@ limitas_rate_info{category="unittest",display_name="X Another Rate",has_limit="f
 # TYPE limitas_resource_autogrow_growth_multiplier gauge
 limitas_resource_autogrow_growth_multiplier{resource="capacity",service="unittest"} 1
 limitas_resource_autogrow_growth_multiplier{resource="things",service="unittest"} 1
-# HELP limitas_resource_autogrow_quota_overcommit_threshold_percent For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.
-# TYPE limitas_resource_autogrow_quota_overcommit_threshold_percent gauge
-limitas_resource_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unittest"} 0
-limitas_resource_autogrow_quota_overcommit_threshold_percent{resource="things",service="unittest"} 0
 # HELP limitas_resource_info Info metric for resources. The value is always 1, and information can be found in labels.
 # TYPE limitas_resource_info gauge
 limitas_resource_info{category="unittest",display_name="Capacity",has_quota="true",qdm="autogrow",resource="capacity",service="unittest",topology="az-aware",unit="B"} 1

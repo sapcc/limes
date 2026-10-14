@@ -720,7 +720,9 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 			autogrowCfg, ok := d.Cluster.QuotaDistributionConfigForResource(serviceType, dbResourceName).Autogrow.Unpack()
 			if ok {
 				ms.Add("limes_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
-				ms.Add("limes_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
+				if percent, ok := autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack(); ok {
+					ms.Add("limes_autogrow_quota_overcommit_threshold_percent", labels, percent)
+				}
 			}
 
 			for _, duration := range behaviorCache.GetCommitmentBehavior(serviceType, dbResourceName).Durations {
@@ -914,8 +916,9 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 			autogrowCfg, ok := qdConfig.Autogrow.Unpack()
 			if ok {
 				ms.Add("limitas_resource_autogrow_growth_multiplier", labels, autogrowCfg.GrowthMultiplier)
-
-				ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent)
+				if percent, ok := autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack(); ok {
+					ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, percent)
+				}
 			}
 
 			// emit limitas_resource_unit_multiplier

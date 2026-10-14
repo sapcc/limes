@@ -845,7 +845,7 @@ var scanCapacityWithCommitmentsConfig = httptest.NewJQModifiableJSONString(test.
 		],
 		"quota_distribution_configs": [
 			// test automatic project quota calculation with non-default settings on */capacity resources
-			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m", "allow_quota_overcommit_until_allocated_percent": 0.0}}
 		]
 	}`), "Test_ScanCapacityWithCommitments").
 	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
@@ -2442,7 +2442,7 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 
 	cfgJSON := testScanCapacitySingleLiquidConfigJSON[:len(testScanCapacitySingleLiquidConfigJSON)-1] + `,
 		"quota_distribution_configs": [
-			{"resource": "shared/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+			{"resource": "shared/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m", "allow_quota_overcommit_until_allocated_percent": 0.0}}
 		]
 	}`
 
