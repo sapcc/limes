@@ -26,12 +26,15 @@ type Client struct {
 
 // GetVector executes a Prometheus query and returns a vector of results.
 func (c Client) GetVector(ctx context.Context, queryStr string) (model.Vector, error) {
-	value, warnings, err := c.api.Query(ctx, queryStr, time.Now())
+	value, warnings, infos, err := c.api.Query(ctx, queryStr, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("could not execute Prometheus query: %s: %w", queryStr, err)
 	}
 	for _, warning := range warnings {
 		logg.Info("Prometheus query produced warning: %s", warning)
+	}
+	for _, info := range infos {
+		logg.Info("Prometheus query produced info: %s", info)
 	}
 
 	resultVector, ok := value.(model.Vector)
