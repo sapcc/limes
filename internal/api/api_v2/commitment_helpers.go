@@ -13,6 +13,8 @@ import (
 	"slices"
 	"time"
 
+	. "go.xyrillian.de/gg/option"
+
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -21,13 +23,13 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/is"
-	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
 
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -39,7 +41,7 @@ var (
 	errConfirmByInPast                 = errors.New("confirm_by may not be set in the past")
 	errConfirmByMissing                = errors.New("confirm_by must be set for the requested initial commitment status")
 	errConfirmByNotAllowed             = errors.New("confirm_by may not be set for the requested initial commitment status")
-	errEmptyAmount                     = errors.New("amount of committed resource must be greater than zero")
+	errEmptyAmount                     = errors.New("amount must be greater than zero")
 	errInvalidInitialStatus            = errors.New("initial commitment status value is invalid")
 	errInvalidResourceReference        = errors.New("reference to an unknown az resource (race condition)")
 	errNoSuchAZ                        = errors.New("no such availability zone")
@@ -71,6 +73,13 @@ var (
 	errReceiveAmountTooHigh            = errors.New("cannot receive more amount than commitment in transfer has")
 	errReceiveAmountTooLow             = errors.New("cannot receive amount of 0")
 	errReceiveSourceTargetEqual        = errors.New("source and target project are equal")
+	errConversionSameResource          = errors.New("commitment conversion is only allowed to a different resource")
+	errNoSuchConversion                = errors.New("no such conversion available")
+	errConversionAmountTooHigh         = errors.New("amount cannot be higher than the commitment amount")
+	errConversionNoRounding            = errors.New("for this conversion, no rounding is allowed and there would be a remainder on the target side")
+	errConversionTargetZero            = errors.New("target amount would be zero")
+	errConversionTargetMismatch        = errors.New("target amount does not match the conversion rate")
+	errNoTransferConversion            = errors.New(`commitment in transfer must not be converted`)
 )
 
 func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePath, projectUUID liquid.ProjectUUID, deletable bool) resourcesv2.Commitment {
@@ -102,15 +111,15 @@ func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePa
 // validateCommittability checks that the AZ resource identified by `path`:
 //   - exists in the given project scope, and
 //   - allows commitments of the specified duration.
-func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope reports_v2.ProjectScope, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
+func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope reports_v2.ProjectScope, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot, scopeDescription string) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
 	_, ok := sis.GetServiceForType(path.ServiceType)
 	if !ok {
-		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchService)
+		err = respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("%s%w", scopeDescription, errNoSuchService))
 		return
 	}
 	resource, ok := sis.GetResourceForPath(path.Resource())
 	if !ok {
-		err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchResource)
+		err = respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("%s%w", scopeDescription, errNoSuchResource))
 		return
 	}
 
@@ -121,34 +130,34 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope report
 		return
 	}
 	if forbidden {
-		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errResourceForbidden)
+		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, fmt.Errorf("%s%w", scopeDescription, errResourceForbidden))
 		return
 	}
 
 	behavior := p.Cluster.CommitmentBehaviorForResourcePath(path.Resource()).ForDomain(scope.Domain.Name)
 	if len(behavior.Durations) == 0 {
-		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errCommitmentsDisabled)
+		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, fmt.Errorf("%s%w", scopeDescription, errCommitmentsDisabled))
 		return
 	}
 	if !slices.Contains(behavior.Durations, duration) {
 		buf := must.Return(json.Marshal(behavior.Durations)) // panic on error is acceptable here, marshals should never fail
-		msg := "unacceptable commitment duration for this resource; acceptable values: " + string(buf)
+		msg := scopeDescription + "unacceptable commitment duration for this resource; acceptable values: " + string(buf)
 		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errors.New(msg))
 		return
 	}
 
 	if resource.Topology == liquid.FlatTopology {
 		if path.AvailabilityZone != limes.AvailabilityZoneAny {
-			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errAZMustBeAny)
+			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, fmt.Errorf("%s%w", scopeDescription, errAZMustBeAny))
 			return
 		}
 	} else {
 		if path.AvailabilityZone == limes.AvailabilityZoneAny {
-			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errAZMustNotBeAny)
+			err = respondwith.CustomStatus(http.StatusUnprocessableEntity, fmt.Errorf("%s%w", scopeDescription, errAZMustNotBeAny))
 			return
 		}
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, path.AvailabilityZone) {
-			err = respondwith.CustomStatus(http.StatusNotFound, errNoSuchAZ)
+			err = respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("%s%w", scopeDescription, errNoSuchAZ))
 			return
 		}
 	}
@@ -316,4 +325,52 @@ func (p *v2Provider) selectCommitmentsIfPermittedAndAlive(ctx context.Context, d
 		return nil, db.AZResource{}, reports_v2.ProjectScope{}, err
 	}
 	return commitments, azRes, scope, nil
+}
+
+// buildSplitCommitments prepares commitments from an existing one, whose creation contexts
+// indicate that they were split from the given existing commitment.
+func buildSplitCommitments(c db.ProjectCommitment, amounts []uint64, now time.Time) ([]*db.ProjectCommitment, error) {
+	creationContext := db.CommitmentWorkflowContext{
+		Reason:                 db.CommitmentReasonSplit,
+		RelatedCommitmentIDs:   []db.ProjectCommitmentID{c.ID},
+		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{c.UUID},
+	}
+	buf, err := json.Marshal(creationContext)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		transferToken     Option[string]
+		transferStartedAt Option[time.Time]
+	)
+
+	result := make([]*db.ProjectCommitment, len(amounts))
+	for i, amount := range amounts {
+		if c.TransferStatus != limesresources.CommitmentTransferStatusNone {
+			transferToken = Some(datamodel.GenerateTransferToken())
+			transferStartedAt = Some(now)
+		}
+		result[i] = &db.ProjectCommitment{
+			UUID:                  datamodel.GenerateProjectCommitmentUUID(),
+			ProjectID:             c.ProjectID,
+			AZResourceID:          c.AZResourceID,
+			Amount:                amount,
+			Duration:              c.Duration,
+			CreatedAt:             now,
+			UpdatedAt:             now,
+			CreatorUUID:           c.CreatorUUID,
+			CreatorName:           c.CreatorName,
+			ConfirmBy:             c.ConfirmBy,
+			ConfirmedAt:           c.ConfirmedAt,
+			ExpiresAt:             c.ExpiresAt,
+			CreationContextJSON:   json.RawMessage(buf),
+			Status:                c.Status,
+			NotifyOnConfirm:       c.NotifyOnConfirm,
+			NotifiedForExpiration: c.NotifiedForExpiration,
+			TransferStatus:        c.TransferStatus,
+			TransferToken:         transferToken,
+			TransferStartedAt:     transferStartedAt,
+		}
+	}
+	return result, nil
 }

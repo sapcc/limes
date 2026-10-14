@@ -112,7 +112,7 @@ func (p *v2Provider) handlePatchCommitment(r *http.Request, token *gopherpolicy.
 		c.UpdatedAt = now
 
 		// sending the patch to liquid is only relevant for extending durations
-		stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
+		stats, err := getCommitmentStats(tx, c.ProjectID, c.AZResourceID)
 		if err != nil {
 			return err
 		}

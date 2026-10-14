@@ -252,6 +252,11 @@ func TestCommitmentSplitErrors(t *testing.T) {
 				r.ExpectText(t, http.StatusBadRequest, "commitment has to be split in two or more commitments\n")
 			})
 
+			// 0 amount does not make sense
+			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"amounts": []uint64{1, 0, 1}}, func(r httptest.Response) {
+				r.ExpectText(t, http.StatusBadRequest, "amount must be greater than zero\n")
+			})
+
 			// mismatched amounts
 			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"amounts": []uint64{1, 1}}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusBadRequest, "sum of split amounts must equal the original commitment amount\n")

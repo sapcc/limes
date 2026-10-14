@@ -61,7 +61,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	if err != nil {
 		return none, err
 	}
-	azResource, behavior, err := p.validateCommittability(path, scope, req.Duration, sis)
+	azResource, behavior, err := p.validateCommittability(path, scope, req.Duration, sis, "")
 	if err != nil {
 		return none, err
 	}

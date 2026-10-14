@@ -120,6 +120,14 @@ type CommitmentReceiveRequest struct {
 	Amount            Option[uint64]     `json:"amount"`            // if set, split the commitment and only transfer this portion (TODO: only allow for TransferStatusPublic?)
 }
 
+// CommitmentConvertRequest is the request payload format for POST /v2/commitments/:uuid/convert.
+type CommitmentConvertRequest struct {
+	TargetServiceType  db.ServiceType      `json:"target_service_type"`
+	TargetResourceName liquid.ResourceName `json:"target_resource_name"`
+	SourceAmount       uint64              `json:"source_amount"`
+	TargetAmount       uint64              `json:"target_amount"`
+}
+
 // CommitmentConfiguration describes how commitments are configured for a given resource.
 //
 // This appears as a field on resource reports, if the respective resource allows commitments.
