@@ -11,6 +11,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/is"
 	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
@@ -54,7 +55,7 @@ func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 	} else {
 		// If there is a reliable capacity measurement, we can voice a strong opinion.
 		usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
-		allowsOvercommit := usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
+		allowsOvercommit := cfg.AllowQuotaOvercommitUntilAllocatedPercent.IsNoneOr(is.Above(usedPercent))
 		return allowsOvercommit, allowsOvercommit
 	}
 }

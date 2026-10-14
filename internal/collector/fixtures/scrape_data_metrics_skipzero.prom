@@ -6,10 +6,6 @@ limes_acpq_duration_secs{resource="things",service="unittest",service_name="unit
 # TYPE limes_autogrow_growth_multiplier gauge
 limes_autogrow_growth_multiplier{resource="capacity",service="unittest",service_name="unittest"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unittest",service_name="unittest"} 1
-# HELP limes_autogrow_quota_overcommit_threshold_percent For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.
-# TYPE limes_autogrow_quota_overcommit_threshold_percent gauge
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unittest",service_name="unittest"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unittest",service_name="unittest"} 0
 # HELP limes_available_commitment_duration Reports which commitment durations are available for new commitments on a Limes resource.
 # TYPE limes_available_commitment_duration gauge
 limes_available_commitment_duration{duration="1 year",resource="capacity",service="unittest",service_name="unittest"} 1

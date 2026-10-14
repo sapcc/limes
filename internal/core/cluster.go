@@ -233,7 +233,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 	return QuotaDistributionConfiguration{
 		Model: limesresources.AutogrowQuotaDistribution,
 		Autogrow: Some(AutogrowQuotaDistributionConfiguration{
-			AllowQuotaOvercommitUntilAllocatedPercent: 0,
+			AllowQuotaOvercommitUntilAllocatedPercent: None[float64](), // irrelevant because both base quota and growth quota are disabled
 			ProjectBaseQuota:         0,
 			GrowthMultiplier:         1.0,
 			GrowthMinimum:            0,

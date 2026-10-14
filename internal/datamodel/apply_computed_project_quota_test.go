@@ -52,7 +52,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []Option[float64]{Some(0.0), Some(10000.0), None[float64]()} {
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			liquid.AvailabilityZoneAny: {
 				401: {Allocated: 36}, // 30 * 1.2 = 36
@@ -72,7 +72,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 			},
 		},
 			db.Resource{Topology: liquid.FlatTopology},
-			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent != Some(0.0), limes.AvailabilityZoneAny))
 	}
 }
 
@@ -139,7 +139,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []Option[float64]{Some(0.0), Some(10000.0), None[float64]()} {
 		expectACPQResult(t, input, cfg, map[db.ProjectID]projectLocalQuotaConstraints{408: {MinQuota: Some(uint64(12))}}, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},
@@ -183,7 +183,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 			},
 		},
 			db.Resource{Topology: liquid.AZAwareTopology},
-			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent != Some(0.0), "az-one", "az-two", limes.AvailabilityZoneAny))
 	}
 }
 
@@ -225,7 +225,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 
-	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []Option[float64]{Some(0.0), Some(10000.0), None[float64]()} {
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},
@@ -256,7 +256,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 			},
 		},
 			db.Resource{Topology: liquid.AZSeparatedTopology},
-			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two"))
+			getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent != Some(0.0), "az-one", "az-two"))
 	}
 }
 
@@ -278,6 +278,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	}
 	cfg := core.AutogrowQuotaDistributionConfiguration{
+		AllowQuotaOvercommitUntilAllocatedPercent: Some(0.0), // this test specifically covers how quota is distributed fairly when overcommit is not possible
 		GrowthMultiplier: 1.8,
 		ProjectBaseQuota: 10,
 	}
@@ -308,7 +309,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: false})
 
 	// Stage 2: There is enough capacity for the minimum quotas, but not for the
 	// desired quotas.
@@ -336,7 +337,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: false})
 
 	// Stage 3: There is enough capacity for the hard minimum quotas, but not for
 	// the soft minimum quotas.
@@ -364,7 +365,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: false})
 
 	// Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
 	input[liquid.AvailabilityZoneAny] = clusterAZAllocationStats{
@@ -391,7 +392,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: false})
 }
 
 func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
@@ -408,7 +409,7 @@ func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
 	cfg := core.AutogrowQuotaDistributionConfiguration{
 		GrowthMultiplier: 1.5,
 		ProjectBaseQuota: 6,
-		AllowQuotaOvercommitUntilAllocatedPercent: 90,
+		AllowQuotaOvercommitUntilAllocatedPercent: Some(90.0),
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		liquid.AvailabilityZoneAny: {
@@ -421,7 +422,7 @@ func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: true})
 
 	// az-aware
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
@@ -466,7 +467,7 @@ func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 
 	// az-separated
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
@@ -500,7 +501,7 @@ func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZSeparatedTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two"))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two"))
 }
 
 func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
@@ -547,7 +548,7 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 	}
 
 	// test with quota overcommit allowed (85% allocation is below 90%)
-	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 90
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(90.0)
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
 			401: {Allocated: 36}, // 30 * 1.2 = 36
@@ -579,10 +580,10 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 
 	// test with quota overcommit forbidden = no "allow_quota_overcommit" in az-one (85% allocation is above 80%)
-	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 80
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(80.0)
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
 			401: {Allocated: 35}, // 30 * 1.2 = 36, but fair distribution gives only 35
@@ -669,7 +670,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 
 	// test with MinQuota constraints
 	//
@@ -701,7 +702,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 
 	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
 	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
@@ -727,7 +728,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 
 	// test with MaxQuota constraints that constrain the base quota
 	constraints = map[db.ProjectID]projectLocalQuotaConstraints{
@@ -753,7 +754,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", limes.AvailabilityZoneAny))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", limes.AvailabilityZoneAny))
 }
 
 func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
@@ -806,7 +807,7 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 	}
 	// Quota overcommit should always be allowed.
 	cfg := core.AutogrowQuotaDistributionConfiguration{
-		AllowQuotaOvercommitUntilAllocatedPercent: 10000,
+		AllowQuotaOvercommitUntilAllocatedPercent: None[float64](),
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 5,
 	}
@@ -930,7 +931,7 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 	}
 
 	cfg := core.AutogrowQuotaDistributionConfiguration{
-		AllowQuotaOvercommitUntilAllocatedPercent: 95,
+		AllowQuotaOvercommitUntilAllocatedPercent: Some(95.0),
 		GrowthMultiplier: 1.0,
 		ProjectBaseQuota: 10,
 	}
@@ -960,7 +961,7 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 			402: {Allocated: 0},
 		},
 	}, resource,
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three"))
+		getExpectedAllowsQuotaOvercommit(true, "az-one", "az-two", "az-three"))
 }
 
 func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
@@ -1030,7 +1031,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three", limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{"az-one": false, "az-two": false, "az-three": true, liquid.AvailabilityZoneAny: true})
 
 	// Multiple AZs with capacity.
 	// Sufficient total capacity for quota demand.
@@ -1094,7 +1095,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three", limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{"az-one": false, "az-two": true, "az-three": true, liquid.AvailabilityZoneAny: true})
 
 	// Multiple AZs with capacity.
 	// Total capacity can not fully satisfy quota demand.
@@ -1159,7 +1160,7 @@ func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three", limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{"az-one": false, "az-two": true, "az-three": true, liquid.AvailabilityZoneAny: true})
 }
 
 func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
@@ -1229,7 +1230,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three", limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{"az-one": true, "az-two": true, "az-three": false, liquid.AvailabilityZoneAny: true})
 
 	input = map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
@@ -1291,7 +1292,7 @@ func TestMinQuotaConstraintWithLargeNumbers(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, "az-one", "az-two", "az-three", limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{"az-one": true, "az-two": true, "az-three": false, liquid.AvailabilityZoneAny: true})
 }
 
 func TestACPQFlatTopologyWithOverrideQuotaAndUsage(t *testing.T) {
@@ -1318,7 +1319,7 @@ func TestACPQFlatTopologyWithOverrideQuotaAndUsage(t *testing.T) {
 	cfg := core.AutogrowQuotaDistributionConfiguration{
 		GrowthMultiplier: 1.0,
 		ProjectBaseQuota: 1000,
-		AllowQuotaOvercommitUntilAllocatedPercent: 10000,
+		AllowQuotaOvercommitUntilAllocatedPercent: None[float64](),
 	}
 	constraints := map[db.ProjectID]projectLocalQuotaConstraints{
 		// override_quota_from_config = 1200 sets both MinQuota and MaxQuota to 1200
@@ -1339,7 +1340,7 @@ func TestACPQFlatTopologyWithOverrideQuotaAndUsage(t *testing.T) {
 		},
 	},
 		db.Resource{Topology: liquid.FlatTopology},
-		getExpectedAllowsQuotaOvercommit(cfg.AllowQuotaOvercommitUntilAllocatedPercent > 0, limes.AvailabilityZoneAny))
+		map[liquid.AvailabilityZone]bool{liquid.AvailabilityZoneAny: true})
 }
 
 // Shortcut to avoid repetition in projectAZAllocationStats literals.

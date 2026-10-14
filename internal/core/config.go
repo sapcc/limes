@@ -160,7 +160,7 @@ type QuotaDistributionConfiguration struct {
 
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
 type AutogrowQuotaDistributionConfiguration struct {
-	AllowQuotaOvercommitUntilAllocatedPercent float64                      `json:"allow_quota_overcommit_until_allocated_percent"`
+	AllowQuotaOvercommitUntilAllocatedPercent Option[float64]              `json:"allow_quota_overcommit_until_allocated_percent"`
 	ProjectBaseQuota                          uint64                       `json:"project_base_quota"`
 	GrowthMultiplier                          float64                      `json:"growth_multiplier"`
 	GrowthMinimum                             uint64                       `json:"growth_minimum"`

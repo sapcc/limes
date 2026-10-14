@@ -132,9 +132,9 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.LiquidConnections)))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42, allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
-		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 2 AND az = 'any' AND path = 'unshared/capacity/any';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42, allows_quota_overcommit = TRUE WHERE id = 3 AND resource_id = 2 AND az = 'any' AND path = 'unshared/capacity/any';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 2 AND az = 'total' AND path = 'unshared/capacity/total';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
@@ -207,7 +207,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
 		DELETE FROM az_resources WHERE id = 5 AND resource_id = 3 AND az = 'any' AND path = 'unshared/unknown/any';
-		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path) VALUES (6, 4, 'any', 23, 4, 23, 'shared/things/any');
+		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, last_nonzero_raw_capacity, path, allows_quota_overcommit) VALUES (6, 4, 'any', 23, 4, 23, 'shared/things/any', TRUE);
 		INSERT INTO az_resources (id, resource_id, az, raw_capacity, usage, path) VALUES (7, 4, 'total', 23, 4, 'shared/things/total');
 		UPDATE resources SET liquid_version = 2 WHERE id = 2 AND service_id = 2 AND name = 'capacity' AND path = 'unshared/capacity';
 		DELETE FROM resources WHERE id = 3 AND service_id = 2 AND name = 'unknown' AND path = 'unshared/unknown';
@@ -295,7 +295,7 @@ func Test_ScanCapacityWithSubcapacities(t *testing.T) {
 
 	scrapedAt := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42 WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 42, subcapacities = '[{"name":"smaller_half","capacity":7,"attributes":{"az":"az-one"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-one"}},{"name":"smaller_half","capacity":7,"attributes":{"az":"az-two"}},{"name":"larger_half","capacity":14,"attributes":{"az":"az-two"}}]', last_nonzero_raw_capacity = 42, allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{"limes_unittest_capacity_larger_half":{"lk":null,"m":[{"v":7,"l":null}]},"limes_unittest_capacity_smaller_half":{"lk":null,"m":[{"v":3,"l":null}]}}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -397,8 +397,9 @@ func Test_ScanCapacityAZAware(t *testing.T) {
 
 	scrapedAt := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
-		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21, allows_quota_overcommit = TRUE WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/things/az-one';
+		UPDATE az_resources SET raw_capacity = 21, usage = 4, last_nonzero_raw_capacity = 21, allows_quota_overcommit = TRUE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/things/az-two';
 		UPDATE az_resources SET raw_capacity = 42, usage = 8 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
 		UPDATE services SET scraped_at = %d, scrape_duration_secs = 5, serialized_metrics = '{}', next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -506,11 +507,10 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET allows_quota_overcommit = FALSE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
-		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
-		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10, allows_quota_overcommit = TRUE WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 10, usage = 5, last_nonzero_raw_capacity = 10, allows_quota_overcommit = TRUE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
-		UPDATE az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 20, usage = 10, last_nonzero_raw_capacity = 20, allows_quota_overcommit = TRUE WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 20, usage = 10 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
@@ -528,11 +528,10 @@ func TestScanCapacityReportsZeroValues(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
-		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
-		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 0, usage = 0, allows_quota_overcommit = FALSE WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 0, usage = 0, allows_quota_overcommit = FALSE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
-		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 0, usage = 0, allows_quota_overcommit = FALSE WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 0, usage = 0 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
 	`,
@@ -574,8 +573,9 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET raw_capacity = 4, usage = 0, last_nonzero_raw_capacity = 4 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
-		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
+		UPDATE az_resources SET raw_capacity = 4, usage = 0, last_nonzero_raw_capacity = 4, allows_quota_overcommit = TRUE WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 5, usage = 0, last_nonzero_raw_capacity = 5, allows_quota_overcommit = TRUE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 15, usage = 0 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 6, usage = 0, last_nonzero_raw_capacity = 6 WHERE id = 5 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
@@ -603,7 +603,7 @@ func Test_ScanCapacityAZVanishes(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE az_resources SET raw_capacity = 10, last_nonzero_raw_capacity = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
-		UPDATE az_resources SET raw_capacity = 0 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET raw_capacity = 0, allows_quota_overcommit = FALSE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 10 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
 		UPDATE az_resources SET raw_capacity = 0, usage = NULL WHERE id = 5 AND resource_id = 1 AND az = 'unknown' AND path = 'shared/capacity/unknown';
 		UPDATE services SET scraped_at = %d, next_scrape_at = %d WHERE id = 1 AND type = 'shared' AND liquid_version = 1;
@@ -735,10 +735,11 @@ func Test_ScanManualCapacity(t *testing.T) {
 	must.SucceedT(t, job.ProcessOne(s.Ctx))
 
 	tr.DBChanges().AssertEqualf(`
-		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
-		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42 WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 1 AND resource_id = 1 AND az = 'any' AND path = 'shared/capacity/any';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42, allows_quota_overcommit = TRUE WHERE id = 2 AND resource_id = 1 AND az = 'az-one' AND path = 'shared/capacity/az-one';
+		UPDATE az_resources SET raw_capacity = 42, usage = 8, last_nonzero_raw_capacity = 42, allows_quota_overcommit = TRUE WHERE id = 3 AND resource_id = 1 AND az = 'az-two' AND path = 'shared/capacity/az-two';
 		UPDATE az_resources SET raw_capacity = 84, usage = 16 WHERE id = 4 AND resource_id = 1 AND az = 'total' AND path = 'shared/capacity/total';
-		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000 WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
+		UPDATE az_resources SET raw_capacity = 1000000, last_nonzero_raw_capacity = 1000000, allows_quota_overcommit = TRUE WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'shared/things/any';
 		UPDATE az_resources SET raw_capacity = 1000000 WHERE id = 7 AND resource_id = 2 AND az = 'total' AND path = 'shared/things/total';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 1 AND service_id = 1 AND name = 'capacity' AND path = 'shared/capacity';
 		UPDATE resources SET acpq_duration_secs = 5 WHERE id = 2 AND service_id = 1 AND name = 'things' AND path = 'shared/things';
@@ -845,7 +846,7 @@ var scanCapacityWithCommitmentsConfig = httptest.NewJQModifiableJSONString(test.
 		],
 		"quota_distribution_configs": [
 			// test automatic project quota calculation with non-default settings on */capacity resources
-			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+			{"resource": ".*/capacity", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m", "allow_quota_overcommit_until_allocated_percent": 0.0}}
 		]
 	}`), "Test_ScanCapacityWithCommitments").
 	ModifyWithVariable(".areas = $ref", common_fixtures.AreasFirstSecond).
@@ -1037,6 +1038,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// total project_az_resources: 4, 10, 11
 	// the total az get's a default value of quota=0 so that all reports work, so they are not updated here
 	tr.DBChanges().AssertEqualf(`
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 13 AND resource_id = 4 AND az = 'any' AND path = 'second/things/any';
+		UPDATE az_resources SET allows_quota_overcommit = TRUE WHERE id = 6 AND resource_id = 2 AND az = 'any' AND path = 'first/things/any';
 		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND project_id = 1 AND az_resource_id = 1;
 		UPDATE project_az_resources SET quota = 1 WHERE id = 10 AND project_id = 1 AND az_resource_id = 10;
 		UPDATE project_az_resources SET quota = 10 WHERE id = 11 AND project_id = 1 AND az_resource_id = 11;
@@ -2442,7 +2445,7 @@ func Test_ScanCapacityWithAutogrowQuota(t *testing.T) {
 
 	cfgJSON := testScanCapacitySingleLiquidConfigJSON[:len(testScanCapacitySingleLiquidConfigJSON)-1] + `,
 		"quota_distribution_configs": [
-			{"resource": "shared/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m"}}
+			{"resource": "shared/things", "model": "autogrow", "autogrow": {"growth_multiplier": 1.0, "project_base_quota": 10, "usage_data_retention_period": "1m", "allow_quota_overcommit_until_allocated_percent": 0.0}}
 		]
 	}`
 

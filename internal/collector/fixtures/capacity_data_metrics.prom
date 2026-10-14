@@ -6,10 +6,6 @@ limes_acpq_duration_secs{resource="things",service="shared",service_name="shared
 # TYPE limes_autogrow_growth_multiplier gauge
 limes_autogrow_growth_multiplier{resource="capacity",service="unshared",service_name="unshared"} 1
 limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="shared"} 1
-# HELP limes_autogrow_quota_overcommit_threshold_percent For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.
-# TYPE limes_autogrow_quota_overcommit_threshold_percent gauge
-limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unshared",service_name="unshared"} 0
-limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="shared",service_name="shared"} 0
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{resource="capacity",service="unshared",service_name="unshared"} 42
@@ -20,8 +16,8 @@ limes_cluster_capacity_per_az{availability_zone="any",resource="capacity",servic
 limes_cluster_capacity_per_az{availability_zone="any",resource="things",service="shared",service_name="shared"} 23
 # HELP limes_cluster_resource_allows_quota_overcommit Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.
 # TYPE limes_cluster_resource_allows_quota_overcommit gauge
-limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="capacity",service="unshared",service_name="unshared"} 0
-limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="things",service="shared",service_name="shared"} 0
+limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="capacity",service="unshared",service_name="unshared"} 1
+limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="things",service="shared",service_name="shared"} 1
 # HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
 # TYPE limes_cluster_usage_per_az gauge
 limes_cluster_usage_per_az{availability_zone="any",resource="capacity",service="unshared",service_name="unshared"} 8
