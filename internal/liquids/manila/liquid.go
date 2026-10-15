@@ -32,11 +32,12 @@ import (
 type Logic struct {
 	// configuration
 	CapacityCalculation struct {
-		CapacityBalance   float64 `json:"capacity_balance"`
-		ShareNetworks     uint64  `json:"share_networks"`
-		SharesPerPool     uint64  `json:"shares_per_pool"`
-		SnapshotsPerShare uint64  `json:"snapshots_per_share"`
-		WithSubcapacities bool    `json:"with_subcapacities"`
+		CapacityBalance     float64 `json:"capacity_balance"`
+		ShareNetworks       uint64  `json:"share_networks"`
+		ShareServerReplicas uint64  `json:"share_server_replicas"`
+		SharesPerPool       uint64  `json:"shares_per_pool"`
+		SnapshotsPerShare   uint64  `json:"snapshots_per_share"`
+		WithSubcapacities   bool    `json:"with_subcapacities"`
 	} `json:"capacity_calculation"`
 	VirtualShareTypes                   []virtualShareType             `json:"share_types"`
 	PrometheusAPIConfigForAZAwareness   *promquery.Config              `json:"prometheus_api_for_az_awareness"`
@@ -57,6 +58,9 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	}
 	if l.CapacityCalculation.ShareNetworks == 0 {
 		return errors.New("missing required configuration field: capacity_calculation.share_networks")
+	}
+	if l.CapacityCalculation.ShareServerReplicas == 0 {
+		return errors.New("missing required configuration field: capacity_calculation.share_server_replicas")
 	}
 	if l.CapacityCalculation.SharesPerPool == 0 {
 		return errors.New("missing required configuration field: capacity_calculation.shares_per_pool")
@@ -79,10 +83,10 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	if microversion == 0 {
 		return errors.New(`cannot find API microversion: no version of the form "2.x" found in advertisement`)
 	}
-	if microversion < 53 {
-		return fmt.Errorf("need at least Manila microversion 2.53 (for replica quotas), but got 2.%d", microversion)
+	if microversion < 100 {
+		return fmt.Errorf("need at least Manila microversion 2.100 (for share server replica quotas), but got 2.%d", microversion)
 	}
-	l.ManilaV2.Microversion = "2.53"
+	l.ManilaV2.Microversion = "2.100"
 
 	// initialize connection to Prometheus
 	if l.PrometheusAPIConfigForAZAwareness != nil && l.PrometheusAPIConfigForAZAwareness.ServerURL != "" {
@@ -171,9 +175,16 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		HasQuota:    true,
 	}
 
-	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+1)
+	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+2)
 	resources["share_networks"] = liquid.ResourceInfo{
 		DisplayName: "Share Networks",
+		Unit:        liquid.UnitPiece,
+		Topology:    liquid.FlatTopology,
+		HasCapacity: true,
+		HasQuota:    true,
+	}
+	resources["share_server_replicas"] = liquid.ResourceInfo{
+		DisplayName: "Share Server Replicas",
 		Unit:        liquid.UnitPiece,
 		Topology:    liquid.FlatTopology,
 		HasCapacity: true,
