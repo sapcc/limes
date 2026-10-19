@@ -19,7 +19,7 @@ import (
 
 // ScanUsage implements the liquidapi.Logic interface.
 func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
-	// the share_networks quota is only shown when querying for no share_type in particular
+	// the share_networks and share_server_replicas quotas are only shown when querying for no share_type in particular
 	qs, err := l.getQuotaSet(ctx, projectUUID, "")
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
@@ -28,6 +28,10 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		"share_networks": {
 			Quota: Some(qs.ShareNetworks.Quota),
 			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: qs.ShareNetworks.Usage}),
+		},
+		"share_server_replicas": {
+			Quota: Some(qs.ShareServerReplicas.Quota),
+			PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: qs.ShareServerReplicas.Usage}),
 		},
 	}
 
@@ -206,7 +210,8 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 
 	// compute overall quotas
 	overallQuotas := QuotaSet{
-		ShareNetworks: Some(req.Resources["share_networks"].Quota),
+		ShareNetworks:       Some(req.Resources["share_networks"].Quota),
+		ShareServerReplicas: Some(req.Resources["share_server_replicas"].Quota),
 	}
 	if anyReplicationEnabled {
 		overallQuotas.Replicas = Some[uint64](0)
@@ -249,13 +254,14 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 
 // QuotaSetDetail is used when reading quota and usage.
 type QuotaSetDetail struct {
-	Shares            QuotaDetail `json:"shares"`
-	Snapshots         QuotaDetail `json:"snapshots"`
-	Gigabytes         QuotaDetail `json:"gigabytes"`
-	SnapshotGigabytes QuotaDetail `json:"snapshot_gigabytes"`
-	ShareNetworks     QuotaDetail `json:"share_networks"`
-	Replicas          QuotaDetail `json:"share_replicas"`
-	ReplicaGigabytes  QuotaDetail `json:"replica_gigabytes"`
+	Shares              QuotaDetail `json:"shares"`
+	Snapshots           QuotaDetail `json:"snapshots"`
+	Gigabytes           QuotaDetail `json:"gigabytes"`
+	SnapshotGigabytes   QuotaDetail `json:"snapshot_gigabytes"`
+	ShareNetworks       QuotaDetail `json:"share_networks"`
+	ShareServerReplicas QuotaDetail `json:"share_server_replicas"`
+	Replicas            QuotaDetail `json:"share_replicas"`
+	ReplicaGigabytes    QuotaDetail `json:"replica_gigabytes"`
 }
 
 // QuotaDetail appears in type QuotaSetDetail.
@@ -307,13 +313,14 @@ func (l *Logic) getQuotaSet(ctx context.Context, projectUUID string, st realShar
 
 // QuotaSet is used when writing quotas.
 type QuotaSet struct {
-	Shares            uint64         `json:"shares"`
-	Snapshots         uint64         `json:"snapshots"`
-	Gigabytes         uint64         `json:"gigabytes"`
-	SnapshotGigabytes uint64         `json:"snapshot_gigabytes"`
-	ShareNetworks     Option[uint64] `json:"share_networks,omitzero"`
-	Replicas          Option[uint64] `json:"share_replicas,omitzero"`
-	ReplicaGigabytes  Option[uint64] `json:"replica_gigabytes,omitzero"`
+	Shares              uint64         `json:"shares"`
+	Snapshots           uint64         `json:"snapshots"`
+	Gigabytes           uint64         `json:"gigabytes"`
+	SnapshotGigabytes   uint64         `json:"snapshot_gigabytes"`
+	ShareNetworks       Option[uint64] `json:"share_networks,omitzero"`
+	ShareServerReplicas Option[uint64] `json:"share_server_replicas,omitzero"`
+	Replicas            Option[uint64] `json:"share_replicas,omitzero"`
+	ReplicaGigabytes    Option[uint64] `json:"replica_gigabytes,omitzero"`
 }
 
 // IsEmpty returns whether there is no non-zero value in this QuotaSet.
@@ -323,6 +330,7 @@ func (qs QuotaSet) IsEmpty() bool {
 		qs.Gigabytes == 0 &&
 		qs.SnapshotGigabytes == 0 &&
 		options.IsNoneOrZero(qs.ShareNetworks) &&
+		options.IsNoneOrZero(qs.ShareServerReplicas) &&
 		options.IsNoneOrZero(qs.Replicas) &&
 		options.IsNoneOrZero(qs.ReplicaGigabytes)
 }
