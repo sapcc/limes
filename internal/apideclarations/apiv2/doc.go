@@ -87,7 +87,6 @@
 // # Endpoint: POST /resources/v2/commitments/new
 //
 // Creates a new commitment (or performs a dry run of a commitment creation request).
-//
 //   - The request body payload must be of type [resourcesv2.CommitmentRequest].
 //   - On success, status code 201 (Created) will be returned, including for dry runs.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
@@ -112,6 +111,13 @@
 // Merges two or more existing commitments according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentMergeRequest].
 //   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/convert
+//
+// Creates a new commitment for the time when the old one will expire, if permissions allow.
+//   - The request body payload must be of type [resourcesv2.CommitmentConvertRequest].
+//   - On success, status code 202 (Accepted) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
 // # Endpoint: POST /resources/v2/commitments/:uuid/renew

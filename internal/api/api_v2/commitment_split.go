@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/cadf"
@@ -58,6 +57,9 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		// validate sum of amounts
 		newSum := uint64(0)
 		for _, amount := range req.Amounts {
+			if amount == 0 {
+				return respondwith.CustomStatus(http.StatusBadRequest, errEmptyAmount)
+			}
 			if newSum+amount < newSum {
 				return respondwith.CustomStatus(http.StatusBadRequest, errAmountOverflow)
 			}
@@ -95,7 +97,7 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		}
 
 		// inform liquid
-		stats, err := getCommitmentStats(p.DB, c.ProjectID, c.AZResourceID)
+		stats, err := getCommitmentStats(tx, c.ProjectID, c.AZResourceID)
 		if err != nil {
 			return err
 		}
@@ -174,39 +176,4 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 	}
 
 	return
-}
-
-// buildSplitCommitments prepares commitments from an existing one, whose creation contexts
-// indicate that they were split from the given existing commitment.
-func buildSplitCommitments(dbCommitment db.ProjectCommitment, amounts []uint64, now time.Time) ([]*db.ProjectCommitment, error) {
-	creationContext := db.CommitmentWorkflowContext{
-		Reason:                 db.CommitmentReasonSplit,
-		RelatedCommitmentIDs:   []db.ProjectCommitmentID{dbCommitment.ID},
-		RelatedCommitmentUUIDs: []liquid.CommitmentUUID{dbCommitment.UUID},
-	}
-	buf, err := json.Marshal(creationContext)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]*db.ProjectCommitment, len(amounts))
-	for i, amount := range amounts {
-		result[i] = &db.ProjectCommitment{
-			UUID:                datamodel.GenerateProjectCommitmentUUID(),
-			ProjectID:           dbCommitment.ProjectID,
-			AZResourceID:        dbCommitment.AZResourceID,
-			Amount:              amount,
-			Duration:            dbCommitment.Duration,
-			CreatedAt:           now,
-			UpdatedAt:           now,
-			CreatorUUID:         dbCommitment.CreatorUUID,
-			CreatorName:         dbCommitment.CreatorName,
-			ConfirmBy:           dbCommitment.ConfirmBy,
-			ConfirmedAt:         dbCommitment.ConfirmedAt,
-			ExpiresAt:           dbCommitment.ExpiresAt,
-			CreationContextJSON: json.RawMessage(buf),
-			Status:              dbCommitment.Status,
-		}
-	}
-	return result, nil
 }

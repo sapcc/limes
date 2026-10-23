@@ -44,4 +44,9 @@ var (
 	azsOneTwo string
 	// AZsOneTwo can be used as fixture for config.json in tests.
 	AZsOneTwo httptest.JQUnmodifiedContent = httptest.JQUnmodifiedJSONString(azsOneTwo)
+
+	//go:embed liquid_second_with_conversions.json
+	liquidSecondWithConversions string
+	// LiquidSecondWithConversions can be used as fixture for config.json in tests.
+	LiquidSecondWithConversions httptest.JQUnmodifiedContent = httptest.JQUnmodifiedJSONString(liquidSecondWithConversions)
 )
