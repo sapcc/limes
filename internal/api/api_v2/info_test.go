@@ -71,7 +71,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		test.WithEmptyRateRecordsAsNeeded,
 	)
 	firstCapacity := s.GetResourceID("first", "capacity")
-	secondCapacityBig := s.GetResourceID("second", "capacity_80")
+	secondCapacity80 := s.GetResourceID("second", "capacity_80")
 	berlin := s.GetProjectID("berlin")
 	paris := s.GetProjectID("paris")
 	dresden := s.GetProjectID("dresden")
@@ -103,6 +103,8 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		fmt.Sprintf("del(%s.capacity_80.commitment_conversion_targets)", pathToModify),
 		fmt.Sprintf("del(%s.capacity_32.commitment_config)", pathToModify),
 		fmt.Sprintf("del(%s.capacity_32.commitment_conversion_targets)", pathToModify),
+		fmt.Sprintf("del(%s.capacity_160.commitment_config)", pathToModify),
+		fmt.Sprintf("del(%s.capacity_160.commitment_conversion_targets)", pathToModify),
 	}
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-commitments-disabled").
@@ -131,11 +133,12 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-dresden"))
 
 	// now a project admin with a project scoped token where one resource is forbidden, commitments enabled --> this modifies the conversion targets, too
-	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, dresden, secondCapacityBig)
+	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, dresden, secondCapacity80)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "filtered_conversions").
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_80)").
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity.commitment_conversion_targets[1])").
+			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_160.commitment_conversion_targets[1])").
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_32.commitment_conversion_targets[1])"))
 
 	// now a project admin with a project scoped token where a resource is forbidden, commitments still enabled

@@ -112,6 +112,14 @@ func ServiceInfoSecondForCommitmentConversion() liquid.ServiceInfo {
 				HasCapacity: true,
 				HasQuota:    true,
 			},
+			"capacity_160": {
+				DisplayName: "Capacity 160",
+				Category:    Some(liquid.CategoryName("foo_category")),
+				Unit:        must.Return(liquid.UnitGibibytes.MultiplyBy(160)),
+				Topology:    liquid.AZAwareTopology,
+				HasCapacity: true,
+				HasQuota:    true,
+			},
 			"capacity_32": {
 				DisplayName: "Capacity 32",
 				Category:    Some(liquid.CategoryName("foo_category")),

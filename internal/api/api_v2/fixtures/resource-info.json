@@ -80,7 +80,8 @@
                       "to": 1,
                       "target_service": "second",
                       "target_resource": "capacity_32",
-                      "allow_rounding": true
+                      "allow_rounding": true,
+                      "one_way": true
                     },
                     {
                       "from": 80,
@@ -88,6 +89,34 @@
                       "target_service": "second",
                       "target_resource": "capacity_80",
                       "one_way": true
+                    }
+                  ]
+                },
+                "capacity_160": {
+                  "display_name": "Capacity 160",
+                  "unit": "160 GiB",
+                  "topology": "az-aware",
+                  "has_capacity": true,
+                  "has_quota": true,
+                  "commitment_config": {
+                    "durations": [
+                      "1 hour",
+                      "2 hours"
+                    ]
+                  },
+                  "commitment_conversion_targets": [
+                    {
+                      "from": 1,
+                      "to": 5,
+                      "target_service": "second",
+                      "target_resource": "capacity_32",
+                      "allow_rounding": true
+                    },
+                    {
+                      "from": 1,
+                      "to": 2,
+                      "target_service": "second",
+                      "target_resource": "capacity_80"
                     }
                   ]
                 },
@@ -105,10 +134,10 @@
                   },
                   "commitment_conversion_targets": [
                     {
-                      "from": 1,
-                      "to": 80,
+                      "from": 2,
+                      "to": 1,
                       "target_service": "second",
-                      "target_resource": "capacity"
+                      "target_resource": "capacity_160"
                     },
                     {
                       "from": 2,
@@ -133,10 +162,10 @@
                   },
                   "commitment_conversion_targets": [
                     {
-                      "from": 1,
-                      "to": 32,
+                      "from": 5,
+                      "to": 1,
                       "target_service": "second",
-                      "target_resource": "capacity"
+                      "target_resource": "capacity_160"
                     },
                     {
                       "from": 5,
