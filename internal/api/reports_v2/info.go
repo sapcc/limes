@@ -38,10 +38,26 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	AND pr.forbidden = false
 `)
 
-func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID, domainName string, _ error) {
+// InfoScope describes the scope used to build an info report.
+// It is resolved from the token and optional query parameters
+// by the handler before calling [GetResourcesInfo] or [GetRatesInfo].
+type InfoScope struct {
+	// ProjectUUID restricts the report to resources/rates available in this project.
+	// If empty, the report covers the whole domain (or cluster, if DomainUUID is also empty).
+	ProjectUUID string
+	// DomainUUID restricts the report to resources/rates available in at least one project of this domain.
+	// If empty (and ProjectUUID is also empty), the report covers the whole cluster.
+	DomainUUID string
+	// DomainName is the name of the domain identified by DomainUUID (needed for commitment behavior scoping).
+	DomainName string
+}
+
+// AuthenticateInfoRequest determines the InfoScope from the token alone (without query-parameter overrides).
+// It checks authorization and returns the appropriate scope.
+func AuthenticateInfoRequest(token *gopherpolicy.Token) (InfoScope, error) {
 	// case 1: cloud admin
 	if token.Check("v2:cluster:info") {
-		return "", "", "", nil
+		return InfoScope{}, nil
 	}
 
 	// manipulation of `token.Context.Request` inside this function should not break request-path-specific object attributes
@@ -60,7 +76,7 @@ func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID
 		}
 		token.Context.Request = map[string]string{"domain_uuid": domain.UUID}
 		if token.Check("v2:domain:info") {
-			return "", domain.UUID, domain.Name, nil
+			return InfoScope{DomainUUID: domain.UUID, DomainName: domain.Name}, nil
 		}
 	}
 
@@ -68,26 +84,21 @@ func authenticateInfoRequest(token *gopherpolicy.Token) (projectUUID, domainUUID
 	// (the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors)
 	err := token.Enforce("v2:project:info")
 	if err != nil {
-		return "", "", "", err
+		return InfoScope{}, err
 	}
-	projectUUID = token.ProjectScopeUUID()
+	projectUUID := token.ProjectScopeUUID()
 	if projectUUID == "" {
 		// safety check: v2:project:info should only be allowed with a project-scoped token
-		return "", "", "", respondwith.CustomStatus(http.StatusForbidden, errors.New("cannot retrieve InfoReport for project without a project-scoped token"))
+		return InfoScope{}, respondwith.CustomStatus(http.StatusForbidden, errors.New("cannot retrieve InfoReport for project without a project-scoped token"))
 	}
-	return projectUUID, token.ProjectScopeDomainUUID(), token.ProjectScopeDomainName(), nil
+	return InfoScope{ProjectUUID: projectUUID, DomainUUID: token.ProjectScopeDomainUUID(), DomainName: token.ProjectScopeDomainName()}, nil
 }
 
 // GetResourcesInfo returns a resourcesv2.InfoReport, which can be exposed via
 // an own endpoint or re-used in resource reports.
-func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
+func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, infoScope InfoScope, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
 	dbm := cluster.DB
 	var none resourcesv2.InfoReport // used on error return paths only
-
-	projectUUID, domainUUID, domainName, err := authenticateInfoRequest(token)
-	if err != nil {
-		return none, err
-	}
 
 	// collect allowed items for this user
 	allowedResourcesByService := make(map[db.ServiceType]map[liquid.ResourceName]struct{})
@@ -95,7 +106,7 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherp
 		ServiceType  db.ServiceType      `db:"type"`
 		ResourceName liquid.ResourceName `db:"name"`
 	}
-	err = oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, findAllowedResourcesQuery, projectUUID, domainUUID).Foreach(func(r allowedResourceRecord) error {
+	err := oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, findAllowedResourcesQuery, infoScope.ProjectUUID, infoScope.DomainUUID).Foreach(func(r allowedResourceRecord) error {
 		if allowedResourcesByService[r.ServiceType] == nil {
 			allowedResourcesByService[r.ServiceType] = make(map[liquid.ResourceName]struct{})
 		}
@@ -112,10 +123,10 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherp
 	for serviceType := range services.Keys() {
 		for resource := range sis.GetResourcesForType(serviceType).Values() {
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(serviceType, resource.Name)
-			if domainUUID == "" {
+			if infoScope.DomainUUID == "" {
 				allBehaviors[resource.Path] = commitmentBehavior.ForCluster()
 			} else {
-				allBehaviors[resource.Path] = commitmentBehavior.ForDomain(domainName)
+				allBehaviors[resource.Path] = commitmentBehavior.ForDomain(infoScope.DomainName)
 			}
 		}
 	}
@@ -216,14 +227,7 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, token *gopherp
 
 // GetRatesInfo returns a ratesv2.InfoReport, which can be exposed via
 // an own endpoint or re-used in rate reports.
-func GetRatesInfo(cluster *core.Cluster, token *gopherpolicy.Token, sis core.ServiceInfoReader) (ratesv2.InfoReport, error) {
-	var none ratesv2.InfoReport // used on error return paths only
-
-	_, _, _, err := authenticateInfoRequest(token)
-	if err != nil {
-		return none, err
-	}
-
+func GetRatesInfo(cluster *core.Cluster, infoScope InfoScope, sis core.ServiceInfoReader) (ratesv2.InfoReport, error) {
 	// assemble the report
 	report := ratesv2.InfoReport{
 		AllAZs: cluster.Config.AvailabilityZones,

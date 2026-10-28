@@ -100,7 +100,11 @@ func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *goph
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetResourcesInfo(ctx, cluster, token, timeNow, filter)
+		infoScope, err := AuthenticateInfoRequest(token)
+		if err != nil {
+			return result, err
+		}
+		infoReport, err := GetResourcesInfo(ctx, cluster, infoScope, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -282,7 +286,11 @@ func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpo
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetRatesInfo(cluster, token, filter)
+		infoScope, err := AuthenticateInfoRequest(token)
+		if err != nil {
+			return result, err
+		}
+		infoReport, err := GetRatesInfo(cluster, infoScope, filter)
 		if err != nil {
 			return result, err
 		}

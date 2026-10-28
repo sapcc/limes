@@ -39,6 +39,8 @@
 // A project-scoped token will receive information about all resources available in that project.
 // A domain-scoped token will receive information about all resources available in at least one project of that domain.
 // A cloud-admin token will receive information about all resources.
+// A domain-scoped token can be reduced to the scope of a project by specifying a project_uuid query parameter.
+// A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [resourcesv2.InfoReport].
 //
 // # Endpoint: GET /resources/v2/cluster
@@ -151,6 +153,8 @@
 // A project-scoped token will receive information about all rates available in that project.
 // A domain-scoped token will receive information about all rates available in at least one project of that domain.
 // A cloud-admin token will receive information about all rates.
+// A domain-scoped token can be reduced to the scope of a project by specifying a project_uuid query parameter.
+// A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [ratesv2.InfoReport].
 //
 // # Endpoint: GET /rates/v2/cluster

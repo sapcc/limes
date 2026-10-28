@@ -77,6 +77,29 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	dresden := s.GetProjectID("dresden")
 	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, berlin, firstCapacity)
 	fixturePath := "./fixtures/resource-info.json"
+	cloudAdminIdentity := map[string]string{
+		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
+		"domain_id": "", "domain_name": "",
+	}
+	domainFranceIdentity := map[string]string{
+		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
+		"domain_id": "uuid-for-france", "domain_name": "france",
+	}
+	domainGermanyIdentity := map[string]string{
+		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
+		"domain_id": "uuid-for-germany", "domain_name": "germany",
+	}
+	projectDresdenIdentity := map[string]string{
+		"domain_id": "", "domain_name": "",
+		"project_id": "uuid-for-dresden", "project_name": "dresden", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
+	}
+	projectBerlinIdentity := map[string]string{
+		"domain_id": "", "domain_name": "",
+		"project_id": "uuid-for-berlin", "project_name": "berlin", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
+	}
+	projectParisIdentity := map[string]string{
+		"project_id": "uuid-for-paris", "project_name": "paris", "project_domain_id": "uuid-for-france", "project_domain_name": "france",
+	}
 
 	// we need to have some sort of permission for the info endpoint
 	s.TokenValidator.Enforcer.AllowInfo = false
@@ -90,10 +113,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 
 	// now a domain admin with a domain scoped token where no resource is forbidden, but commitments disabled
 	s.TokenValidator.Enforcer.AllowCluster = false
-	s.UpdateMockUserIdentity(map[string]string{
-		"project_id": "", "project_domain_id": "", "project_name": "", "project_domain_name": "",
-		"domain_id": "uuid-for-france", "domain_name": "france",
-	})
+	s.UpdateMockUserIdentity(domainFranceIdentity)
 	pathToModify := ".service_areas.second.services.second.categories.foo_category.resources"
 	commitmentMod := []string{
 		fmt.Sprintf("del(%s.capacity.commitment_config)", pathToModify),
@@ -110,6 +130,13 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-commitments-disabled").
 			Modify(commitmentMod...))
 
+	// as cloud admin, we can reduce the scope to this exact result by specifying a query param
+	s.UpdateMockUserIdentity(cloudAdminIdentity)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info?domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-commitments-disabled-as-cloud-admin").
+			Modify(commitmentMod...))
+	s.UpdateMockUserIdentity(domainFranceIdentity)
+
 	// now, the single project in this domain has a forbidden resource, commitments still disabled
 	s.MustDBExec(`UPDATE project_resources pr SET forbidden = true WHERE pr.project_id = $1 AND pr.resource_id = $2`, paris, firstCapacity)
 	forbiddenMod := "del(.service_areas.first.services.first.categories.foo_category)"
@@ -125,10 +152,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 
 	// now a project admin with a project scoped token where no resource is forbidden, commitments are enabled
 	s.TokenValidator.Enforcer.AllowDomain = false
-	s.UpdateMockUserIdentity(map[string]string{
-		"domain_id": "", "domain_name": "",
-		"project_id": "uuid-for-dresden", "project_name": "dresden", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
-	})
+	s.UpdateMockUserIdentity(projectDresdenIdentity)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-dresden"))
 
@@ -142,13 +166,25 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_32.commitment_conversion_targets[1])"))
 
 	// now a project admin with a project scoped token where a resource is forbidden, commitments still enabled
-	s.UpdateMockUserIdentity(map[string]string{"project_id": "uuid-for-berlin", "project_name": "berlin"})
+	s.UpdateMockUserIdentity(projectBerlinIdentity)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-forbidden-resource").
 			Modify(forbiddenMod))
 
+	// as cloud admin, we can reduce the scope to this exact result by specifying a query param
+	s.UpdateMockUserIdentity(cloudAdminIdentity)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info?project_uuid=uuid-for-berlin").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "project-forbidden-resource-as-cloud-admin").
+			Modify(forbiddenMod))
+
+	// as domain admin, we can reduce the scope to this exact result by specifying a query param
+	s.UpdateMockUserIdentity(domainGermanyIdentity)
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info?project_uuid=uuid-for-berlin").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "project-forbidden-resource-as-cloud-admin").
+			Modify(forbiddenMod))
+
 	// now a project admin with a project scoped token where a resource is forbidden and commitments are disabled
-	s.UpdateMockUserIdentity(map[string]string{"project_id": "uuid-for-paris", "project_name": "paris", "project_domain_id": "uuid-for-france", "project_domain_name": "france"})
+	s.UpdateMockUserIdentity(projectParisIdentity)
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-forbidden-no-commitments").
 			Modify(forbiddenMod).Modify(commitmentMod...))
