@@ -78,7 +78,7 @@ func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gop
 	if err != nil {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
 	}
-	return reports_v2.GetProjectResources(ctx, p.Cluster, token, filter, options, scope, p.timeNow())
+	return reports_v2.GetProjectResources(ctx, p.Cluster, filter, options, scope, p.timeNow())
 }
 
 // handleGetRatesProjects handles GET /rates/v2/projects.
@@ -88,7 +88,7 @@ func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy
 	if err != nil {
 		return
 	}
-	return p.commonHandleGetRatesProject(r, token, scope)
+	return p.commonHandleGetRatesProject(r, scope)
 }
 
 // handleGetRatesProject handles GET /rates/v2/projects/:project_uuid.
@@ -98,11 +98,11 @@ func (p *v2Provider) handleGetRatesProject(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return
 	}
-	return p.commonHandleGetRatesProject(r, token, scope)
+	return p.commonHandleGetRatesProject(r, scope)
 }
 
 // commonHandleGetRatesProject handles single- and multi-project rate calls.
-func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, token *gopherpolicy.Token, scope reports_v2.Scope) (_ ratesv2.ProjectGetResponse, err error) {
+func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, scope reports_v2.Scope) (_ ratesv2.ProjectGetResponse, err error) {
 	none := ratesv2.ProjectGetResponse{}
 	ctx := r.Context()
 
@@ -118,7 +118,7 @@ func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, token *gopherp
 	if err != nil {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, err)
 	}
-	result, err := reports_v2.GetProjectRates(ctx, p.Cluster, token, filter, options, scope)
+	result, err := reports_v2.GetProjectRates(ctx, p.Cluster, filter, options, scope)
 	if err != nil {
 		return none, err
 	}

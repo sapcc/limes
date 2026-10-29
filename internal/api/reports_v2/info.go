@@ -6,9 +6,7 @@ package reports_v2
 import (
 	"cmp"
 	"context"
-	"errors"
 	"maps"
-	"net/http"
 	"slices"
 	"time"
 
@@ -17,8 +15,6 @@ import (
 	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
@@ -34,7 +30,7 @@ var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
 	JOIN services s ON r.service_id = s.id
 	JOIN projects p ON pr.project_id = p.id
 	JOIN domains d ON p.domain_id = d.id
-	WHERE ((p.uuid = $1 OR $1 = '') AND (d.uuid = $2 OR $2 = ''))
+	WHERE {{p.id = ANY($project_id)}} AND {{d.id = ANY($domain_id)}}
 	AND pr.forbidden = false
 `)
 
@@ -52,51 +48,9 @@ type InfoScope struct {
 	DomainName string
 }
 
-// AuthenticateInfoRequest determines the InfoScope from the token alone (without query-parameter overrides).
-// It checks authorization and returns the appropriate scope.
-func AuthenticateInfoRequest(token *gopherpolicy.Token) (InfoScope, error) {
-	// case 1: cloud admin
-	if token.Check("v2:cluster:info") {
-		return InfoScope{}, nil
-	}
-
-	// manipulation of `token.Context.Request` inside this function should not break request-path-specific object attributes
-	originalRequest := token.Context.Request
-	defer func() {
-		token.Context.Request = originalRequest
-	}()
-
-	// case 2: domain admin (evaluated multiple times, see documentation on policy rules for details)
-	for _, domain := range []core.KeystoneDomain{
-		{Name: token.DomainScopeName(), UUID: token.DomainScopeUUID()},
-		{Name: token.ProjectScopeDomainName(), UUID: token.ProjectScopeDomainUUID()},
-	} {
-		if domain.Name == "" || domain.UUID == "" {
-			continue // skip options that are not applicable to the current token
-		}
-		token.Context.Request = map[string]string{"domain_uuid": domain.UUID}
-		if token.Check("v2:domain:info") {
-			return InfoScope{DomainUUID: domain.UUID, DomainName: domain.Name}, nil
-		}
-	}
-
-	// case 3: project admin (there is only one option for this: a project-scoped token)
-	// (the final token.Check() is a token.Enforce() because Enforce can properly distinguish between 401 and 403 errors)
-	err := token.Enforce("v2:project:info")
-	if err != nil {
-		return InfoScope{}, err
-	}
-	projectUUID := token.ProjectScopeUUID()
-	if projectUUID == "" {
-		// safety check: v2:project:info should only be allowed with a project-scoped token
-		return InfoScope{}, respondwith.CustomStatus(http.StatusForbidden, errors.New("cannot retrieve InfoReport for project without a project-scoped token"))
-	}
-	return InfoScope{ProjectUUID: projectUUID, DomainUUID: token.ProjectScopeDomainUUID(), DomainName: token.ProjectScopeDomainName()}, nil
-}
-
 // GetResourcesInfo returns a resourcesv2.InfoReport, which can be exposed via
 // an own endpoint or re-used in resource reports.
-func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, infoScope InfoScope, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
+func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, scope Scope, timeNow time.Time, sis core.ServiceInfoReader) (resourcesv2.InfoReport, error) {
 	dbm := cluster.DB
 	var none resourcesv2.InfoReport // used on error return paths only
 
@@ -106,7 +60,8 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, infoScope Info
 		ServiceType  db.ServiceType      `db:"type"`
 		ResourceName liquid.ResourceName `db:"name"`
 	}
-	err := oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, findAllowedResourcesQuery, infoScope.ProjectUUID, infoScope.DomainUUID).Foreach(func(r allowedResourceRecord) error {
+	query, args := scope.ExpandScopeFilters(findAllowedResourcesQuery)
+	err := oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, query, args...).Foreach(func(r allowedResourceRecord) error {
 		if allowedResourcesByService[r.ServiceType] == nil {
 			allowedResourcesByService[r.ServiceType] = make(map[liquid.ResourceName]struct{})
 		}
@@ -123,10 +78,10 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, infoScope Info
 	for serviceType := range services.Keys() {
 		for resource := range sis.GetResourcesForType(serviceType).Values() {
 			commitmentBehavior := cluster.CommitmentBehaviorForResource(serviceType, resource.Name)
-			if infoScope.DomainUUID == "" {
-				allBehaviors[resource.Path] = commitmentBehavior.ForCluster()
+			if domain, ok := scope.GetDomain().Unpack(); ok {
+				allBehaviors[resource.Path] = commitmentBehavior.ForDomain(domain.Name)
 			} else {
-				allBehaviors[resource.Path] = commitmentBehavior.ForDomain(infoScope.DomainName)
+				allBehaviors[resource.Path] = commitmentBehavior.ForCluster()
 			}
 		}
 	}
@@ -227,7 +182,7 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, infoScope Info
 
 // GetRatesInfo returns a ratesv2.InfoReport, which can be exposed via
 // an own endpoint or re-used in rate reports.
-func GetRatesInfo(cluster *core.Cluster, infoScope InfoScope, sis core.ServiceInfoReader) (ratesv2.InfoReport, error) {
+func GetRatesInfo(cluster *core.Cluster, scope Scope, sis core.ServiceInfoReader) (ratesv2.InfoReport, error) {
 	// assemble the report
 	report := ratesv2.InfoReport{
 		AllAZs: cluster.Config.AvailabilityZones,

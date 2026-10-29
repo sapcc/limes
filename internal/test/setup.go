@@ -270,7 +270,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowEditMaxQuota: true,
 		AllowUncommit:     true,
 		// v2 actions
-		AllowInfo:                  true,
 		AllowReportSingle:          true,
 		AllowReportMultiple:        true,
 		AllowCommitmentCreate:      true,

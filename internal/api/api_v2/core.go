@@ -296,3 +296,40 @@ func (p *v2Provider) checkDomainAccess(ctx context.Context, t *gopherpolicy.Toke
 	}
 	return reports_v2.DomainScope{Domain: domain}, nil
 }
+
+// AuthenticateInfoRequest determines the Scope, considering whether a specific domain or project have been requested.
+// It checks authorization and returns the appropriate scope.
+func (p *v2Provider) authenticateInfoRequest(r *http.Request, token *gopherpolicy.Token) (reports_v2.Scope, error) {
+	// determine for which UUIDs we check
+	requestDomainUUID := r.URL.Query().Get("domain_uuid")
+	requestProjectUUID := r.URL.Query().Get("project_uuid")
+	if requestDomainUUID != "" && requestProjectUUID != "" {
+		return reports_v2.ClusterScope{}, respondwith.CustomStatus(http.StatusBadRequest, errors.New("domain_uuid and project_uuid should not be specified together"))
+	}
+
+	// case 1: requested domain
+	if requestDomainUUID != "" {
+		return p.checkDomainAccess(r.Context(), token, requestDomainUUID, "v2:domain:report_single")
+	}
+	// case 2: requested project
+	if requestProjectUUID != "" {
+		return p.checkProjectAccess(r.Context(), token, liquid.ProjectUUID(requestProjectUUID), "v2:project:report_single")
+	}
+
+	// check implicit scopes from broadest to narrowest
+	// case 3: cloud admin
+	err := token.Enforce("v2:cluster:report_single")
+	if err == nil {
+		return reports_v2.ClusterScope{}, nil
+	}
+	// case 4: implicit domain
+	if implicitDomainUUID := token.DomainScopeUUID(); implicitDomainUUID != "" {
+		return p.checkDomainAccess(r.Context(), token, implicitDomainUUID, "v2:domain:report_single")
+	}
+	// case 5: implicit project
+	if implicitProjectUUID := token.ProjectScopeUUID(); implicitProjectUUID != "" {
+		return p.checkProjectAccess(r.Context(), token, liquid.ProjectUUID(implicitProjectUUID), "v2:project:report_single")
+	}
+
+	return reports_v2.ClusterScope{}, err
+}

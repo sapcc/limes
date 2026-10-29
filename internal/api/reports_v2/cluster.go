@@ -18,8 +18,6 @@ import (
 	"go.xyrillian.de/gg/options"
 	"go.xyrillian.de/oblast"
 
-	"github.com/sapcc/go-bits/gopherpolicy"
-
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
@@ -99,16 +97,12 @@ var clusterResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehol
 `))
 
 // GetClusterResources returns a resourcesv2.ClusterGetResponse.
-func GetClusterResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
+func GetClusterResources(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.ClusterResourceReportOpts, timeNow time.Time) (resourcesv2.ClusterGetResponse, error) {
 	var result resourcesv2.ClusterGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoScope, err := AuthenticateInfoRequest(token)
-		if err != nil {
-			return result, err
-		}
-		infoReport, err := GetResourcesInfo(ctx, cluster, infoScope, timeNow, filter)
+		infoReport, err := GetResourcesInfo(ctx, cluster, ClusterScope{}, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -236,16 +230,12 @@ var clusterRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterRates returns a ratesv2.ClusterGetResponse.
-func GetClusterRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
+func GetClusterRates(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.ClusterRateReportOpts) (ratesv2.ClusterGetResponse, error) {
 	var result ratesv2.ClusterGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoScope, err := AuthenticateInfoRequest(token)
-		if err != nil {
-			return result, err
-		}
-		infoReport, err := GetRatesInfo(cluster, infoScope, filter)
+		infoReport, err := GetRatesInfo(cluster, ClusterScope{}, filter)
 		if err != nil {
 			return result, err
 		}

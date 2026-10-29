@@ -98,14 +98,15 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 		"project_id": "uuid-for-berlin", "project_name": "berlin", "project_domain_id": "uuid-for-germany", "project_domain_name": "germany",
 	}
 	projectParisIdentity := map[string]string{
+		"domain_id": "", "domain_name": "",
 		"project_id": "uuid-for-paris", "project_name": "paris", "project_domain_id": "uuid-for-france", "project_domain_name": "france",
 	}
 
 	// we need to have some sort of permission for the info endpoint
-	s.TokenValidator.Enforcer.AllowInfo = false
+	s.TokenValidator.Enforcer.AllowReportSingle = false
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
-	s.TokenValidator.Enforcer.AllowInfo = true
+	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// we start with cloud_admin permissions, the scope does not matter for this case
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
@@ -188,6 +189,14 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-forbidden-no-commitments").
 			Modify(forbiddenMod).Modify(commitmentMod...))
+
+	// a limes-unknown project will produce an error (not an empty response)
+	s.UpdateMockUserIdentity(map[string]string{
+		"domain_id": "", "domain_name": "",
+		"project_id": "fake", "project_name": "fake", "project_domain_id": "fake", "project_domain_name": "fake",
+	})
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").
+		ExpectBody(t, http.StatusNotFound, []byte("no such project (UUID = fake)\n"))
 }
 
 func TestV2RatesInfoAPI(t *testing.T) {
@@ -210,10 +219,10 @@ func TestV2RatesInfoAPI(t *testing.T) {
 	fixturePath := "./fixtures/rate-info.json"
 
 	// we need to have some sort of permission for the info endpoint
-	s.TokenValidator.Enforcer.AllowInfo = false
+	s.TokenValidator.Enforcer.AllowReportSingle = false
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
-	s.TokenValidator.Enforcer.AllowInfo = true
+	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// we start with cloud_admin permissions, the scope does not matter for rates
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
@@ -237,4 +246,12 @@ func TestV2RatesInfoAPI(t *testing.T) {
 	})
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-admin"))
+
+	// a limes-unknown project will produce an error (not an empty response)
+	s.UpdateMockUserIdentity(map[string]string{
+		"domain_id": "", "domain_name": "",
+		"project_id": "fake", "project_name": "fake", "project_domain_id": "fake", "project_domain_name": "fake",
+	})
+	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").
+		ExpectBody(t, http.StatusNotFound, []byte("no such project (UUID = fake)\n"))
 }

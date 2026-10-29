@@ -25,6 +25,10 @@ type Scope interface {
 	// with appropriate conditions that restrict matches to domains and projects within this scope.
 	// Returns the modified query and the appropriately extended argument list.
 	ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any)
+	// GetDomain returns the Domain of this scope, if this scope has one. This is useful if the concrete Scope is unknown.
+	GetDomain() Option[db.Domain]
+	// GetProject returns the Project of this scope, if this scope has one. This is useful if the concrete Scope is unknown.
+	GetProject() Option[db.Project]
 }
 
 // ClusterScope is a [Scope] for operations that are not restricted to a specific domain or project.
@@ -33,6 +37,16 @@ type ClusterScope struct{}
 // ExpandScopeFilters implements the [Scope] interface.
 func (ClusterScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
 	return expandScopeFilters(None[db.Domain](), None[db.Project](), originalQuery, originalArgs)
+}
+
+// GetDomain implements the [Scope] interface.
+func (ClusterScope) GetDomain() Option[db.Domain] {
+	return None[db.Domain]()
+}
+
+// GetProject implements the [Scope] interface.
+func (ClusterScope) GetProject() Option[db.Project] {
+	return None[db.Project]()
 }
 
 // DomainScope is a [Scope] for operations that are restricted to a single domain.
@@ -45,6 +59,16 @@ func (s DomainScope) ExpandScopeFilters(originalQuery string, originalArgs ...an
 	return expandScopeFilters(Some(s.Domain), None[db.Project](), originalQuery, originalArgs)
 }
 
+// GetDomain implements the [Scope] interface.
+func (s DomainScope) GetDomain() Option[db.Domain] {
+	return Some(s.Domain)
+}
+
+// GetProject implements the [Scope] interface.
+func (s DomainScope) GetProject() Option[db.Project] {
+	return None[db.Project]()
+}
+
 // ProjectScope is a [Scope] for operations that are restricted to a single domain.
 type ProjectScope struct {
 	Domain  db.Domain
@@ -54,6 +78,16 @@ type ProjectScope struct {
 // ExpandScopeFilters implements the [Scope] interface.
 func (s ProjectScope) ExpandScopeFilters(originalQuery string, originalArgs ...any) (query string, args []any) {
 	return expandScopeFilters(Some(s.Domain), Some(s.Project), originalQuery, originalArgs)
+}
+
+// GetDomain implements the [Scope] interface.
+func (s ProjectScope) GetDomain() Option[db.Domain] {
+	return Some(s.Domain)
+}
+
+// GetProject implements the [Scope] interface.
+func (s ProjectScope) GetProject() Option[db.Project] {
+	return Some(s.Project)
 }
 
 var scopeFilterReplaceRx = regexp.MustCompile(`{{(\S+?) = ANY\(\$(domain_id|project_id)\)}}`)
