@@ -163,7 +163,7 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_80)").
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity.commitment_conversion_targets[1])").
 			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_160.commitment_conversion_targets[1])").
-			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_32.commitment_conversion_targets[1])"))
+			Modify("del(.service_areas.second.services.second.categories.foo_category.resources.capacity_32.commitment_conversion_targets[2])"))
 
 	// now a project admin with a project scoped token where a resource is forbidden, commitments still enabled
 	s.UpdateMockUserIdentity(projectBerlinIdentity)

@@ -80,8 +80,7 @@
                       "to": 1,
                       "target_service": "second",
                       "target_resource": "capacity_32",
-                      "allow_rounding": true,
-                      "one_way": true
+                      "allow_rounding": true
                     },
                     {
                       "from": 80,
@@ -161,6 +160,12 @@
                     ]
                   },
                   "commitment_conversion_targets": [
+                    {
+                      "from": 1,
+                      "to": 32,
+                      "target_service": "second",
+                      "target_resource": "capacity"
+                    },
                     {
                       "from": 5,
                       "to": 1,

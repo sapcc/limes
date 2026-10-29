@@ -522,6 +522,31 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			}, func(r httptest.Response) {
 				r.ExpectText(t, http.StatusNotFound, "no such commitment\n")
 			})
+
+			// error: before min_confirm_date (1970-01-08T00:00:00Z)
+			s.Clock.StepBy(-8 * 24 * time.Hour)
+			var uuid32 liquid.CommitmentUUID
+			var resp32Body struct {
+				UUID liquid.CommitmentUUID `json:"uuid"`
+			}
+			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+				"amount":            1,
+				"duration":          "2 hours",
+				"project_id":        "uuid-for-berlin",
+				"service_type":      "second",
+				"resource_name":     "capacity_32",
+				"availability_zone": "az-one",
+				"status":            "confirmed",
+			})).CaptureJSON(&resp32Body).ExpectStatus(t, http.StatusCreated)
+			uuid32 = resp32Body.UUID
+			tr.DBChanges().Ignore()
+			s.Auditor.IgnoreEventsUntilNow()
+			convertCommitmentAndExpectError(t, s, tr, uuid32, map[string]any{
+				"target_service_type":  "second",
+				"target_resource_name": "capacity",
+			}, func(r httptest.Response) {
+				r.ExpectText(t, http.StatusUnprocessableEntity, "conversion would circumvent the minimum confirmed_at timestamp of the target resource\n")
+			})
 		})
 	}
 }

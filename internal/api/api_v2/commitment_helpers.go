@@ -75,6 +75,7 @@ var (
 	errReceiveSourceTargetEqual        = errors.New("source and target project are equal")
 	errConversionSameResource          = errors.New("commitment conversion is only allowed to a different resource")
 	errNoSuchConversion                = errors.New("no such conversion available")
+	errConversionBeforeMinConfirmedAt  = errors.New("conversion would circumvent the minimum confirmed_at timestamp of the target resource")
 	errConversionNoRounding            = errors.New("for this conversion, no rounding is allowed and there would be a remainder on the target side")
 	errConversionTargetZero            = errors.New("target amount would be zero")
 	errNoTransferConversion            = errors.New(`commitment in transfer must not be converted`)

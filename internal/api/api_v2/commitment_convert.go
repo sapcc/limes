@@ -72,6 +72,13 @@ func (p *v2Provider) handleConvertCommitment(r *http.Request, token *gopherpolic
 		if !exists {
 			return respondwith.CustomStatus(http.StatusUnprocessableEntity, errNoSuchConversion)
 		}
+		confirmBy := now
+		if c.Status == liquid.CommitmentStatusPlanned || c.Status == liquid.CommitmentStatusGuaranteed {
+			confirmBy = c.ConfirmBy.UnwrapOr(now)
+		}
+		if targetBehavior.CanConfirmCommitmentsAt(confirmBy) != "" {
+			return respondwith.CustomStatus(http.StatusUnprocessableEntity, errConversionBeforeMinConfirmedAt)
+		}
 
 		// number validations
 		remainderAmount := c.Amount % rate.FromAmount
