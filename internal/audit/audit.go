@@ -113,7 +113,7 @@ func (t AutogrowthEventTarget) Render() cadf.Resource {
 }
 
 // V2AutogrowthEventTarget contains the structure for rendering a cadf.Event.Target for
-// changes regarding the forbid-autogrowth flag.
+// v2-API changes regarding the forbid-autogrowth flag.
 type V2AutogrowthEventTarget struct {
 	DomainID         string
 	DomainName       string
@@ -151,7 +151,7 @@ type RateLimitEventTarget struct {
 	Payload     RateLimitChange
 }
 
-// RateLimitChange appears in type rateLimitEventTarget.
+// RateLimitChange appears in type RateLimitEventTarget.
 type RateLimitChange struct {
 	Unit         limes.Unit        `json:"unit,omitzero"`
 	OldLimit     uint64            `json:"oldLimit"`
@@ -165,6 +165,42 @@ type RateLimitChange struct {
 func (t RateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.Payload)),
+		},
+	}
+}
+
+// V2RateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
+// v2-API changes regarding rate limits
+type V2RateLimitEventTarget struct {
+	DomainID    string
+	DomainName  string
+	ProjectID   liquid.ProjectUUID
+	ProjectName string
+	ServiceType db.ServiceType
+	RateName    liquid.RateName
+	Payload     V2RateLimitChange
+}
+
+// V2RateLimitChange appears in type V2RateLimitEventTarget.
+type V2RateLimitChange struct {
+	Unit      limes.Unit                `json:"unit,omitzero"`
+	OldLimit  Option[uint64]            `json:"oldLimit"`
+	NewLimit  Option[uint64]            `json:"newLimit"`
+	OldWindow Option[limesrates.Window] `json:"oldWindow"`
+	NewWindow Option[limesrates.Window] `json:"newWindow"`
+}
+
+// Render implements the audittools.Target interface.
+func (t V2RateLimitEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.RateName),
 		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,

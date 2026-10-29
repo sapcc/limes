@@ -8,6 +8,7 @@ import "errors"
 var (
 	errNoSuchProjectResource  = errors.New("no such project resource")
 	errNoSuchResource         = errors.New("no such resource")
+	errNoSuchRate             = errors.New("no such rate")
 	errNoSuchService          = errors.New("no such service")
 	errDoesNotTrackQuota      = errors.New("resource does not track quota")
 	errDoesNotHaveCommitments = errors.New("resource does not have commitments")
