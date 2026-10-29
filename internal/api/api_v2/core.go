@@ -84,6 +84,7 @@ func (p *v2Provider) AddTo(c *httpapi.Composer) {
 	ratesRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomain))
 	ratesRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProjects))
 	ratesRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProject))
+	ratesRouter.Methods("PUT").Path("/projects/{project_uuid}/limit").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePutRateLimitProject))
 }
 
 // Wrapper for request handlers that enforces a structure,

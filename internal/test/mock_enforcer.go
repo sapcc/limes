@@ -33,6 +33,7 @@ type PolicyEnforcer struct {
 	AllowCommitmentUpdate       bool
 	AllowMaxQuotaUpdate         bool
 	AllowForbidAutogrowthUpdate bool
+	AllowRateLimitUpdate        bool
 	// flags for v2 project-level ?with= permissions (default: true via fallthrough)
 	ForbidWithHistoricalUsage bool
 	ForbidWithObsolete        bool
@@ -107,6 +108,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowMaxQuotaUpdate
 	case "forbid_autogrowth_update":
 		return e.AllowForbidAutogrowthUpdate
+	case "rate_limit_update":
+		return e.AllowRateLimitUpdate
 	case "with_historical_usage":
 		return !e.ForbidWithHistoricalUsage
 	case "with_obsolete":

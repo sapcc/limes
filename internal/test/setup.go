@@ -282,6 +282,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowCommitmentUpdate:       true,
 		AllowMaxQuotaUpdate:         true,
 		AllowForbidAutogrowthUpdate: true,
+		AllowRateLimitUpdate:        true,
 	}
 	s.mockUserIdentity = map[string]string{
 		"user_id":             "uuid-for-alice",

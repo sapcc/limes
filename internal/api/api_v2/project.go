@@ -5,11 +5,13 @@ package api_v2
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-api-declarations/opts"
 	"github.com/sapcc/go-bits/audittools"
@@ -48,7 +50,7 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 	return p.commonHandleGetResourcesProject(r, token, scope)
 }
 
-// commonHandleGetResourcesProject handles single- and multi-project rate calls.
+// commonHandleGetResourcesProject handles single- and multi-project resource calls.
 func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gopherpolicy.Token, scope reports_v2.Scope) (_ resourcesv2.ProjectGetResponse, err error) {
 	none := resourcesv2.ProjectGetResponse{}
 	ctx := r.Context()
@@ -186,14 +188,13 @@ func (p *v2Provider) handlePutMaxQuota(r *http.Request, token *gopherpolicy.Toke
 	}
 
 	// get projectResource
-	projectResources, err := db.ProjectResourceStore.SelectWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID).Collect()
+	projectResource, err := db.ProjectResourceStore.SelectOneWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
+	}
 	if err != nil {
 		return none, err
 	}
-	if len(projectResources) == 0 {
-		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
-	}
-	projectResource := projectResources[0]
 	if projectResource.Forbidden {
 		return none, respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
 	}
@@ -207,7 +208,7 @@ func (p *v2Provider) handlePutMaxQuota(r *http.Request, token *gopherpolicy.Toke
 			Value: maxQuota,
 		}.ConvertTo(res.Unit)
 		if err != nil {
-			return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("given unit was not convertible to the resources unit"))
+			return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("given unit was not convertible to the resource's unit"))
 		}
 		projectResource.MaxQuotaFromOutsideAdmin = Some(converted.Value)
 	} else {
@@ -283,14 +284,13 @@ func (p *v2Provider) handlePutForbidAutogrowth(r *http.Request, token *gopherpol
 	}
 
 	// get projectResource
-	projectResources, err := db.ProjectResourceStore.SelectWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID).Collect()
+	projectResource, err := db.ProjectResourceStore.SelectOneWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
+	}
 	if err != nil {
 		return none, err
 	}
-	if len(projectResources) == 0 {
-		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
-	}
-	projectResource := projectResources[0]
 	if projectResource.Forbidden {
 		return none, respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
 	}
@@ -324,6 +324,120 @@ func (p *v2Provider) handlePutForbidAutogrowth(r *http.Request, token *gopherpol
 			ResourceName: req.ResourceName,
 			AutogrowthChange: audit.AutogrowthChange{
 				ForbidAutogrowth: projectResource.ForbidAutogrowth,
+			},
+		},
+	})
+
+	return none, nil
+}
+
+// (p *v2Provider) handlePutRateLimitProject handles PUT /rates/v2/projects/:project_uuid/limit.
+func (p *v2Provider) handlePutRateLimitProject(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
+	httpapi.IdentifyEndpoint(r, "/rates/v2/projects/:project_uuid/limit")
+	var (
+		ctx = r.Context()
+		sis = p.Cluster.SIC.GetSnapshot()
+		now = p.timeNow()
+	)
+
+	scope, err := p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:rate_limit_update")
+	if err != nil {
+		return none, err
+	}
+
+	// validate request contents
+	req, err := parseRequestBodyAs[ratesv2.ProjectRateLimitRequest](r)
+	if err != nil {
+		return none, err
+	}
+	_, sExists := sis.GetServiceForType(req.ServiceType)
+	if !sExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	rate, rExists := sis.GetRateForPath(db.RatePath{ServiceType: req.ServiceType, RateName: req.RateName})
+	if !rExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchRate)
+	}
+	if req.Limit.IsSome() != req.Unit.IsSome() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("unit should be set when limit is set"))
+	}
+	if req.Limit.IsSome() != req.Window.IsSome() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window should be set when limit is set"))
+	}
+	serviceConfig, cExists := p.Cluster.Config.GetLiquidConfigurationForType(req.ServiceType)
+	if !cExists {
+		// defense in depth, should be caught above
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	_, defaultExists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(req.RateName).Unpack()
+	if !defaultExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("for this rate, no custom rate limits can be set"))
+	}
+	if window, wExists := req.Window.Unpack(); wExists && window == 0 {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("a window of 0 does not make sense"))
+	}
+
+	// get projectRate
+	projectRate, err := db.ProjectRateStore.SelectOneWhere(ctx, p.DB, "project_id = $1 AND rate_id = $2", scope.Project.ID, rate.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		// we ignore not-yet created projectRates here and instead insert them!
+		return none, err
+	}
+
+	// modifications
+	oldLimit := projectRate.Limit
+	oldWindow := projectRate.Window
+	if limit, ok := req.Limit.Unpack(); ok {
+		unit := must.BeOK(req.Unit.Unpack())                      // already checked above
+		projectRate.Window = Some(must.BeOK(req.Window.Unpack())) // already checked above
+		converted, err := limes.ValueWithUnit{
+			Unit:  unit,
+			Value: limit,
+		}.ConvertTo(rate.Unit)
+		if err != nil {
+			return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("given unit was not convertible to the rate's unit"))
+		}
+		projectRate.Limit = Some(converted.Value)
+	} else {
+		projectRate.Limit = None[uint64]()
+		projectRate.Window = None[limesrates.Window]()
+	}
+
+	// early return or update
+	if oldLimit == projectRate.Limit && oldWindow == projectRate.Window {
+		return none, nil
+	}
+	if projectRate.ID == 0 {
+		projectRate.ProjectID = scope.Project.ID
+		projectRate.RateID = rate.ID
+		err = db.ProjectRateStore.Insert(ctx, p.DB, &projectRate)
+	} else {
+		err = db.ProjectRateStore.Update(ctx, p.DB, projectRate)
+	}
+	if err != nil {
+		return none, err
+	}
+
+	// audit log entry
+	p.auditor.Record(audittools.Event{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.UpdateAction,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    scope.Domain.UUID,
+			DomainName:  scope.Domain.Name,
+			ProjectID:   scope.Project.UUID,
+			ProjectName: scope.Project.Name,
+			ServiceType: req.ServiceType,
+			RateName:    req.RateName,
+			Payload: audit.V2RateLimitChange{
+				Unit:      rate.Unit,
+				OldLimit:  oldLimit,
+				NewLimit:  projectRate.Limit,
+				OldWindow: oldWindow,
+				NewWindow: projectRate.Window,
 			},
 		},
 	})
