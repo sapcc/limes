@@ -74,6 +74,7 @@ The v2 API uses the policy rules listed below.
 | `v2:domain:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for domain scope and `?with=info` in domain-level reports (based on domain of token scope, supporting both project-scoped and domain-scoped tokens) |
 | `v2:project:info` | `domain_uuid` | `GET /{rates,resources}/v2/info` for project scope and `?with=info` in project-level reports |
 | `v2:project:max_quota_update` | `project_uuid` | `PUT /resources/v2/projects/:project_uuid/max-quota` |
+| `v2:project:rate_limit_update` | `project_uuid` | `PUT /rates/v2/projects/:project_uuid/limit` |
 | `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
 | `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
 | `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster` |

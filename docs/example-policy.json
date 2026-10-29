@@ -41,6 +41,7 @@
 
     "v2:project:max_quota_update": "rule:v2_domain_admin",
     "v2:project:forbid_autogrowth_update": "rule:v2_project_admin",
+    "v2:project:rate_limit_update": "rule:v2_cluster_admin",
     "v2:project:info": "rule:v2_project_viewer",
     "v2:project:report_single": "rule:v2_project_viewer",
     "v2:project:report_multiple": "rule:v2_domain_viewer",

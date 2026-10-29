@@ -186,6 +186,12 @@
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [ratesv2.ProjectGetResponse].
 //
+// # Endpoint: PUT /rates/v2/projects/:project_uuid/limit
+//
+// Updates a project's rate limit for a single rate, if permissions allow.
+//   - The request body payload must be of type [ratesv2.ProjectRateLimitRequest].
+//   - On success, status code 204 (No Content) will be returned.
+//
 // [Keystone token]: https://docs.openstack.org/api-ref/identity/v3/index.html#password-authentication-with-scoped-authorization
 // [Limes]: https://github.com/sapcc/limes
 package apiv2
