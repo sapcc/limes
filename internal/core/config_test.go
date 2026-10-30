@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/core"
@@ -145,7 +147,7 @@ func TestConfigValidation(t *testing.T) {
 	assert.Equal(t, errs.Join(","), "missing configuration value: distribution_model_configs[0].autogrow")
 
 	// quota distribution config: invalid growth multiplier and invalid retention period
-	_, errs = core.NewClusterFromJSON([]byte(`{
+	testConfigQuotaDistro := `{
 		"availability_zones": [ "foo" ],
 		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
@@ -163,8 +165,30 @@ func TestConfigValidation(t *testing.T) {
 				}
 			}
 		]
-	}`), time.Now, nil, true)
+	}`
+	_, errs = core.NewClusterFromJSON([]byte(testConfigQuotaDistro), time.Now, nil, true)
 	assert.Equal(t, errs.Join(","), "invalid value for distribution_model_configs[0].growth_multiplier: -5 (must be >= 0),invalid value for distribution_model_configs[0].usage_data_retention_period: must not be 0")
+
+	// invalid values for quota_overcommit
+	_, errs = core.NewClusterFromJSON(must.ReturnT(httptest.NewJQModifiableJSONString(testConfigQuotaDistro, "quota_overcommit checks").
+		Modify(`.quota_distribution_configs[0].autogrow = {
+			"growth_multiplier": 1.2,
+			"usage_data_retention_period": "1h",
+			"reduce_quota_overcommit_from_allocated_percent": 200
+		}`).
+		MarshalJSON())(t), time.Now, nil, true)
+	assert.Equal(t, errs.Join(","), "invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: must be >= 0 and <= 100,invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: cannot be set without allow_quota_overcommit_until_allocated_percent")
+
+	// more (other) invalid values for quota_overcommit
+	_, errs = core.NewClusterFromJSON(must.ReturnT(httptest.NewJQModifiableJSONString(testConfigQuotaDistro, "quota_overcommit checks").
+		Modify(`.quota_distribution_configs[0].autogrow = {
+			"growth_multiplier": 1.2,
+			"usage_data_retention_period": "1h",
+			"reduce_quota_overcommit_from_allocated_percent": 95,
+			"allow_quota_overcommit_until_allocated_percent": -100
+		}`).
+		MarshalJSON())(t), time.Now, nil, true)
+	assert.Equal(t, errs.Join(","), "invalid value for distribution_model_configs[0].allow_quota_overcommit_until_allocated_percent: must be >= 0 and <= 100,invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: must be < allow_quota_overcommit_until_allocated_percent")
 
 	// commitment conversion: overlapping flavors
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -263,9 +287,11 @@ func TestConfigValidation(t *testing.T) {
 				"resource": ".*/capacity",
 				"model": "autogrow",
 				"autogrow": {
-					"growth_multiplier": 1.0,
+					"growth_multiplier": 1.2,
 					"project_base_quota": 10,
-					"usage_data_retention_period": "1m"
+					"usage_data_retention_period": "1m",
+					"allow_quota_overcommit_until_allocated_percent": 95,
+					"reduce_quota_overcommit_from_allocated_percent": 85
 				}
 			}
 		]
