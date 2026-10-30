@@ -161,6 +161,7 @@ type QuotaDistributionConfiguration struct {
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
 type AutogrowQuotaDistributionConfiguration struct {
 	AllowQuotaOvercommitUntilAllocatedPercent Option[float64]              `json:"allow_quota_overcommit_until_allocated_percent"`
+	ReduceQuotaOvercommitFromAllocatedPercent Option[float64]              `json:"reduce_quota_overcommit_from_allocated_percent"`
 	ProjectBaseQuota                          uint64                       `json:"project_base_quota"`
 	GrowthMultiplier                          float64                      `json:"growth_multiplier"`
 	GrowthMinimum                             uint64                       `json:"growth_minimum"`
@@ -277,12 +278,27 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			autogrowCfg, ok := qdCfg.Autogrow.Unpack()
 			if !ok {
 				missing(fmt.Sprintf(`distribution_model_configs[%d].autogrow`, idx))
+				break
 			}
-			if ok && autogrowCfg.GrowthMultiplier < 0 {
+			if autogrowCfg.GrowthMultiplier < 0 {
 				errs.Addf("invalid value for distribution_model_configs[%d].growth_multiplier: %g (must be >= 0)", idx, autogrowCfg.GrowthMultiplier)
 			}
-			if ok && autogrowCfg.UsageDataRetentionPeriod.Into() == 0 {
+			if autogrowCfg.UsageDataRetentionPeriod.Into() == 0 {
 				errs.Addf("invalid value for distribution_model_configs[%d].usage_data_retention_period: must not be 0", idx)
+			}
+			startVal, startExists := autogrowCfg.ReduceQuotaOvercommitFromAllocatedPercent.Unpack()
+			endVal, endExists := autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack()
+			if startExists && (startVal < 0 || startVal > 100) {
+				errs.Addf("invalid value for distribution_model_configs[%d].reduce_quota_overcommit_from_allocated_percent: must be >= 0 and <= 100", idx)
+			}
+			if endExists && (endVal < 0 || endVal > 100) {
+				errs.Addf("invalid value for distribution_model_configs[%d].allow_quota_overcommit_until_allocated_percent: must be >= 0 and <= 100", idx)
+			}
+			if startExists && endExists && startVal >= endVal {
+				errs.Addf("invalid value for distribution_model_configs[%d].reduce_quota_overcommit_from_allocated_percent: must be < allow_quota_overcommit_until_allocated_percent", idx)
+			}
+			if autogrowCfg.ReduceQuotaOvercommitFromAllocatedPercent.IsSome() && autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.IsNone() {
+				errs.Addf("invalid value for distribution_model_configs[%d].reduce_quota_overcommit_from_allocated_percent: cannot be set without allow_quota_overcommit_until_allocated_percent", idx)
 			}
 		default:
 			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
