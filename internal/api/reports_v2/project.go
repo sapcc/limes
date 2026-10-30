@@ -18,7 +18,6 @@ import (
 	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
@@ -95,12 +94,12 @@ type projectConstraints struct {
 }
 
 // GetProjectResources returns a resourcesv2.ProjectGetResponse.
-func GetProjectResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
+func GetProjectResources(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.ProjectResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.ProjectGetResponse, error) {
 	var result resourcesv2.ProjectGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetResourcesInfo(ctx, cluster, token, timeNow, filter)
+		infoReport, err := GetResourcesInfo(ctx, cluster, scope, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -277,12 +276,12 @@ var projectRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetProjectRates returns a ratesv2.ProjectGetResponse.
-func GetProjectRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
+func GetProjectRates(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.ProjectRateReportOpts, scope Scope) (ratesv2.ProjectGetResponse, error) {
 	var result ratesv2.ProjectGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetRatesInfo(cluster, token, filter)
+		infoReport, err := GetRatesInfo(cluster, scope, filter)
 		if err != nil {
 			return result, err
 		}

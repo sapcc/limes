@@ -244,6 +244,7 @@ var ProjectAZResourceStore = oblast.MustNewStore[ProjectAZResource](oblast.Postg
 var ProjectAZResourceByAZResourceIDIndex = oblast.NewRuntimeIndex(func(pazr ProjectAZResource) AZResourceID { return pazr.AZResourceID })
 
 // ProjectRate contains a record from the `project_rates` table.
+// TODO: Introduce forbidden flag for rates (for consistency).
 type ProjectRate struct {
 	// NOTE: Data metrics v2 currently selects this entire table because it needs basically everything.
 	// If new fields are added later that might be expensive to fetch, consider adjusting dmv2 to select only the fields that it needs.

@@ -5,6 +5,8 @@ package core
 
 import (
 	"maps"
+	"math"
+	"math/bits"
 	"slices"
 	"time"
 
@@ -30,7 +32,9 @@ type CommitmentBehavior struct {
 	// If DurationsPerDomain.Pick() returns an empty slice, then commitments are entirely forbidden for that resource in the given domain.
 	DurationsPerDomain regexpext.ConfigSet[string, []limesresources.CommitmentDuration] `json:"durations_per_domain"`
 
-	MinConfirmDate  Option[time.Time]                                     `json:"min_confirm_date"`
+	MinConfirmDate Option[time.Time] `json:"min_confirm_date"`
+	// TODO: MaxConfirmDate for phasing out resources
+	// If we remove a CommitmentBehavior completely, it becomes non-convertible and non-transferable
 	UntilPercent    Option[float64]                                       `json:"until_percent"`
 	ConversionRules map[ConversionRuleIdentifier]CommitmentConversionRule `json:"conversion_rules"`
 }
@@ -161,6 +165,24 @@ type CommitmentConversionRate struct {
 	FromAmount    uint64
 	ToAmount      uint64
 	AllowRounding bool
+	OneWay        bool
+}
+
+// ConvertAmount computes amount * r.ToAmount / r.FromAmount using
+// 128-bit intermediate arithmetic. It requires only that the final result
+// fits into an int64 (PostgreSQL BIGINT).
+func (r CommitmentConversionRate) ConvertAmount(amount uint64) (result uint64, ok bool) {
+	hi, lo := bits.Mul64(amount, r.ToAmount) // 128-bit product of amount * ToAmount
+	if hi >= r.FromAmount {
+		// quotient >= 2^64, so it cannot fit into a uint64, let alone a BIGINT
+		return 0, false
+	}
+	// here the quotient is < 2^64, and Div64(hi, lo, x) == (hi*2^64+lo)/x
+	result, _ = bits.Div64(hi, lo, r.FromAmount)
+	if result > math.MaxInt64 {
+		return 0, false
+	}
+	return result, true
 }
 
 // GetConversionRateTo checks whether this resource can be converted into the given resource.
@@ -234,6 +256,7 @@ outer:
 				FromAmount:    fromAmount,
 				ToAmount:      toAmount,
 				AllowRounding: targetRule.AllowRounding,
+				OneWay:        sourceRule.OnlySource,
 			})
 		}
 	}

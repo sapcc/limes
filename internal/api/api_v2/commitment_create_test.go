@@ -533,7 +533,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"availability_zone": "az-one",
 		"status":            "confirmed",
 	}, func(r httptest.Response) {
-		r.ExpectText(t, http.StatusUnprocessableEntity, "amount of committed resource must be greater than zero\n")
+		r.ExpectText(t, http.StatusUnprocessableEntity, "amount must be greater than zero\n")
 	})
 
 	// invalid choice of duration
