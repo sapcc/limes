@@ -43,11 +43,8 @@ var (
 	errInvalidInitialStatus            = errors.New("initial commitment status value is invalid")
 	errInvalidResourceReference        = errors.New("reference to an unknown az resource (race condition)")
 	errNoSuchAZ                        = errors.New("no such availability zone")
-	errNoSuchResource                  = errors.New("no such resource")
-	errNoSuchService                   = errors.New("no such service")
 	errNoSuchCommitment                = errors.New("no such commitment")
 	errNotifyOnConfirmNotAllowed       = errors.New("notify_on_confirm may not be set for commitments with immediate confirmation")
-	errResourceForbidden               = errors.New("resource is not enabled in this project")
 	errOnlyOneCommitmentModification   = errors.New("only one commitment modification may be set")
 	errNoCommitmentModification        = errors.New("one commitment modification has to be set")
 	errNoDurationShortening            = errors.New("commitment duration must not be shortened")
@@ -121,7 +118,7 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope report
 		return
 	}
 	if forbidden {
-		err = respondwith.CustomStatus(http.StatusUnprocessableEntity, errResourceForbidden)
+		err = respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
 		return
 	}
 

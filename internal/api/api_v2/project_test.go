@@ -9,13 +9,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/cadf"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/must"
 
 	. "go.xyrillian.de/gg/option"
 
+	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/util"
@@ -363,4 +367,771 @@ func TestV2ProjectRateReport(t *testing.T) {
 	// unknown domain/ project
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?domain_uuid=does-not-exists").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exists)\n")
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/does-not-exists").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exists)\n")
+}
+
+func TestV2ProjectPutMaxQuota(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(resourceReportConfigJSON),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+	)
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
+	tr0.Ignore()
+
+	maxQuotaPath := "/resources/v2/projects/uuid-for-berlin/max-quota"
+
+	// happy case: set a non-null value for the first time (None → Some)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"max_quota":     500,
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET max_quota_from_outside_admin = 500 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: maxQuotaPath,
+		Target: audit.V2MaxQuotaEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "things",
+			RequestedChange: audit.MaxQuotaChange{
+				OldValue: None[uint64](),
+				NewValue: Some[uint64](500),
+			},
+		}.Render(),
+	})
+
+	// happy case: update an existing value (Some → Some)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"max_quota":     1000,
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET max_quota_from_outside_admin = 1000 WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: maxQuotaPath,
+		Target: audit.V2MaxQuotaEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "things",
+			RequestedChange: audit.MaxQuotaChange{
+				OldValue: Some[uint64](500),
+				NewValue: Some[uint64](1000),
+			},
+		}.Render(),
+	})
+
+	// happy case: unit conversion (KiB → bytes for capacity resource)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "capacity",
+		"max_quota":     10,
+		"unit":          "KiB",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: maxQuotaPath,
+		Target: audit.V2MaxQuotaEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "capacity",
+			RequestedChange: audit.MaxQuotaChange{
+				OldValue: None[uint64](),
+				NewValue: Some[uint64](10240),
+			},
+		}.Render(),
+	})
+
+	// happy case: reset to None (omit max_quota from body)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 2 AND project_id = 1 AND resource_id = 2;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: maxQuotaPath,
+		Target: audit.V2MaxQuotaEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "things",
+			RequestedChange: audit.MaxQuotaChange{
+				OldValue: Some[uint64](1000),
+				NewValue: None[uint64](),
+			},
+		}.Render(),
+	})
+
+	// no-op: setting the same value again (already None) → no DB change, no audit event
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: max_quota without unit
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"max_quota":     500,
+	})).ExpectText(t, http.StatusBadRequest, "unit should be set when max_quota is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unit without max_quota
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusBadRequest, "unit should be set when max_quota is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: incompatible unit (MiB against a countable resource)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"max_quota":     1000,
+		"unit":          "MiB",
+	})).ExpectText(t, http.StatusBadRequest, "given unit was not convertible to the resource's unit\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown service
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "unknown",
+		"resource_name": "things",
+		"max_quota":     500,
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusBadRequest, "no such service\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown resource
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "unknown",
+		"max_quota":     500,
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusBadRequest, "no such resource\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: does not track quota
+	s.MustDBExec(`UPDATE resources SET has_quota = false WHERE path = 'first/capacity'`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
+	tr.DBChanges().Ignore()
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "capacity",
+		"max_quota":     500,
+		"unit":          "GiB",
+	})).ExpectText(t, http.StatusBadRequest, "resource does not track quota\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+	s.MustDBExec(`UPDATE resources SET has_quota = true WHERE path = 'first/capacity'`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
+	tr.DBChanges().Ignore()
+
+	// error case: malformed body (unknown JSON field)
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"extra_field":   true,
+	})).ExpectStatus(t, http.StatusBadRequest)
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown project
+	s.Handler.RespondTo(s.Ctx, "PUT /resources/v2/projects/does-not-exist/max-quota", httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+	})).ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown project + permission denied → 403 beats 404 (obfuscation design)
+	s.TokenValidator.Enforcer.AllowMaxQuotaUpdate = false
+	s.Handler.RespondTo(s.Ctx, "PUT /resources/v2/projects/does-not-exist/max-quota", httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: permission denied on existing project
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "things",
+		"max_quota":     500,
+		"unit":          "piece",
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+	s.TokenValidator.Enforcer.AllowMaxQuotaUpdate = true
+
+	// error case: forbidden project resource
+	s.MustDBExec(`UPDATE project_resources SET forbidden = true WHERE project_id = 1 AND resource_id = 1`)
+	tr.DBChanges().Ignore()
+	s.Handler.RespondTo(s.Ctx, "PUT "+maxQuotaPath, httptest.WithJSONBody(map[string]any{
+		"service_type":  "first",
+		"resource_name": "capacity",
+		"max_quota":     100,
+		"unit":          "B",
+	})).ExpectText(t, http.StatusForbidden, "resource is not enabled in this project\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+}
+
+func TestV2ProjectPutRateLimit(t *testing.T) {
+	srvInfoFirst := test.DefaultLiquidServiceInfo("First")
+	srvInfoFirst.Rates = map[liquid.RateName]liquid.RateInfo{
+		"objects:create":    {DisplayName: "Object Creations", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: true, Category: Some(liquid.CategoryName("foo_category"))},
+		"objects:delete":    {DisplayName: "Object Deletions", Unit: liquid.UnitMebibytes, Topology: liquid.FlatTopology, HasUsage: true},
+		"objects:update":    {DisplayName: "Object Updates", Unit: liquid.UnitPiece, Topology: liquid.FlatTopology, HasUsage: false},
+		"objects:unlimited": {DisplayName: "Object Unlimited Operations", Unit: liquid.UnitKibibytes, Topology: liquid.FlatTopology, HasUsage: true},
+	}
+
+	s := test.NewSetup(t,
+		test.WithConfig(rateReportConfigJSON),
+		test.WithPersistedServiceInfo("first", srvInfoFirst),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+		test.WithEmptyRateRecordsAsNeeded,
+	)
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
+	tr0.Ignore()
+
+	rateLimitPath := "/rates/v2/projects/uuid-for-berlin/limit"
+
+	// happy case: set a rate limit for the first time (None → Some)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "2m",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_rates SET rate_limit = 10, window_ns = 120000000000 WHERE id = 1 AND project_id = 1 AND rate_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: rateLimitPath,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    "uuid-for-germany",
+			DomainName:  "germany",
+			ProjectID:   "uuid-for-berlin",
+			ProjectName: "berlin",
+			ServiceType: "first",
+			RateName:    "objects:create",
+			Payload: audit.V2RateLimitChange{
+				Unit:      liquid.UnitPiece,
+				OldLimit:  None[uint64](),
+				NewLimit:  Some[uint64](10),
+				OldWindow: None[limesrates.Window](),
+				NewWindow: Some(2 * limesrates.WindowMinutes),
+			},
+		}.Render(),
+	})
+
+	// happy case: update an existing rate limit (Some → Some)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        20,
+		"window":       "5m",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_rates SET rate_limit = 20, window_ns = 300000000000 WHERE id = 1 AND project_id = 1 AND rate_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: rateLimitPath,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    "uuid-for-germany",
+			DomainName:  "germany",
+			ProjectID:   "uuid-for-berlin",
+			ProjectName: "berlin",
+			ServiceType: "first",
+			RateName:    "objects:create",
+			Payload: audit.V2RateLimitChange{
+				Unit:      liquid.UnitPiece,
+				OldLimit:  Some[uint64](10),
+				NewLimit:  Some[uint64](20),
+				OldWindow: Some(2 * limesrates.WindowMinutes),
+				NewWindow: Some(5 * limesrates.WindowMinutes),
+			},
+		}.Render(),
+	})
+
+	// happy case: remove the rate limit (Some → None)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_rates SET rate_limit = NULL, window_ns = NULL WHERE id = 1 AND project_id = 1 AND rate_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: rateLimitPath,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    "uuid-for-germany",
+			DomainName:  "germany",
+			ProjectID:   "uuid-for-berlin",
+			ProjectName: "berlin",
+			ServiceType: "first",
+			RateName:    "objects:create",
+			Payload: audit.V2RateLimitChange{
+				Unit:      liquid.UnitPiece,
+				OldLimit:  Some[uint64](20),
+				NewLimit:  None[uint64](),
+				OldWindow: Some(5 * limesrates.WindowMinutes),
+				NewWindow: None[limesrates.Window](),
+			},
+		}.Render(),
+	})
+
+	// happy case: set limit to 0 (blocks all operations)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        0,
+		"window":       "1s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_rates SET rate_limit = 0, window_ns = 1000000000 WHERE id = 1 AND project_id = 1 AND rate_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: rateLimitPath,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    "uuid-for-germany",
+			DomainName:  "germany",
+			ProjectID:   "uuid-for-berlin",
+			ProjectName: "berlin",
+			ServiceType: "first",
+			RateName:    "objects:create",
+			Payload: audit.V2RateLimitChange{
+				Unit:      liquid.UnitPiece,
+				OldLimit:  None[uint64](),
+				NewLimit:  Some[uint64](0),
+				OldWindow: None[limesrates.Window](),
+				NewWindow: Some(1 * limesrates.WindowSeconds),
+			},
+		}.Render(),
+	})
+
+	// no-op: setting the same value again → no DB change, no audit event
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        0,
+		"window":       "1s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// happy case: insert when project_rates row does not exist yet
+	// (simulates a rate added after the last scrape)
+	s.MustDBExec(`DELETE FROM project_rates WHERE project_id = 1 AND rate_id = 1`)
+	tr.DBChanges().Ignore()
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        5,
+		"window":       "30s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		INSERT INTO project_rates (id, project_id, rate_id, rate_limit, window_ns, usage_as_bigint) VALUES (13, 1, 1, 5, 30000000000, '');
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: rateLimitPath,
+		Target: audit.V2RateLimitEventTarget{
+			DomainID:    "uuid-for-germany",
+			DomainName:  "germany",
+			ProjectID:   "uuid-for-berlin",
+			ProjectName: "berlin",
+			ServiceType: "first",
+			RateName:    "objects:create",
+			Payload: audit.V2RateLimitChange{
+				Unit:      liquid.UnitPiece,
+				OldLimit:  None[uint64](),
+				NewLimit:  Some[uint64](5),
+				OldWindow: None[limesrates.Window](),
+				NewWindow: Some(30 * limesrates.WindowSeconds),
+			},
+		}.Render(),
+	})
+
+	// error case: limit without unit
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "1s",
+	})).ExpectText(t, http.StatusBadRequest, "unit should be set when limit is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unit without limit
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusBadRequest, "unit should be set when limit is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: limit without window
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusBadRequest, "window should be set when limit is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: window without limit
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"window":       "1s",
+	})).ExpectText(t, http.StatusBadRequest, "window should be set when limit is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: window of 0
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "0s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusBadRequest, "a window of 0 does not make sense\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: incompatible unit (MiB against a countable rate)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "MiB",
+	})).ExpectText(t, http.StatusBadRequest, "given unit was not convertible to the rate's unit\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown service
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "unknown",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusBadRequest, "no such service\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown rate
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "unknown:rate",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusBadRequest, "no such rate\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: rate has no project default (objects:delete has only a global limit, no project default)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:delete",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "MiB",
+	})).ExpectText(t, http.StatusBadRequest, "for this rate, no custom rate limits can be set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: rate has no rate limits at all (objects:unlimited)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:unlimited",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "KiB",
+	})).ExpectText(t, http.StatusBadRequest, "for this rate, no custom rate limits can be set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: malformed body (unknown JSON field)
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"extra_field":  true,
+	})).ExpectStatus(t, http.StatusBadRequest)
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown project
+	s.Handler.RespondTo(s.Ctx, "PUT /rates/v2/projects/does-not-exist/limit", httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+	})).ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown project + permission denied → 403 beats 404 (obfuscation design)
+	s.TokenValidator.Enforcer.AllowRateLimitUpdate = false
+	s.Handler.RespondTo(s.Ctx, "PUT /rates/v2/projects/does-not-exist/limit", httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: permission denied on existing project
+	s.Handler.RespondTo(s.Ctx, "PUT "+rateLimitPath, httptest.WithJSONBody(map[string]any{
+		"service_type": "first",
+		"rate_name":    "objects:create",
+		"limit":        10,
+		"window":       "1s",
+		"unit":         "piece",
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+	s.TokenValidator.Enforcer.AllowRateLimitUpdate = true
+}
+
+func TestV2ProjectPutForbidAutogrowth(t *testing.T) {
+	resourceConfigWithCommitmentsForGermany := string(must.ReturnT(
+		httptest.NewJQModifiableJSONString(resourceReportConfigJSON, "project-forbid-autogrowth").
+			Modify(`.liquids.second.commitment_behavior_per_resource[0].value.durations_per_domain[0].key = "germany"`).
+			MarshalJSON())(t))
+
+	s := test.NewSetup(t,
+		test.WithConfig(resourceConfigWithCommitmentsForGermany),
+		test.WithPersistedServiceInfo("first", test.DefaultLiquidServiceInfo("First")),
+		test.WithPersistedServiceInfo("second", test.DefaultLiquidServiceInfo("Second")),
+		test.WithInitialDiscovery,
+		test.WithEmptyResourceRecordsAsNeeded,
+	)
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
+	tr0.Ignore()
+
+	forbidPath := "/resources/v2/projects/uuid-for-berlin/forbid-autogrowth"
+
+	// happy case: set to true
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET forbid_autogrowth = TRUE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: forbidPath,
+		Target: audit.V2AutogrowthEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "capacity",
+			AutogrowthChange: audit.AutogrowthChange{
+				ForbidAutogrowth: true,
+			},
+		}.Render(),
+	})
+
+	// happy case: set to false
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": false,
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEqual(`
+		UPDATE project_resources SET forbid_autogrowth = FALSE WHERE id = 1 AND project_id = 1 AND resource_id = 1;
+	`)
+	s.Auditor.ExpectEvents(t, cadf.Event{
+		Action:      "update",
+		Outcome:     "success",
+		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "204"},
+		RequestPath: forbidPath,
+		Target: audit.V2AutogrowthEventTarget{
+			DomainID:     "uuid-for-germany",
+			DomainName:   "germany",
+			ProjectID:    "uuid-for-berlin",
+			ProjectName:  "berlin",
+			ServiceType:  "first",
+			ResourceName: "capacity",
+			AutogrowthChange: audit.AutogrowthChange{
+				ForbidAutogrowth: false,
+			},
+		}.Render(),
+	})
+
+	// no-op: setting false again → no DB change, no audit event
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": false,
+	})).ExpectText(t, http.StatusNoContent, "")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: permission denied
+	s.TokenValidator.Enforcer.AllowForbidAutogrowthUpdate = false
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown project + permission denied → 403 beats 404
+	s.Handler.RespondTo(s.Ctx, "PUT /resources/v2/projects/does-not-exist/forbid-autogrowth", httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+	s.TokenValidator.Enforcer.AllowForbidAutogrowthUpdate = true
+
+	// error case: unknown project (with permission)
+	s.Handler.RespondTo(s.Ctx, "PUT /resources/v2/projects/does-not-exist/forbid-autogrowth", httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown service
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "unknown",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusBadRequest, "no such service\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: unknown resource
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "unknown",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusBadRequest, "no such resource\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: does not track quota
+	s.MustDBExec(`UPDATE resources SET has_quota = false WHERE path = 'first/capacity'`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
+	tr.DBChanges().Ignore()
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusBadRequest, "resource does not track quota\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+	s.MustDBExec(`UPDATE resources SET has_quota = true WHERE path = 'first/capacity'`)
+	must.SucceedT(t, s.Cluster.SIC.InvalidateService(s.Ctx, Some(db.ServiceType("first"))))
+	tr.DBChanges().Ignore()
+
+	// error case: has no commitments in this domain (france)
+	s.Handler.RespondTo(s.Ctx, "PUT /resources/v2/projects/uuid-for-paris/forbid-autogrowth", httptest.WithJSONBody(map[string]any{
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusBadRequest, "resource does not have commitments\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: malformed body (unknown JSON field)
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+		"extra_field":       42,
+	})).ExpectStatus(t, http.StatusBadRequest)
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// error case: forbidden project resource
+	s.MustDBExec(`UPDATE project_resources SET forbidden = true WHERE project_id = 1 AND resource_id = 1`)
+	tr.DBChanges().Ignore()
+	s.Handler.RespondTo(s.Ctx, "PUT "+forbidPath, httptest.WithJSONBody(map[string]any{
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"forbid_autogrowth": true,
+	})).ExpectText(t, http.StatusForbidden, "resource is not enabled in this project\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
 }

@@ -494,7 +494,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"availability_zone": "az-one",
 		"status":            "pending",
 	}, func(r httptest.Response) {
-		r.ExpectText(t, http.StatusUnprocessableEntity, "resource is not enabled in this project\n")
+		r.ExpectText(t, http.StatusForbidden, "resource is not enabled in this project\n")
 	})
 	s.MustDBExec(`UPDATE project_resources SET forbidden = $1 WHERE project_id = $2 AND resource_id = $3`, false, berlinID, firstCapacityID)
 	tr.DBChanges().Ignore()

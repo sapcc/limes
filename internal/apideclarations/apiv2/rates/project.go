@@ -4,6 +4,7 @@
 package ratesv2
 
 import (
+	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 
@@ -70,4 +71,15 @@ type ProjectRateReport struct {
 	// If the rate does not have a local project rate limit, this will be None.
 	ProjectLimit  Option[uint64]            `json:"project_limit,omitzero"`
 	ProjectWindow Option[limesrates.Window] `json:"project_window,omitzero"`
+}
+
+// ProjectRateLimitRequest is the request payload format for PUT /rates/v2/projects/:project_uuid/limit.
+type ProjectRateLimitRequest struct {
+	// Service/ Rate identification
+	ServiceType db.ServiceType  `json:"service_type"`
+	RateName    liquid.RateName `json:"rate_name"`
+	// Constraint Settings
+	Limit  Option[uint64]            `json:"limit,omitzero"`  // None means no Limit
+	Window Option[limesrates.Window] `json:"window,omitzero"` // has to be Some() when Limit.IsSome()
+	Unit   Option[limes.Unit]        `json:"unit,omitzero"`   // has to be Some() when Limit.IsSome()
 }
