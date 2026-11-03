@@ -34,7 +34,7 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetClusterResources(ctx, p.Cluster, token, filter, options, p.timeNow())
+	result, err := reports_v2.GetClusterResources(ctx, p.Cluster, filter, options, p.timeNow())
 	if err != nil {
 		return none, err
 	}
@@ -59,7 +59,7 @@ func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.
 	if err != nil {
 		return none, err
 	}
-	result, err := reports_v2.GetClusterRates(ctx, p.Cluster, token, filter, options)
+	result, err := reports_v2.GetClusterRates(ctx, p.Cluster, filter, options)
 	if err != nil {
 		return none, err
 	}

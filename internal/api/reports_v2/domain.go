@@ -12,7 +12,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
 	. "go.xyrillian.de/gg/option"
@@ -103,12 +102,12 @@ var domainResourceReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlacehold
 `))
 
 // GetDomainResources returns a resourcesv2.DomainGetResponse.
-func GetDomainResources(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
+func GetDomainResources(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.DomainResourceReportOpts, scope Scope, timeNow time.Time) (resourcesv2.DomainGetResponse, error) {
 	var result resourcesv2.DomainGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetResourcesInfo(ctx, cluster, token, timeNow, filter)
+		infoReport, err := GetResourcesInfo(ctx, cluster, scope, timeNow, filter)
 		if err != nil {
 			return result, err
 		}
@@ -242,12 +241,12 @@ var domainRateReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 // GetDomainRates returns a ratesv2.DomainGetResponse.
-func GetDomainRates(ctx context.Context, cluster *core.Cluster, token *gopherpolicy.Token, filter PathFilter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
+func GetDomainRates(ctx context.Context, cluster *core.Cluster, filter PathFilter, opts common.DomainRateReportOpts, scope Scope) (ratesv2.DomainGetResponse, error) {
 	var result ratesv2.DomainGetResponse
 
 	// fill info report
 	if opts.WithInfo {
-		infoReport, err := GetRatesInfo(cluster, token, filter)
+		infoReport, err := GetRatesInfo(cluster, scope, filter)
 		if err != nil {
 			return result, err
 		}

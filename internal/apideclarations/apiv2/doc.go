@@ -39,6 +39,8 @@
 // A project-scoped token will receive information about all resources available in that project.
 // A domain-scoped token will receive information about all resources available in at least one project of that domain.
 // A cloud-admin token will receive information about all resources.
+// A domain-scoped token can be reduced to the scope of a project by specifying a project_uuid query parameter.
+// A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [resourcesv2.InfoReport].
 //
 // # Endpoint: GET /resources/v2/cluster
@@ -87,7 +89,6 @@
 // # Endpoint: POST /resources/v2/commitments/new
 //
 // Creates a new commitment (or performs a dry run of a commitment creation request).
-//
 //   - The request body payload must be of type [resourcesv2.CommitmentRequest].
 //   - On success, status code 201 (Created) will be returned, including for dry runs.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
@@ -112,6 +113,14 @@
 // Merges two or more existing commitments according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentMergeRequest].
 //   - On success, status code 201 (Created) will be returned.
+//   - On success, the response body payload will be of type [resourcesv2.Commitment].
+//
+// # Endpoint: POST /resources/v2/commitments/:uuid/convert
+//
+// Converts a commitment of one resource to another resource according to the given body, if permissions allow.
+// The available conversions are retrievable via GET /resources/v2/info.
+//   - The request body payload must be of type [resourcesv2.CommitmentConvertRequest].
+//   - On success, status code 202 (Accepted) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
 // # Endpoint: POST /resources/v2/commitments/:uuid/renew
@@ -144,6 +153,8 @@
 // A project-scoped token will receive information about all rates available in that project.
 // A domain-scoped token will receive information about all rates available in at least one project of that domain.
 // A cloud-admin token will receive information about all rates.
+// A domain-scoped token can be reduced to the scope of a project by specifying a project_uuid query parameter.
+// A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [ratesv2.InfoReport].
 //
 // # Endpoint: GET /rates/v2/cluster

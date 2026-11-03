@@ -45,10 +45,24 @@ type CategoryInfoReport struct {
 // ResourceInfoReport contains details about a resource.
 // It appears in [CategoryInfoReport].
 type ResourceInfoReport struct {
-	DisplayName      string                          `json:"display_name"`
-	Unit             liquid.Unit                     `json:"unit,omitzero"`
-	Topology         liquid.Topology                 `json:"topology"`
-	HasCapacity      bool                            `json:"has_capacity"`
-	HasQuota         bool                            `json:"has_quota"`
-	CommitmentConfig Option[CommitmentConfiguration] `json:"commitment_config,omitzero"`
+	DisplayName                 string                          `json:"display_name"`
+	Unit                        liquid.Unit                     `json:"unit,omitzero"`
+	Topology                    liquid.Topology                 `json:"topology"`
+	HasCapacity                 bool                            `json:"has_capacity"`
+	HasQuota                    bool                            `json:"has_quota"`
+	CommitmentConfig            Option[CommitmentConfiguration] `json:"commitment_config,omitzero"`
+	CommitmentConversionTargets []CommitmentConversionTarget    `json:"commitment_conversion_targets,omitempty"` // may only be filled, when CommitmentConfig.IsSome()
+}
+
+// CommitmentConversionTarget is the API representation of a target of a commitment conversion on this specific resource.
+// The conversion rate is represented as an integer fraction:
+// For example, "FromAmount = 2" of the source resource and "ToAmount = 3" of the target resource corresponds to a 2:3 conversion rate.
+// It appears in [ResourceInfoReport].
+type CommitmentConversionTarget struct {
+	FromAmount     uint64              `json:"from"`
+	ToAmount       uint64              `json:"to"`
+	TargetService  db.ServiceType      `json:"target_service"`
+	TargetResource liquid.ResourceName `json:"target_resource"`
+	OneWay         bool                `json:"one_way,omitempty"` // denotes whether this conversion can be reverted
+	AllowRounding  bool                `json:"allow_rounding,omitempty"`
 }

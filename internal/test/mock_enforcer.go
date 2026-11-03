@@ -21,7 +21,6 @@ type PolicyEnforcer struct {
 	AllowEditMaxQuota bool
 	AllowUncommit     bool
 	// flags by v2 action
-	AllowInfo                  bool
 	AllowReportSingle          bool
 	AllowReportMultiple        bool
 	AllowCommitmentCreate      bool
@@ -81,8 +80,6 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowEditMaxQuota
 	case "uncommit":
 		return e.AllowUncommit
-	case "info":
-		return e.AllowInfo
 	case "report_single":
 		return e.AllowReportSingle
 	case "report_multiple":
