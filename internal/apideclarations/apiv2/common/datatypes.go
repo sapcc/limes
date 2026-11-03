@@ -5,7 +5,10 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
+
+	. "go.xyrillian.de/gg/option"
 )
 
 // RFC3339EncodedTime is a time.Time that marshals into JSON as RFC3339 timestamp.
@@ -58,4 +61,31 @@ func (t *RFC3339NanoEncodedTime) UnmarshalJSON(buf []byte) error {
 	}
 	t.Time, err = time.Parse(time.RFC3339Nano, s)
 	return err
+}
+
+// Uint64OrNegativeOne has all values of a uint64 and -1.
+// All values < -1 will fail parsing.
+type Uint64OrNegativeOne int64
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (t *Uint64OrNegativeOne) UnmarshalJSON(buf []byte) error {
+	var value int64
+	err := json.Unmarshal(buf, &value)
+	if err != nil {
+		return err
+	}
+	if value < -1 {
+		return fmt.Errorf("Uint64OrNegativeOne must be >= -1: %d", value)
+	}
+	*t = Uint64OrNegativeOne(value)
+	return nil
+}
+
+// AsOption converts the value to an Option[uint64]:
+// negative values (normally only -1, which is "infinite / no limit") map to None.
+func (t Uint64OrNegativeOne) AsOption() Option[uint64] {
+	if t < 0 {
+		return None[uint64]()
+	}
+	return Some(uint64(t))
 }

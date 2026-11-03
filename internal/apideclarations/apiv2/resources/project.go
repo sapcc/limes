@@ -108,21 +108,8 @@ type ProjectHistoricalReport struct {
 	Duration limesrates.Window `json:"duration"`
 }
 
-// ProjectResourceMaxQuotaRequest is the request payload format for PUT /resources/v2/projects/:project_uuid/max-quota.
-type ProjectResourceMaxQuotaRequest struct {
-	// Service/ Resource identification
-	ServiceType  db.ServiceType      `json:"service_type"`
-	ResourceName liquid.ResourceName `json:"resource_name"`
-	// Constraint Settings
-	MaxQuota     Option[uint64]     `json:"max_quota,omitzero"` // None means no MaxQuota
-	MaxQuotaUnit Option[limes.Unit] `json:"unit,omitzero"`      // has to be Some() when MaxQuota.IsSome()
-}
-
-// ProjectResourceForbidAutogrowthRequest is the request payload format for PUT /resources/v2/projects/:project_uuid/forbid-autogrowth.
-type ProjectResourceForbidAutogrowthRequest struct {
-	// Service/ Resource identification
-	ServiceType  db.ServiceType      `json:"service_type"`
-	ResourceName liquid.ResourceName `json:"resource_name"`
-	// Constraint Settings
-	ForbidAutogrowth bool `json:"forbid_autogrowth"`
+// ProjectResourcePatchRequest is the request payload format for PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name.
+type ProjectResourcePatchRequest struct {
+	MaxQuota         Option[common.Uint64OrNegativeOne] `json:"max_quota,omitzero"`         // None means no change, -1 means infinite (remove the MaxQuota)
+	ForbidAutogrowth Option[bool]                       `json:"forbid_autogrowth,omitzero"` // None means no change
 }

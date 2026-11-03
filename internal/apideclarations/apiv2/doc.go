@@ -65,22 +65,13 @@
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [resourcesv2.ProjectGetResponse].
 //
-// # Endpoint: PUT /resources/v2/projects/:project_uuid/max-quota
+// # Endpoint: PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name
 //
-// Updates the user-specified max-quota-forbid-autogrowth for a project, if permissions allow.
-// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
-// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter.
+// Updates the user-specified resource values for a project, if permissions allow.
+// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter - but the max_quota parameter is unavailable.
+// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter - with max_quota allowed.
 // A cloud-admin token can always access this path.
-//   - The request body payload must be of type [resourcesv2.ProjectResourceMaxQuotaRequest].
-//   - On success, status code 204 (No Content) will be returned.
-//
-// # Endpoint: PUT /resources/v2/projects/:project_uuid/forbid-autogrowth
-//
-// Updates the user-specified forbid-autogrowth-setting for a project, if permissions allow.
-// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
-// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter.
-// A cloud-admin token can always access this path.
-//   - The request body payload must be of type [resourcesv2.ProjectResourceForbidAutogrowthRequest].
+//   - The request body payload must be of type [resourcesv2.ProjectResourcePatchRequest].
 //   - On success, status code 204 (No Content) will be returned.
 //
 // # Endpoint: GET /resources/v2/availability
@@ -197,10 +188,10 @@
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [ratesv2.ProjectGetResponse].
 //
-// # Endpoint: PUT /rates/v2/projects/:project_uuid/limit
+// # Endpoint: PATCH /rates/v2/projects/:project_uuid/:service_type/:rate_name
 //
 // Updates a project's rate limit for a single rate, if permissions allow.
-//   - The request body payload must be of type [ratesv2.ProjectRateLimitRequest].
+//   - The request body payload must be of type [ratesv2.ProjectRatePatchRequest].
 //   - On success, status code 204 (No Content) will be returned.
 //
 // [Keystone token]: https://docs.openstack.org/api-ref/identity/v3/index.html#password-authentication-with-scoped-authorization
