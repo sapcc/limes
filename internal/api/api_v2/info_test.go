@@ -197,6 +197,10 @@ func TestV2ResourcesInfoAPI(t *testing.T) {
 	})
 	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info").
 		ExpectBody(t, http.StatusNotFound, []byte("no such project (UUID = fake)\n"))
+
+	// cannot request project_uuid and domain_uuid
+	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/info?project_uuid=foo&domain_uuid=bar").
+		ExpectBody(t, http.StatusBadRequest, []byte("domain_uuid and project_uuid may not be specified together\n"))
 }
 
 func TestV2RatesInfoAPI(t *testing.T) {
@@ -254,4 +258,8 @@ func TestV2RatesInfoAPI(t *testing.T) {
 	})
 	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info").
 		ExpectBody(t, http.StatusNotFound, []byte("no such project (UUID = fake)\n"))
+
+	// cannot request project_uuid and domain_uuid
+	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/info?project_uuid=foo&domain_uuid=bar").
+		ExpectBody(t, http.StatusBadRequest, []byte("domain_uuid and project_uuid may not be specified together\n"))
 }

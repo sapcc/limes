@@ -72,7 +72,7 @@ The v2 API uses the policy rules listed below.
 | `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
 | `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
 | `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster`, `GET /{rates,resources}/v2/info` for whole cluster |
-| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid`, `GET /{rates,resources}/v2/info?domain_uuid={id}` for his specific domain |
+| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid`, `GET /{rates,resources}/v2/info?domain_uuid={id}` for this specific domain |
 | `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid`, `GET /{rates,resources}/v2/info?project_uuid={id}` for this specific project |
 | `v2:cluster:validation` | none | `GET /admin/mail/render` |
 | `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |

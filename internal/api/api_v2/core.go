@@ -304,7 +304,7 @@ func (p *v2Provider) authenticateInfoRequest(r *http.Request, token *gopherpolic
 	requestDomainUUID := r.URL.Query().Get("domain_uuid")
 	requestProjectUUID := r.URL.Query().Get("project_uuid")
 	if requestDomainUUID != "" && requestProjectUUID != "" {
-		return reports_v2.ClusterScope{}, respondwith.CustomStatus(http.StatusBadRequest, errors.New("domain_uuid and project_uuid should not be specified together"))
+		return reports_v2.ClusterScope{}, respondwith.CustomStatus(http.StatusBadRequest, errors.New("domain_uuid and project_uuid may not be specified together"))
 	}
 
 	// case 1: requested domain
