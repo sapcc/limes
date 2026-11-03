@@ -54,21 +54,29 @@ func (t MaxQuotaEventTarget) Render() cadf.Resource {
 	}
 }
 
-// V2MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event of the v2 API.
-type V2MaxQuotaEventTarget struct {
+// V2ProjectResourceChange appears in type V2ProjectResourceEventTarget.
+type V2ProjectResourceChange struct {
+	OldMaxQuota         Option[uint64] `json:"oldMaxQuota"`
+	NewMaxQuota         Option[uint64] `json:"newMaxQuota"`
+	OldForbidAutogrowth bool           `json:"oldForbidAutogrowth"`
+	NewForbidAutogrowth bool           `json:"newForbidAutogrowth"`
+}
+
+// V2ProjectResourceEventTarget renders a cadf.Event.Target for a project/resource change event of the v2 API.
+type V2ProjectResourceEventTarget struct {
 	DomainID        string
 	DomainName      string
 	ProjectID       liquid.ProjectUUID
 	ProjectName     string
 	ServiceType     db.ServiceType
 	ResourceName    liquid.ResourceName
-	RequestedChange MaxQuotaChange
+	RequestedChange V2ProjectResourceChange
 }
 
 // Render implements the audittools.Target interface.
-func (t V2MaxQuotaEventTarget) Render() cadf.Resource {
+func (t V2ProjectResourceEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
-		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
+		TypeURI:     fmt.Sprintf("service/%s/%s", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
@@ -99,33 +107,6 @@ type AutogrowthChange struct {
 
 // Render implements the audittools.Target interface.
 func (t AutogrowthEventTarget) Render() cadf.Resource {
-	return cadf.Resource{
-		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
-		ID:          string(t.ProjectID),
-		DomainID:    t.DomainID,
-		DomainName:  t.DomainName,
-		ProjectID:   string(t.ProjectID),
-		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{
-			must.Return(cadf.NewJSONAttachment("payload", t.AutogrowthChange)),
-		},
-	}
-}
-
-// V2AutogrowthEventTarget contains the structure for rendering a cadf.Event.Target for
-// v2-API changes regarding the forbid-autogrowth flag.
-type V2AutogrowthEventTarget struct {
-	DomainID         string
-	DomainName       string
-	ProjectID        liquid.ProjectUUID
-	ProjectName      string
-	ServiceType      db.ServiceType
-	ResourceName     liquid.ResourceName
-	AutogrowthChange AutogrowthChange
-}
-
-// Render implements the audittools.Target interface.
-func (t V2AutogrowthEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/forbid-autogrowth", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),
@@ -176,19 +157,19 @@ func (t RateLimitEventTarget) Render() cadf.Resource {
 	}
 }
 
-// V2RateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
+// V2ProjectRateEventTarget contains the structure for rendering a cadf.Event.Target for
 // v2-API changes regarding rate limits
-type V2RateLimitEventTarget struct {
-	DomainID    string
-	DomainName  string
-	ProjectID   liquid.ProjectUUID
-	ProjectName string
-	ServiceType db.ServiceType
-	RateName    liquid.RateName
-	Payload     V2RateLimitChange
+type V2ProjectRateEventTarget struct {
+	DomainID        string
+	DomainName      string
+	ProjectID       liquid.ProjectUUID
+	ProjectName     string
+	ServiceType     db.ServiceType
+	RateName        liquid.RateName
+	RequestedChange V2RateLimitChange
 }
 
-// V2RateLimitChange appears in type V2RateLimitEventTarget.
+// V2RateLimitChange appears in type V2ProjectRateEventTarget.
 type V2RateLimitChange struct {
 	Unit      limes.Unit                `json:"unit,omitzero"`
 	OldLimit  Option[uint64]            `json:"oldLimit"`
@@ -198,16 +179,16 @@ type V2RateLimitChange struct {
 }
 
 // Render implements the audittools.Target interface.
-func (t V2RateLimitEventTarget) Render() cadf.Resource {
+func (t V2ProjectRateEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
-		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.RateName),
+		TypeURI:     fmt.Sprintf("service/%s/%s", t.ServiceType, t.RateName),
 		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   string(t.ProjectID),
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
-			must.Return(cadf.NewJSONAttachment("payload", t.Payload)),
+			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
 		},
 	}
 }

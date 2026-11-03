@@ -62,6 +62,10 @@ The v2 API uses the policy rules listed below.
 <!-- This table is sorted by the third section of the rule name first, then by the second section. This groups similar rules of different levels together. -->
 | Rule | Object attributes | Authorized access |
 | --- | --- | --- |
+| `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster` |
+| `v2:cluster:validation` | none | `GET /admin/mail/render` |
+| `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
+| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid` |
 | `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
 | `v2:project:commitment_delete` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as regular user |
 | `v2:project:commitment_delete_admin` | none | `DELETE /resources/v2/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
@@ -69,15 +73,11 @@ The v2 API uses the policy rules listed below.
 | `v2:project:commitment_get_public` | none | `GET /resources/v2/commitments?only_public=true` |
 | `v2:project:commitment_get_unscoped` | none | `GET /resources/v2/commitments` without `domain_uuid` and `project_uuid` filters |
 | `v2:project:commitment_update` | `domain_uuid`, `project_uuid` | `PATCH /resources/v2/commitments/:commitment_uuid` |
-| `v2:project:forbid_autogrowth_update` | `project_uuid` | `PUT /resources/v2/projects/:project_uuid/forbid-autogrowth` |
-| `v2:project:max_quota_update` | `project_uuid` | `PUT /resources/v2/projects/:project_uuid/max-quota` |
-| `v2:project:rate_limit_update` | `project_uuid` | `PUT /rates/v2/projects/:project_uuid/limit` |
-| `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
+| `v2:project:rate_update` | `project_uuid` | `PATCH /rates/v2/projects/:project_uuid/:service_type/:rate_name` |
 | `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
-| `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster`, `GET /{rates,resources}/v2/info` for whole cluster |
-| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid`, `GET /{rates,resources}/v2/info?domain_uuid={id}` for this specific domain |
-| `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid`, `GET /{rates,resources}/v2/info?project_uuid={id}` for this specific project |
-| `v2:cluster:validation` | none | `GET /admin/mail/render` |
+| `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid` |
+| `v2:project:resource_update` | `project_uuid` | `PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name` excluding `max_quota`|
+| `v2:project:resource_update_admin` | `project_uuid` | `PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name` just for `max_quota`|
 | `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |
 | `v2:project:with_obsolete` | none | `?with=obsolete` in commitment APIs |
 | `v2:project:with_subresources` | none | `?with=subresources` in resource reports |

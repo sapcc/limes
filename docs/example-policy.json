@@ -39,26 +39,26 @@
 
     "v2:meta:no_error_obfuscation": "rule:v2_cluster_admin",
 
-    "v2:project:max_quota_update": "rule:v2_domain_admin",
-    "v2:project:forbid_autogrowth_update": "rule:v2_project_admin",
-    "v2:project:rate_limit_update": "rule:v2_cluster_admin",
-    "v2:project:report_single": "rule:v2_project_viewer",
-    "v2:project:report_multiple": "rule:v2_domain_viewer",
-    "v2:project:with_historical_usage": "rule:v2_cluster_viewer",
-    "v2:project:with_obsolete": "rule:v2_cluster_viewer",
-    "v2:project:with_subresources": "rule:v2_cluster_viewer",
-    "v2:project:with_timing": "rule:v2_cluster_viewer",
+    "v2:cluster:report_single": "rule:v2_cluster_viewer",
+    "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default",
+
+    "v2:domain:report_multiple": "rule:v2_cluster_viewer",
+    "v2:domain:report_single": "rule:v2_domain_viewer",
+
     "v2:project:commitment_create": "rule:v2_project_admin",
     "v2:project:commitment_delete": "rule:v2_project_admin",
     "v2:project:commitment_delete_admin": "rule:v2_cluster_admin",
     "v2:project:commitment_get": "rule:v2_project_viewer",
-    "v2:project_commitment_get_public": "rule:v2_cluster_viewer or role:resource_admin or role:resource_viewer",
-    "v2:project_commitment_get_unscoped": "rule:v2_cluster_viewer",
+    "v2:project:commitment_get_public": "rule:v2_cluster_viewer or role:resource_admin or role:resource_viewer",
+    "v2:project:commitment_get_unscoped": "rule:v2_cluster_viewer",
     "v2:project:commitment_update": "rule:v2_project_admin",
-
-    "v2:domain:report_single": "rule:v2_domain_viewer",
-    "v2:domain:report_multiple": "rule:v2_cluster_viewer",
-
-    "v2:cluster:report_single": "rule:v2_cluster_viewer",
-    "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default"
+    "v2:project:rate_update": "rule:v2_cluster_admin",
+    "v2:project:report_multiple": "rule:v2_domain_viewer",
+    "v2:project:report_single": "rule:v2_project_viewer",
+    "v2:project:resource_update": "rule:v2_project_admin",
+    "v2:project:resource_update_admin": "rule:v2_domain_admin",
+    "v2:project:with_historical_usage": "rule:v2_cluster_viewer",
+    "v2:project:with_obsolete": "rule:v2_cluster_viewer",
+    "v2:project:with_subresources": "rule:v2_cluster_viewer",
+    "v2:project:with_timing": "rule:v2_cluster_viewer"
 }
