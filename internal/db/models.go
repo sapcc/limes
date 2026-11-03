@@ -40,8 +40,8 @@ var ServiceStore = oblast.MustNewStore[Service](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// ServiceByTypeIndex is an [oblast.RuntimeIndex] using the Service.Type field.
-var ServiceByTypeIndex = oblast.NewRuntimeIndex(func(s Service) ServiceType { return s.Type })
+// ServiceByType is an [oblast.RuntimeIndex] using the Service.Type field.
+var ServiceByType = oblast.NewRuntimeIndex(func(s Service) ServiceType { return s.Type })
 
 // Resource contains a record from the `resources` table.
 type Resource struct {
@@ -71,11 +71,11 @@ var ResourceStore = oblast.MustNewStore[Resource](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// ResourceByIDIndex is an [oblast.RuntimeIndex] using the Resource.ID field.
-var ResourceByIDIndex = oblast.NewRuntimeIndex(func(r Resource) ResourceID { return r.ID })
+// ResourceByID is an [oblast.RuntimeIndex] using the Resource.ID field.
+var ResourceByID = oblast.NewRuntimeIndex(func(r Resource) ResourceID { return r.ID })
 
-// ResourceByPathIndex is an [oblast.RuntimeIndex] using the Resource.Path field.
-var ResourceByPathIndex = oblast.NewRuntimeIndex(func(r Resource) ResourcePath { return r.Path })
+// ResourceByPath is an [oblast.RuntimeIndex] using the Resource.Path field.
+var ResourceByPath = oblast.NewRuntimeIndex(func(r Resource) ResourcePath { return r.Path })
 
 // AZResource contains a record from the `az_resources` table.
 type AZResource struct {
@@ -105,11 +105,11 @@ var AZResourceStore = oblast.MustNewStore[AZResource](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// AZResourceByPathIndex is an [oblast.RuntimeIndex] using the AZResource.Path field.
-var AZResourceByPathIndex = oblast.NewRuntimeIndex(func(azr AZResource) AZResourcePath { return azr.Path })
+// AZResourceByPath is an [oblast.RuntimeIndex] using the AZResource.Path field.
+var AZResourceByPath = oblast.NewRuntimeIndex(func(azr AZResource) AZResourcePath { return azr.Path })
 
-// AZResourceByResourceIDIndex is an [oblast.RuntimeIndex] using the AZResource.ResourceID field.
-var AZResourceByResourceIDIndex = oblast.NewRuntimeIndex(func(azr AZResource) ResourceID { return azr.ResourceID })
+// AZResourceByResourceID is an [oblast.RuntimeIndex] using the AZResource.ResourceID field.
+var AZResourceByResourceID = oblast.NewRuntimeIndex(func(azr AZResource) ResourceID { return azr.ResourceID })
 
 // Rate contains a record from the `rates` table.
 type Rate struct {
@@ -133,11 +133,11 @@ var RateStore = oblast.MustNewStore[Rate](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// RateByIDIndex is an [oblast.RuntimeIndex] using the Rate.ID field.
-var RateByIDIndex = oblast.NewRuntimeIndex(func(r Rate) RateID { return r.ID })
+// RateByID is an [oblast.RuntimeIndex] using the Rate.ID field.
+var RateByID = oblast.NewRuntimeIndex(func(r Rate) RateID { return r.ID })
 
-// RateByPathIndex is an [oblast.RuntimeIndex] using the Rate.Path field.
-var RateByPathIndex = oblast.NewRuntimeIndex(func(r Rate) RatePath { return r.Path })
+// RateByPath is an [oblast.RuntimeIndex] using the Rate.Path field.
+var RateByPath = oblast.NewRuntimeIndex(func(r Rate) RatePath { return r.Path })
 
 // Domain contains a record from the `domains` table.
 type Domain struct {
@@ -152,8 +152,8 @@ var DomainStore = oblast.MustNewStore[Domain](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// DomainByIDIndex is an [oblast.RuntimeIndex] using the Domain.ID field.
-var DomainByIDIndex = oblast.NewRuntimeIndex(func(d Domain) DomainID { return d.ID })
+// DomainByID is an [oblast.RuntimeIndex] using the Domain.ID field.
+var DomainByID = oblast.NewRuntimeIndex(func(d Domain) DomainID { return d.ID })
 
 // Project contains a record from the `projects` table.
 type Project struct {
@@ -170,11 +170,11 @@ var ProjectStore = oblast.MustNewStore[Project](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// ProjectByIDIndex is an [oblast.RuntimeIndex] using the Project.ID field.
-var ProjectByIDIndex = oblast.NewRuntimeIndex(func(p Project) ProjectID { return p.ID })
+// ProjectByID is an [oblast.RuntimeIndex] using the Project.ID field.
+var ProjectByID = oblast.NewRuntimeIndex(func(p Project) ProjectID { return p.ID })
 
-// ProjectByUUIDIndex is an [oblast.RuntimeIndex] using the Project.UUID field.
-var ProjectByUUIDIndex = oblast.NewRuntimeIndex(func(p Project) liquid.ProjectUUID { return p.UUID })
+// ProjectByUUID is an [oblast.RuntimeIndex] using the Project.UUID field.
+var ProjectByUUID = oblast.NewRuntimeIndex(func(p Project) liquid.ProjectUUID { return p.UUID })
 
 // ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
@@ -240,8 +240,8 @@ var ProjectAZResourceStore = oblast.MustNewStore[ProjectAZResource](oblast.Postg
 	oblast.PrimaryKeyIs("id"),
 )
 
-// ProjectAZResourceByAZResourceIDIndex is an [oblast.RuntimeIndex] using the ProjectAZResource.AZResourceID field.
-var ProjectAZResourceByAZResourceIDIndex = oblast.NewRuntimeIndex(func(pazr ProjectAZResource) AZResourceID { return pazr.AZResourceID })
+// ProjectAZResourceByAZResourceID is an [oblast.RuntimeIndex] using the ProjectAZResource.AZResourceID field.
+var ProjectAZResourceByAZResourceID = oblast.NewRuntimeIndex(func(pazr ProjectAZResource) AZResourceID { return pazr.AZResourceID })
 
 // ProjectRate contains a record from the `project_rates` table.
 // TODO: Introduce forbidden flag for rates (for consistency).
@@ -265,8 +265,8 @@ var ProjectRateStore = oblast.MustNewStore[ProjectRate](oblast.PostgresDialect()
 	oblast.PrimaryKeyIs("id"),
 )
 
-// ProjectRateByRateIDIndex is an [oblast.RuntimeIndex] using the ProjectRate.RateID field.
-var ProjectRateByRateIDIndex = oblast.NewRuntimeIndex(func(r ProjectRate) RateID { return r.RateID })
+// ProjectRateByRateID is an [oblast.RuntimeIndex] using the ProjectRate.RateID field.
+var ProjectRateByRateID = oblast.NewRuntimeIndex(func(r ProjectRate) RateID { return r.RateID })
 
 // ProjectCommitment contains a record from the `project_commitments` table.
 type ProjectCommitment struct {
@@ -381,8 +381,8 @@ var CategoryStore = oblast.MustNewStore[Category](oblast.PostgresDialect(),
 	oblast.PrimaryKeyIs("id"),
 )
 
-// CategoryByIDIndex is an [oblast.RuntimeIndex] using the Category.ID field.
-var CategoryByIDIndex = oblast.NewRuntimeIndex(func(c Category) CategoryID { return c.ID })
+// CategoryByID is an [oblast.RuntimeIndex] using the Category.ID field.
+var CategoryByID = oblast.NewRuntimeIndex(func(c Category) CategoryID { return c.ID })
 
-// CategoryByNameIndex is an [oblast.RuntimeIndex] using the Category.Name field.
-var CategoryByNameIndex = oblast.NewRuntimeIndex(func(c Category) liquid.CategoryName { return c.Name })
+// CategoryByName is an [oblast.RuntimeIndex] using the Category.Name field.
+var CategoryByName = oblast.NewRuntimeIndex(func(c Category) liquid.CategoryName { return c.Name })

@@ -100,7 +100,7 @@ func NewTransferableCommitmentCache(ctx context.Context, dbi db.Interface, clust
 	t.transferredCommitmentIDs = make(map[db.ProjectID]map[db.ProjectCommitmentID]commitmentTransferLeftover)
 
 	// project and domain structures
-	t.affectedProjectsByID, err = db.ProjectByIDIndex.IndexFrom(
+	t.affectedProjectsByID, err = db.ProjectByID.IndexFrom(
 		db.ProjectStore.SelectWhere(ctx, dbi, `id = ANY($1)`,
 			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
 		),
@@ -112,7 +112,7 @@ func NewTransferableCommitmentCache(ctx context.Context, dbi db.Interface, clust
 	for _, project := range t.affectedProjectsByID {
 		t.affectedProjectsByUUID[project.UUID] = project
 	}
-	t.affectedDomainsByID, err = db.DomainByIDIndex.IndexFrom(
+	t.affectedDomainsByID, err = db.DomainByID.IndexFrom(
 		db.DomainStore.SelectWhere(ctx, dbi, `id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`,
 			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
 		),

@@ -58,7 +58,7 @@ func CanAcceptCommitmentChangeRequest(ctx context.Context, req liquid.Commitment
 		}
 	}
 	// internally, we only work with projectIDs, so we have to have a conversion ready
-	projectByUUID, err := db.ProjectByUUIDIndex.IndexFrom(
+	projectByUUID, err := db.ProjectByUUID.IndexFrom(
 		db.ProjectStore.SelectWhere(ctx, dbi, `uuid = ANY($1)`,
 			pq.Array(slices.Collect(maps.Keys(req.ByProject)))),
 	)
@@ -143,7 +143,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	for _, c := range confirmableCommitments {
 		affectedProjectIDs[c.ProjectID] = struct{}{}
 	}
-	affectedProjectsByID, err := db.ProjectByIDIndex.IndexFrom(
+	affectedProjectsByID, err := db.ProjectByID.IndexFrom(
 		db.ProjectStore.SelectWhere(ctx, dbi, `id = ANY($1)`,
 			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
 		),
@@ -151,7 +151,7 @@ func ConfirmPendingCommitments(ctx context.Context, path db.AZResourcePath, clus
 	if err != nil {
 		return nil, fmt.Errorf("while loading affected projects for %s: %w", path, err)
 	}
-	affectedDomainsByID, err := db.DomainByIDIndex.IndexFrom(
+	affectedDomainsByID, err := db.DomainByID.IndexFrom(
 		db.DomainStore.SelectWhere(ctx, dbi, `id IN (SELECT domain_id FROM projects WHERE id = ANY($1))`,
 			pq.Array(slices.Collect(maps.Keys(affectedProjectIDs))),
 		),

@@ -183,7 +183,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		}
 
 		// get all project_rates and make them accessible quickly by ID
-		projectRateByClusterRateID, err := db.ProjectRateByRateIDIndex.IndexFrom(
+		projectRateByClusterRateID, err := db.ProjectRateByRateID.IndexFrom(
 			db.ProjectRateStore.SelectWhere(ctx, tx, `project_id = $1`, updater.Project.ID),
 		)
 		if err != nil {
