@@ -349,32 +349,33 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 		Collect:    d.collectMetrics,
 		SortOutput: testing.Testing(),
 		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
-			"limes_acpq_duration_secs":                          gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
-			"limes_autogrow_growth_multiplier":                  gauge(`For resources with quota distribution model "autogrow", reports the configured growth multiplier.`),
-			"limes_autogrow_quota_overcommit_threshold_percent": gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`),
-			"limes_available_commitment_duration":               gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
-			"limes_cluster_capacity":                            gauge(`Reported capacity of a Limes resource for an OpenStack cluster.`),
-			"limes_cluster_capacity_per_az":                     gauge("Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone."),
-			"limes_cluster_resource_allows_quota_overcommit":    gauge(`Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.`),
-			"limes_cluster_usage_per_az":                        gauge("Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone."),
-			"limes_domain_quota":                                gauge(`Assigned quota of a Limes resource for an OpenStack domain.`),
-			"limes_project_backendquota":                        gauge(`Actual quota of a Limes resource for an OpenStack project.`),
-			"limes_project_commitment_min_expires_at":           gauge(`Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`),
-			"limes_project_committed_per_az":                    gauge(`Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`),
-			"limes_project_override_quota_from_config":          gauge(`Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`),
-			"limes_project_physical_usage":                      gauge(`Actual (physical) usage of a Limes resource for an OpenStack project.`),
-			"limes_project_quota":                               gauge(`Assigned quota of a Limes resource for an OpenStack project.`),
-			"limes_project_rate_usage":                          gauge(`Usage of a Limes rate for an OpenStack project. These are counters that never reset.`),
-			"limes_project_usage":                               gauge(`Actual (logical) usage of a Limes resource for an OpenStack project.`),
-			"limes_project_usage_per_az":                        gauge(`Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`),
-			"limes_project_used_and_or_committed_per_az":        gauge(`The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`),
-			"limes_unit_multiplier":                             gauge(`Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`),
+			"limes_acpq_duration_secs":                                     gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
+			"limes_autogrow_growth_multiplier":                             gauge(`For resources with quota distribution model "autogrow", reports the configured growth multiplier.`),
+			"limes_autogrow_quota_overcommit_threshold_percent":            gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`),
+			"limes_autogrow_quota_overcommit_reduction_threshold_percent":  gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit gets reduced (if configured).`),
+			"limes_available_commitment_duration":                          gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
+			"limes_cluster_capacity":                                       gauge(`Reported capacity of a Limes resource for an OpenStack cluster.`),
+			"limes_cluster_capacity_per_az":                                gauge("Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone."),
+			"limes_cluster_resource_quota_overcommit_reduction_percentage": gauge(`How much of the quota overcommit was reduced by the ACPQ algorithm. Values between 0 and 100. For resources without reduce_quota_overcommit_from_allocated_percent window, this jumps between 0 and 100.`),
+			"limes_cluster_usage_per_az":                                   gauge("Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone."),
+			"limes_domain_quota":                                           gauge(`Assigned quota of a Limes resource for an OpenStack domain.`),
+			"limes_project_backendquota":                                   gauge(`Actual quota of a Limes resource for an OpenStack project.`),
+			"limes_project_commitment_min_expires_at":                      gauge(`Minimum expiredAt timestamp of all commitments for an Openstack project, grouped by resource and service.`),
+			"limes_project_committed_per_az":                               gauge(`Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`),
+			"limes_project_override_quota_from_config":                     gauge(`Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`),
+			"limes_project_physical_usage":                                 gauge(`Actual (physical) usage of a Limes resource for an OpenStack project.`),
+			"limes_project_quota":                                          gauge(`Assigned quota of a Limes resource for an OpenStack project.`),
+			"limes_project_rate_usage":                                     gauge(`Usage of a Limes rate for an OpenStack project. These are counters that never reset.`),
+			"limes_project_usage":                                          gauge(`Actual (logical) usage of a Limes resource for an OpenStack project.`),
+			"limes_project_usage_per_az":                                   gauge(`Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`),
+			"limes_project_used_and_or_committed_per_az":                   gauge(`The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`),
+			"limes_unit_multiplier":                                        gauge(`Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`),
 		},
 	}
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
-	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity) AS capacity_per_az_json, JSON_OBJECT_AGG(azr.az, azr.usage) AS usage_per_az_json, JSON_OBJECT_AGG(azr.az, azr.allows_quota_overcommit) AS allows_quota_overcommit_per_az_json
+	SELECT s.type, r.name, JSON_OBJECT_AGG(azr.az, azr.raw_capacity) AS capacity_per_az_json, JSON_OBJECT_AGG(azr.az, azr.usage) AS usage_per_az_json, JSON_OBJECT_AGG(azr.az, azr.quota_overcommit_reduction_percentage) AS quota_overcommit_reduction_percentage_per_az_json
 	  FROM services s
 	  JOIN resources r ON r.service_id = s.id
 	  JOIN az_resources azr ON azr.resource_id = r.id AND azr.az != {{liquid.AvailabilityZoneTotal}}
@@ -468,18 +469,18 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 
 	// fetch values for cluster level
 	type clusterCapacityRecord struct {
-		ServiceType                    db.ServiceType      `db:"type"`
-		ResourceName                   liquid.ResourceName `db:"name"`
-		CapacityPerAZJSON              string              `db:"capacity_per_az_json"`
-		UsagePerAZJSON                 string              `db:"usage_per_az_json"`
-		AllowsQuotaOvercommitPerAZJSON string              `db:"allows_quota_overcommit_per_az_json"`
+		ServiceType                                 db.ServiceType      `db:"type"`
+		ResourceName                                liquid.ResourceName `db:"name"`
+		CapacityPerAZJSON                           string              `db:"capacity_per_az_json"`
+		UsagePerAZJSON                              string              `db:"usage_per_az_json"`
+		QuotaOvercommitReductionPercentagePerAZJSON string              `db:"quota_overcommit_reduction_percentage_per_az_json"`
 	}
 	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
 	err := oblast.MustNewStore[clusterCapacityRecord](oblast.PostgresDialect()).Select(ctx, d.DB, clusterMetricsQuery).Foreach(func(r clusterCapacityRecord) error {
 		var (
-			capacityPerAZ              map[liquid.AvailabilityZone]uint64
-			usagePerAZ                 map[liquid.AvailabilityZone]*uint64
-			allowsQuotaOvercommitPerAZ map[liquid.AvailabilityZone]bool
+			capacityPerAZ                           map[liquid.AvailabilityZone]uint64
+			usagePerAZ                              map[liquid.AvailabilityZone]*uint64
+			quotaOvercommitReductionPercentagePerAZ map[liquid.AvailabilityZone]uint8
 		)
 		err := json.Unmarshal([]byte(r.CapacityPerAZJSON), &capacityPerAZ)
 		if err != nil {
@@ -489,7 +490,7 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal([]byte(r.AllowsQuotaOvercommitPerAZJSON), &allowsQuotaOvercommitPerAZ)
+		err = json.Unmarshal([]byte(r.QuotaOvercommitReductionPercentagePerAZJSON), &quotaOvercommitReductionPercentagePerAZ)
 		if err != nil {
 			return err
 		}
@@ -501,19 +502,15 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 		behavior := behaviorCache.Get(r.ServiceType, r.ResourceName)
 		apiIdentity := behavior.IdentityInV1API
 
-		// emit allows_quota_overcommit metric for all AZs except unknown (which can never be true)
-		for az, allowsQuotaOvercommit := range allowsQuotaOvercommitPerAZ {
+		// emit limes_cluster_resource_quota_overcommit_reduction_percentage metric for all AZs except unknown
+		for az, quotaOvercommitReductionPercentage := range quotaOvercommitReductionPercentagePerAZ {
 			if az == liquid.AvailabilityZoneUnknown {
 				continue
 			}
-			allowsQuotaOvercommitLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
+			quotaOvercommitReductionLabels := ms.FormatLabels(dmv1AZResourceLabelNames,
 				string(az), string(apiIdentity.Name), string(apiIdentity.ServiceType), string(r.ServiceType),
 			)
-			quotaOvercommitValue := float64(0)
-			if allowsQuotaOvercommit {
-				quotaOvercommitValue = 1
-			}
-			ms.Add("limes_cluster_resource_allows_quota_overcommit", allowsQuotaOvercommitLabels, quotaOvercommitValue)
+			ms.Add("limes_cluster_resource_quota_overcommit_reduction_percentage", quotaOvercommitReductionLabels, float64(quotaOvercommitReductionPercentage))
 		}
 
 		for az, azCapacity := range capacityPerAZ {
@@ -723,6 +720,9 @@ func (d *DataMetricsV1Reporter) collectMetrics(ctx context.Context, ms *micropro
 				if percent, ok := autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack(); ok {
 					ms.Add("limes_autogrow_quota_overcommit_threshold_percent", labels, percent)
 				}
+				if percent, ok := autogrowCfg.ReduceQuotaOvercommitFromAllocatedPercent.Unpack(); ok {
+					ms.Add("limes_autogrow_quota_overcommit_reduction_threshold_percent", labels, percent)
+				}
 			}
 
 			for _, duration := range behaviorCache.GetCommitmentBehavior(serviceType, dbResourceName).Durations {
@@ -812,29 +812,30 @@ func (d *DataMetricsV2Reporter) Handler() http.Handler {
 		Collect:    d.collectMetrics,
 		SortOutput: testing.Testing(),
 		Families: map[microprom.MetricFamilyName]microprom.MetricFamilyInfo{
-			"limitas_cluster_resource_acpq_duration_secs":                  gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
-			"limitas_cluster_rate_global_limit":                            gauge(`The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
-			"limitas_cluster_rate_global_window_seconds":                   gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
-			"limitas_cluster_resource_capacity":                            gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
-			"limitas_cluster_resource_raw_capacity":                        gauge(`Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`),
-			"limitas_az_resource_info":                                     gauge(`Info metric for AZ resources. The value is always 1, and information can be found in labels.`),
-			"limitas_project_rate_limit":                                   gauge(`For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
-			"limitas_project_rate_usage":                                   counter(`For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`),
-			"limitas_project_rate_window_seconds":                          gauge(`For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
-			"limitas_project_resource_allocation":                          gauge(`For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
-			"limitas_project_resource_commitment_amount":                   gauge(`For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`),
-			"limitas_project_resource_commitment_expires_at":               gauge(`For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`),
-			"limitas_project_resource_physical_usage":                      gauge(`For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
-			"limitas_project_resource_quota":                               gauge(`For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
-			"limitas_project_resource_usage":                               gauge(`For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
-			"limitas_rate_default_limit":                                   gauge(`The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).`),
-			"limitas_rate_default_window_seconds":                          gauge(`The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.`),
-			"limitas_rate_info":                                            gauge(`Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).`),
-			"limitas_resource_autogrow_growth_multiplier":                  gauge(`For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`),
-			"limitas_resource_autogrow_quota_overcommit_threshold_percent": gauge(`For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`),
-			"limitas_resource_info":                                        gauge(`Info metric for resources. The value is always 1, and information can be found in labels.`),
-			"limitas_resource_overcommit_factor":                           gauge(`Multiplier for converting this resource's raw capacity into reported capacity.`),
-			"limitas_resource_unit_multiplier":                             gauge(`Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`),
+			"limitas_cluster_resource_acpq_duration_secs":                            gauge(`Duration of the last ACPQ (apply computed project quota) run for this resource, in seconds.`),
+			"limitas_cluster_rate_global_limit":                                      gauge(`The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_cluster_rate_global_window_seconds":                             gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_cluster_resource_capacity":                                      gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
+			"limitas_cluster_resource_raw_capacity":                                  gauge(`Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`),
+			"limitas_az_resource_info":                                               gauge(`Info metric for AZ resources. The value is always 1, and information can be found in labels.`),
+			"limitas_project_rate_limit":                                             gauge(`For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_project_rate_usage":                                             counter(`For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`),
+			"limitas_project_rate_window_seconds":                                    gauge(`For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
+			"limitas_project_resource_allocation":                                    gauge(`For each project, resource and AZ, the amount of resource allocated to the project because of active usage or confirmed commitments. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_commitment_amount":                             gauge(`For each present or future commitment, the committed amount of resource. The value is a multiple of the resource's unit.`),
+			"limitas_project_resource_commitment_expires_at":                         gauge(`For each present or future commitment, the UNIX timestamp of its expiry. This value will always be in the future, because expired commitments do not appear in the API.`),
+			"limitas_project_resource_physical_usage":                                gauge(`For each project, resource and AZ, the amount of resource physically used by the project. Only for resources that report physical usage separately from logical usage. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_quota":                                         gauge(`For each project, resource and AZ, the quota assigned to the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_project_resource_usage":                                         gauge(`For each project, resource and AZ, the amount of resource used by the project. The value is a multiple of the resource's unit. Only values > 0 are reported.`),
+			"limitas_rate_default_limit":                                             gauge(`The value of the default limit per project for this rate. Projects using this default rate limit may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_rate_default_window_seconds).`),
+			"limitas_rate_default_window_seconds":                                    gauge(`The window for the default limit per project for this rate. Projects using this default rate limit may spend their limit (see limitas_rate_default_limit) over the course of this many seconds.`),
+			"limitas_rate_info":                                                      gauge(`Info metric for rates. The value is always 1, and information can be found in labels. The "has_limit" label refers to whether there is a rate limit on the project level. There may also be a global rate limit that is shared by all projects (see limitas_cluster_rate_global_limit).`),
+			"limitas_resource_autogrow_growth_multiplier":                            gauge(`For resources with quota distribution strategy "autogrow", shows the value of the growth_multiplier configuration option.`),
+			"limitas_resource_autogrow_quota_overcommit_threshold_percent":           gauge(`For resources with quota distribution strategy "autogrow", shows the value of the allow_quota_overcommit_until_allocated_percent configuration option.`),
+			"limitas_resource_autogrow_quota_overcommit_reduction_threshold_percent": gauge(`For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit gets reduced (if configured).`),
+			"limitas_resource_info":                                                  gauge(`Info metric for resources. The value is always 1, and information can be found in labels.`),
+			"limitas_resource_overcommit_factor":                                     gauge(`Multiplier for converting this resource's raw capacity into reported capacity.`),
+			"limitas_resource_unit_multiplier":                                       gauge(`Multiplier for converting a value of this resource to its base unit (e.g. bytes). Useful for comparing values across resources, or for resources whose unit may change over time.`),
 		},
 	}
 }
@@ -860,7 +861,7 @@ var (
 	dmv2ResourceInfoLabelNames   = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
 	dmv2ResourceUnitLabelNames   = microprom.NewLabelNames("base_unit", "resource", "service")
 	dmv2AZResourceLabelNames     = microprom.NewLabelNames("az", "resource", "service")
-	dmv2AZResourceInfoLabelNames = microprom.NewLabelNames("allows_quota_overcommit", "az", "resource", "service")
+	dmv2AZResourceInfoLabelNames = microprom.NewLabelNames("quota_overcommit_reduction_percentage", "az", "resource", "service")
 
 	dmv2RateLabelNames     = microprom.NewLabelNames("rate", "service")
 	dmv2RateInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit")
@@ -919,6 +920,9 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 				if percent, ok := autogrowCfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack(); ok {
 					ms.Add("limitas_resource_autogrow_quota_overcommit_threshold_percent", labels, percent)
 				}
+				if percent, ok := autogrowCfg.ReduceQuotaOvercommitFromAllocatedPercent.Unpack(); ok {
+					ms.Add("limitas_resource_autogrow_quota_overcommit_reduction_threshold_percent", labels, percent)
+				}
 			}
 
 			// emit limitas_resource_unit_multiplier
@@ -937,7 +941,7 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 				// emit limitas_az_resource_info for all AZs except total and unknown
 				if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
 					azResInfoLabels := ms.FormatLabels(dmv2AZResourceInfoLabelNames,
-						strconv.FormatBool(!azRes.AllowsQuotaOvercommit), string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
+						strconv.FormatUint(uint64(azRes.QuotaOvercommitReductionPercentage), 10), string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
 					)
 					ms.Add("limitas_az_resource_info", azResInfoLabels, 1)
 				}
