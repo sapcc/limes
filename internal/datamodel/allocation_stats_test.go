@@ -78,3 +78,92 @@ func TestCanAcceptCommitmentChanges(t *testing.T) {
 	result = stats.CanAcceptCommitmentChanges(additions, subtractions, behavior)
 	assert.Equal(t, result, true)
 }
+
+func assertReduction(t *testing.T, stats clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, expectedReduction, expectedReductionInAny uint8) {
+	t.Helper()
+	reduction, reductionInAny := stats.computeQuotaOvercommitReduction(cfg)
+	assert.Equal(t, reduction, expectedReduction)
+	assert.Equal(t, reductionInAny, expectedReductionInAny)
+}
+
+func TestComputeQuotaOvercommitReduction(t *testing.T) {
+	stats := clusterAZAllocationStats{
+		Capacity: 50,
+		ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+			1: {Committed: 5, Usage: 15},
+			2: {Committed: 10, Usage: 10},
+			3: {Committed: 15, Usage: 10},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		AllowQuotaOvercommitUntilAllocatedPercent: None[float64](),
+	}
+
+	// no limit - no reduction
+	assertReduction(t, stats, cfg, 0, 0)
+
+	// limit high enough - no reduction
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(99))
+	assertReduction(t, stats, cfg, 0, 0)
+
+	// astronomically low utilization (no underflows)
+	stats.Capacity = 1 << 63
+	assertReduction(t, stats, cfg, 0, 0)
+
+	// like the previous one, but with a lower border
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(98))
+	assertReduction(t, stats, cfg, 0, 0)
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = None[float64]()
+
+	// astronomically high utilization (no overflows)
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(50))
+	stats.Capacity = 1
+	assertReduction(t, stats, cfg, 100, 100)
+
+	// like the previous one, but with a lower border
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(40))
+	assertReduction(t, stats, cfg, 100, 100)
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = None[float64]()
+
+	stats.Capacity = 50
+
+	// exactly on the edge - already reduced
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(40) / float64(50) * 100)
+	assertReduction(t, stats, cfg, 100, 100)
+
+	// other case (below) - reduction
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(50))
+	assertReduction(t, stats, cfg, 100, 100)
+
+	// below both borders
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(99))
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(95))
+	assertReduction(t, stats, cfg, 0, 0)
+
+	// exactly on the edge, first 20% reduction
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(90))
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(80))
+	assertReduction(t, stats, cfg, 20, 20)
+
+	// 50% -> 60%
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(90))
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(70))
+	assertReduction(t, stats, cfg, 60, 60)
+
+	// 100% --> 100%
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(float64(80))
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(float64(70))
+	assertReduction(t, stats, cfg, 100, 100)
+
+	// special case - no capacity and no capacity in the past, but usage
+	stats.Capacity = 0
+	assertReduction(t, stats, cfg, 100, 0)
+
+	// special case - no capacity and capacity in the past with usage
+	stats.ObservedNonzeroCapacityBefore = true
+	assertReduction(t, stats, cfg, 100, 100)
+
+	// special case - no capacity and capacity in the past with no usage
+	stats.ProjectStats = nil
+	assertReduction(t, stats, cfg, 100, 0)
+}

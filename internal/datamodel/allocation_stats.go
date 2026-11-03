@@ -11,7 +11,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
-	"go.xyrillian.de/gg/is"
 	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/core"
@@ -38,25 +37,50 @@ type clusterAZAllocationStats struct {
 }
 
 // Returns two separate opinions:
-//   - Whether growth quota overcommit is allowed in this AZ, and
-//   - whether this AZ is fine with allowing base quota overcommit in the `any` AZ.
-func (c clusterAZAllocationStats) allowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) (allowsGrowth, allowsBase bool) {
+//   - How much between 0 and 100 percent of the quota overcommit should be reduced in this AZ.
+//   - How much between 0 and 100 percent of the quota overcommit should be reduced in the "any" AZ.
+func (c clusterAZAllocationStats) computeQuotaOvercommitReduction(cfg core.AutogrowQuotaDistributionConfiguration) (reduction, reductionInAny uint8) {
 	usedCapacity := uint64(0)
 	for _, stats := range c.ProjectStats {
 		usedCapacity += max(stats.Committed, stats.Usage)
 	}
 
 	if c.Capacity == 0 {
-		// If we have no capacity, we will definitely forbid growth quota overcommit in this AZ.
+		// If we have no capacity, we will definitely forbid quota overcommit in this AZ.
 		// But we do not block base quota overcommit in some specific scenarios:
 		// - when the AZ never had any capacity (either because this resource is just not available here, or because it is still in buildup)
 		// - when there is no usage either (e.g. during decommissioning)
-		return false, !c.ObservedNonzeroCapacityBefore || usedCapacity == 0
+		reduction = 100
+		if c.ObservedNonzeroCapacityBefore && usedCapacity != 0 {
+			reductionInAny = 100
+		}
+		return
 	} else {
 		// If there is a reliable capacity measurement, we can voice a strong opinion.
+		// The methodology is as follows:
+		// - If no AllowQuotaOvercommitUntilAllocatedPercent is configured, we allow overcommit.
+		// - If no ReduceQuotaOvercommitFromAllocatedPercent is configured, we just check the upper boundary.
+		// - If both are configured, we locate the allocation in this range and divide the reduction into 5 parts:
+		// 20% for each quarter, the leftover 20% get reduced when reaching 100% of the window.
 		usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
-		allowsOvercommit := cfg.AllowQuotaOvercommitUntilAllocatedPercent.IsNoneOr(is.Above(usedPercent))
-		return allowsOvercommit, allowsOvercommit
+		lowerLimit, lowerExists := cfg.ReduceQuotaOvercommitFromAllocatedPercent.Unpack()
+		upperLimit, upperExists := cfg.AllowQuotaOvercommitUntilAllocatedPercent.Unpack()
+		if !upperExists {
+			return 0, 0
+		}
+		if !lowerExists {
+			if usedPercent >= upperLimit {
+				reduction = 100
+				reductionInAny = 100
+			}
+			return
+		}
+		// we can assume that lower is smaller than upper because of config validation
+		// this does the step function to the nearest 25%, mapping to a reduction of 20% steps
+		step := min(max(int(((usedPercent-lowerLimit)/(upperLimit-lowerLimit)*4)+1), 0), 5)
+		reduction = uint8(step) * 20
+		reductionInAny = reduction
+		return
 	}
 }
 
