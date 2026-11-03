@@ -382,7 +382,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		if err != nil {
 			return fmt.Errorf("cannot create/update categories for %s: %w", serviceType, err)
 		}
-		categoryByName, err := db.CategoryByNameIndex.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID))
+		categoryByName, err := db.CategoryByName.IndexFrom(db.CategoryStore.SelectWhere(ctx, tx, `service_id = $1`, srv.ID))
 		if err != nil {
 			return fmt.Errorf("cannot inspect existing categories for %s: %w", serviceType, err)
 		}
@@ -520,7 +520,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 		}
 
 		// for az_resources, we need to do one SetUpdate per resource, so that we can limit the keys to just the AZs of this resource
-		dbAZResourcesByResourceID, err := db.AZResourceByResourceIDIndex.PartitionFrom(
+		dbAZResourcesByResourceID, err := db.AZResourceByResourceID.PartitionFrom(
 			db.AZResourceStore.Select(ctx, tx, `SELECT azr.* FROM az_resources azr JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1`, srv.ID),
 		)
 		if err != nil {

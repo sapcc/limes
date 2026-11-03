@@ -340,7 +340,7 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 		}
 
 		// For inserting the project_az_resources, we need to find the project_az_resources availabilityZone
-		projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceIDIndex.IndexFrom(
+		projectAZResourcesByAZResourceID, err := db.ProjectAZResourceByAZResourceID.IndexFrom(
 			db.ProjectAZResourceStore.Select(ctx, tx,
 				`SELECT pazr.* FROM project_az_resources pazr JOIN az_resources azr ON PAZR.az_resource_id = azr.id JOIN resources r ON azr.resource_id = r.id WHERE r.service_id = $1 AND pazr.project_id = $2`,
 				service.ID, dbProject.ID,
@@ -489,7 +489,7 @@ func (c *Collector) writeRateScrapeResult(ctx context.Context, task projectScrap
 
 	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
 		// For updating project_rates, we need to find the project_rates' rate_name
-		ratesByID := db.RateByIDIndex.Index(slices.Collect(rates.Values()))
+		ratesByID := db.RateByID.Index(slices.Collect(rates.Values()))
 
 		// update existing project_rates entries
 		rateExists := make(map[liquid.RateName]bool)
