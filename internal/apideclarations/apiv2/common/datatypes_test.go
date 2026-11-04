@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"go.xyrillian.de/gg/assert"
+
+	. "go.xyrillian.de/gg/option"
 )
 
 func TestMarshalRFC3339Time(t *testing.T) {
@@ -49,4 +51,46 @@ func TestUnmarshalRFC3339NanoTime(t *testing.T) {
 	if assert.ErrEqual(t, err, nil) {
 		assert.Equal(t, u.Time, time.Date(2024, 3, 15, 12, 30, 45, 123456789, time.UTC))
 	}
+}
+
+func TestMarshalUint64OrNegativeOne(t *testing.T) {
+	u := Uint64OrNegativeOne(Some(uint64(12345)))
+
+	buf, err := json.Marshal(u)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, string(buf), `12345`)
+	}
+
+	u = Uint64OrNegativeOne(None[uint64]())
+
+	buf, err = json.Marshal(u)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, string(buf), `-1`)
+	}
+}
+
+func TestUnmarshalUint64OrNegativeOne(t *testing.T) {
+	input := "12345"
+
+	var u Uint64OrNegativeOne
+	err := json.Unmarshal([]byte(input), &u)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, u.AsOption(), Some[uint64](12345))
+	}
+
+	input = "-1"
+	err = json.Unmarshal([]byte(input), &u)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, u.AsOption(), None[uint64]())
+	}
+
+	input = "0"
+	err = json.Unmarshal([]byte(input), &u)
+	if assert.ErrEqual(t, err, nil) {
+		assert.Equal(t, u.AsOption(), Some[uint64](0))
+	}
+
+	input = "-1234"
+	err = json.Unmarshal([]byte(input), &u)
+	assert.ErrEqual(t, err, "Uint64OrNegativeOne must be >= -1 (was -1234)")
 }

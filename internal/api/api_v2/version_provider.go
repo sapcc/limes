@@ -33,9 +33,9 @@ func (p *versionProvider) AddTo(c *httpapi.Composer) {
 	// NOTE: The intent of this is to provide a minimal response on every URL
 	//       that appears in the Keystone catalog. These are, by service type:
 	//
-	// - resources:         https://$LIMES_API_DOMAIN_NAME_V1/
-	// - limitas-resources: https://$LIMES_API_DOMAIN_NAME_V2/resources/v2/
-	// - limitas-rates:     https://$LIMES_API_DOMAIN_NAME_V2/rates/v2/
+	// - resources:   https://$LIMES_API_DOMAIN_NAME_V1/
+	// - limes-rates: https://$LIMES_API_DOMAIN_NAME_V1/
+	// - limitas:     https://$LIMES_API_DOMAIN_NAME_V2/
 	//
 	// Also, for maximum backwards compatibility, https://$LIMES_API_DOMAIN_NAME_V1/v1/ is also understood.
 
@@ -49,14 +49,9 @@ func (p *versionProvider) AddTo(c *httpapi.Composer) {
 			http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md", http.StatusSeeOther)
 		})))
 	}
-	r.Methods("HEAD", "GET").Path("/resources/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/resources/v2/")
+	r.Methods("HEAD", "GET").Path("/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/v2/")
 		// TODO: replace with link to pkg.go.dev of the resource API spec
-		http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md", http.StatusSeeOther)
-	})))
-	r.Methods("HEAD", "GET").Path("/rates/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/rates/v2/")
-		// TODO: replace with link to pkg.go.dev of the rate API spec
 		http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md", http.StatusSeeOther)
 	})))
 }

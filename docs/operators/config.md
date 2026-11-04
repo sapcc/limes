@@ -31,7 +31,7 @@ on the top left corner of this document to get to a specific section of this gui
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_DOMAIN_NAME_V1` | *(required)* | Domain name of Limes v1 API as it appears in the Keystone service catalog for this cluster. The endpoint URL in the catalog entry for service type `resources` must be `https://THIS_VALUE`. Multiple values are allowed (separated by commas with optional whitespace inbetween) if multiple endpoints are maintained in the catalog for this service type. |
-| `LIMES_API_DOMAIN_NAME_V2` | *(required)* | Domain name of Limes v2 API as it appears in the Keystone service catalog for this cluster. The endpoint URLs in the catalog entries for service types `limitas-resources` and `limitas-rates` must be `https://THIS_VALUE/resources` and `https://THIS_VALUE/rates`, respectively. Multiple values are allowed (separated by commas with optional whitespace inbetween) if multiple endpoints are maintained in the catalog for these service types. |
+| `LIMES_API_DOMAIN_NAME_V2` | *(required)* | Domain name of Limes v2 API as it appears in the Keystone service catalog for this cluster. The endpoint URL in the catalog entry for service type `limitas` must be `https://THIS_VALUE`. Multiple values are allowed (separated by commas with optional whitespace inbetween) if multiple endpoints are maintained in the catalog for this service type. |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
 | `LIMES_API_POLICY_PATH` | `/etc/limes/policy.json` | Path to the oslo.policy file that describes authorization behavior for this service. [See below](#oslo-policy) for further details on authoring the `policy.json` file.  |
 
@@ -62,22 +62,22 @@ The v2 API uses the policy rules listed below.
 <!-- This table is sorted by the third section of the rule name first, then by the second section. This groups similar rules of different levels together. -->
 | Rule | Object attributes | Authorized access |
 | --- | --- | --- |
-| `v2:cluster:report_single` | none | `GET /{rates,resources}/v2/cluster` |
+| `v2:cluster:report_single` | none | `GET /v2/{rates,resources}/cluster` |
 | `v2:cluster:validation` | none | `GET /admin/mail/render` |
-| `v2:domain:report_multiple` | none | `GET /{rates,resources}/v2/domains` |
-| `v2:domain:report_single` | `domain_uuid` | `GET /{rates,resources}/v2/domains/:domain_uuid` |
-| `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /resources/v2/commitments/new` |
-| `v2:project:commitment_delete` | `domain_uuid`, `project_uuid` | `DELETE /resources/v2/commitments/:commitment_uuid` as regular user |
-| `v2:project:commitment_delete_admin` | none | `DELETE /resources/v2/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
-| `v2:project:commitment_get` | `domain_uuid`, `project_uuid` | `GET /resources/v2/commitments(/:commitment_uuid)?` as regular user |
-| `v2:project:commitment_get_public` | none | `GET /resources/v2/commitments?only_public=true` |
-| `v2:project:commitment_get_unscoped` | none | `GET /resources/v2/commitments` without `domain_uuid` and `project_uuid` filters |
-| `v2:project:commitment_update` | `domain_uuid`, `project_uuid` | `PATCH /resources/v2/commitments/:commitment_uuid` |
-| `v2:project:rate_update` | `project_uuid` | `PATCH /rates/v2/projects/:project_uuid/:service_type/:rate_name` |
-| `v2:project:report_multiple` | `domain_uuid` | `GET /{rates,resources}/v2/projects` |
-| `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /{rates,resources}/v2/projects/:project_uuid` |
-| `v2:project:resource_update` | `project_uuid` | `PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name` excluding `max_quota`|
-| `v2:project:resource_update_admin` | `project_uuid` | `PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name` just for `max_quota`|
+| `v2:domain:report_multiple` | none | `GET /v2/{rates,resources}/domains` |
+| `v2:domain:report_single` | `domain_uuid` | `GET /v2/{rates,resources}/domains/:domain_uuid` |
+| `v2:project:commitment_create` | `domain_uuid`, `project_uuid` | `POST /v2/resources/commitments/new` |
+| `v2:project:commitment_delete` | `domain_uuid`, `project_uuid` | `DELETE /v2/resources/commitments/:commitment_uuid` as regular user |
+| `v2:project:commitment_delete_admin` | none | `DELETE /v2/resources/commitments/:commitment_uuid` as admin, who can bypass the 24 hour grace period for deletion |
+| `v2:project:commitment_get` | `domain_uuid`, `project_uuid` | `GET /v2/resources/commitments(/:commitment_uuid)?` as regular user |
+| `v2:project:commitment_get_public` | none | `GET /v2/resources/commitments?only_public=true` |
+| `v2:project:commitment_get_unscoped` | none | `GET /v2/resources/commitments` without `domain_uuid` and `project_uuid` filters |
+| `v2:project:commitment_update` | `domain_uuid`, `project_uuid` | `PATCH /v2/resources/commitments/:commitment_uuid` |
+| `v2:project:rate_update` | `project_uuid` | `PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid` |
+| `v2:project:report_multiple` | `domain_uuid` | `GET /v2/{rates,resources}/projects` |
+| `v2:project:report_single` | `domain_uuid`, `project_uuid` | `GET /v2/{rates,resources}/projects/:project_uuid` |
+| `v2:project:resource_update` | `project_uuid` | `PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid` excluding `max_quota`|
+| `v2:project:resource_update_admin` | `project_uuid` | `PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid` just for `max_quota`|
 | `v2:project:with_historical_usage` | none | `?with=historical_usage` in resource reports |
 | `v2:project:with_obsolete` | none | `?with=obsolete` in commitment APIs |
 | `v2:project:with_subresources` | none | `?with=subresources` in resource reports |

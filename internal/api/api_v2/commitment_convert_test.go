@@ -111,7 +111,7 @@ func convertCommitmentSetup(t *testing.T, manager string) (s test.Setup, tr *eas
 		"expires_at":        expiresAt.Format(time.RFC3339),
 		"updated_at":        createdAt.Format(time.RFC3339),
 	}
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            240,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-berlin",
@@ -137,7 +137,7 @@ func convertCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandles
 	}
 
 	// the DB effect is not checked here; the caller will take care of that afterwards
-	path := "/resources/v2/commitments/" + string(uuid) + "/convert"
+	path := "/v2/resources/commitments/" + string(uuid) + "/convert"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusAccepted, expected)
 	target := getTarget()
@@ -167,7 +167,7 @@ func convertCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Trac
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "POST /resources/v2/commitments/" + string(uuid) + "/convert"
+	methodAndPath := "POST /v2/resources/commitments/" + string(uuid) + "/convert"
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
@@ -328,7 +328,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			})
 
 			// commitment in transfer must not be converted
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidCapacity), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidCapacity), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -339,7 +339,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 				r.ExpectText(t, http.StatusUnprocessableEntity, "commitment in transfer must not be converted\n")
 			})
 			// remove transfer status
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidCapacity), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidCapacity), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -395,7 +395,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			var resp2hBody struct {
 				UUID liquid.CommitmentUUID `json:"uuid"`
 			}
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            239,
 				"duration":          "2 hours",
 				"project_id":        "uuid-for-berlin",
@@ -447,7 +447,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			var respLargeBody struct {
 				UUID liquid.CommitmentUUID `json:"uuid"`
 			}
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            (1 << 62),
 				"duration":          "2 hours",
 				"project_id":        "uuid-for-berlin",
@@ -513,7 +513,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			}
 
 			// deleted commitment → no such commitment
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidCapacity)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuidCapacity)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			convertCommitmentAndExpectError(t, s, tr, uuidCapacity, map[string]any{
@@ -529,7 +529,7 @@ func TestCommitmentConvertErrors(t *testing.T) {
 			var resp32Body struct {
 				UUID liquid.CommitmentUUID `json:"uuid"`
 			}
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            1,
 				"duration":          "2 hours",
 				"project_id":        "uuid-for-berlin",

@@ -37,7 +37,7 @@ func patchCommitmentAndExpectSuccess(t *testing.T, s test.Setup, noop, liquidHan
 
 	// we only expect the audit event and call to the liquid here
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
-	path := "/resources/v2/commitments/" + string(uuid)
+	path := "/v2/resources/commitments/" + string(uuid)
 	s.Handler.RespondTo(ctx, "PATCH "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusAccepted, expected)
 	if noop {
@@ -75,7 +75,7 @@ func patchCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracke
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "PATCH /resources/v2/commitments/" + string(uuid)
+	methodAndPath := "PATCH /v2/resources/commitments/" + string(uuid)
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
@@ -275,7 +275,7 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			expectedJSON["uuid"] = jsonmatch.CaptureField(&uuidTwo)
 			expectedJSON["duration"] = "2 hours"
 			expectedJSON["expires_at"] = expiresAt.Add(1 * time.Hour).Format(time.RFC3339)
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            10,
 				"duration":          "2 hours",
 				"project_id":        "uuid-for-paris",
@@ -291,7 +291,7 @@ func TestCommitmentPatchErrors(t *testing.T) {
 			})
 
 			// inactive status
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidTwo)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuidTwo)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			patchCommitmentAndExpectError(t, s, tr, uuidTwo, map[string]any{}, func(r httptest.Response) {

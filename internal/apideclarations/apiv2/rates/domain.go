@@ -12,11 +12,11 @@ import (
 	. "go.xyrillian.de/gg/option"
 )
 
-// DomainGetResponse is the response type for GET /rates/v2/domains(/:domain_uuid)?.
+// DomainGetResponse is the response type for GET /v2/rates/domains(/:domain_uuid)?.
 // It contains the latest state of all dynamic rate data for one or many domains.
 // This can only contain summed data from project level.
 type DomainGetResponse struct {
-	// InfoReport is what GET /rates/v2/info would report.
+	// InfoReport is what GET /v2/rates/info would report.
 	// It is only returned when the respective query option with=info is set.
 	InfoReport    Option[InfoReport]      `json:"info,omitzero"`
 	DomainReports map[string]DomainReport `json:"domains"`

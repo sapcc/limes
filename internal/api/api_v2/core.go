@@ -49,42 +49,41 @@ func NewV2API(cluster *core.Cluster, domainNames Option[DomainNames], tokenValid
 
 // AddTo implements the httpapi.API interface.
 func (p *v2Provider) AddTo(c *httpapi.Composer) {
-	r := c.Router()
-	resRouter := r.PathPrefix("/resources/v2/").Subrouter()
-	ratesRouter := r.PathPrefix("/rates/v2/").Subrouter()
-
+	// using a subrouter to ensure that the EnforceDomainName middleware only attaches to the routes defined here
+	r := c.Router().PathPrefix("/v2/").Subrouter()
 	if apiDomainNames, ok := p.DomainNames.Unpack(); ok {
-		mw := EnforceDomainName(apiDomainNames.V2)
-		resRouter.Use(mw)
-		ratesRouter.Use(mw)
+		r.Use(EnforceDomainName(apiDomainNames.V2))
 	}
 
 	tv := p.tokenValidator
-	resRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
-	resRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesCluster))
-	resRouter.Methods("GET").Path("/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomains))
-	resRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
-	resRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
-	resRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
-	resRouter.Methods("PATCH").Path("/projects/{project_uuid}/{service_type}/{resource_name}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePatchResourcesProject))
-	resRouter.Methods("POST").Path("/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
-	resRouter.Methods("DELETE").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
-	resRouter.Methods("PATCH").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handlePatchCommitment))
-	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/split").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleSplitCommitment))
-	resRouter.Methods("POST").Path("/commitments/merge").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleMergeCommitments))
-	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/renew").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handleRenewCommitment))
-	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/receive").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleReceiveCommitment))
-	resRouter.Methods("POST").Path("/commitments/{commitment_uuid}/convert").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handleConvertCommitment))
-	resRouter.Methods("GET").Path("/commitments").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentMultiple))
-	resRouter.Methods("GET").Path("/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentSingle))
+	r.Methods("GET").Path("/resources/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesInfo))
+	r.Methods("GET").Path("/resources/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesCluster))
+	r.Methods("GET").Path("/resources/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomains))
+	r.Methods("GET").Path("/resources/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
+	r.Methods("GET").Path("/resources/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
+	r.Methods("GET").Path("/resources/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
+	// TODO: when migrating to pathrouter, add a check to ensure that this cannot match endpoints of other options (i.e. service_type != ANY("info", "cluster", "domains", "projects"))
+	r.Methods("PATCH").Path("/resources/{service_type}/{resource_name}/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePatchResourcesProject))
 
-	ratesRouter.Methods("GET").Path("/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
-	ratesRouter.Methods("GET").Path("/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))
-	ratesRouter.Methods("GET").Path("/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomains))
-	ratesRouter.Methods("GET").Path("/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomain))
-	ratesRouter.Methods("GET").Path("/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProjects))
-	ratesRouter.Methods("GET").Path("/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProject))
-	ratesRouter.Methods("PATCH").Path("/projects/{project_uuid}/{service_type}/{rate_name}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePatchRatesProject))
+	r.Methods("POST").Path("/resources/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))
+	r.Methods("DELETE").Path("/resources/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handleDeleteCommitment))
+	r.Methods("PATCH").Path("/resources/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handlePatchCommitment))
+	r.Methods("POST").Path("/resources/commitments/{commitment_uuid}/split").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleSplitCommitment))
+	r.Methods("POST").Path("/resources/commitments/merge").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleMergeCommitments))
+	r.Methods("POST").Path("/resources/commitments/{commitment_uuid}/renew").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handleRenewCommitment))
+	r.Methods("POST").Path("/resources/commitments/{commitment_uuid}/receive").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handleReceiveCommitment))
+	r.Methods("POST").Path("/resources/commitments/{commitment_uuid}/convert").HandlerFunc(handlerFunc(http.StatusAccepted, tv, p.handleConvertCommitment))
+	r.Methods("GET").Path("/resources/commitments").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentMultiple))
+	r.Methods("GET").Path("/resources/commitments/{commitment_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetCommitmentSingle))
+
+	r.Methods("GET").Path("/rates/info").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesInfo))
+	r.Methods("GET").Path("/rates/cluster").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesCluster))
+	r.Methods("GET").Path("/rates/domains").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomains))
+	r.Methods("GET").Path("/rates/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesDomain))
+	r.Methods("GET").Path("/rates/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProjects))
+	r.Methods("GET").Path("/rates/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetRatesProject))
+	// TODO: when migrating to pathrouter, add a check to ensure that this cannot match endpoints of other options (i.e. service_type != ANY("info", "domains", "projects"))
+	r.Methods("PATCH").Path("/rates/{service_type}/{rate_name}/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePatchRatesProject))
 }
 
 // Wrapper for request handlers that enforces a structure,

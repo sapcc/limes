@@ -34,7 +34,7 @@ func receiveCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandles
 
 	// we only expect the audit event and call to the liquid here
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
-	path := "/resources/v2/commitments/" + string(uuid) + "/receive"
+	path := "/v2/resources/commitments/" + string(uuid) + "/receive"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
 	target0, target1 := getAuditTargets()
@@ -75,7 +75,7 @@ func receiveCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Trac
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "POST /resources/v2/commitments/" + string(uuid) + "/receive"
+	methodAndPath := "POST /v2/resources/commitments/" + string(uuid) + "/receive"
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
@@ -334,7 +334,7 @@ func TestCommitmentReceiveErrors(t *testing.T) {
 			expectedJSON["transfer_status"] = "public"
 			expectedJSON["transfer_started_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
 			expectedJSON["updated_at"] = s.Clock.Now().UTC().Format(time.RFC3339)
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectJSON(t, http.StatusAccepted, expectedJSON)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -451,7 +451,7 @@ func TestCommitmentReceiveErrors(t *testing.T) {
 			}
 
 			// deleted commitment
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			receiveCommitmentAndExpectError(t, s, tr, uuidOriginal, baseRequest, func(r httptest.Response) {

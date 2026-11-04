@@ -32,7 +32,7 @@ import (
 )
 
 func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolicy.Token) (resourcesv2.Commitment, error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/new")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/new")
 	var (
 		none resourcesv2.Commitment // used on error return paths only
 		ctx  = r.Context()

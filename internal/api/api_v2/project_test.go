@@ -86,32 +86,32 @@ func TestV2ProjectResourceReport(t *testing.T) {
 
 	// permission checks
 	s.TokenValidator.Enforcer.AllowReportMultiple = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportMultiple = true
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects/uuid-for-paris").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// permission checks for with= params that require special permissions
 	s.TokenValidator.Enforcer.ForbidWithTiming = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=timing").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=timing").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.ForbidWithTiming = false
 
 	s.TokenValidator.Enforcer.ForbidWithSubresources = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=subresources").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=subresources").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.ForbidWithSubresources = false
 
 	s.TokenValidator.Enforcer.ForbidWithHistoricalUsage = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=historical_usage").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=historical_usage").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.ForbidWithHistoricalUsage = false
 
 	// full result with all options
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&with=commitment_stats&with=timing&with=subresources&with=historical_usage&with=constraints").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&with=commitment_stats&with=timing&with=subresources&with=historical_usage&with=constraints").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "all options"))
 
 	var (
@@ -131,7 +131,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 	)
 
 	// without any extras
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
@@ -141,35 +141,35 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// individual with= params
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
 			Modify(withoutSubresourcesMods...).
 			Modify(withoutHistoricalUsageMods...).
 			Modify(withoutConstraintsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=timing").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=timing").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutSubresourcesMods...).
 			Modify(withoutHistoricalUsageMods...).
 			Modify(withoutCommitmentStatsMods...).
 			Modify(withoutConstraintsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=subresources").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=subresources").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
 			Modify(withoutHistoricalUsageMods...).
 			Modify(withoutCommitmentStatsMods...).
 			Modify(withoutConstraintsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=historical_usage").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=historical_usage").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
 			Modify(withoutSubresourcesMods...).
 			Modify(withoutCommitmentStatsMods...).
 			Modify(withoutConstraintsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=constraints").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=constraints").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
@@ -178,14 +178,14 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// single project
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects/uuid-for-paris?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter paris").
 			Modify(`del(.domains["uuid-for-germany"])`).
 			Modify(withoutTimingMods...).
 			Modify(withoutSubresourcesMods...).
 			Modify(withoutHistoricalUsageMods...).
 			Modify(withoutConstraintsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-berlin?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects/uuid-for-berlin?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter berlin").
 			Modify(`del(.domains["uuid-for-france"])`).
 			Modify(`del(.domains["uuid-for-germany"].projects["uuid-for-dresden"])`).
@@ -195,7 +195,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// domain filter
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&with=commitment_stats&domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&with=commitment_stats&domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
 			Modify(`del(.domains["uuid-for-germany"])`).
 			Modify(withoutTimingMods...).
@@ -204,7 +204,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// filter by area
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify("del(.info.service_areas.first)").
 			Modify("del(.domains[].projects[].service_areas.first)").
@@ -215,7 +215,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// filter by service
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&service=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&service=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify("del(.info.service_areas.second)").
 			Modify("del(.domains[].projects[].service_areas.second)").
@@ -226,7 +226,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// filter by resource
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "resource filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -239,7 +239,7 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// filter by category
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -252,11 +252,11 @@ func TestV2ProjectResourceReport(t *testing.T) {
 			Modify(withoutConstraintsMods...))
 
 	// cannot set both at the same time
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
 
 	// unknown domain/project
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects?domain_uuid=does-not-exist").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exist)\n")
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/projects/does-not-exist").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects?domain_uuid=does-not-exist").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exist)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/projects/does-not-exist").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
 }
 
 func TestV2ProjectRateReport(t *testing.T) {
@@ -283,72 +283,72 @@ func TestV2ProjectRateReport(t *testing.T) {
 	s.MustDBExec(`UPDATE project_rates SET usage_as_bigint = '5' WHERE rate_id != $1`, objectsUpdateRateID)
 
 	s.TokenValidator.Enforcer.AllowReportMultiple = false
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportMultiple = true
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-paris").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/uuid-for-paris").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// the maximum result set includes the info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "with-info"))
 
 	// without info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify("del(.info)"))
 
 	// one project
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-paris?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/uuid-for-paris?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter paris").
 			Modify(`del(.domains["uuid-for-germany"])`))
 	// another project
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-berlin?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/uuid-for-berlin?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter berlin").
 			Modify(`del(.domains["uuid-for-france"])`).
 			Modify(`del(.domains["uuid-for-germany"].projects["uuid-for-dresden"])`))
 	// another project
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-dresden?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/uuid-for-dresden?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project filter dresden").
 			Modify(`del(.domains["uuid-for-france"])`).
 			Modify(`del(.domains["uuid-for-germany"].projects["uuid-for-berlin"])`))
 
 	// one full domain
 	// for this, a cloud_admin or domain token is required.
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&domain_uuid=uuid-for-france").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
 			Modify(`del(.domains["uuid-for-germany"])`))
 	// the other domain
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&domain_uuid=uuid-for-germany").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&domain_uuid=uuid-for-germany").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
 			Modify(`del(.domains["uuid-for-france"])`))
 
 	// when filtering for a certain rate, the info and report get filtered similarly
 	// area: this will lead to an empty report, hence the structure is cut off at a higher level!
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify(".domains=null").
 			Modify("del(.info.service_areas.first)"))
 	// service: also empty report
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&service=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&service=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify(".domains=null").
 			Modify("del(.info.service_areas.first)"))
 	// category
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.domains[].projects[].service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))
 	// category - special case: empty category (category = service type)
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&category=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&category=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter - empty category/ equal service type").
 			Modify("del(.domains[].projects[].service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.second)"))
 	// rate
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "rate filter").
 			Modify("del(.domains[].projects[].service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))
@@ -356,17 +356,17 @@ func TestV2ProjectRateReport(t *testing.T) {
 	// no we add some rate limits to get the other 2 combinations (objects:update=limit only, object:delete=limit + usage)
 	objectsDeleteRateID := s.GetRateID("first", "objects:delete")
 	s.MustDBExec(`UPDATE project_rates SET rate_limit = 10, window_ns = 5000000000 WHERE rate_id IN ($1, $2)`, objectsDeleteRateID, objectsUpdateRateID)
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "with limits").
 			Modify(`.domains[].projects[].service_areas.first.services.first.categories.first.rates["objects:delete"]={"usage_as_bigint":"5", "project_limit":10, "project_window":"5s"}`).
 			Modify(`.domains[].projects[].service_areas.first.services.first.categories.first.rates["objects:update"]={"project_limit":10, "project_window":"5s"}`))
 
 	// cannot set both at the same time
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/uuid-for-paris?domain_uuid=uuid-for-france").ExpectText(t, http.StatusBadRequest, "query domain_uuid cannot be set, when URL project_uuid is set\n")
 
 	// unknown domain/ project
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects?domain_uuid=does-not-exists").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exists)\n")
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/projects/does-not-exists").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exists)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects?domain_uuid=does-not-exists").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exists)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/projects/does-not-exists").ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exists)\n")
 }
 
 func TestV2ProjectPatchResource(t *testing.T) {
@@ -388,8 +388,8 @@ func TestV2ProjectPatchResource(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
-	thingsPath := "/resources/v2/projects/uuid-for-berlin/first/things"
-	capacityPath := "/resources/v2/projects/uuid-for-berlin/first/capacity"
+	thingsPath := "/v2/resources/first/things/projects/uuid-for-berlin"
+	capacityPath := "/v2/resources/first/capacity/projects/uuid-for-berlin"
 
 	// max quota happy cases
 
@@ -583,14 +583,14 @@ func TestV2ProjectPatchResource(t *testing.T) {
 	})
 
 	// error case: unknown service
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/projects/uuid-for-berlin/unknown/things", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/unknown/things/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"max_quota": 500,
 	})).ExpectText(t, http.StatusBadRequest, "no such service\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
 	// error case: unknown resource
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/projects/uuid-for-berlin/first/unknown", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/first/unknown/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"max_quota": 500,
 	})).ExpectText(t, http.StatusBadRequest, "no such resource\n")
 	tr.DBChanges().AssertEmpty()
@@ -616,8 +616,15 @@ func TestV2ProjectPatchResource(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
+	// error case: value below -1
+	s.Handler.RespondTo(s.Ctx, "PATCH "+thingsPath, httptest.WithJSONBody(map[string]any{
+		"max_quota": -2,
+	})).ExpectText(t, http.StatusBadRequest, "request body is not valid JSON: Uint64OrNegativeOne must be >= -1 (was -2)\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
 	// error case: unknown project
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/projects/does-not-exist/first/things", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/first/things/projects/does-not-exist", httptest.WithJSONBody(map[string]any{
 		"max_quota": 500,
 	})).ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
 	tr.DBChanges().AssertEmpty()
@@ -625,7 +632,7 @@ func TestV2ProjectPatchResource(t *testing.T) {
 
 	// error case: unknown project + permission denied → 403 beats 404 (obfuscation design)
 	s.TokenValidator.Enforcer.AllowResourceUpdate = false
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/projects/does-not-exist/first/things", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/first/things/projects/does-not-exist", httptest.WithJSONBody(map[string]any{
 		"max_quota": 500,
 	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	tr.DBChanges().AssertEmpty()
@@ -660,9 +667,16 @@ func TestV2ProjectPatchResource(t *testing.T) {
 	tr.DBChanges().Ignore()
 
 	// error case: has no commitments in this domain (france, service second)
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/projects/uuid-for-paris/second/capacity", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/second/capacity/projects/uuid-for-paris", httptest.WithJSONBody(map[string]any{
 		"forbid_autogrowth": true,
 	})).ExpectText(t, http.StatusBadRequest, "resource does not have commitments\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
+	// no-op: setting forbid_autogrowth to false is allowed even without commitments (it's already false)
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/second/capacity/projects/uuid-for-paris", httptest.WithJSONBody(map[string]any{
+		"forbid_autogrowth": false,
+	})).ExpectText(t, http.StatusNoContent, "")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 }
@@ -688,7 +702,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.DB)
 	tr0.Ignore()
 
-	ratePath := "/rates/v2/projects/uuid-for-berlin/first/objects:create"
+	ratePath := "/v2/rates/first/objects:create/projects/uuid-for-berlin"
 
 	// happy case: set a rate limit for the first time (None → Some)
 	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
@@ -855,7 +869,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	// error case: limit without window
 	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
 		"limit": 10,
-	})).ExpectText(t, http.StatusBadRequest, "window should be set when limit != -1\n")
+	})).ExpectText(t, http.StatusBadRequest, "window must be set when limit != -1\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
@@ -863,7 +877,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
 		"limit":  -1,
 		"window": "1s",
-	})).ExpectText(t, http.StatusBadRequest, "window should not be set when limit == -1\n")
+	})).ExpectText(t, http.StatusBadRequest, "window must not be set when limit == -1\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
@@ -871,12 +885,12 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "0s",
-	})).ExpectText(t, http.StatusBadRequest, "a window of 0 does not make sense\n")
+	})).ExpectText(t, http.StatusBadRequest, "invalid value for window: 0\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
 	// error case: unknown service (via URL path)
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/uuid-for-berlin/unknown/objects:create", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/unknown/objects:create/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
 	})).ExpectText(t, http.StatusBadRequest, "no such service\n")
@@ -884,7 +898,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	s.Auditor.ExpectEvents(t)
 
 	// error case: unknown rate (via URL path)
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/uuid-for-berlin/first/unknown:rate", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/first/unknown:rate/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
 	})).ExpectText(t, http.StatusBadRequest, "no such rate\n")
@@ -892,18 +906,18 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	s.Auditor.ExpectEvents(t)
 
 	// error case: rate has no project default (objects:delete has only a global limit, no project default)
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/uuid-for-berlin/first/objects:delete", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/first/objects:delete/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
-	})).ExpectText(t, http.StatusBadRequest, "for this rate, no custom rate limits can be set\n")
+	})).ExpectText(t, http.StatusBadRequest, "project-level rate limits not supported for this rate\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
 	// error case: rate has no rate limits at all (objects:unlimited)
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/uuid-for-berlin/first/objects:unlimited", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/first/objects:unlimited/projects/uuid-for-berlin", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
-	})).ExpectText(t, http.StatusBadRequest, "for this rate, no custom rate limits can be set\n")
+	})).ExpectText(t, http.StatusBadRequest, "project-level rate limits not supported for this rate\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 
@@ -917,7 +931,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 	s.Auditor.ExpectEvents(t)
 
 	// error case: unknown project
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/does-not-exist/first/objects:create", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/first/objects:create/projects/does-not-exist", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
 	})).ExpectText(t, http.StatusNotFound, "no such project (UUID = does-not-exist)\n")
@@ -926,7 +940,7 @@ func TestV2ProjectPatchRate(t *testing.T) {
 
 	// error case: unknown project + permission denied → 403 beats 404 (obfuscation design)
 	s.TokenValidator.Enforcer.AllowRateUpdate = false
-	s.Handler.RespondTo(s.Ctx, "PATCH /rates/v2/projects/does-not-exist/first/objects:create", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/rates/first/objects:create/projects/does-not-exist", httptest.WithJSONBody(map[string]any{
 		"limit":  10,
 		"window": "1s",
 	})).ExpectText(t, http.StatusForbidden, "Forbidden\n")

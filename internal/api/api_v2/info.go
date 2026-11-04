@@ -14,9 +14,9 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )
 
-// handleGetResourcesInfo handles GET /resources/v2/info.
+// handleGetResourcesInfo handles GET /v2/resources/info.
 func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy.Token) (resourcesv2.InfoReport, error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/info")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/info")
 	scope, err := p.authenticateInfoRequest(r, token)
 	if err != nil {
 		return resourcesv2.InfoReport{}, err
@@ -24,9 +24,9 @@ func (p *v2Provider) handleGetResourcesInfo(r *http.Request, token *gopherpolicy
 	return reports_v2.GetResourcesInfo(r.Context(), p.Cluster, scope, p.timeNow(), p.Cluster.SIC.GetSnapshot())
 }
 
-// handleGetRatesInfo handles GET /rates/v2/info.
+// handleGetRatesInfo handles GET /v2/rates/info.
 func (p *v2Provider) handleGetRatesInfo(r *http.Request, token *gopherpolicy.Token) (ratesv2.InfoReport, error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/info")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/info")
 	infoScope, err := p.authenticateInfoRequest(r, token)
 	if err != nil {
 		return ratesv2.InfoReport{}, err
