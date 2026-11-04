@@ -68,7 +68,7 @@ func commonExistingCommitmentSetup(t *testing.T, manager string) (s test.Setup, 
 		"expires_at":        expiresAt.Format(time.RFC3339),
 		"updated_at":        createdAt.Format(time.RFC3339),
 	}
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            10,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-paris",

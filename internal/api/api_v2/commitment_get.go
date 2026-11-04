@@ -26,7 +26,7 @@ import (
 )
 
 func (p *v2Provider) handleGetCommitmentSingle(r *http.Request, token *gopherpolicy.Token) (resourcesv2.Commitment, error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/:commitment_uuid")
 	var (
 		none resourcesv2.Commitment
 		ctx  = r.Context()
@@ -82,7 +82,7 @@ var findCommitmentsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 `))
 
 func (p *v2Provider) handleGetCommitmentMultiple(r *http.Request, token *gopherpolicy.Token) (resourcesv2.CommitmentList, error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments")
 	var (
 		none resourcesv2.CommitmentList
 		ctx  = r.Context()

@@ -81,7 +81,8 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 
 5. Register the public URL of the API service in the Keystone service catalog: A service with type `resources` shall
    point to the base path of the public URL, e.g. `https://limes.example.com/`. A service with type `limes-rates` shall
-   point to the `/rates/` subpath, e.g. `https://limes.example.com/rates/`. Note that the API service only exposes HTTP,
+   point to the `/rates/` subpath, e.g. `https://limes.example.com/rates/`. A service with type `limitas` shall point to
+   the base path of the v2 public URL, e.g. `https://limitas.example.com/`. Note that the API service only exposes HTTP,
    so you probably want to have some sort of reverse proxy in front for load balancing and TLS termination.
 
 ## Logging

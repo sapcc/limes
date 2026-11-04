@@ -16,9 +16,9 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )
 
-// handleGetResourcesCluster handles GET /resources/v2/cluster.
+// handleGetResourcesCluster handles GET /v2/resources/cluster.
 func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ClusterGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/cluster")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/cluster")
 	none := resourcesv2.ClusterGetResponse{}
 	ctx := r.Context()
 
@@ -41,9 +41,9 @@ func (p *v2Provider) handleGetResourcesCluster(r *http.Request, token *gopherpol
 	return result, nil
 }
 
-// handleGetRatesCluster handles GET /rates/v2/cluster.
+// handleGetRatesCluster handles GET /v2/rates/cluster.
 func (p *v2Provider) handleGetRatesCluster(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ClusterGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/cluster")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/cluster")
 	none := ratesv2.ClusterGetResponse{}
 	ctx := r.Context()
 

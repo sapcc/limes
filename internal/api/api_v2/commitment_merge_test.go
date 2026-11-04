@@ -40,13 +40,13 @@ func commonMergeCommitmentsSetup(t *testing.T, manager string) (s test.Setup, tr
 	expectedJSONNew := jsonmatch.Object(maps.Clone(expectedJSON))
 	expectedJSONNew["uuid"] = jsonmatch.CaptureField(&uuid2)
 	expectedJSONNew["amount"] = 5
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
 
 	// create a third commitment (amount 6, same duration)
 	req["amount"] = 6
 	expectedJSONNew["uuid"] = jsonmatch.CaptureField(&uuid3)
 	expectedJSONNew["amount"] = 6
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
 
 	// create a fourth commitment (amount 3, 2 hour duration for different expiresAt)
 	req["amount"] = 3
@@ -55,7 +55,7 @@ func commonMergeCommitmentsSetup(t *testing.T, manager string) (s test.Setup, tr
 	expectedJSONNew["amount"] = 3
 	expectedJSONNew["duration"] = "2 hours"
 	expectedJSONNew["expires_at"] = initialExpiresAt.Add(1 * time.Hour).Format(time.RFC3339)
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(req)).ExpectJSON(t, http.StatusCreated, expectedJSONNew)
 
 	s.Auditor.IgnoreEventsUntilNow()
 	tr.DBChanges().Ignore()
@@ -72,7 +72,7 @@ func mergeCommitmentsAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesC
 		mockLiquid.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 	}
 
-	path := "/resources/v2/commitments/merge"
+	path := "/v2/resources/commitments/merge"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
 	target := getAuditTarget()
@@ -100,7 +100,7 @@ func mergeCommitmentsAndExpectError(t *testing.T, s test.Setup, tr *easypg.Track
 	t.Helper()
 	ctx := t.Context()
 
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/merge", httptest.WithJSONBody(request)).Expect(expect)
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/merge", httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 }
@@ -269,7 +269,7 @@ func TestCommitmentMergeErrors(t *testing.T) {
 			})
 
 			// commitment in transfer cannot be merged
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuid1), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuid1), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -277,13 +277,13 @@ func TestCommitmentMergeErrors(t *testing.T) {
 				r.ExpectText(t, http.StatusBadRequest, "commitments in transfer cannot be merged\n")
 			})
 			// revert transfer status
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuid1), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuid1), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 
 			// deleted/inactive commitment
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuid2)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuid2)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			mergeCommitmentsAndExpectError(t, s, tr, map[string]any{"commitment_uuids": []string{string(uuid1), string(uuid2)}}, func(r httptest.Response) {

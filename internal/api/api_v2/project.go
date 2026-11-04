@@ -28,9 +28,9 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// handleGetResourcesProjects handles GET /resources/v2/projects.
+// handleGetResourcesProjects handles GET /v2/resources/projects.
 func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/projects")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/projects")
 	scope, err := p.checkAuthZForReportWithMultipleProjects(r, token)
 	if err != nil {
 		return
@@ -38,9 +38,9 @@ func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpo
 	return p.commonHandleGetResourcesProject(r, token, scope)
 }
 
-// handleGetResourcesProject handles GET /resources/v2/projects/:project_uuid.
+// handleGetResourcesProject handles GET /v2/resources/projects/:project_uuid.
 func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/projects/:project_uuid")
 	scope, err := p.checkAuthZForReportWithSingleProject(r.Context(), token)
 	if err != nil {
 		return
@@ -89,9 +89,9 @@ func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gop
 	return reports_v2.GetProjectResources(ctx, p.Cluster, filter, options, scope, p.timeNow())
 }
 
-// handleGetRatesProjects handles GET /rates/v2/projects.
+// handleGetRatesProjects handles GET /v2/rates/projects.
 func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/projects")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/projects")
 	scope, err := p.checkAuthZForReportWithMultipleProjects(r, token)
 	if err != nil {
 		return
@@ -99,9 +99,9 @@ func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy
 	return p.commonHandleGetRatesProject(r, scope)
 }
 
-// handleGetRatesProject handles GET /rates/v2/projects/:project_uuid.
+// handleGetRatesProject handles GET /v2/rates/projects/:project_uuid.
 func (p *v2Provider) handleGetRatesProject(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/projects/:project_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/projects/:project_uuid")
 	scope, err := p.checkAuthZForReportWithSingleProject(r.Context(), token)
 	if err != nil {
 		return
@@ -133,7 +133,7 @@ func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, scope reports_
 	return result, nil
 }
 
-// checkAuthZForReportWithMultipleProjects handles AuthZ for GET /{resources,rates}/v2/projects.
+// checkAuthZForReportWithMultipleProjects handles AuthZ for GET /v2/{resources,rates}/projects.
 func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, token *gopherpolicy.Token) (reports_v2.Scope, error) {
 	// full query parsing will be done later; for now we just need ?domain_uuid= because it influences AuthZ
 	if queryDomainUUID := r.URL.Query().Get("domain_uuid"); queryDomainUUID != "" {
@@ -146,14 +146,14 @@ func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, to
 	}
 }
 
-// checkAuthZForReportWithSingleProject handles AuthZ for GET /{resources,rates}/v2/projects/:project_uuid.
+// checkAuthZForReportWithSingleProject handles AuthZ for GET /v2/{resources,rates}/projects/:project_uuid.
 func (p *v2Provider) checkAuthZForReportWithSingleProject(ctx context.Context, token *gopherpolicy.Token) (reports_v2.Scope, error) {
 	return p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:report_single")
 }
 
-// (p *v2Provider) handlePatchResourcesProject handles PATCH /resources/v2/projects/:project_uuid/:service_type/:resource_name.
+// (p *v2Provider) handlePatchResourcesProject handles PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid.
 func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid/:service_type/:resource_name")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/:service_type/:resource_name/projects/:project_uuid")
 	var (
 		ctx = r.Context()
 		sis = p.Cluster.SIC.GetSnapshot()
@@ -201,7 +201,7 @@ func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherp
 	dirty := false
 	if newValue, requested := req.ForbidAutogrowth.Unpack(); requested {
 		behavior := p.Cluster.CommitmentBehaviorForResourcePath(res.Path).ForDomain(scope.Domain.Name)
-		if len(behavior.Durations) == 0 {
+		if len(behavior.Durations) == 0 && newValue {
 			return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotHaveCommitments)
 		}
 		if projectResource.ForbidAutogrowth != newValue {
@@ -261,9 +261,9 @@ func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherp
 	return none, nil
 }
 
-// (p *v2Provider) handlePatchRatesProject handles PATCH /rates/v2/projects/:project_uuid/:service_type/:rate_name.
+// (p *v2Provider) handlePatchRatesProject handles PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid.
 func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/projects/:project_uuid/:service_type/:rate_name")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/:service_type/:rate_name/projects/:project_uuid")
 	var (
 		ctx = r.Context()
 		sis = p.Cluster.SIC.GetSnapshot()
@@ -290,11 +290,11 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 	if !rExists {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchRate)
 	}
-	if req.Limit != -1 && req.Window.IsNone() {
-		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window should be set when limit != -1"))
+	if req.Limit.AsOption().IsSome() && req.Window.IsNone() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must be set when limit != -1"))
 	}
-	if req.Limit == -1 && req.Window.IsSome() {
-		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window should not be set when limit == -1"))
+	if req.Limit.AsOption().IsNone() && req.Window.IsSome() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must not be set when limit == -1"))
 	}
 	serviceConfig, cExists := p.Cluster.Config.GetLiquidConfigurationForType(serviceType)
 	if !cExists {
@@ -303,10 +303,10 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 	}
 	_, defaultExists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(rateName).Unpack()
 	if !defaultExists {
-		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("for this rate, no custom rate limits can be set"))
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("project-level rate limits not supported for this rate"))
 	}
 	if window, wExists := req.Window.Unpack(); wExists && window == 0 {
-		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("a window of 0 does not make sense"))
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("invalid value for window: 0"))
 	}
 
 	// get projectRate

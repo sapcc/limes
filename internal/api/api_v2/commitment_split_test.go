@@ -35,7 +35,7 @@ func splitCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCo
 
 	// we only expect the audit event and call to the liquid here
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
-	path := "/resources/v2/commitments/" + string(uuid) + "/split"
+	path := "/v2/resources/commitments/" + string(uuid) + "/split"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
 	target := getAuditTarget()
@@ -65,7 +65,7 @@ func splitCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracke
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "POST /resources/v2/commitments/" + string(uuid) + "/split"
+	methodAndPath := "POST /v2/resources/commitments/" + string(uuid) + "/split"
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
@@ -268,7 +268,7 @@ func TestCommitmentSplitErrors(t *testing.T) {
 			})
 
 			// commitment in transfer cannot be split
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -277,7 +277,7 @@ func TestCommitmentSplitErrors(t *testing.T) {
 			})
 
 			// inactive status
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			splitCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"amounts": []uint64{5, 5}}, func(r httptest.Response) {

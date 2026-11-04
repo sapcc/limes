@@ -11,7 +11,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// InfoReport is the response type for GET /rates/v2/info.
+// InfoReport is the response type for GET /v2/rates/info.
 // It contains all metadata information about the cluster's services and rates.
 type InfoReport struct {
 	// All AZs known to Limes (excluding pseudo-AZs like "any").

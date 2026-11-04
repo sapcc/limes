@@ -26,7 +26,7 @@ import (
 // Helper function for a successful commitment deletion.
 func deleteCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tracker, liquidHandlesCommitments bool, uuid string, dbID int, ccr liquid.CommitmentChangeRequest) {
 	t.Helper()
-	path := "/resources/v2/commitments/" + uuid
+	path := "/v2/resources/commitments/" + uuid
 	s.Handler.RespondTo(s.Ctx, "DELETE "+path).ExpectStatus(t, http.StatusNoContent)
 
 	// if CCR is empty, this was an already deleted commitment and we don't need to check for any updates
@@ -61,7 +61,7 @@ func deleteCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 // Helper function for a failed commitment deletion.
 func deleteCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracker, uuid liquid.CommitmentUUID, ccr liquid.CommitmentChangeRequest, expect func(r httptest.Response)) {
 	t.Helper()
-	path := "/resources/v2/commitments/" + string(uuid)
+	path := "/v2/resources/commitments/" + string(uuid)
 	s.Handler.RespondTo(s.Ctx, "DELETE "+path).Expect(expect)
 
 	// assertions
@@ -127,7 +127,7 @@ func TestCommitmentDeleteBasic(t *testing.T) {
 			// setup: create one commitment via the POST API
 			var uuid string
 			expiresAt := s.Clock.Now().Add(1 * time.Hour).UTC()
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            10,
 				"duration":          "1 hour",
 				"project_id":        "uuid-for-paris",
@@ -199,7 +199,7 @@ func TestCommitmentDeleteErrors(t *testing.T) {
 	// create a commitment via POST API, then advance 24 hours (cannot be deleted by non-admins)
 	var uuidOne string
 	expiresAt := s.Clock.Now().Add(1 * time.Hour).UTC()
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            10,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-paris",
@@ -249,7 +249,7 @@ func TestCommitmentDeleteErrors(t *testing.T) {
 	// create another commitment via POST API
 	var uuidTwo string
 	expiresAt2 := s.Clock.Now().Add(1 * time.Hour).UTC()
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            10,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-paris",

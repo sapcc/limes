@@ -30,7 +30,7 @@ import (
 )
 
 func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolicy.Token) (result resourcesv2.Commitment, _ error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid/receive")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/:commitment_uuid/receive")
 	var (
 		none resourcesv2.Commitment
 		ctx  = r.Context()

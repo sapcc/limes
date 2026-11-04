@@ -27,7 +27,7 @@ import (
 )
 
 func (p *v2Provider) handleMergeCommitments(r *http.Request, token *gopherpolicy.Token) (result resourcesv2.Commitment, _ error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/merge")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/merge")
 	var (
 		none resourcesv2.Commitment
 		ctx  = r.Context()
