@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/common v0.73.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.25.1
-	github.com/sapcc/go-bits v0.0.0-20261103143358-0cf02691bfb8
+	github.com/sapcc/go-bits v0.0.0-20261105181628-13886743d3a7
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.19.0
 	go.xyrillian.de/oblast v0.17.0
@@ -24,8 +24,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/itchyny/gojq v0.12.19 // indirect
-	github.com/itchyny/timefmt-go v0.1.8 // indirect
+	github.com/itchyny/gojq v0.12.20 // indirect
+	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect

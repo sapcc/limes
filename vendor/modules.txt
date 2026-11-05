@@ -64,10 +64,10 @@ github.com/gorilla/mux
 github.com/hashicorp/golang-lru/v2
 github.com/hashicorp/golang-lru/v2/internal
 github.com/hashicorp/golang-lru/v2/simplelru
-# github.com/itchyny/gojq v0.12.19
+# github.com/itchyny/gojq v0.12.20
 ## explicit; go 1.24.0
 github.com/itchyny/gojq
-# github.com/itchyny/timefmt-go v0.1.8
+# github.com/itchyny/timefmt-go v0.1.9
 ## explicit; go 1.24
 github.com/itchyny/timefmt-go
 # github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629
@@ -144,7 +144,7 @@ github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
 github.com/sapcc/go-api-declarations/opts
-# github.com/sapcc/go-bits v0.0.0-20261103143358-0cf02691bfb8
+# github.com/sapcc/go-bits v0.0.0-20261105181628-13886743d3a7
 ## explicit; go 1.27
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
