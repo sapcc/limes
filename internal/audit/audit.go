@@ -18,6 +18,8 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
+
+	"github.com/sapcc/limes/internal/db"
 )
 
 // MaxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -41,6 +43,40 @@ type MaxQuotaChange struct {
 func (t MaxQuotaEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
+		},
+	}
+}
+
+// V2ProjectResourceChange appears in type V2ProjectResourceEventTarget.
+type V2ProjectResourceChange struct {
+	OldMaxQuota         Option[uint64] `json:"oldMaxQuota"`
+	NewMaxQuota         Option[uint64] `json:"newMaxQuota"`
+	OldForbidAutogrowth bool           `json:"oldForbidAutogrowth"`
+	NewForbidAutogrowth bool           `json:"newForbidAutogrowth"`
+}
+
+// V2ProjectResourceEventTarget renders a cadf.Event.Target for a project/resource change event of the v2 API.
+type V2ProjectResourceEventTarget struct {
+	DomainID        string
+	DomainName      string
+	ProjectID       liquid.ProjectUUID
+	ProjectName     string
+	ServiceType     db.ServiceType
+	ResourceName    liquid.ResourceName
+	RequestedChange V2ProjectResourceChange
+}
+
+// Render implements the audittools.Target interface.
+func (t V2ProjectResourceEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s", t.ServiceType, t.ResourceName),
 		ID:          string(t.ProjectID),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
@@ -96,7 +132,7 @@ type RateLimitEventTarget struct {
 	Payload     RateLimitChange
 }
 
-// RateLimitChange appears in type rateLimitEventTarget.
+// RateLimitChange appears in type RateLimitEventTarget.
 type RateLimitChange struct {
 	Unit         limes.Unit        `json:"unit,omitzero"`
 	OldLimit     uint64            `json:"oldLimit"`
@@ -117,6 +153,42 @@ func (t RateLimitEventTarget) Render() cadf.Resource {
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
 			must.Return(cadf.NewJSONAttachment("payload", t.Payload)),
+		},
+	}
+}
+
+// V2ProjectRateEventTarget contains the structure for rendering a cadf.Event.Target for
+// v2-API changes regarding rate limits
+type V2ProjectRateEventTarget struct {
+	DomainID        string
+	DomainName      string
+	ProjectID       liquid.ProjectUUID
+	ProjectName     string
+	ServiceType     db.ServiceType
+	RateName        liquid.RateName
+	RequestedChange V2RateLimitChange
+}
+
+// V2RateLimitChange appears in type V2ProjectRateEventTarget.
+type V2RateLimitChange struct {
+	Unit      limes.Unit                `json:"unit,omitzero"`
+	OldLimit  Option[uint64]            `json:"oldLimit"`
+	NewLimit  Option[uint64]            `json:"newLimit"`
+	OldWindow Option[limesrates.Window] `json:"oldWindow"`
+	NewWindow Option[limesrates.Window] `json:"newWindow"`
+}
+
+// Render implements the audittools.Target interface.
+func (t V2ProjectRateEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s", t.ServiceType, t.RateName),
+		ID:          string(t.ProjectID),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   string(t.ProjectID),
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
 		},
 	}
 }

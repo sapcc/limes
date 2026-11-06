@@ -10,11 +10,11 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// ClusterGetResponse is the response type for GET /rates/v2/cluster.
+// ClusterGetResponse is the response type for GET /v2/rates/cluster.
 // It contains the latest state of all dynamic rate data for the whole cluster.
 // This can only contain summed data from project level.
 type ClusterGetResponse struct {
-	// InfoReport is what GET /rates/v2/info would report.
+	// InfoReport is what GET /v2/rates/info would report.
 	// It is only returned when the respective query option with=info is set.
 	InfoReport    Option[InfoReport] `json:"info,omitzero"`
 	ClusterReport ClusterReport      `json:"cluster_report"`

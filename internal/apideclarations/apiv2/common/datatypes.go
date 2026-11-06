@@ -5,7 +5,11 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"time"
+
+	. "go.xyrillian.de/gg/option"
 )
 
 // RFC3339EncodedTime is a time.Time that marshals into JSON as RFC3339 timestamp.
@@ -58,4 +62,53 @@ func (t *RFC3339NanoEncodedTime) UnmarshalJSON(buf []byte) error {
 	}
 	t.Time, err = time.Parse(time.RFC3339Nano, s)
 	return err
+}
+
+// Uint64OrNegativeOne has all values of a uint64 and -1.
+// All values < -1 will fail parsing.
+type Uint64OrNegativeOne Option[uint64]
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (t *Uint64OrNegativeOne) UnmarshalJSON(buf []byte) error {
+	var value json.Number
+	err := json.Unmarshal(buf, &value)
+	if err != nil {
+		return err
+	}
+	stringValue := value.String()
+	if stringValue[0] == '-' {
+		negativeValue, err := strconv.ParseInt(stringValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("Uint64OrNegativeOne was negative but not parsable as int64 (was %s)", value)
+		}
+		if negativeValue == 0 {
+			*t = Uint64OrNegativeOne(Some(uint64(negativeValue)))
+			return nil
+		}
+		if negativeValue < -1 {
+			return fmt.Errorf("Uint64OrNegativeOne must be >= -1 (was %s)", value)
+		}
+		*t = Uint64OrNegativeOne(None[uint64]())
+	} else {
+		positiveValue, err := strconv.ParseUint(stringValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("Uint64OrNegativeOne was positive but not parsable as uint64 (was %s)", value)
+		}
+		*t = Uint64OrNegativeOne(Some(positiveValue))
+	}
+	return nil
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (t Uint64OrNegativeOne) MarshalJSON() ([]byte, error) {
+	if value, ok := t.AsOption().Unpack(); ok {
+		return json.Marshal(value)
+	}
+	return []byte("-1"), nil
+}
+
+// AsOption converts the value to an Option[uint64]:
+// None represents "infinite / no limit" (-1 on the wire).
+func (t Uint64OrNegativeOne) AsOption() Option[uint64] {
+	return Option[uint64](t)
 }

@@ -17,11 +17,11 @@ import (
 	. "go.xyrillian.de/gg/option"
 )
 
-// ProjectGetResponse is the response type for GET /resources/v2/projects(/:project_uuid)?.
+// ProjectGetResponse is the response type for GET /v2/resources/projects(/:project_uuid)?.
 // It contains the latest state of all dynamic resource data for one or many projects.
 // The data comes directly from the project level.
 type ProjectGetResponse struct {
-	// InfoReport is what GET /resources/v2/info would report.
+	// InfoReport is what GET /v2/resources/info would report.
 	// It is only returned when the respective query option with=info is set.
 	InfoReport    Option[InfoReport]                `json:"info,omitzero"`
 	DomainReports map[string]ProjectsByDomainReport `json:"domains"`
@@ -106,4 +106,10 @@ type ProjectHistoricalReport struct {
 	MinUsage uint64            `json:"min_usage"`
 	MaxUsage uint64            `json:"max_usage"`
 	Duration limesrates.Window `json:"duration"`
+}
+
+// ProjectResourcePatchRequest is the request payload format for PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid.
+type ProjectResourcePatchRequest struct {
+	MaxQuota         Option[common.Uint64OrNegativeOne] `json:"max_quota,omitzero"`         // None means no change, -1 means infinite (remove the MaxQuota)
+	ForbidAutogrowth Option[bool]                       `json:"forbid_autogrowth,omitzero"` // None means no change
 }

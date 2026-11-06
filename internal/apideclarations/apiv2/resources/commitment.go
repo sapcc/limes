@@ -18,7 +18,7 @@ type CommitmentList struct {
 	Commitments []Commitment `json:"commitments"`
 }
 
-// Commitment is the response payload format for GET /resources/v2/commitments/:uuid and several endpoints that create or modify commitments.
+// Commitment is the response payload format for GET /v2/resources/commitments/:uuid and several endpoints that create or modify commitments.
 type Commitment struct {
 	UUID liquid.CommitmentUUID `json:"uuid"`
 	// Amount refers to the amount of resource that is committed, in terms of the unit of the committed resource.
@@ -59,7 +59,7 @@ type Commitment struct {
 	WasRenewed bool `json:"was_renewed,omitempty"`
 }
 
-// CommitmentRequest is the request payload format for POST /resources/v2/commitments/new.
+// CommitmentRequest is the request payload format for POST /v2/resources/commitments/new.
 //
 // See documentation on [Commitment] for the semantics of all fields.
 // Documentation on this type's fields only mentions specifics related to the commitment creation process.

@@ -27,7 +27,7 @@ import (
 )
 
 func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.Token) (result resourcesv2.CommitmentList, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/:commitment_uuid")
 	var (
 		none resourcesv2.CommitmentList
 		ctx  = r.Context()

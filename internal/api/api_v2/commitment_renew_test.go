@@ -31,7 +31,7 @@ func renewCommitmentAndExpectSuccess(t *testing.T, s test.Setup, liquidHandlesCo
 		mockLiquid.LastCommitmentChangeRequest = liquid.CommitmentChangeRequest{}
 	}
 
-	path := "/resources/v2/commitments/" + string(uuid) + "/renew"
+	path := "/v2/resources/commitments/" + string(uuid) + "/renew"
 	s.Handler.RespondTo(ctx, "POST "+path, httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusAccepted, expected)
 	target := getAuditTarget()
@@ -59,7 +59,7 @@ func renewCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Tracke
 	t.Helper()
 	ctx := t.Context()
 
-	methodAndPath := "POST /resources/v2/commitments/" + string(uuid) + "/renew"
+	methodAndPath := "POST /v2/resources/commitments/" + string(uuid) + "/renew"
 	s.Handler.RespondTo(ctx, methodAndPath, httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
@@ -131,7 +131,7 @@ func TestCommitmentRenewHappyPath(t *testing.T) {
 			expectedJSON["confirmed_at"] = createdAt2.Format(time.RFC3339)
 			expectedJSON["expires_at"] = expiresAt2.Format(time.RFC3339)
 			expectedJSON["updated_at"] = createdAt2.Format(time.RFC3339)
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            10,
 				"duration":          "1 hour",
 				"project_id":        "uuid-for-paris",
@@ -233,7 +233,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 			expectedJSON["confirm_by"] = plannedAt.Add(1 * time.Hour).Format(time.RFC3339)
 			expectedJSON["expires_at"] = plannedAt.Add(1 * time.Hour).Add(1 * time.Hour).Format(time.RFC3339)
 			delete(expectedJSON, "confirmed_at")
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            10,
 				"duration":          "1 hour",
 				"project_id":        "uuid-for-paris",
@@ -250,7 +250,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 			})
 
 			// in transfer: set uuidOriginal to public transfer, then try to renew
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": "public"})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -258,7 +258,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 				r.ExpectText(t, http.StatusBadRequest, "commitment renewal is only allowed for commitments which are not in transfer\n")
 			})
 			// revert transfer status
-			s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
+			s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+string(uuidOriginal), httptest.WithJSONBody(map[string]any{"transfer_status": ""})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -281,7 +281,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 			expectedJSON["updated_at"] = nowForYearCommitment.Format(time.RFC3339)
 			expectedJSON["expires_at"] = expiresAtYear.Format(time.RFC3339)
 			delete(expectedJSON, "confirm_by")
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 				"amount":            10,
 				"duration":          "1 year",
 				"project_id":        "uuid-for-paris",
@@ -298,7 +298,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 
 			// already renewed: renew uuidYear once (step into the renewal window first), then try again
 			s.Clock.StepBy(expiresAtYear.Sub(s.Clock.Now()) - 1*time.Hour)
-			s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/"+string(uuidYear)+"/renew", httptest.WithJSONBody(map[string]any{"duration": "1 year"})).
+			s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/"+string(uuidYear)+"/renew", httptest.WithJSONBody(map[string]any{"duration": "1 year"})).
 				ExpectStatus(t, http.StatusAccepted)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
@@ -308,7 +308,7 @@ func TestCommitmentRenewErrors(t *testing.T) {
 			})
 
 			// deleted commitment
-			s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
+			s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+string(uuidOriginal)).ExpectStatus(t, http.StatusNoContent)
 			tr.DBChanges().Ignore()
 			s.Auditor.IgnoreEventsUntilNow()
 			renewCommitmentAndExpectError(t, s, tr, uuidOriginal, map[string]any{"duration": "1 hour"}, func(r httptest.Response) {

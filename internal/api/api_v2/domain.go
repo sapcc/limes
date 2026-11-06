@@ -17,9 +17,9 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 )
 
-// handleGetResourcesDomains handles GET /resources/v2/domains.
+// handleGetResourcesDomains handles GET /v2/resources/domains.
 func (p *v2Provider) handleGetResourcesDomains(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.DomainGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/domains")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/domains")
 	err = token.Enforce("v2:domain:report_multiple")
 	if err != nil {
 		return
@@ -27,9 +27,9 @@ func (p *v2Provider) handleGetResourcesDomains(r *http.Request, token *gopherpol
 	return p.commonHandleGetResourcesDomain(r, reports_v2.ClusterScope{})
 }
 
-// handleGetResourcesDomain handles GET /resources/v2/domains/:domain_uuid.
+// handleGetResourcesDomain handles GET /v2/resources/domains/:domain_uuid.
 func (p *v2Provider) handleGetResourcesDomain(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.DomainGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/domains/:domain_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/domains/:domain_uuid")
 	scope, err := p.checkDomainAccess(r.Context(), token, token.Context.Request["domain_uuid"], "v2:domain:report_single")
 	if err != nil {
 		return
@@ -53,9 +53,9 @@ func (p *v2Provider) commonHandleGetResourcesDomain(r *http.Request, scope repor
 	return reports_v2.GetDomainResources(ctx, p.Cluster, filter, options, scope, p.timeNow())
 }
 
-// handleGetRatesDomains handles GET /rates/v2/domains.
+// handleGetRatesDomains handles GET /v2/rates/domains.
 func (p *v2Provider) handleGetRatesDomains(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.DomainGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/domains")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/domains")
 	err = token.Enforce("v2:domain:report_multiple")
 	if err != nil {
 		return
@@ -63,9 +63,9 @@ func (p *v2Provider) handleGetRatesDomains(r *http.Request, token *gopherpolicy.
 	return p.commonHandleGetRatesDomain(r, reports_v2.ClusterScope{})
 }
 
-// handleGetRatesDomain handles GET /rates/v2/domains/:domain_uuid.
+// handleGetRatesDomain handles GET /v2/rates/domains/:domain_uuid.
 func (p *v2Provider) handleGetRatesDomain(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.DomainGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/domains/:domain_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/domains/:domain_uuid")
 	scope, err := p.checkDomainAccess(r.Context(), token, token.Context.Request["domain_uuid"], "v2:domain:report_single")
 	if err != nil {
 		return
