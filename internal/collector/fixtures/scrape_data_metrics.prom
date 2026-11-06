@@ -20,14 +20,14 @@ limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",servi
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="capacity",service="unittest",service_name="unittest"} 0
 limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="unittest",service_name="unittest"} 0
 limes_cluster_capacity_per_az{availability_zone="unknown",resource="capacity",service="unittest",service_name="unittest"} 1234
-# HELP limes_cluster_resource_allows_quota_overcommit Whether the ACPQ algorithm allowed overcommit for a Limes resource in a specific availability zone. 1 if true, 0 otherwise.
-# TYPE limes_cluster_resource_allows_quota_overcommit gauge
-limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="capacity",service="unittest",service_name="unittest"} 1
-limes_cluster_resource_allows_quota_overcommit{availability_zone="any",resource="things",service="unittest",service_name="unittest"} 1
-limes_cluster_resource_allows_quota_overcommit{availability_zone="az-one",resource="capacity",service="unittest",service_name="unittest"} 0
-limes_cluster_resource_allows_quota_overcommit{availability_zone="az-one",resource="things",service="unittest",service_name="unittest"} 0
-limes_cluster_resource_allows_quota_overcommit{availability_zone="az-two",resource="capacity",service="unittest",service_name="unittest"} 0
-limes_cluster_resource_allows_quota_overcommit{availability_zone="az-two",resource="things",service="unittest",service_name="unittest"} 0
+# HELP limes_cluster_resource_quota_overcommit_reduction_percentage How much of the quota overcommit was reduced by the ACPQ algorithm. Values between 0 and 100. For resources without reduce_quota_overcommit_from_allocated_percent window, this jumps between 0 and 100.
+# TYPE limes_cluster_resource_quota_overcommit_reduction_percentage gauge
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="any",resource="capacity",service="unittest",service_name="unittest"} 0
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="any",resource="things",service="unittest",service_name="unittest"} 0
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="az-one",resource="capacity",service="unittest",service_name="unittest"} 100
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="az-one",resource="things",service="unittest",service_name="unittest"} 100
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="az-two",resource="capacity",service="unittest",service_name="unittest"} 100
+limes_cluster_resource_quota_overcommit_reduction_percentage{availability_zone="az-two",resource="things",service="unittest",service_name="unittest"} 100
 # HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
 # TYPE limes_domain_quota gauge
 limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest",service_name="unittest"} 55
