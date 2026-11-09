@@ -540,10 +540,8 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 		}
 		reduction := quotaOvercommitReduction[az]
 		availableCapacity := liquidapi.SaturatingSub(stats[az].Capacity, azTarget.SumAllocated())
-		if availableCapacity > 0 {
-			granted := liquidapi.DistributeFairly(availableCapacity, azTarget.Requested())
-			azTarget.AddGranted(granted, overcommitedDesired[az], reduction)
-		}
+		granted := liquidapi.DistributeFairly(availableCapacity, azTarget.Requested())
+		azTarget.AddGranted(granted, overcommitedDesired[az], reduction)
 	}
 
 	// the pseudo-AZ "any" can fulfil demand by absorbing all unused capacity

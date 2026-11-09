@@ -62,7 +62,6 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: None[float64](), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 0}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 100}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 0}},
-		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 100}},
 		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 60}},
 	} {
 		cfg.ReduceQuotaOvercommitFromAllocatedPercent = ocCfg.fromAllocatedPercent
@@ -157,7 +156,6 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: None[float64](), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 0, "az-one": 0, "az-two": 0}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 100, "az-one": 100, "az-two": 100}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 0, "az-one": 0, "az-two": 0}},
-		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 100, "az-one": 100, "az-two": 100}},
 		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{limes.AvailabilityZoneAny: 60, "az-one": 60, "az-two": 40}},
 	} {
 		cfg.ReduceQuotaOvercommitFromAllocatedPercent = ocCfg.fromAllocatedPercent
@@ -251,7 +249,6 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: None[float64](), expectedReductions: map[limes.AvailabilityZone]uint8{"az-one": 0, "az-two": 0}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{"az-one": 100, "az-two": 100}},
 		{fromAllocatedPercent: None[float64](), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{"az-one": 0, "az-two": 0}},
-		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(0.0), expectedReductions: map[limes.AvailabilityZone]uint8{"az-one": 100, "az-two": 100}},
 		{fromAllocatedPercent: Some(0.0), untilAllocatedPercent: Some(99.0), expectedReductions: map[limes.AvailabilityZone]uint8{"az-one": 60, "az-two": 40}},
 	} {
 		cfg.ReduceQuotaOvercommitFromAllocatedPercent = ocCfg.fromAllocatedPercent
@@ -510,6 +507,87 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		map[liquid.AvailabilityZone]uint8{liquid.AvailabilityZoneAny: 100})
 
 	// Realistically, there cannot be a case where we are not at 100% overcommit reduction
+}
+
+func TestACPQSoftMinPhaseExhaustsCapacity(t *testing.T) {
+	// This test covers the regression where the soft-minimum phase (phase 2)
+	// drains all remaining capacity in a real AZ. With partial overcommit
+	// reduction active, the subsequent desired and base phases must still
+	// apply the reduction-scaled interpolation even though availableCapacity
+	// is zero.
+	//
+	// Other tests cover this in topology=flat, so we only test the others here.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				// 401 has a large commitment that dominates the hard minimum;
+				// its soft minimum (MaxHistoricalUsage 40) is already below the committed amount,
+				// so it has no soft-minimum demand
+				401: {Committed: 60, Usage: 20, MinHistoricalUsage: 20, MaxHistoricalUsage: 40},
+				// 402 drives the soft-minimum exhaustion: hard minimum 28, soft minimum 45,
+				// demand 17 against only 12 remaining capacity after hard minimums (100 - 88 = 12)
+				402: {Usage: 28, MinHistoricalUsage: 30, MaxHistoricalUsage: 45},
+			},
+		},
+		"az-two": {
+			Capacity: 20,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: {},
+				402: {Usage: 2, MinHistoricalUsage: 2, MaxHistoricalUsage: 4},
+			},
+		},
+		liquid.AvailabilityZoneAny: {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.3,
+		ProjectBaseQuota: 5,
+	}
+
+	// az-one utilization is 88% (hard mins 60+28=88 of 100) -> 40% reduction in az-one.
+	// az-two utilization is 10% (2 of 20) -> below the window -> 0% reduction.
+	//
+	// Phase 2 (soft minimum): az-one has 12 remaining, 402 requests 17 -> granted 12 -> 40.
+	//   Interpolation: upper 45, lower 40, 40 + ((45-40)*0.6) = 40 + 3 = 43.
+	//   az-one is now full (60+43 = 103 > 100).
+	//   az-two has reduction 0 -> 402 gets full soft minimum 4.
+	//
+	// Phase 3 (desired): az-one availableCapacity = 0.
+	//   401: desired 78 (60*1.3), 60 + ((78-60)*0.6) = 60 + 11 = 71.
+	//   402: desired 39 (30*1.3) < allocated (43) -> no change.
+	//   az-two: 402 desired 3 (max(2*1.3, 2+1)) < allocated 4 -> no change.
+	//
+	// Phase 4 (base quota 5): both projects exceed 5 in localized AZs -> no "any" demand.
+	//   But TryFulfillDesired re-runs on az-one (still 0 remaining):
+	//   401: interpolation 71 + ((78-71)*0.6) = 71 + 4 = 75.
+	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(85.0)
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(95.0)
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 75}, // 60 -> 71 (phase 3, interpolation) -> 75 (4, interpolation)
+			402: {Allocated: 43}, // 28 -> 40 (grant) -> 43 (phase 2, interpolation)
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 4}, // full soft minimum (no reduction in az-two)
+		},
+		liquid.AvailabilityZoneAny: {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		liquid.AvailabilityZoneTotal: {
+			401: {Allocated: 75}, // 75 + 0 + 0
+			402: {Allocated: 47}, // 43 + 4 + 0
+		},
+	},
+		db.Resource{Topology: liquid.AZAwareTopology},
+		map[limes.AvailabilityZone]uint8{"az-one": 40, "az-two": 0, limes.AvailabilityZoneAny: 40})
 }
 
 func TestCapacityLimitsBaseQuotaAllocation(t *testing.T) {

@@ -77,8 +77,8 @@ func (c clusterAZAllocationStats) computeQuotaOvercommitReduction(cfg core.Autog
 		}
 		// we can assume that lower is smaller than upper because of config validation
 		// this does the step function to the nearest 25%, mapping to a reduction of 20% steps
-		step := min(max(int(((usedPercent-lowerLimit)/(upperLimit-lowerLimit)*4)+1), 0), 5)
-		reduction = uint8(step) * 20
+		step := uint8(min(max(((usedPercent-lowerLimit)/(upperLimit-lowerLimit)*4)+1, 0), 5))
+		reduction = step * 20
 		reductionInAny = reduction
 		return
 	}
