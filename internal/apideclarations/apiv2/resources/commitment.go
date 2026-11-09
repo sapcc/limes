@@ -67,7 +67,7 @@ type CommitmentRequest struct {
 	// DryRun can be set to true to avoid any side effects: No data will be saved in the system.
 	// The response from a dry run will be identical to if a commitment had actually been created,
 	// except that the UUID will be set to a dummy value.
-	DryRun bool   `json:"dry_run"`
+	DryRun bool   `json:"dry_run,omitempty"`
 	Amount uint64 `json:"amount"`
 	// Duration must be one of the values that appear in the resource's [ResourceInfoReport].
 	Duration limesresources.CommitmentDuration `json:"duration"`
@@ -115,9 +115,9 @@ type CommitmentRenewRequest struct {
 
 // CommitmentReceiveRequest is the request payload format for POST /v2/commitments/:uuid/receive.
 type CommitmentReceiveRequest struct {
-	TargetProjectUUID liquid.ProjectUUID `json:"target_project_id"` // token scope must cover this project
-	TransferToken     string             `json:"transfer_token"`    // may be empty if token scope covers source project
-	Amount            Option[uint64]     `json:"amount"`            // if set, split the commitment and only transfer this portion (TODO: only allow for TransferStatusPublic?)
+	TargetProjectUUID liquid.ProjectUUID `json:"target_project_id"`        // token scope must cover this project
+	TransferToken     string             `json:"transfer_token,omitempty"` // may be empty if token scope covers source project
+	Amount            Option[uint64]     `json:"amount,omitzero"`          // if set, split the commitment and only transfer this portion (TODO: only allow for TransferStatusPublic?)
 }
 
 // CommitmentConvertRequest is the request payload format for POST /v2/commitments/:uuid/convert.

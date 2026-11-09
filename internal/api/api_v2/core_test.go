@@ -71,6 +71,14 @@ func TestDomainNameSeparation(t *testing.T) {
 				ExpectStatus(t, http.StatusOK)
 			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v2/resources/info`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
 				ExpectStatus(t, http.StatusOK)
+
+			// version discovery on GET / must work for both V1 and V2 domain names
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limes.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limitas.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
 		})
 	}
 }

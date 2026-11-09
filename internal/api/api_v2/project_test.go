@@ -477,7 +477,7 @@ func TestV2ProjectPatchResource(t *testing.T) {
 		}.Render(),
 	})
 
-	// no-op: omitting max_quota from body means no change → no DB change, no audit event
+	// no-op: empty body does nothing
 	s.Handler.RespondTo(s.Ctx, "PATCH "+thingsPath, httptest.WithJSONBody(map[string]any{})).
 		ExpectText(t, http.StatusNoContent, "")
 	tr.DBChanges().AssertEmpty()
@@ -863,6 +863,12 @@ func TestV2ProjectPatchRate(t *testing.T) {
 			},
 		}.Render(),
 	})
+
+	// no-op: empty body does nothing
+	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{})).
+		ExpectStatus(t, http.StatusNoContent)
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
 
 	// error cases: validation
 

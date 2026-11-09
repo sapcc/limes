@@ -74,6 +74,6 @@ type ProjectRateReport struct {
 
 // ProjectRatePatchRequest is the request payload format for PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid.
 type ProjectRatePatchRequest struct {
-	Limit  common.Uint64OrNegativeOne `json:"limit"`           // -1 means infinite (remove the Limit)
-	Window Option[limesrates.Window]  `json:"window,omitzero"` // has to be Some() when Limit != -1
+	Limit  Option[common.Uint64OrNegativeOne] `json:"limit"`           // -1 means infinite (remove the Limit)
+	Window Option[limesrates.Window]          `json:"window,omitzero"` // has to be Some() when Limit.IsSome() and value != -1
 }

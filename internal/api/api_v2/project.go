@@ -278,10 +278,15 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 	if !rExists {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchRate)
 	}
-	if req.Limit.AsOption().IsSome() && req.Window.IsNone() {
+	limit, limitExists := req.Limit.Unpack()
+	if !limitExists && req.Window.IsNone() {
+		// early return for empty body
+		return none, nil
+	}
+	if limit.AsOption().IsSome() && req.Window.IsNone() {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must be set when limit != -1"))
 	}
-	if req.Limit.AsOption().IsNone() && req.Window.IsSome() {
+	if limit.AsOption().IsNone() && req.Window.IsSome() {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must not be set when limit == -1"))
 	}
 	serviceConfig, cExists := p.Cluster.Config.GetLiquidConfigurationForType(serviceType)
@@ -308,7 +313,7 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 	// modifications
 	oldLimit := projectRate.Limit
 	oldWindow := projectRate.Window
-	projectRate.Limit = req.Limit.AsOption()
+	projectRate.Limit = limit.AsOption()
 	projectRate.Window = req.Window
 
 	// early return or insert/update

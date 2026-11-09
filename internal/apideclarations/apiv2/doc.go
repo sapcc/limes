@@ -25,6 +25,8 @@
 // The documentation for an endpoint may refer to a request body being expected or a response body being generated on success.
 // In all such cases, the request or response body will be encoded as "Content-Type: application/json".
 // The structure of the payload must conform to how the referenced Go type would be serialized by the Go standard library's "encoding/json" package.
+// All request body fields that are not tagged with omitempty or omitzero must be present in the JSON object;
+// omitting a required field will result in a 400 (Bad Request) error.
 //
 // When producing a successful response, the status code shall be 200 (OK) unless noted otherwise.
 // When producing an error response (with a status code between 400 and 599), the liquid shall include a response body of "Content-Type: text/plain" to indicate the error.
