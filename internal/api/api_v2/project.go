@@ -18,8 +18,6 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
-	. "go.xyrillian.de/gg/option"
-
 	"github.com/sapcc/limes/internal/api/reports_v2"
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
@@ -198,36 +196,26 @@ func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherp
 
 	// handle autogrowth change
 	oldAutogrowth := projectResource.ForbidAutogrowth
-	dirty := false
 	if newValue, requested := req.ForbidAutogrowth.Unpack(); requested {
 		behavior := p.Cluster.CommitmentBehaviorForResourcePath(res.Path).ForDomain(scope.Domain.Name)
 		if len(behavior.Durations) == 0 && newValue {
 			return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotHaveCommitments)
 		}
-		if projectResource.ForbidAutogrowth != newValue {
-			dirty = true
-			projectResource.ForbidAutogrowth = newValue
-		}
+		projectResource.ForbidAutogrowth = newValue
 	}
 
 	// handle max-quota change
-	oldMaxQuota := None[uint64]()
-	newMaxQuota := None[uint64]()
+	oldMaxQuota := projectResource.MaxQuotaFromOutsideAdmin
 	if newValueUnconverted, requested := req.MaxQuota.Unpack(); requested {
 		err = token.Enforce("v2:project:resource_update_admin")
 		if err != nil {
 			return none, err
 		}
-		newMaxQuota = newValueUnconverted.AsOption()
-		if projectResource.MaxQuotaFromOutsideAdmin != newMaxQuota {
-			dirty = true
-			oldMaxQuota = projectResource.MaxQuotaFromOutsideAdmin
-			projectResource.MaxQuotaFromOutsideAdmin = newMaxQuota
-		}
+		projectResource.MaxQuotaFromOutsideAdmin = newValueUnconverted.AsOption()
 	}
 
 	// early return or update
-	if !dirty {
+	if projectResource.ForbidAutogrowth == oldAutogrowth && projectResource.MaxQuotaFromOutsideAdmin == oldMaxQuota {
 		return none, nil
 	}
 	err = db.ProjectResourceStore.Update(ctx, p.DB, projectResource)
@@ -251,7 +239,7 @@ func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherp
 			ResourceName: resourceName,
 			RequestedChange: audit.V2ProjectResourceChange{
 				OldMaxQuota:         oldMaxQuota,
-				NewMaxQuota:         newMaxQuota,
+				NewMaxQuota:         projectResource.MaxQuotaFromOutsideAdmin,
 				OldForbidAutogrowth: oldAutogrowth,
 				NewForbidAutogrowth: projectResource.ForbidAutogrowth,
 			},

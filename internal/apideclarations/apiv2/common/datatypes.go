@@ -5,6 +5,7 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -70,29 +71,32 @@ type Uint64OrNegativeOne Option[uint64]
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
 func (t *Uint64OrNegativeOne) UnmarshalJSON(buf []byte) error {
+	if string(buf) == "null" {
+		return errors.New("cannot unmarshal null to Uint64OrNegativeOne")
+	}
 	var value json.Number
 	err := json.Unmarshal(buf, &value)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot unmarshal to Uint64OrNegativeOne: %w", err)
 	}
 	stringValue := value.String()
-	if stringValue[0] == '-' {
+	if stringValue != "" && stringValue[0] == '-' {
 		negativeValue, err := strconv.ParseInt(stringValue, 10, 64)
 		if err != nil {
-			return fmt.Errorf("Uint64OrNegativeOne was negative but not parsable as int64 (was %s)", value)
+			return fmt.Errorf("Uint64OrNegativeOne was negative but not parsable as int64 (was %q)", value)
 		}
 		if negativeValue == 0 {
 			*t = Uint64OrNegativeOne(Some(uint64(negativeValue)))
 			return nil
 		}
 		if negativeValue < -1 {
-			return fmt.Errorf("Uint64OrNegativeOne must be >= -1 (was %s)", value)
+			return fmt.Errorf("Uint64OrNegativeOne must be >= -1 (was %q)", value)
 		}
 		*t = Uint64OrNegativeOne(None[uint64]())
 	} else {
 		positiveValue, err := strconv.ParseUint(stringValue, 10, 64)
 		if err != nil {
-			return fmt.Errorf("Uint64OrNegativeOne was positive but not parsable as uint64 (was %s)", value)
+			return fmt.Errorf("Uint64OrNegativeOne was not parsable as uint64 (was %q)", value)
 		}
 		*t = Uint64OrNegativeOne(Some(positiveValue))
 	}

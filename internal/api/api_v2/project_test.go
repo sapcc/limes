@@ -619,7 +619,7 @@ func TestV2ProjectPatchResource(t *testing.T) {
 	// error case: value below -1
 	s.Handler.RespondTo(s.Ctx, "PATCH "+thingsPath, httptest.WithJSONBody(map[string]any{
 		"max_quota": -2,
-	})).ExpectText(t, http.StatusBadRequest, "request body is not valid JSON: Uint64OrNegativeOne must be >= -1 (was -2)\n")
+	})).ExpectText(t, http.StatusBadRequest, "request body is not valid JSON: Uint64OrNegativeOne must be >= -1 (was \"-2\")\n")
 	tr.DBChanges().AssertEmpty()
 	s.Auditor.ExpectEvents(t)
 

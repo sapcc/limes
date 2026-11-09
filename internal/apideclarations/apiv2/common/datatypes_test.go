@@ -92,5 +92,13 @@ func TestUnmarshalUint64OrNegativeOne(t *testing.T) {
 
 	input = "-1234"
 	err = json.Unmarshal([]byte(input), &u)
-	assert.ErrEqual(t, err, "Uint64OrNegativeOne must be >= -1 (was -1234)")
+	assert.ErrEqual(t, err, `Uint64OrNegativeOne must be >= -1 (was "-1234")`)
+
+	input = "null"
+	err = json.Unmarshal([]byte(input), &u)
+	assert.ErrEqual(t, err, `cannot unmarshal null to Uint64OrNegativeOne`)
+
+	input = `""`
+	err = json.Unmarshal([]byte(input), &u)
+	assert.ErrEqual(t, err, `cannot unmarshal to Uint64OrNegativeOne: json: cannot unmarshal string "" into Go value of type json.Number: invalid syntax`)
 }
