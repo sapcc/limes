@@ -10,8 +10,8 @@ import (
 	"slices"
 
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/oblast"
 )
 
 // SetUpdate describes an operation where we have an existing set of records (type R),
