@@ -72,7 +72,7 @@ func (c *Collector) checkConsistency(ctx context.Context, _ prometheus.Labels) e
 	// (this is also done by core.SaveServiceInfoToDB() on startup, so this is
 	// only defense in depth against garbage entries entering the DB somehow)
 	knownServiceTypes := slices.Sorted(maps.Keys(c.Cluster.Config.Liquids))
-	deletedTypes, err := db.SelectSeveralValues[db.ServiceType](c.DB, deleteSuperfluousServicesQuery, pq.Array(knownServiceTypes))
+	deletedTypes, err := oblast.Select[db.ServiceType](ctx, c.DB, deleteSuperfluousServicesQuery, pq.Array(knownServiceTypes)).Collect()
 	if err != nil {
 		return fmt.Errorf("while cleaning up services: %w", err)
 	}

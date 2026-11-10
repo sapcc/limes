@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
@@ -107,12 +108,12 @@ var (
 	`))
 )
 
-func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
+func (c *Collector) discoverCapacityScrapeTask(ctx context.Context, _ prometheus.Labels) (task capacityScrapeTask, err error) {
 	task.ScrapeTiming.StartedAt = c.MeasureTime()
 	// CheckConsistencyJob will ensure that all services are present in the DB. Before it runs,
 	// we might have a service entry without a corresponding LiquidConnection or vise versa.
 
-	str, err := db.SelectOneValue[string](c.DB, findServiceForScrapeQuery, task.ScrapeTiming.StartedAt)
+	str, err := oblast.SelectOne[string](ctx, c.DB, findServiceForScrapeQuery, task.ScrapeTiming.StartedAt)
 	if err != nil {
 		return task, err
 	}
