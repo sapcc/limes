@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"

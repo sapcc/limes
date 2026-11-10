@@ -19,9 +19,9 @@ import (
 	"github.com/sapcc/limes/internal/util"
 
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
-	"go.xyrillian.de/oblast"
 )
 
 ///////////////////////////////////////////////////////////////////////

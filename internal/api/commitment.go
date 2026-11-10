@@ -27,9 +27,9 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/options"
-	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/core"

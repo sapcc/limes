@@ -14,8 +14,8 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/oblast"
 	"go.xyrillian.de/gg/options"
-	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"

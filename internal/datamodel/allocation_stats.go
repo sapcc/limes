@@ -12,7 +12,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/is"
-	"go.xyrillian.de/oblast"
+	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"

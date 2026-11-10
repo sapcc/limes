@@ -24,8 +24,8 @@ import (
 	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/is"
 	"go.xyrillian.de/gg/microprom"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"

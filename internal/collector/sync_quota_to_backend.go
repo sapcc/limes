@@ -15,8 +15,8 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
-	"go.xyrillian.de/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
