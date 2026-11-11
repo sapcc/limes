@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/cadf"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-api-declarations/opts"
 	"github.com/sapcc/go-bits/audittools"
@@ -24,6 +25,8 @@ import (
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
 	"github.com/sapcc/limes/internal/audit"
 	"github.com/sapcc/limes/internal/db"
+
+	. "go.xyrillian.de/gg/option"
 )
 
 // handleGetResourcesProjects handles GET /v2/resources/projects.
@@ -279,9 +282,12 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchRate)
 	}
 	limit, limitExists := req.Limit.Unpack()
-	if !limitExists && req.Window.IsNone() {
-		// early return for empty body
-		return none, nil
+	if !limitExists {
+		if req.Window.IsNone() {
+			// early return for empty body
+			return none, nil
+		}
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("limit must be set when window is set"))
 	}
 	if limit.AsOption().IsSome() && req.Window.IsNone() {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must be set when limit != -1"))
@@ -298,7 +304,7 @@ func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolic
 	if !defaultExists {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("project-level rate limits not supported for this rate"))
 	}
-	if window, wExists := req.Window.Unpack(); wExists && window == 0 {
+	if req.Window == Some[limesrates.Window](0) {
 		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("invalid value for window: 0"))
 	}
 

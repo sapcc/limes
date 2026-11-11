@@ -62,7 +62,7 @@ func (p *v2Provider) AddTo(c *httpapi.Composer) {
 	r.Methods("GET").Path("/resources/domains/{domain_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesDomain))
 	r.Methods("GET").Path("/resources/projects").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProjects))
 	r.Methods("GET").Path("/resources/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusOK, tv, p.handleGetResourcesProject))
-	// TODO: when migrating to pathrouter, add a check to ensure that this cannot match endpoints of other options (i.e. service_type != ANY("info", "cluster", "domains", "projects"))
+	// TODO: when migrating to pathrouter, add a check to ensure that this cannot match endpoints of other options (i.e. service_type != ANY("info", "cluster", "domains", "projects", "commitments"))
 	r.Methods("PATCH").Path("/resources/{service_type}/{resource_name}/projects/{project_uuid}").HandlerFunc(handlerFunc(http.StatusNoContent, tv, p.handlePatchResourcesProject))
 
 	r.Methods("POST").Path("/resources/commitments/new").HandlerFunc(handlerFunc(http.StatusCreated, tv, p.handlePostNewCommitment))

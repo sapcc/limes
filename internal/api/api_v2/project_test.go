@@ -872,6 +872,13 @@ func TestV2ProjectPatchRate(t *testing.T) {
 
 	// error cases: validation
 
+	// error case: window without limit
+	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
+		"window": "1s",
+	})).ExpectText(t, http.StatusBadRequest, "limit must be set when window is set\n")
+	tr.DBChanges().AssertEmpty()
+	s.Auditor.ExpectEvents(t)
+
 	// error case: limit without window
 	s.Handler.RespondTo(s.Ctx, "PATCH "+ratePath, httptest.WithJSONBody(map[string]any{
 		"limit": 10,

@@ -34,7 +34,6 @@ func (p *versionProvider) AddTo(c *httpapi.Composer) {
 	//       that appears in the Keystone catalog. These are, by service type:
 	//
 	// - resources:   https://$LIMES_API_DOMAIN_NAME_V1/
-	// - limes-rates: https://$LIMES_API_DOMAIN_NAME_V1/
 	// - limitas:     https://$LIMES_API_DOMAIN_NAME_V2/
 	//
 	// Also, for maximum backwards compatibility, https://$LIMES_API_DOMAIN_NAME_V1/v1/ is also understood.
