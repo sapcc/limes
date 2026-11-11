@@ -564,13 +564,11 @@ func TestACPQSoftMinPhaseExhaustsCapacity(t *testing.T) {
 	//   az-two: 402 desired 3 (max(2*1.3, 2+1)) < allocated 4 -> no change.
 	//
 	// Phase 4 (base quota 5): both projects exceed 5 in localized AZs -> no "any" demand.
-	//   But TryFulfillDesired re-runs on az-one (still 0 remaining):
-	//   401: interpolation 71 + ((78-71)*0.6) = 71 + 4 = 75.
 	cfg.ReduceQuotaOvercommitFromAllocatedPercent = Some(85.0)
 	cfg.AllowQuotaOvercommitUntilAllocatedPercent = Some(95.0)
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
-			401: {Allocated: 75}, // 60 -> 71 (phase 3, interpolation) -> 75 (4, interpolation)
+			401: {Allocated: 71}, // 60 -> 71 (phase 3, interpolation)
 			402: {Allocated: 43}, // 28 -> 40 (grant) -> 43 (phase 2, interpolation)
 		},
 		"az-two": {
@@ -582,8 +580,8 @@ func TestACPQSoftMinPhaseExhaustsCapacity(t *testing.T) {
 			402: {Allocated: 0},
 		},
 		liquid.AvailabilityZoneTotal: {
-			401: {Allocated: 75}, // 75 + 0 + 0
-			402: {Allocated: 47}, // 43 + 4 + 0
+			401: {Allocated: 71},
+			402: {Allocated: 47},
 		},
 	},
 		db.Resource{Topology: liquid.AZAwareTopology},

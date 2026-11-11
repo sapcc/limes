@@ -556,4 +556,14 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	reduction := quotaOvercommitReduction[limes.AvailabilityZoneAny]
 	granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
 	anyTarget.AddGranted(granted, overcommitedDesired[limes.AvailabilityZoneAny], reduction)
+
+	target.resetDesiredToAllocated()
+}
+
+func (target acpqGlobalTarget) resetDesiredToAllocated() {
+	for _, azTarget := range target {
+		for _, projectTarget := range azTarget {
+			projectTarget.Desired = projectTarget.Allocated
+		}
+	}
 }
