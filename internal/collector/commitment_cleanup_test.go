@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-bits/httptest"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/collector"
@@ -78,7 +79,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// and their respective project resources created
 	_, err := s.Collector.ScanDomains(s.Ctx, collector.ScanDomainsOpts{})
 	must.SucceedT(t, err)
-	projectCount := must.ReturnT(db.SelectOneValue[int](s.DB, `SELECT COUNT(*) FROM projects`))(t)
+	projectCount := must.ReturnT(oblast.SelectOne[int](s.Ctx, s.DB, `SELECT COUNT(*) FROM projects`))(t)
 	scrapeJob := s.Collector.ScrapeJob(s.Registry)
 	must.SucceedT(t, jobloop.ProcessMany(scrapeJob, s.Ctx, projectCount, jobloop.WithLabel("service_type", "unittest")))
 

@@ -13,6 +13,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/db"
 )
@@ -65,7 +66,7 @@ func (c *Collector) discoverMailDeliveryTask(ctx context.Context, _ prometheus.L
 }
 
 func (c *Collector) processMailDeliveryTask(ctx context.Context, task db.MailNotification, client MailClient, _ prometheus.Labels) error {
-	projectUUID, err := db.SelectOneValue[string](c.DB, `SELECT uuid FROM projects WHERE id = $1`, task.ProjectID)
+	projectUUID, err := oblast.SelectOne[string](ctx, c.DB, `SELECT uuid FROM projects WHERE id = $1`, task.ProjectID)
 	if err != nil {
 		return err
 	}

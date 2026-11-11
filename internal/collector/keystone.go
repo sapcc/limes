@@ -19,6 +19,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -264,7 +265,7 @@ var (
 func (c *Collector) deleteProject(ctx context.Context, project db.Project) error {
 	// do this in a transaction to avoid commitment deletions going through unless actually necessary
 	return c.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
-		result, err := db.SelectOneValue[int64](tx, deleteProjectCheckBlockingCommitmentsQuery, project.ID)
+		result, err := oblast.SelectOne[int64](ctx, tx, deleteProjectCheckBlockingCommitmentsQuery, project.ID)
 		if err != nil {
 			return err
 		}

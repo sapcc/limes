@@ -24,6 +24,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
 
@@ -257,9 +258,9 @@ var deleteFuncCheckQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholders(`
 			WHERE path LIKE $1
 			AND status NOT IN ({{liquid.CommitmentStatusSuperseded}}, {{liquid.CommitmentStatusExpired}}, {{util.CommitmentStatusDeleted}})`))
 
-func generateDeleteFunc[T any](dbm *gsql.DB, getAZResourcePathPattern func(o T) string) func(T) error {
+func generateDeleteFunc[T any](ctx context.Context, dbm *gsql.DB, getAZResourcePathPattern func(o T) string) func(T) error {
 	return func(o T) error {
-		hasLeftovers, err := db.SelectOneValue[bool](dbm, deleteFuncCheckQuery, getAZResourcePathPattern(o))
+		hasLeftovers, err := oblast.SelectOne[bool](ctx, dbm, deleteFuncCheckQuery, getAZResourcePathPattern(o))
 		if err != nil {
 			return fmt.Errorf("cannot get project commitments count: %w", err)
 		}
@@ -353,7 +354,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				service.CommitmentHandlingNeedsProjectMetadata = serviceInfo.CommitmentHandlingNeedsProjectMetadata
 				return nil
 			},
-			PreDelete: Some(generateDeleteFunc(dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
+			PreDelete: Some(generateDeleteFunc(ctx, dbm, func(_ db.Service) string { return string(serviceType) + "/%/%" })),
 		}
 		dbServices, err = serviceUpdate.Execute(ctx, tx, db.ServiceStore)
 		if err != nil {
@@ -454,7 +455,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				res.HandlesCommitments = resInfo.HandlesCommitments
 				return nil
 			},
-			PreDelete: Some(generateDeleteFunc(dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
+			PreDelete: Some(generateDeleteFunc(ctx, dbm, func(r db.Resource) string { return r.Path.String() + "/%" })),
 		}
 		dbResources, err = resourceUpdate.Execute(ctx, tx, db.ResourceStore)
 		if err != nil {
@@ -474,7 +475,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			// For commitments, our strategy cannot be rounding, because this has billing impact.
 			// Therefore, we block it - any operation where we would have to round prevents the unit change.
 			// We use integer modulo arithmetic to avoid floating-point precision issues.
-			nonConvertibleEntries, err := db.SelectOneValue[int](tx, sqlext.SimplifyWhitespace(`SELECT COUNT(*)
+			nonConvertibleEntries, err := oblast.SelectOne[int](ctx, tx, sqlext.SimplifyWhitespace(`SELECT COUNT(*)
 			FROM project_commitments pc
 			JOIN az_resources azr ON pc.az_resource_id = azr.id
 			WHERE (pc.amount::NUMERIC * $1) % $2 != 0 AND azr.resource_id = $3`), oldFactor, newFactor, resID)
@@ -562,7 +563,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 					// we don't know more than the existence of the AZ, so we don't update anything
 					return nil
 				},
-				PreDelete: Some(generateDeleteFunc(dbm, func(azr db.AZResource) string { return azr.Path.String() })),
+				PreDelete: Some(generateDeleteFunc(ctx, dbm, func(azr db.AZResource) string { return azr.Path.String() })),
 			}
 			_, err = setUpdate.Execute(ctx, tx, db.AZResourceStore)
 			if err != nil {

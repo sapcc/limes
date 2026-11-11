@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 	"go.xyrillian.de/gg/assert"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
 
@@ -865,7 +866,7 @@ func expectStaleProjectServices(t *testing.T, dbm *gsql.DB, pairs ...string) {
 		 ORDER BY p.name, s.type
 	`)
 
-	actualPairs := must.ReturnT(db.SelectSeveralValues[string](dbm, queryStr))(t)
+	actualPairs := must.ReturnT(oblast.Select[string](t.Context(), dbm, queryStr).Collect())(t)
 	assert.Equal(t, actualPairs, pairs)
 }
 
