@@ -88,16 +88,16 @@ func TestV2DomainResourceReport(t *testing.T) {
 
 	// permission checks
 	s.TokenValidator.Enforcer.AllowReportMultiple = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportMultiple = true
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains/uuid-for-france").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains/uuid-for-france").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// full result with all options
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "all options"))
 
 	var (
@@ -110,40 +110,40 @@ func TestV2DomainResourceReport(t *testing.T) {
 	)
 
 	// without any extras
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutCommitmentStatsMods...))
 
 	// with=commitment_stats only
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "commitment_stats only").
 			Modify(withoutInfoMods...))
 
 	// single domain
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains/uuid-for-france?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains/uuid-for-france?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
 			Modify(`del(.domains["uuid-for-germany"])`))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains/uuid-for-germany?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains/uuid-for-germany?with=info&with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter germany").
 			Modify(`del(.domains["uuid-for-france"])`))
 
 	// filter by area
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify("del(.info.service_areas.first)").
 			Modify("del(.domains[].service_areas.first)").
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by service
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=info&service=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=info&service=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify("del(.info.service_areas.second)").
 			Modify("del(.domains[].service_areas.second)").
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by resource
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "resource filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -152,7 +152,7 @@ func TestV2DomainResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by category
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -161,7 +161,7 @@ func TestV2DomainResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// unknown domain
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/domains/does-not-exist").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exist)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/domains/does-not-exist").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exist)\n")
 }
 
 func TestV2DomainRateReport(t *testing.T) {
@@ -188,60 +188,60 @@ func TestV2DomainRateReport(t *testing.T) {
 	s.MustDBExec(`UPDATE project_rates SET usage_as_bigint = '5' WHERE rate_id != $1`, updatesUpdateRateID)
 
 	s.TokenValidator.Enforcer.AllowReportMultiple = false
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportMultiple = true
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains/uuid-for-france").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains/uuid-for-france").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// the maximum result set includes the info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "with-info"))
 
 	// without info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify("del(.info)"))
 
 	// one domain
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains/uuid-for-france?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains/uuid-for-france?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter france").
 			Modify(`del(.domains["uuid-for-germany"])`))
 	// the other domain
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains/uuid-for-germany?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains/uuid-for-germany?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain filter germany").
 			Modify(`del(.domains["uuid-for-france"])`))
 
 	// when filtering for a certain rate, the info and report get filtered similarly
 	// area: this will lead to an empty report, hence the structure is cut off at a higher level!
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify(".domains=null").
 			Modify("del(.info.service_areas.first)"))
 	// service: also empty report
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info&service=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info&service=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify(".domains=null").
 			Modify("del(.info.service_areas.first)"))
 	// category
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.domains[].service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))
 	// category - special case: empty category (category = service type)
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info&category=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info&category=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter - empty category/ equal service type").
 			Modify("del(.domains[].service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.second)"))
 	// rate
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "rate filter").
 			Modify("del(.domains[].service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))
 
 	// unknown domain
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/domains/does-not-exists").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exists)\n")
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/domains/does-not-exists").ExpectText(t, http.StatusNotFound, "no such domain (UUID = does-not-exists)\n")
 }

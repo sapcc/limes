@@ -29,7 +29,7 @@ import (
 )
 
 func (p *v2Provider) handleDeleteCommitment(r *http.Request, token *gopherpolicy.Token) (any, error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/:commitment_uuid")
 	var (
 		ctx = r.Context()
 		sis = p.Cluster.SIC.GetSnapshot()

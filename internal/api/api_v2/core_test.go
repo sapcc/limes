@@ -27,7 +27,7 @@ func TestRequestBodyParsing(t *testing.T) {
 	)
 
 	// overlong request body
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new",
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new",
 		httptest.WithHeader("Content-Type", "application/json"),
 		httptest.WithBody(strings.NewReader(
 			fmt.Sprintf(`{"service_type":"%s"}`, strings.Repeat("a", 10000)),
@@ -35,13 +35,13 @@ func TestRequestBodyParsing(t *testing.T) {
 	).ExpectText(t, http.StatusRequestEntityTooLarge, "request body too large\n")
 
 	// request body that is not a JSON payload
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new",
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new",
 		httptest.WithHeader("Content-Type", "application/json"),
 		httptest.WithBody(strings.NewReader("I need more quota kthxbye")),
 	).ExpectText(t, http.StatusBadRequest, "request body is not valid JSON: invalid character 'I' looking for beginning of value\n")
 
 	// multiple JSON payloads in request body
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new",
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new",
 		httptest.WithHeader("Content-Type", "application/json"),
 		httptest.WithBody(strings.NewReader(`{"service_type":"first"}{"service_type":"second"}`)),
 	).ExpectText(t, http.StatusBadRequest, "request body contains 25 unexpected bytes after the JSON payload\n")
@@ -65,12 +65,20 @@ func TestDomainNameSeparation(t *testing.T) {
 
 	for _, format := range []string{"http://%s", "http://%s:8080", "https://%s", "https://%s:4443"} {
 		t.Run("format="+format, func(t *testing.T) {
-			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limes.example.com"))).
-				ExpectText(t, http.StatusBadRequest, "endpoint /resources/v2/info cannot be accessed on limes.example.com\n")
-			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limitas.example.com"))).
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v2/resources/info`, fmt.Sprintf(format, "limes.example.com"))).
+				ExpectText(t, http.StatusBadRequest, "endpoint /v2/resources/info cannot be accessed on limes.example.com\n")
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v2/resources/info`, fmt.Sprintf(format, "limitas.example.com"))).
 				ExpectStatus(t, http.StatusOK)
-			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/resources/v2/info`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/v2/resources/info`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
 				ExpectStatus(t, http.StatusOK)
+
+			// version discovery on GET / must work for both V1 and V2 domain names
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limes.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limitas.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
+			s.Handler.RespondTo(ctx, fmt.Sprintf(`GET %s/`, fmt.Sprintf(format, "limes-api.limes.svc.example.com"))).
+				ExpectStatus(t, http.StatusSeeOther)
 		})
 	}
 }

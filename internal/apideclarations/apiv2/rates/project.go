@@ -13,11 +13,11 @@ import (
 	. "go.xyrillian.de/gg/option"
 )
 
-// ProjectGetResponse is the response type for GET /rates/v2/projects(/:project_uuid)?.
+// ProjectGetResponse is the response type for GET /v2/rates/projects(/:project_uuid)?.
 // It contains the latest state of all dynamic rate data for one or many projects.
 // The data comes directly from the project level.
 type ProjectGetResponse struct {
-	// InfoReport is what GET /rates/v2/info would report.
+	// InfoReport is what GET /v2/rates/info would report.
 	// It is only returned when the respective query option with=info is set.
 	InfoReport    Option[InfoReport]                `json:"info,omitzero"`
 	DomainReports map[string]ProjectsByDomainReport `json:"domains"`
@@ -70,4 +70,10 @@ type ProjectRateReport struct {
 	// If the rate does not have a local project rate limit, this will be None.
 	ProjectLimit  Option[uint64]            `json:"project_limit,omitzero"`
 	ProjectWindow Option[limesrates.Window] `json:"project_window,omitzero"`
+}
+
+// ProjectRatePatchRequest is the request payload format for PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid.
+type ProjectRatePatchRequest struct {
+	Limit  Option[common.Uint64OrNegativeOne] `json:"limit"`           // -1 means infinite (remove the Limit)
+	Window Option[limesrates.Window]          `json:"window,omitzero"` // has to be Some() when Limit.IsSome() and value != -1
 }

@@ -80,7 +80,7 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 	dryrunRequest["dry_run"] = true
 	dryrunExpected := maps.Clone(expected)
 	dryrunExpected["uuid"] = jsonmatch.Irrelevant()
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(dryrunRequest)).
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(dryrunRequest)).
 		ExpectJSON(t, http.StatusCreated, dryrunExpected)
 
 	s.Auditor.ExpectEvents(t, nil...)
@@ -94,14 +94,14 @@ func createCommitmentAndExpectSuccess(t *testing.T, s test.Setup, tr *easypg.Tra
 
 	// after creating the commitment, we expect to see an audit event
 	// (the DB effect is not checked here; the caller will take care of that afterwards)
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(request)).
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(request)).
 		ExpectJSON(t, http.StatusCreated, expected)
 	target := getTarget() // this is a callback because we need to wait for ExpectJSON() to capture the UUID in expected["uuid"] first
 	s.Auditor.ExpectEvents(t, cadf.Event{
 		Action:      "create",
 		Outcome:     "success",
 		Reason:      cadf.Reason{ReasonType: "HTTP", ReasonCode: "201"},
-		RequestPath: "/resources/v2/commitments/new",
+		RequestPath: "/v2/resources/commitments/new",
 		Target:      target,
 	})
 
@@ -125,8 +125,8 @@ func createCommitmentAndExpectError(t *testing.T, s test.Setup, tr *easypg.Track
 	dryrunRequest := maps.Clone(request)
 	dryrunRequest["dry_run"] = true
 
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(dryrunRequest)).Expect(expect)
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(request)).Expect(expect)
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(dryrunRequest)).Expect(expect)
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(request)).Expect(expect)
 	tr.DBChanges().AssertEmpty() // since both requests failed
 }
 
@@ -494,7 +494,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 		"availability_zone": "az-one",
 		"status":            "pending",
 	}, func(r httptest.Response) {
-		r.ExpectText(t, http.StatusUnprocessableEntity, "resource is not enabled in this project\n")
+		r.ExpectText(t, http.StatusForbidden, "resource is not enabled in this project\n")
 	})
 	s.MustDBExec(`UPDATE project_resources SET forbidden = $1 WHERE project_id = $2 AND resource_id = $3`, false, berlinID, firstCapacityID)
 	tr.DBChanges().Ignore()
@@ -635,7 +635,7 @@ func TestCommitmentCreateValidationErrors(t *testing.T) {
 	})
 
 	// HOWEVER a commitment with confirm_by = min_confirm_by exactly should be accepted
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"dry_run":           true,
 		"amount":            1,
 		"duration":          "1 hour",
@@ -684,7 +684,7 @@ func TestCommitmentCreateRejectedByLiquid(t *testing.T) {
 	mockLiquid.CommitmentChangeResponse.Set(liquid.CommitmentChangeResponse{
 		RejectionReason: "datacenter is not accepting new commitments at this time (reason: on fire)",
 	})
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            1,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-berlin",
@@ -701,7 +701,7 @@ func TestCommitmentCreateRejectedByLiquid(t *testing.T) {
 		RejectionReason: "could not purchase new capacity, Sammy bought it all",
 		RetryAt:         Some(s.Clock.Now().Add(1 * time.Hour)),
 	})
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            1,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-berlin",
@@ -739,7 +739,7 @@ func TestCommitmentCreateRejectedByLimes(t *testing.T) {
 	firstCapacityOneID := s.GetAZResourceID("first", "capacity", "az-one")
 	s.MustDBExec(`UPDATE project_az_resources SET usage = $1 WHERE project_id = $2 AND az_resource_id = $3`,
 		10, dresdenID, firstCapacityOneID)
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            5,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-berlin",
@@ -751,7 +751,7 @@ func TestCommitmentCreateRejectedByLimes(t *testing.T) {
 
 	// test rejection by Limes: on 20 capacity, we have 10 used by dresden
 	// and 5 committed by berlin, so this additional commitment does not fit
-	s.Handler.RespondTo(ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            15,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-berlin",

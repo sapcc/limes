@@ -20,11 +20,13 @@
 //
 // Each individual endpoint is documented in a section of this docstring whose title starts with "Endpoint:".
 // Unless noted otherwise, a liquid must implement all documented endpoints.
-// The full URL of the endpoint is obtained by appending the subpath from the section header to the liquid's base URL from the Keystone service catalog.
+// The full URL of the endpoint is obtained by appending the subpath from the section header to Limes's base URL from the Keystone service catalog.
 //
 // The documentation for an endpoint may refer to a request body being expected or a response body being generated on success.
 // In all such cases, the request or response body will be encoded as "Content-Type: application/json".
 // The structure of the payload must conform to how the referenced Go type would be serialized by the Go standard library's "encoding/json" package.
+// All request body fields that are not tagged with omitempty or omitzero must be present in the JSON object;
+// omitting a required field will result in a 400 (Bad Request) error.
 //
 // When producing a successful response, the status code shall be 200 (OK) unless noted otherwise.
 // When producing an error response (with a status code between 400 and 599), the liquid shall include a response body of "Content-Type: text/plain" to indicate the error.
@@ -33,7 +35,7 @@
 //
 // TODO: fill when implemented
 //
-// # Endpoint: GET /resources/v2/info
+// # Endpoint: GET /v2/resources/info
 //
 // Returns information about the cluster's resources, potentially limited to those resources that are accessible within the authenticated scope:
 // A project-scoped token will receive information about all resources available in that project.
@@ -43,13 +45,13 @@
 // A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [resourcesv2.InfoReport].
 //
-// # Endpoint: GET /resources/v2/cluster
+// # Endpoint: GET /v2/resources/cluster
 //
 // Returns the latest state of all dynamic resource data for the whole cluster.
 // This path is only available to users with cloud-admin token.
 //   - On success, the response body payload will be of type [resourcesv2.ClusterGetResponse].
 //
-// # Endpoint: GET /resources/v2/domains(/:domain_uuid)?
+// # Endpoint: GET /v2/resources/domains(/:domain_uuid)?
 //
 // Returns the latest state of all dynamic resource data for one or many domains.
 // A project-scoped token cannot access this path.
@@ -57,7 +59,7 @@
 // A cloud-admin token can receive data for requests with and without domain_uuid.
 //   - On success, the response body payload will be of type [resourcesv2.DomainGetResponse].
 //
-// # Endpoint: GET /resources/v2/projects(/:project_uuid)?
+// # Endpoint: GET /v2/resources/projects(/:project_uuid)?
 //
 // Returns the latest state of all dynamic resource data for one or many projects.
 // A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
@@ -65,11 +67,20 @@
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [resourcesv2.ProjectGetResponse].
 //
-// # Endpoint: GET /resources/v2/availability
+// # Endpoint: PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid
+//
+// Updates the user-specified resource values for a project, if permissions allow.
+// A project-scoped token can only access this path, if its project_uuid is set in the URL parameter - but the max_quota parameter is unavailable.
+// A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter - with max_quota allowed.
+// A cloud-admin token can always access this path.
+//   - The request body payload must be of type [resourcesv2.ProjectResourcePatchRequest].
+//   - On success, status code 204 (No Content) will be returned.
+//
+// # Endpoint: GET /v2/resources/availability
 //
 // TODO: fill when implemented
 //
-// # Endpoint: GET /resources/v2/commitments
+// # Endpoint: GET /v2/resources/commitments
 //
 // Returns information about multiple commitments.
 // A project-scoped token can only access this path, if its project_uuid is set in the query parameter or when public=true.
@@ -78,7 +89,7 @@
 //   - Takes query parameters as defined in [common.CommitmentListOpts].
 //   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
 //
-// # Endpoint: GET /resources/v2/commitments/:uuid
+// # Endpoint: GET /v2/resources/commitments/:uuid
 //
 // Returns information about multiple commitments.
 // A project-scoped token can only access this path, if a commitment_uuid from his project is set in the URL parameter.
@@ -86,7 +97,7 @@
 // A cloud-admin token can receive data for any commitment_uuid.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: POST /resources/v2/commitments/new
+// # Endpoint: POST /v2/resources/commitments/new
 //
 // Creates a new commitment (or performs a dry run of a commitment creation request).
 //   - The request body payload must be of type [resourcesv2.CommitmentRequest].
@@ -94,43 +105,43 @@
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //   - Errors caused by insufficient committable capacity will be marked with status code 409 (Conflict) and might have a Retry-After header.
 //
-// # Endpoint: PATCH /resources/v2/commitments/:uuid
+// # Endpoint: PATCH /v2/resources/commitments/:uuid
 //
 // Alters properties of an existing commitment according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentPatchRequest].
 //   - On success, status code 202 (Accepted) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: POST /resources/v2/commitments/:uuid/split
+// # Endpoint: POST /v2/resources/commitments/:uuid/split
 //
 // Splits an existing commitment into two or more commitments according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentSplitRequest].
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.CommitmentList].
 //
-// # Endpoint: POST /resources/v2/commitments/merge
+// # Endpoint: POST /v2/resources/commitments/merge
 //
 // Merges two or more existing commitments according to the given body, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentMergeRequest].
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: POST /resources/v2/commitments/:uuid/convert
+// # Endpoint: POST /v2/resources/commitments/:uuid/convert
 //
 // Converts a commitment of one resource to another resource according to the given body, if permissions allow.
-// The available conversions are retrievable via GET /resources/v2/info.
+// The available conversions are retrievable via GET /v2/resources/info.
 //   - The request body payload must be of type [resourcesv2.CommitmentConvertRequest].
 //   - On success, status code 202 (Accepted) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: POST /resources/v2/commitments/:uuid/renew
+// # Endpoint: POST /v2/resources/commitments/:uuid/renew
 //
 // Creates a new commitment for the time when the old one will expire, if permissions allow.
 //   - The request body payload must be of type [resourcesv2.CommitmentRenewRequest].
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: POST /resources/v2/commitments/:uuid/receive
+// # Endpoint: POST /v2/resources/commitments/:uuid/receive
 //
 // Receives a commitment or a part of it in the specified target project, if permissions allow.
 //   - If the given token is a scoped to the source project, no transfer_token has to be supplied.
@@ -138,7 +149,7 @@
 //   - On success, status code 201 (Created) will be returned.
 //   - On success, the response body payload will be of type [resourcesv2.Commitment].
 //
-// # Endpoint: DELETE /resources/v2/commitments/:uuid
+// # Endpoint: DELETE /v2/resources/commitments/:uuid
 //
 // Deletes the specified commitment.
 // A project-scoped token can only access this path, if a commitment_uuid from his project is set in the URL parameter.
@@ -147,7 +158,7 @@
 // For project- and domain-scoped tokens, the commitment needs to be deletable - meaning maximum 24 hours old and not yet transferred.
 //   - On success, status code 204 (No Content) will be returned.
 //
-// # Endpoint: GET /rates/v2/info
+// # Endpoint: GET /v2/rates/info
 //
 // Returns information about the cluster's rates, potentially limited to those rates that are accessible within the authenticated scope:
 // A project-scoped token will receive information about all rates available in that project.
@@ -157,13 +168,13 @@
 // A cloud-admin token can be reduced to the scope of a domain or project by specifying a domain_uuid or project_uuid query parameter.
 //   - On success, the response body payload will be of type [ratesv2.InfoReport].
 //
-// # Endpoint: GET /rates/v2/cluster
+// # Endpoint: GET /v2/rates/cluster
 //
 // Returns the latest state of all dynamic rate data for the whole cluster.
 // This path is only available to users with cloud-admin token.
 //   - On success, the response body payload will be of type [ratesv2.ClusterGetResponse].
 //
-// # Endpoint: GET /rates/v2/domains(/:domain_uuid)?
+// # Endpoint: GET /v2/rates/domains(/:domain_uuid)?
 //
 // Returns the latest state of all dynamic rate data for one or many domains.
 // A project-scoped token cannot access this path.
@@ -171,13 +182,19 @@
 // A cloud-admin token can receive data for requests with and without domain_uuid.
 //   - On success, the response body payload will be of type [ratesv2.DomainGetResponse].
 //
-// # Endpoint: GET /rates/v2/projects(/:project_uuid)?
+// # Endpoint: GET /v2/rates/projects(/:project_uuid)?
 //
 // Returns the latest state of all dynamic rate data for one or many projects.
 // A project-scoped token can only access this path, if its project_uuid is set in the URL parameter.
 // A domain-scoped token can only access this path, if a project_uuid from its domain is set in the URL parameter or when a domain_uuid query parameter is set.
 // A cloud-admin token can receive data for requests with and without project_uuid/ domain_uuid.
 //   - On success, the response body payload will be of type [ratesv2.ProjectGetResponse].
+//
+// # Endpoint: PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid
+//
+// Updates a project's rate limit for a single rate, if permissions allow.
+//   - The request body payload must be of type [ratesv2.ProjectRatePatchRequest].
+//   - On success, status code 204 (No Content) will be returned.
 //
 // [Keystone token]: https://docs.openstack.org/api-ref/identity/v3/index.html#password-authentication-with-scoped-authorization
 // [Limes]: https://github.com/sapcc/limes

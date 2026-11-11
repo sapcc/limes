@@ -5,11 +5,16 @@ package api_v2
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 
+	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/cadf"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-api-declarations/opts"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -18,11 +23,15 @@ import (
 	"github.com/sapcc/limes/internal/apideclarations/apiv2/common"
 	ratesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/rates"
 	resourcesv2 "github.com/sapcc/limes/internal/apideclarations/apiv2/resources"
+	"github.com/sapcc/limes/internal/audit"
+	"github.com/sapcc/limes/internal/db"
+
+	. "go.xyrillian.de/gg/option"
 )
 
-// handleGetResourcesProjects handles GET /resources/v2/projects.
+// handleGetResourcesProjects handles GET /v2/resources/projects.
 func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/projects")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/projects")
 	scope, err := p.checkAuthZForReportWithMultipleProjects(r, token)
 	if err != nil {
 		return
@@ -30,9 +39,9 @@ func (p *v2Provider) handleGetResourcesProjects(r *http.Request, token *gopherpo
 	return p.commonHandleGetResourcesProject(r, token, scope)
 }
 
-// handleGetResourcesProject handles GET /resources/v2/projects/:project_uuid.
+// handleGetResourcesProject handles GET /v2/resources/projects/:project_uuid.
 func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpolicy.Token) (_ resourcesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/projects/:project_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/projects/:project_uuid")
 	scope, err := p.checkAuthZForReportWithSingleProject(r.Context(), token)
 	if err != nil {
 		return
@@ -40,7 +49,7 @@ func (p *v2Provider) handleGetResourcesProject(r *http.Request, token *gopherpol
 	return p.commonHandleGetResourcesProject(r, token, scope)
 }
 
-// commonHandleGetResourcesProject handles single- and multi-project rate calls.
+// commonHandleGetResourcesProject handles single- and multi-project resource calls.
 func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gopherpolicy.Token, scope reports_v2.Scope) (_ resourcesv2.ProjectGetResponse, err error) {
 	none := resourcesv2.ProjectGetResponse{}
 	ctx := r.Context()
@@ -81,9 +90,9 @@ func (p *v2Provider) commonHandleGetResourcesProject(r *http.Request, token *gop
 	return reports_v2.GetProjectResources(ctx, p.Cluster, filter, options, scope, p.timeNow())
 }
 
-// handleGetRatesProjects handles GET /rates/v2/projects.
+// handleGetRatesProjects handles GET /v2/rates/projects.
 func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/projects")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/projects")
 	scope, err := p.checkAuthZForReportWithMultipleProjects(r, token)
 	if err != nil {
 		return
@@ -91,9 +100,9 @@ func (p *v2Provider) handleGetRatesProjects(r *http.Request, token *gopherpolicy
 	return p.commonHandleGetRatesProject(r, scope)
 }
 
-// handleGetRatesProject handles GET /rates/v2/projects/:project_uuid.
+// handleGetRatesProject handles GET /v2/rates/projects/:project_uuid.
 func (p *v2Provider) handleGetRatesProject(r *http.Request, token *gopherpolicy.Token) (_ ratesv2.ProjectGetResponse, err error) {
-	httpapi.IdentifyEndpoint(r, "/rates/v2/projects/:project_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/rates/projects/:project_uuid")
 	scope, err := p.checkAuthZForReportWithSingleProject(r.Context(), token)
 	if err != nil {
 		return
@@ -125,7 +134,7 @@ func (p *v2Provider) commonHandleGetRatesProject(r *http.Request, scope reports_
 	return result, nil
 }
 
-// checkAuthZForReportWithMultipleProjects handles AuthZ for GET /{resources,rates}/v2/projects.
+// checkAuthZForReportWithMultipleProjects handles AuthZ for GET /v2/{resources,rates}/projects.
 func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, token *gopherpolicy.Token) (reports_v2.Scope, error) {
 	// full query parsing will be done later; for now we just need ?domain_uuid= because it influences AuthZ
 	if queryDomainUUID := r.URL.Query().Get("domain_uuid"); queryDomainUUID != "" {
@@ -138,7 +147,219 @@ func (p *v2Provider) checkAuthZForReportWithMultipleProjects(r *http.Request, to
 	}
 }
 
-// checkAuthZForReportWithSingleProject handles AuthZ for GET /{resources,rates}/v2/projects/:project_uuid.
+// checkAuthZForReportWithSingleProject handles AuthZ for GET /v2/{resources,rates}/projects/:project_uuid.
 func (p *v2Provider) checkAuthZForReportWithSingleProject(ctx context.Context, token *gopherpolicy.Token) (reports_v2.Scope, error) {
 	return p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:report_single")
+}
+
+// (p *v2Provider) handlePatchResourcesProject handles PATCH /v2/resources/:service_type/:resource_name/projects/:project_uuid.
+func (p *v2Provider) handlePatchResourcesProject(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
+	httpapi.IdentifyEndpoint(r, "/v2/resources/:service_type/:resource_name/projects/:project_uuid")
+	var (
+		ctx = r.Context()
+		sis = p.Cluster.SIC.GetSnapshot()
+		now = p.timeNow()
+	)
+
+	scope, err := p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:resource_update")
+	if err != nil {
+		return none, err
+	}
+
+	// validate request contents
+	serviceType := db.ServiceType(mux.Vars(r)["service_type"])
+	resourceName := liquid.ResourceName(mux.Vars(r)["resource_name"])
+	req, err := parseRequestBodyAs[resourcesv2.ProjectResourcePatchRequest](r)
+	if err != nil {
+		return none, err
+	}
+	_, sExists := sis.GetServiceForType(serviceType)
+	if !sExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	res, rExists := sis.GetResourceForPath(db.ResourcePath{ServiceType: serviceType, ResourceName: resourceName})
+	if !rExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchResource)
+	}
+	if !res.HasQuota {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotTrackQuota)
+	}
+
+	// get projectResource
+	projectResource, err := db.ProjectResourceStore.SelectOneWhere(ctx, p.DB, "project_id = $1 AND resource_id = $2", scope.Project.ID, res.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return none, respondwith.CustomStatus(http.StatusNotFound, errNoSuchProjectResource)
+	}
+	if err != nil {
+		return none, err
+	}
+	if projectResource.Forbidden {
+		return none, respondwith.CustomStatus(http.StatusForbidden, errResourceForbidden)
+	}
+
+	// handle autogrowth change
+	oldAutogrowth := projectResource.ForbidAutogrowth
+	if newValue, requested := req.ForbidAutogrowth.Unpack(); requested {
+		behavior := p.Cluster.CommitmentBehaviorForResourcePath(res.Path).ForDomain(scope.Domain.Name)
+		if len(behavior.Durations) == 0 && newValue {
+			return none, respondwith.CustomStatus(http.StatusBadRequest, errDoesNotHaveCommitments)
+		}
+		projectResource.ForbidAutogrowth = newValue
+	}
+
+	// handle max-quota change
+	oldMaxQuota := projectResource.MaxQuotaFromOutsideAdmin
+	if newValueUnconverted, requested := req.MaxQuota.Unpack(); requested {
+		err = token.Enforce("v2:project:resource_update_admin")
+		if err != nil {
+			return none, err
+		}
+		projectResource.MaxQuotaFromOutsideAdmin = newValueUnconverted.AsOption()
+	}
+
+	// early return or update
+	if projectResource.ForbidAutogrowth == oldAutogrowth && projectResource.MaxQuotaFromOutsideAdmin == oldMaxQuota {
+		return none, nil
+	}
+	err = db.ProjectResourceStore.Update(ctx, p.DB, projectResource)
+	if err != nil {
+		return none, err
+	}
+
+	// audit log entry
+	p.auditor.Record(audittools.Event{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.UpdateAction,
+		Target: audit.V2ProjectResourceEventTarget{
+			DomainID:     scope.Domain.UUID,
+			DomainName:   scope.Domain.Name,
+			ProjectID:    scope.Project.UUID,
+			ProjectName:  scope.Project.Name,
+			ServiceType:  serviceType,
+			ResourceName: resourceName,
+			RequestedChange: audit.V2ProjectResourceChange{
+				OldMaxQuota:         oldMaxQuota,
+				NewMaxQuota:         projectResource.MaxQuotaFromOutsideAdmin,
+				OldForbidAutogrowth: oldAutogrowth,
+				NewForbidAutogrowth: projectResource.ForbidAutogrowth,
+			},
+		},
+	})
+
+	return none, nil
+}
+
+// (p *v2Provider) handlePatchRatesProject handles PATCH /v2/rates/:service_type/:rate_name/projects/:project_uuid.
+func (p *v2Provider) handlePatchRatesProject(r *http.Request, token *gopherpolicy.Token) (none any, err error) {
+	httpapi.IdentifyEndpoint(r, "/v2/rates/:service_type/:rate_name/projects/:project_uuid")
+	var (
+		ctx = r.Context()
+		sis = p.Cluster.SIC.GetSnapshot()
+		now = p.timeNow()
+	)
+
+	scope, err := p.checkProjectAccess(ctx, token, liquid.ProjectUUID(token.Context.Request["project_uuid"]), "v2:project:rate_update")
+	if err != nil {
+		return none, err
+	}
+
+	// validate request contents
+	serviceType := db.ServiceType(mux.Vars(r)["service_type"])
+	rateName := liquid.RateName(mux.Vars(r)["rate_name"])
+	req, err := parseRequestBodyAs[ratesv2.ProjectRatePatchRequest](r)
+	if err != nil {
+		return none, err
+	}
+	_, sExists := sis.GetServiceForType(serviceType)
+	if !sExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	rate, rExists := sis.GetRateForPath(db.RatePath{ServiceType: serviceType, RateName: rateName})
+	if !rExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchRate)
+	}
+	limit, limitExists := req.Limit.Unpack()
+	if !limitExists {
+		if req.Window.IsNone() {
+			// early return for empty body
+			return none, nil
+		}
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("limit must be set when window is set"))
+	}
+	if limit.AsOption().IsSome() && req.Window.IsNone() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must be set when limit != -1"))
+	}
+	if limit.AsOption().IsNone() && req.Window.IsSome() {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("window must not be set when limit == -1"))
+	}
+	serviceConfig, cExists := p.Cluster.Config.GetLiquidConfigurationForType(serviceType)
+	if !cExists {
+		// defense in depth, should be caught above
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errNoSuchService)
+	}
+	_, defaultExists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(rateName).Unpack()
+	if !defaultExists {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("project-level rate limits not supported for this rate"))
+	}
+	if req.Window == Some[limesrates.Window](0) {
+		return none, respondwith.CustomStatus(http.StatusBadRequest, errors.New("invalid value for window: 0"))
+	}
+
+	// get projectRate
+	// NOTE: we don't return when the projectRate does not exist!
+	projectRate, err := db.ProjectRateStore.SelectOneWhere(ctx, p.DB, "project_id = $1 AND rate_id = $2", scope.Project.ID, rate.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		// we ignore not-yet created projectRates here and instead insert them!
+		return none, err
+	}
+
+	// modifications
+	oldLimit := projectRate.Limit
+	oldWindow := projectRate.Window
+	projectRate.Limit = limit.AsOption()
+	projectRate.Window = req.Window
+
+	// early return or insert/update
+	if oldLimit == projectRate.Limit && oldWindow == projectRate.Window {
+		return none, nil
+	}
+	if projectRate.ID == 0 {
+		projectRate.ProjectID = scope.Project.ID
+		projectRate.RateID = rate.ID
+		err = db.ProjectRateStore.Insert(ctx, p.DB, &projectRate)
+	} else {
+		err = db.ProjectRateStore.Update(ctx, p.DB, projectRate)
+	}
+	if err != nil {
+		return none, err
+	}
+
+	// audit log entry
+	p.auditor.Record(audittools.Event{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.UpdateAction,
+		Target: audit.V2ProjectRateEventTarget{
+			DomainID:    scope.Domain.UUID,
+			DomainName:  scope.Domain.Name,
+			ProjectID:   scope.Project.UUID,
+			ProjectName: scope.Project.Name,
+			ServiceType: serviceType,
+			RateName:    rateName,
+			RequestedChange: audit.V2RateLimitChange{
+				Unit:      rate.Unit,
+				OldLimit:  oldLimit,
+				NewLimit:  projectRate.Limit,
+				OldWindow: oldWindow,
+				NewWindow: projectRate.Window,
+			},
+		},
+	})
+
+	return none, nil
 }

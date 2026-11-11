@@ -33,9 +33,8 @@ func (p *versionProvider) AddTo(c *httpapi.Composer) {
 	// NOTE: The intent of this is to provide a minimal response on every URL
 	//       that appears in the Keystone catalog. These are, by service type:
 	//
-	// - resources:         https://$LIMES_API_DOMAIN_NAME_V1/
-	// - limitas-resources: https://$LIMES_API_DOMAIN_NAME_V2/resources/v2/
-	// - limitas-rates:     https://$LIMES_API_DOMAIN_NAME_V2/rates/v2/
+	// - resources:   https://$LIMES_API_DOMAIN_NAME_V1/
+	// - limitas:     https://$LIMES_API_DOMAIN_NAME_V2/
 	//
 	// Also, for maximum backwards compatibility, https://$LIMES_API_DOMAIN_NAME_V1/v1/ is also understood.
 
@@ -43,20 +42,31 @@ func (p *versionProvider) AddTo(c *httpapi.Composer) {
 	enforceV2 := EnforceDomainName(p.DomainNames.V2)
 
 	r := c.Router()
-	for _, v1Path := range []string{"/", "/v1/"} {
-		r.Methods("HEAD", "GET").Path(v1Path).Handler(enforceV1(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			httpapi.IdentifyEndpoint(r, v1Path)
+
+	// GET / must respond on both V1 and V2 domain names, so we use a single handler
+	// that checks the hostname and redirects to the appropriate API spec
+	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/")
+		hostName := getHostNameFor(r)
+		switch {
+		case slices.Contains(p.DomainNames.V1, hostName):
 			http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md", http.StatusSeeOther)
-		})))
-	}
-	r.Methods("HEAD", "GET").Path("/resources/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/resources/v2/")
-		// TODO: replace with link to pkg.go.dev of the resource API spec
-		http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md", http.StatusSeeOther)
+		case slices.Contains(p.DomainNames.V2, hostName):
+			// TODO: replace with link to pkg.go.dev of the resource API spec
+			http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md", http.StatusSeeOther)
+		default:
+			msg := fmt.Sprintf("endpoint %s cannot be accessed on %s", r.URL.EscapedPath(), hostName)
+			http.Error(w, msg, http.StatusBadRequest)
+		}
+	})
+
+	r.Methods("HEAD", "GET").Path("/v1/").Handler(enforceV1(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/v1/")
+		http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md", http.StatusSeeOther)
 	})))
-	r.Methods("HEAD", "GET").Path("/rates/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, "/rates/v2/")
-		// TODO: replace with link to pkg.go.dev of the rate API spec
+	r.Methods("HEAD", "GET").Path("/v2/").Handler(enforceV2(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/v2/")
+		// TODO: replace with link to pkg.go.dev of the resource API spec
 		http.Redirect(w, r, "https://github.com/sapcc/limes/blob/master/docs/users/api-v2-specification.md", http.StatusSeeOther)
 	})))
 }

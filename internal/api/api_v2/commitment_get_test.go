@@ -46,7 +46,7 @@ func TestCommitmentGetSingle(t *testing.T) {
 	var uuidOne string
 	createdAt := s.Clock.Now().UTC().Format(time.RFC3339)
 	expiresAt := s.Clock.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339)
-	s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 		"amount":            10,
 		"duration":          "1 hour",
 		"project_id":        "uuid-for-paris",
@@ -75,30 +75,30 @@ func TestCommitmentGetSingle(t *testing.T) {
 
 	// success: get existing commitment
 	fixturePath := "./fixtures/commitment-get-single.json"
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments/"+uuidOne).
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
 				Modify(fmt.Sprintf(`.uuid = %q`, uuidOne)))
 
 	// error: get non-existing commitment
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/00000000-0000-0000-0000-000000000099").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments/00000000-0000-0000-0000-000000000099").
 		ExpectText(t, http.StatusNotFound, "no such commitment\n")
 
 	// error: permission denied
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments/"+uuidOne).
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 
 	// error: permission denied as regular user for obsolete commitment
 	s.TokenValidator.Enforcer.ForbidWithObsolete = true
-	s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+uuidOne).ExpectStatus(t, http.StatusNoContent)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
+	s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+uuidOne).ExpectStatus(t, http.StatusNoContent)
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments/"+uuidOne).
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.ForbidWithObsolete = false
 
 	// success: elevated user can see obsolete commitment (with updated timestamp)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments/"+uuidOne).
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments/"+uuidOne).
 		ExpectJSON(t, http.StatusOK,
 			httptest.NewJQModifiableJSONFixture(fixturePath, "success").
 				Modify(fmt.Sprintf(`.uuid = %q`, uuidOne)).
@@ -131,7 +131,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 			"project_domain_name": domainName,
 			"project_domain_id":   domainUUID,
 		})
-		s.Handler.RespondTo(s.Ctx, "POST /resources/v2/commitments/new", httptest.WithJSONBody(map[string]any{
+		s.Handler.RespondTo(s.Ctx, "POST /v2/resources/commitments/new", httptest.WithJSONBody(map[string]any{
 			"amount":            amount,
 			"duration":          "1 hour",
 			"project_id":        projectUUID,
@@ -173,7 +173,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 
 	// make commitment 3 public via PATCH API
 	var transferToken3 string
-	s.Handler.RespondTo(s.Ctx, "PATCH /resources/v2/commitments/"+uuid3, httptest.WithJSONBody(map[string]any{
+	s.Handler.RespondTo(s.Ctx, "PATCH /v2/resources/commitments/"+uuid3, httptest.WithJSONBody(map[string]any{
 		"transfer_status": "public",
 	})).ExpectJSON(t, http.StatusAccepted, jsonmatch.Object{
 		"uuid":                uuid3,
@@ -201,7 +201,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	createConfirmedCommitment("uuid-for-dresden", "dresden", "uuid-for-germany", "germany", 5, &uuid4)
 
 	// mark commitment 4 as deleted
-	s.Handler.RespondTo(s.Ctx, "DELETE /resources/v2/commitments/"+uuid4).ExpectStatus(t, http.StatusNoContent)
+	s.Handler.RespondTo(s.Ctx, "DELETE /v2/resources/commitments/"+uuid4).ExpectStatus(t, http.StatusNoContent)
 
 	s.Clock.StepBy(time.Hour)
 
@@ -225,42 +225,42 @@ func TestCommitmentGetMultiple(t *testing.T) {
 
 	// error cases
 	// error: no main filter set (admin)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments").
 		ExpectText(t, http.StatusBadRequest, "one of \"category\" or \"resource\" must be set\n")
 
 	// error: no main filter set (non-admin)
 	s.TokenValidator.Enforcer.AllowCommitmentGetUnscoped = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments").
 		ExpectText(t, http.StatusBadRequest, "one of \"public\", \"project_uuid\", \"domain_uuid\" must be set\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGetUnscoped = true
 
 	// error: multiple main filters set
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true&project_uuid=uuid-for-paris").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?public=true&project_uuid=uuid-for-paris").
 		ExpectText(t, http.StatusBadRequest, "only one of \"public\", \"project_uuid\", \"domain_uuid\" may be set\n")
 
 	// error: category without service
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&category=foo").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?project_uuid=uuid-for-paris&category=foo").
 		ExpectText(t, http.StatusBadRequest, "\"category\" or \"resource\" require \"service\" to be set\n")
 
 	// error: resource without service
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&resource=capacity").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?project_uuid=uuid-for-paris&resource=capacity").
 		ExpectText(t, http.StatusBadRequest, "\"category\" or \"resource\" require \"service\" to be set\n")
 
 	// error: with=obsolete without permission
 	s.TokenValidator.Enforcer.ForbidWithObsolete = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris&with=obsolete").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?project_uuid=uuid-for-paris&with=obsolete").
 		ExpectText(t, http.StatusForbidden, "\"with=obsolete\" requires special permissions\n")
 	s.TokenValidator.Enforcer.ForbidWithObsolete = false
 
 	// error: no permission at all
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?project_uuid=uuid-for-paris").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
 
 	// error: no permission for public
 	s.TokenValidator.Enforcer.AllowCommitmentGetPublic = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?public=true").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowCommitmentGetPublic = true
 
@@ -269,7 +269,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 	// success: filter by project_uuid
 	fixturePath := "./fixtures/commitment-get-multiple.json"
 	deletedModification := `del(.commitments.[] | select(.status == "deleted"))`
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?project_uuid=uuid-for-paris").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?project_uuid=uuid-for-paris").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "single project")).
 				Modify(deletedModification).
@@ -284,7 +284,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 		"domain_id":           "uuid-for-france",
 		"domain_name":         "france",
 	})
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?domain_uuid=uuid-for-germany").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?domain_uuid=uuid-for-germany").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "single domain")).
 				Modify(deletedModification).
@@ -292,7 +292,7 @@ func TestCommitmentGetMultiple(t *testing.T) {
 
 	// success: filter by public (this token cannot see the project_uuid)
 	s.TokenValidator.Enforcer.AllowCommitmentGet = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?public=true").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "public")).
 				Modify(deletedModification).
@@ -301,25 +301,25 @@ func TestCommitmentGetMultiple(t *testing.T) {
 
 	// success: filter by public (this token can see the project_uuid)
 	s.TokenValidator.Enforcer.AllowCommitmentGet = true
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?public=true").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?public=true").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "public")).
 				Modify(deletedModification).
 				Modify(fmt.Sprintf(`del(.commitments.[] | select(.uuid != %q))`, uuid3)))
 
 	// success: with service filter (admin scenario)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?service=first").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "service filter")).
 				Modify(deletedModification))
 
 	// success: obsolete (and service filter, because it's always required)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?with=obsolete&service=first").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?with=obsolete&service=first").
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "obsolete")))
 
 	// success: updated after
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/commitments?service=first&updated_after="+s.Clock.Now().Add(-1*time.Hour).Format(time.RFC3339)).
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/commitments?service=first&updated_after="+s.Clock.Now().Add(-1*time.Hour).Format(time.RFC3339)).
 		ExpectJSON(t, http.StatusOK,
 			injectUUIDs(httptest.NewJQModifiableJSONFixture(fixturePath, "updated_after")).
 				Modify(fmt.Sprintf(`del(.commitments.[] | select(.uuid != %q))`, uuid3)))

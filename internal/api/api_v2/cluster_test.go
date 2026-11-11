@@ -132,12 +132,12 @@ func TestV2ClusterResourceReport(t *testing.T) {
 
 	// permission check
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// full result with all options
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=info&with=subcapacities&with=commitment_stats&with=timing").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=info&with=subcapacities&with=commitment_stats&with=timing").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "all options"))
 
 	var (
@@ -149,7 +149,7 @@ func TestV2ClusterResourceReport(t *testing.T) {
 	)
 
 	// without any extras
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
@@ -157,24 +157,24 @@ func TestV2ClusterResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// just one extra at a time
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=subcapacities").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=subcapacities").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
 			Modify(withoutCommitmentStatsMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=commitment_stats").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=commitment_stats").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutTimingMods...).
 			Modify(withoutSubcapacitiesMods...))
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=timing").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=timing").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify(withoutInfoMods...).
 			Modify(withoutSubcapacitiesMods...).
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by area (second area has resources)
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify("del(.info.service_areas.first)").
 			Modify("del(.cluster_report.service_areas.first)").
@@ -183,7 +183,7 @@ func TestV2ClusterResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by service
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=info&service=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=info&service=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify("del(.info.service_areas.second)").
 			Modify("del(.cluster_report.service_areas.second)").
@@ -192,7 +192,7 @@ func TestV2ClusterResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by resource
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=info&resource=capacity").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "resource filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -203,7 +203,7 @@ func TestV2ClusterResourceReport(t *testing.T) {
 			Modify(withoutCommitmentStatsMods...))
 
 	// filter by category
-	s.Handler.RespondTo(s.Ctx, "GET /resources/v2/cluster?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/cluster?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.info.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.second.services.second.categories.second)").
@@ -265,43 +265,43 @@ func TestV2ClusterRateReport(t *testing.T) {
 	s.MustDBExec(`UPDATE project_rates SET usage_as_bigint = '5' WHERE rate_id != $1`, objectsCreateRateID)
 
 	s.TokenValidator.Enforcer.AllowReportSingle = false
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster").
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster").
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportSingle = true
 
 	// the maximum result set includes the info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "with-info"))
 
 	// without info
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "no params").
 			Modify("del(.info)"))
 
 	// when filtering for a certain rate, the info and report get filtered similarly
 	// area: this will lead to an empty report, hence the structure is cut off at a higher level!
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info&area=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info&area=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "area filter").
 			Modify(".cluster_report.service_areas=null").
 			Modify("del(.info.service_areas.first)"))
 	// service: also empty report
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info&service=second").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info&service=second").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "service filter").
 			Modify(".cluster_report.service_areas=null").
 			Modify("del(.info.service_areas.first)"))
 	// category
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info&category=foo_category").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter").
 			Modify("del(.cluster_report.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))
 	// category - special case: empty category (category = service type)
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info&category=first").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info&category=first").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "category filter - empty category/ equal service type").
 			Modify("del(.cluster_report.service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.first.services.first.categories.foo_category)").
 			Modify("del(.info.service_areas.second)"))
 	// rate
-	s.Handler.RespondTo(s.Ctx, "GET /rates/v2/cluster?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
+	s.Handler.RespondTo(s.Ctx, "GET /v2/rates/cluster?with=info&rate=objects:create").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "rate filter").
 			Modify("del(.cluster_report.service_areas.first.services.first.categories.first)").
 			Modify("del(.info.service_areas.first.services.first.categories.first)"))

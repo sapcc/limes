@@ -34,7 +34,7 @@ import (
 const commitmentRenewalPeriod = 90 * 24 * time.Hour
 
 func (p *v2Provider) handleRenewCommitment(r *http.Request, token *gopherpolicy.Token) (result resourcesv2.Commitment, _ error) {
-	httpapi.IdentifyEndpoint(r, "/resources/v2/commitments/:commitment_uuid")
+	httpapi.IdentifyEndpoint(r, "/v2/resources/commitments/:commitment_uuid")
 	var (
 		none resourcesv2.Commitment
 		ctx  = r.Context()
