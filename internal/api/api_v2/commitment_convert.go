@@ -59,7 +59,7 @@ func (p *v2Provider) handleConvertCommitment(r *http.Request, token *gopherpolic
 
 		// service/ resource validations
 		targetPath := db.AZResourcePath{ServiceType: req.TargetServiceType, ResourceName: req.TargetResourceName, AvailabilityZone: sourceAZRes.AvailabilityZone}
-		targetAZRes, targetBehavior, err := p.validateCommittability(targetPath, scope, c.Duration, sis, "in target resource: ")
+		targetAZRes, targetBehavior, err := p.validateCommittability(ctx, targetPath, scope, c.Duration, sis, "in target resource: ")
 		if err != nil {
 			return err
 		}
@@ -137,11 +137,11 @@ func (p *v2Provider) handleConvertCommitment(r *http.Request, token *gopherpolic
 		}
 
 		// inform liquid
-		sourceStats, err := getCommitmentStats(tx, scope.Project.ID, sourceAZRes.ID)
+		sourceStats, err := getCommitmentStats(ctx, tx, scope.Project.ID, sourceAZRes.ID)
 		if err != nil {
 			return err
 		}
-		targetStats, err := getCommitmentStats(tx, scope.Project.ID, targetAZRes.ID)
+		targetStats, err := getCommitmentStats(ctx, tx, scope.Project.ID, targetAZRes.ID)
 		if err != nil {
 			return err
 		}

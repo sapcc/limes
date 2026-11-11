@@ -11,6 +11,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
@@ -91,12 +92,10 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var (
-		usageReportNeedsProjectMetadata bool
-		prevSerializedState             string
-	)
-	err = p.DB.QueryRow(getServiceUsageRequestAttributesQuery, dbProject.ID, serviceType).
-		Scan(&usageReportNeedsProjectMetadata, &prevSerializedState)
+	data, err := oblast.TupleSelectOne[struct {
+		UsageReportNeedsProjectMetadata bool
+		PrevSerializedState             string
+	}](ctx, p.DB, getServiceUsageRequestAttributesQuery, dbProject.ID, serviceType)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "unknown service type", http.StatusBadRequest)
 		return
@@ -104,6 +103,6 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	serviceUsageRequest := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, usageReportNeedsProjectMetadata, prevSerializedState)
+	serviceUsageRequest := core.BuildServiceUsageRequest(project, p.Cluster.Config.AvailabilityZones, data.UsageReportNeedsProjectMetadata, data.PrevSerializedState)
 	respondwith.JSON(w, http.StatusOK, serviceUsageRequest)
 }

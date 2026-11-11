@@ -83,7 +83,7 @@ func RunOLAPQueries(ctx context.Context, db *gsql.DB, action func(tx *gsql.Tx) e
 			// the SET statement does not accept a placeholder for its argument, so we
 			// need to do the ugly thing and escape by hand
 			workMemStr := osext.GetenvOrDefault("LIMES_DB_WORKMEM_FOR_OLAP", "128MB")
-			_, err := tx.Exec(fmt.Sprintf(`SET LOCAL work_mem TO '%s'`, strings.ReplaceAll(workMemStr, "'", "''")))
+			_, err := gsql.Exec(ctx, tx, fmt.Sprintf(`SET LOCAL work_mem TO '%s'`, strings.ReplaceAll(workMemStr, "'", "''")))
 			if err != nil {
 				return fmt.Errorf("could not set work_mem = %q for OLAP query: %w", workMemStr, err)
 			}

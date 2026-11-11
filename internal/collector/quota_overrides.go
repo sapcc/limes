@@ -14,6 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/oblast"
 
 	"github.com/sapcc/limes/internal/datamodel"
@@ -51,7 +52,7 @@ func (c *Collector) applyQuotaOverrides(ctx context.Context, _ prometheus.Labels
 	for domainName, domainOverrides := range overrides {
 		for projectName, projectOverrides := range domainOverrides {
 			for serviceType, serviceOverrides := range projectOverrides {
-				err := c.aqoUpdateOneProjectService(domainName, projectName, serviceType, serviceOverrides)
+				err := c.aqoUpdateOneProjectService(ctx, domainName, projectName, serviceType, serviceOverrides)
 				if err != nil {
 					return err
 				}
@@ -72,7 +73,7 @@ func (c *Collector) applyQuotaOverrides(ctx context.Context, _ prometheus.Labels
 		if exists {
 			return nil // nothing to do in this loop iteration
 		}
-		_, err := c.DB.Exec(aqoClearOverrideQuery, r.ResourceID)
+		_, err := gsql.Exec(ctx, c.DB, aqoClearOverrideQuery, r.ResourceID)
 		return err
 	})
 	if err != nil {
@@ -115,10 +116,9 @@ var (
 	`)
 )
 
-func (c *Collector) aqoUpdateOneProjectService(domainName, projectName string, serviceType db.ServiceType, overrides map[liquid.ResourceName]uint64) error {
+func (c *Collector) aqoUpdateOneProjectService(ctx context.Context, domainName, projectName string, serviceType db.ServiceType, overrides map[liquid.ResourceName]uint64) error {
 	// find project service
-	var serviceID db.ProjectServiceID
-	err := c.DB.QueryRow(aqoSelectServiceQuery, domainName, projectName, serviceType).Scan(&serviceID)
+	serviceID, err := oblast.SelectOne[db.ProjectServiceID](ctx, c.DB, aqoSelectServiceQuery, domainName, projectName, serviceType)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// it is not an error for a project named in the quota overrides file to not exist (yet)
@@ -129,7 +129,7 @@ func (c *Collector) aqoUpdateOneProjectService(domainName, projectName string, s
 
 	// write quota overrides
 	for resourceName, overrideQuota := range overrides {
-		_, err := c.DB.Exec(aqoUpdateOverrideQuery, overrideQuota, serviceID, resourceName)
+		_, err := gsql.Exec(ctx, c.DB, aqoUpdateOverrideQuery, overrideQuota, serviceID, resourceName)
 		if err != nil {
 			return fmt.Errorf("while writing %s override in project service %d: %w", resourceName, serviceID, err)
 		}

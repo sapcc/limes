@@ -87,7 +87,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		}
 
 		// mark short-term commitments as notified without queueing them
-		_, err := tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
+		_, err := gsql.Exec(ctx, tx, updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
 		if err != nil {
 			return err
 		}
@@ -123,6 +123,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		for _, projectID := range slices.Sorted(maps.Keys(notifications)) {
 			var notification core.CommitmentGroupNotification
 			commitments := notifications[projectID]
+			// TODO: oblast.SelectTwo()
 			err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
 			if err != nil {
 				return err
@@ -142,7 +143,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 			for idx, c := range commitments {
 				commitmentIDs[idx] = c.Commitment.ID
 			}
-			_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
+			_, err = gsql.Exec(ctx, tx, updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
 			if err != nil {
 				return err
 			}

@@ -97,7 +97,7 @@ func (p *v2Provider) handleSplitCommitment(r *http.Request, token *gopherpolicy.
 		}
 
 		// inform liquid
-		stats, err := getCommitmentStats(tx, c.ProjectID, c.AZResourceID)
+		stats, err := getCommitmentStats(ctx, tx, c.ProjectID, c.AZResourceID)
 		if err != nil {
 			return err
 		}

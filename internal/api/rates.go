@@ -256,7 +256,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(mergeStr, string(buf))
+		_, err = gsql.Exec(ctx, tx, mergeStr, string(buf))
 		return err
 	})
 	if respondwith.ErrorText(w, err) { // using respondwith.ObfuscatedErrorText() breaks tests, see `TODO: should be 403` in api_test.go

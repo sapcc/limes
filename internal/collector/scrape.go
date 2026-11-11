@@ -200,7 +200,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 
 	// update scraped_at timestamp and reset the stale flag on this service so
 	// that we don't scrape it again immediately afterwards
-	_, err = c.DB.Exec(writeScrapeSuccessQuery,
+	_, err = gsql.Exec(ctx, c.DB, writeScrapeSuccessQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(ScrapeInterval)), task.Timing.Duration().Seconds(),
 		string(serializedMetrics), serializedScrapeState, projectService.ID,
 	)
@@ -211,7 +211,7 @@ func (c *Collector) processScrapeTask(ctx context.Context, task projectScrapeTas
 }
 
 func (c *Collector) recordScrapeError(ctx context.Context, task projectScrapeTask, serviceType db.ServiceType, dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject) error {
-	_, err := c.DB.Exec(
+	_, err := gsql.Exec(ctx, c.DB,
 		writeScrapeErrorQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(RecheckInterval)),
 		task.Err.Error(), task.ProjectService.ID,
@@ -317,7 +317,7 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 		// happens)
 		//
 		// TODO: consider setting this for the entire connection if it helps
-		_, err := tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
+		_, err := gsql.Exec(ctx, tx, `SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
 		if err != nil {
 			return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 		}
@@ -460,7 +460,7 @@ func (c *Collector) writeResourceScrapeResult(ctx context.Context, task projectS
 		}
 		if hasBackendQuotaDrift {
 			query := `UPDATE project_services ps SET quota_desynced_at = $1 WHERE ps.id = $2 AND quota_desynced_at IS NULL`
-			_, err := tx.Exec(query, c.MeasureTime(), task.ProjectService.ID)
+			_, err := gsql.Exec(ctx, tx, query, c.MeasureTime(), task.ProjectService.ID)
 			if err != nil {
 				return fmt.Errorf("while scheduling backend sync for %s quotas: %w", serviceType, err)
 			}
@@ -626,7 +626,7 @@ func (c *Collector) writeDummyResources(ctx context.Context, dbProject db.Projec
 		// not scrape this service again immediately afterwards if there are other
 		// stale services to cover first
 		dummyScrapedAt := time.Unix(0, 0).UTC()
-		_, err = tx.Exec(
+		_, err = gsql.Exec(ctx, tx,
 			`UPDATE project_services
 			SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, quota_desynced_at = NULL
 			WHERE service_id = $4 AND project_id = $5`,

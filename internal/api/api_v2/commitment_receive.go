@@ -92,7 +92,7 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		if !hasLeftover {
 			receivedAmount = c.Amount
 		}
-		_, _, err = p.validateCommittability(azRes.Path, targetScope, c.Duration, sis, "in target project: ")
+		_, _, err = p.validateCommittability(ctx, azRes.Path, targetScope, c.Duration, sis, "in target project: ")
 		if err != nil {
 			return err
 		}
@@ -166,11 +166,11 @@ func (p *v2Provider) handleReceiveCommitment(r *http.Request, token *gopherpolic
 		}
 
 		// inform liquid
-		sourceStats, err := getCommitmentStats(tx, sourceScope.Project.ID, c.AZResourceID)
+		sourceStats, err := getCommitmentStats(ctx, tx, sourceScope.Project.ID, c.AZResourceID)
 		if err != nil {
 			return err
 		}
-		targetStats, err := getCommitmentStats(tx, targetScope.Project.ID, c.AZResourceID)
+		targetStats, err := getCommitmentStats(ctx, tx, targetScope.Project.ID, c.AZResourceID)
 		if err != nil {
 			return err
 		}

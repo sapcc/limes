@@ -113,6 +113,18 @@ var (
 	`)
 )
 
+type (
+	findAZResourceIDByLocationResult struct {
+		AZResourceID              db.AZResourceID
+		ResourceAllowsCommitments bool
+		TotalConfirmed            uint64
+	}
+	findAZResourceLocationByIDResult struct {
+		Path           db.AZResourcePath
+		TotalConfirmed uint64
+	}
+)
+
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
 func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments")
@@ -379,22 +391,15 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		totalConfirmed            uint64
-	)
-	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceIDByLocationResult](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	if !resourceAllowsCommitments {
+	if !data.ResourceAllowsCommitments {
 		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	_ = azResourceID // returned by the above query, but not used in this function
 
 	// this api should always check CanConfirm at now()
 	now := p.timeNow()
@@ -416,7 +421,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	potentialCommitment := db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
 		ProjectID:           dbProject.ID,
-		AZResourceID:        azResourceID,
+		AZResourceID:        data.AZResourceID,
 		Amount:              req.Amount,
 		Duration:            req.Duration,
 		CreatedAt:           now,
@@ -473,17 +478,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		totalConfirmed            uint64
-	)
-	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceIDByLocationResult](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	if !resourceAllowsCommitments {
+	if !data.ResourceAllowsCommitments {
 		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
@@ -510,7 +509,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	dbCommitment := db.ProjectCommitment{
 		UUID:                p.generateProjectCommitmentUUID(),
-		AZResourceID:        azResourceID,
+		AZResourceID:        data.AZResourceID,
 		ProjectID:           dbProject.ID,
 		Amount:              req.Amount,
 		Duration:            req.Duration,
@@ -582,8 +581,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 						ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 						ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 							path.ResourceName: {
-								TotalConfirmedBefore: totalConfirmed,
-								TotalConfirmedAfter:  totalConfirmed,
+								TotalConfirmedBefore: data.TotalConfirmed,
+								TotalConfirmedAfter:  data.TotalConfirmed,
 								// TODO: change when introducing "guaranteed" commitments
 								TotalGuaranteedBefore: 0,
 								TotalGuaranteedAfter:  0,
@@ -640,7 +639,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt.IsSome() {
-		_, err := p.DB.Exec(`UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
+		_, err := gsql.Exec(ctx, p.DB, `UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
 		if err != nil {
 			logg.Error("could not trigger a new capacity scrape after creating commitment %s: %s", dbCommitment.UUID, err.Error())
 		}
@@ -715,18 +714,14 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err := p.DB.QueryRow(findAZResourceLocationByIDQuery, azResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, azResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := data.Path
 
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
@@ -833,8 +828,8 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 						path.ResourceName: {
-							TotalConfirmedBefore: totalConfirmed,
-							TotalConfirmedAfter:  totalConfirmed,
+							TotalConfirmedBefore: data.TotalConfirmed,
+							TotalConfirmedAfter:  data.TotalConfirmed,
 							// TODO: change when introducing "guaranteed" commitments
 							TotalGuaranteedBefore: 0,
 							TotalGuaranteedAfter:  0,
@@ -925,17 +920,13 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		ccr liquid.CommitmentChangeRequest
 	)
 	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
-		var (
-			path           db.AZResourcePath
-			totalConfirmed uint64
-		)
-		err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-			Scan(&path, &totalConfirmed)
+		data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return respondwith.CustomStatus(http.StatusNotFound, errors.New("no route to this commitment"))
 		} else if err != nil {
 			return err
 		}
+		path := data.Path
 
 		sis := p.Cluster.SIC.GetSnapshot()
 		resource, rExists := sis.GetResourceForPath(path.Resource())
@@ -1000,8 +991,8 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 					ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 						path.ResourceName: {
-							TotalConfirmedBefore: totalConfirmed,
-							TotalConfirmedAfter:  totalConfirmed,
+							TotalConfirmedBefore: data.TotalConfirmed,
+							TotalConfirmedAfter:  data.TotalConfirmed,
 							// TODO: change when introducing "guaranteed" commitments
 							TotalGuaranteedBefore: 0,
 							TotalGuaranteedAfter:  0,
@@ -1070,12 +1061,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1083,6 +1069,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := data.Path
 
 	sis := p.Cluster.SIC.GetSnapshot()
 	_, rExists := sis.GetResourceForPath(path.Resource())
@@ -1104,7 +1091,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	totalConfirmedAfter := totalConfirmed
+	totalConfirmedAfter := data.TotalConfirmed
 	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
 		totalConfirmedAfter -= dbCommitment.Amount
 	}
@@ -1117,7 +1104,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					path.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
+						TotalConfirmedBefore: data.TotalConfirmed,
 						TotalConfirmedAfter:  totalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
@@ -1242,12 +1229,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1255,6 +1237,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := data.Path
 
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
@@ -1282,8 +1265,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					path.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmed,
+						TotalConfirmedBefore: data.TotalConfirmed,
+						TotalConfirmedAfter:  data.TotalConfirmed,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
 						TotalGuaranteedAfter:  0,
@@ -1478,12 +1461,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID).
-		Scan(&path, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "location data not found.", http.StatusNotFound)
@@ -1491,6 +1469,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := data.Path
 
 	resource, rExists := p.Cluster.SIC.GetSnapshot().GetResourceForPath(path.Resource())
 	if !rExists {
@@ -1538,13 +1517,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var (
-		path                 db.AZResourcePath
-		sourceTotalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID).
-		Scan(&path, &sourceTotalConfirmed)
-
+	sourceData, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1552,6 +1525,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := sourceData.Path
 
 	sis := p.Cluster.SIC.GetSnapshot()
 	resource, rExists := sis.GetResourceForPath(path.Resource())
@@ -1572,26 +1546,19 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// check that the target project allows commitments at all
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		targetTotalConfirmed      uint64
-	)
-	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, targetProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &targetTotalConfirmed)
+	targetData, err := oblast.TupleSelectOne[findAZResourceIDByLocationResult](ctx, p.DB, findAZResourceIDByLocationQuery, targetProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	if !resourceAllowsCommitments {
+	if !targetData.ResourceAllowsCommitments {
 		msg := fmt.Sprintf("resource %s is not enabled in the target project", path.Resource().String())
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	_ = azResourceID // returned by the above query, but not used in this function
 
 	// validate that we have enough committable capacity on the receiving side
-	sourceTotalConfirmedAfter := sourceTotalConfirmed
-	targetTotalConfirmedAfter := targetTotalConfirmed
+	sourceTotalConfirmedAfter := sourceData.TotalConfirmed
+	targetTotalConfirmedAfter := targetData.TotalConfirmed
 	if dbCommitment.Status == liquid.CommitmentStatusConfirmed {
 		sourceTotalConfirmedAfter -= dbCommitment.Amount
 		targetTotalConfirmedAfter += dbCommitment.Amount
@@ -1612,7 +1579,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(sourceProject, sourceDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					path.ResourceName: {
-						TotalConfirmedBefore: sourceTotalConfirmed,
+						TotalConfirmedBefore: sourceData.TotalConfirmed,
 						TotalConfirmedAfter:  sourceTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
@@ -1634,7 +1601,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*targetProject, *targetDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					path.ResourceName: {
-						TotalConfirmedBefore: targetTotalConfirmed,
+						TotalConfirmedBefore: targetData.TotalConfirmed,
 						TotalConfirmedAfter:  targetTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
@@ -1805,12 +1772,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	var (
-		sourcePath           db.AZResourcePath
-		sourceTotalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&sourcePath, &sourceTotalConfirmed)
+	sourceData, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1818,6 +1780,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	sourcePath := sourceData.Path
 	sourceBehavior := p.Cluster.CommitmentBehaviorForResourcePath(sourcePath.Resource()).ForDomain(dbDomain.Name)
 
 	sis := p.Cluster.SIC.GetSnapshot()
@@ -1898,22 +1861,16 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		targetAZResourceID        db.AZResourceID
-		resourceAllowsCommitments bool
-		targetTotalConfirmed      uint64
-	)
-	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, targetPath).
-		Scan(&targetAZResourceID, &resourceAllowsCommitments, &targetTotalConfirmed)
+	targetData, err := oblast.TupleSelectOne[findAZResourceIDByLocationResult](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, targetPath)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 	// defense in depth. ServiceType and ResourceName of source and target are already checked. Here it's possible to explicitly check the ID's.
-	if dbCommitment.AZResourceID == targetAZResourceID {
+	if dbCommitment.AZResourceID == targetData.AZResourceID {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
 	}
-	if !resourceAllowsCommitments {
+	if !targetData.ResourceAllowsCommitments {
 		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", targetServiceType, targetResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
@@ -1952,13 +1909,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt: remainingCommitment.ExpiresAt,
 		})
 	}
-	convertedCommitment, err := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
+	convertedCommitment, err := p.buildConvertedCommitment(dbCommitment, targetData.AZResourceID, conversionAmount)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
 
-	sourceTotalConfirmedAfter := sourceTotalConfirmed
-	targetTotalConfirmedAfter := targetTotalConfirmed
+	sourceTotalConfirmedAfter := sourceData.TotalConfirmed
+	targetTotalConfirmedAfter := targetData.TotalConfirmed
 	if dbCommitment.ConfirmedAt.IsSome() {
 		sourceTotalConfirmedAfter -= req.SourceAmount
 		targetTotalConfirmedAfter += req.TargetAmount
@@ -1972,7 +1929,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					sourcePath.ResourceName: {
-						TotalConfirmedBefore: sourceTotalConfirmed,
+						TotalConfirmedBefore: sourceData.TotalConfirmed,
 						TotalConfirmedAfter:  sourceTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
@@ -1980,7 +1937,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 						Commitments:           sourceCommitments,
 					},
 					targetPath.ResourceName: {
-						TotalConfirmedBefore: targetTotalConfirmed,
+						TotalConfirmedBefore: targetData.TotalConfirmed,
 						TotalConfirmedAfter:  targetTotalConfirmedAfter,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
@@ -2121,12 +2078,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	data, err := oblast.TupleSelectOne[findAZResourceLocationByIDResult](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -2134,6 +2086,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	path := data.Path
 	behavior := p.Cluster.CommitmentBehaviorForResourcePath(path.Resource()).ForDomain(dbDomain.Name)
 	if !slices.Contains(behavior.Durations, req.Duration) {
 		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, behavior.Durations)
@@ -2165,8 +2118,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 				ProjectMetadata: datamodel.LiquidProjectMetadataFromDBProject(*dbProject, *dbDomain),
 				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
 					path.ResourceName: {
-						TotalConfirmedBefore: totalConfirmed,
-						TotalConfirmedAfter:  totalConfirmed,
+						TotalConfirmedBefore: data.TotalConfirmed,
+						TotalConfirmedAfter:  data.TotalConfirmed,
 						// TODO: change when introducing "guaranteed" commitments
 						TotalGuaranteedBefore: 0,
 						TotalGuaranteedAfter:  0,

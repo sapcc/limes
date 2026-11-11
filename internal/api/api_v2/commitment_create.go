@@ -61,7 +61,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	if err != nil {
 		return none, err
 	}
-	azResource, behavior, err := p.validateCommittability(path, scope, req.Duration, sis, "")
+	azResource, behavior, err := p.validateCommittability(ctx, path, scope, req.Duration, sis, "")
 	if err != nil {
 		return none, err
 	}
@@ -112,7 +112,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 	// but we need to be able to revert this insertion if the CommitmentChangeRequest is rejected
 	var auditEvents []audittools.Event
 	err = withinDryRunnableTx(ctx, p.DB, req.DryRun, func(tx db.Interface) error {
-		stats, err := getCommitmentStats(tx, scope.Project.ID, azResource.ID)
+		stats, err := getCommitmentStats(ctx, tx, scope.Project.ID, azResource.ID)
 		if err != nil {
 			return err
 		}
@@ -225,7 +225,7 @@ func (p *v2Provider) handlePostNewCommitment(r *http.Request, token *gopherpolic
 
 	// trigger a capacity scrape in order to ApplyComputedProjectQuota based on the new commitment
 	if c.Status == liquid.CommitmentStatusConfirmed && !req.DryRun {
-		_, err := p.DB.Exec(`UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
+		_, err := gsql.Exec(ctx, p.DB, `UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
 		if err != nil {
 			logg.Error("could not trigger a new capacity scrape after creating commitment %s: %s", c.UUID, err.Error())
 		}
