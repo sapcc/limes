@@ -817,7 +817,7 @@ func (d *DataMetricsV2Reporter) Handler() http.Handler {
 			"limitas_cluster_rate_global_window_seconds":                             gauge(`The window for the global limit for this rate. All users together may spend their limit (see limitas_cluster_rate_global_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_cluster_resource_capacity":                                      gauge(`Capacity for resources, split by availability zone (AZ). If an overcommit factor is configured, this will differ from the raw capacity accordingly.`),
 			"limitas_cluster_resource_raw_capacity":                                  gauge(`Raw capacity for resources (i.e. without considering overcommit), split by availability zone (AZ).`),
-			"limitas_az_resource_info":                                               gauge(`Info metric for AZ resources. The value is always 1, and information can be found in labels.`),
+			"limitas_az_resource_quota_overcommit_reduction_percentage":              gauge(`How much of the quota overcommit was reduced by the ACPQ algorithm. Values between 0 and 100. For resources without reduce_quota_overcommit_from_allocated_percent window, this jumps between 0 and 100.`),
 			"limitas_project_rate_limit":                                             gauge(`For each project and rate, the value of the current rate limit. The respective project may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_project_rate_window_seconds). Only shown for rates that have limits (not for those that just track usage).`),
 			"limitas_project_rate_usage":                                             counter(`For each project and rate, the total amount of usage incurred for this rate in this project. This is an ever-growing metric that never resets.`),
 			"limitas_project_rate_window_seconds":                                    gauge(`For each project and rate, the window for the current rate limit. The project may spend its limit (see limitas_project_rate_limit) over the course of this many seconds. Only shown for rates that have limits (not for those that just track usage).`),
@@ -857,11 +857,10 @@ var (
 		  FROM project_az_resources
 	`)
 
-	dmv2ResourceLabelNames       = microprom.NewLabelNames("resource", "service")
-	dmv2ResourceInfoLabelNames   = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
-	dmv2ResourceUnitLabelNames   = microprom.NewLabelNames("base_unit", "resource", "service")
-	dmv2AZResourceLabelNames     = microprom.NewLabelNames("az", "resource", "service")
-	dmv2AZResourceInfoLabelNames = microprom.NewLabelNames("quota_overcommit_reduction_percentage", "az", "resource", "service")
+	dmv2ResourceLabelNames     = microprom.NewLabelNames("resource", "service")
+	dmv2ResourceInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_quota", "qdm", "resource", "service", "topology", "unit")
+	dmv2ResourceUnitLabelNames = microprom.NewLabelNames("base_unit", "resource", "service")
+	dmv2AZResourceLabelNames   = microprom.NewLabelNames("az", "resource", "service")
 
 	dmv2RateLabelNames     = microprom.NewLabelNames("rate", "service")
 	dmv2RateInfoLabelNames = microprom.NewLabelNames("category", "display_name", "has_limit", "has_usage", "rate", "service", "topology", "unit")
@@ -938,12 +937,12 @@ func (d *DataMetricsV2Reporter) collectMetrics(ctx context.Context, ms *micropro
 	for _, serviceType := range slices.Sorted(sis.GetServices().Keys()) {
 		for res := range sis.GetResourcesForType(serviceType).Values() {
 			for azRes := range sis.GetAZResourcesForPath(res.Path).Values() {
-				// emit limitas_az_resource_info for all AZs except total and unknown
+				// emit limitas_az_resource_quota_overcommit_reduction_percentage for all AZs except total and unknown
 				if azRes.AvailabilityZone != liquid.AvailabilityZoneTotal && azRes.AvailabilityZone != liquid.AvailabilityZoneUnknown {
-					azResInfoLabels := ms.FormatLabels(dmv2AZResourceInfoLabelNames,
-						strconv.FormatUint(uint64(azRes.QuotaOvercommitReductionPercentage), 10), string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
+					azResLabels := ms.FormatLabels(dmv2AZResourceLabelNames,
+						string(azRes.AvailabilityZone), string(res.Name), string(serviceType),
 					)
-					ms.Add("limitas_az_resource_info", azResInfoLabels, 1)
+					ms.Add("limitas_az_resource_quota_overcommit_reduction_percentage", azResLabels, float64(azRes.QuotaOvercommitReductionPercentage))
 				}
 
 				// skip reporting AZ "total"

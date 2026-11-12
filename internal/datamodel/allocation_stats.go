@@ -37,22 +37,22 @@ type clusterAZAllocationStats struct {
 }
 
 // Returns two separate opinions:
-//   - How much between 0 and 100 percent of the quota overcommit should be reduced in this AZ.
-//   - How much between 0 and 100 percent of the quota overcommit should be reduced in the "any" AZ.
-func (c clusterAZAllocationStats) computeQuotaOvercommitReduction(cfg core.AutogrowQuotaDistributionConfiguration) (reduction, reductionInAny uint8) {
+//   - How much between 0 and 100 percent of the quota overcommit should be reduced for growth quota.
+//   - How much between 0 and 100 percent of the quota overcommit should be reduced for base quota.
+func (c clusterAZAllocationStats) computeQuotaOvercommitReduction(cfg core.AutogrowQuotaDistributionConfiguration) (growthQuotaReduction, baseQuotaReduction uint8) {
 	usedCapacity := uint64(0)
 	for _, stats := range c.ProjectStats {
 		usedCapacity += max(stats.Committed, stats.Usage)
 	}
 
 	if c.Capacity == 0 {
-		// If we have no capacity, we will definitely forbid quota overcommit in this AZ.
+		// If we have no capacity, we will definitely forbid growth quota overcommit.
 		// But we do not block base quota overcommit in some specific scenarios:
 		// - when the AZ never had any capacity (either because this resource is just not available here, or because it is still in buildup)
 		// - when there is no usage either (e.g. during decommissioning)
-		reduction = 100
+		growthQuotaReduction = 100
 		if c.ObservedNonzeroCapacityBefore && usedCapacity != 0 {
-			reductionInAny = 100
+			baseQuotaReduction = 100
 		}
 		return
 	} else {
@@ -70,16 +70,17 @@ func (c clusterAZAllocationStats) computeQuotaOvercommitReduction(cfg core.Autog
 		}
 		if !lowerExists {
 			if usedPercent >= upperLimit {
-				reduction = 100
-				reductionInAny = 100
+				growthQuotaReduction = 100
+				baseQuotaReduction = 100
 			}
 			return
 		}
 		// we can assume that lower is smaller than upper because of config validation
+		smoothReductionPercent := (usedPercent - lowerLimit) / (upperLimit - lowerLimit)
 		// this does the step function to the nearest 25%, mapping to a reduction of 20% steps
-		step := uint8(min(max(((usedPercent-lowerLimit)/(upperLimit-lowerLimit)*4)+1, 0), 5))
-		reduction = step * 20
-		reductionInAny = reduction
+		step := uint8(min(max(smoothReductionPercent*4+1, 0), 5))
+		growthQuotaReduction = step * 20
+		baseQuotaReduction = growthQuotaReduction
 		return
 	}
 }

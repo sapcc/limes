@@ -45,7 +45,7 @@ var (
 		SET quota = $1
 		WHERE project_id = $2 AND az_resource_id = $3 AND quota IS DISTINCT FROM $1
 	`)
-	acpqUpdateQuotaOvercommitReductionPercentage = sqlext.SimplifyWhitespace(`
+	acpqUpdateQuotaOvercommitReductionPercentageQuery = sqlext.SimplifyWhitespace(`
 		UPDATE az_resources
 		SET quota_overcommit_reduction_percentage = $1
 		WHERE id = $2 AND quota_overcommit_reduction_percentage IS DISTINCT FROM $1
@@ -187,7 +187,7 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 		}
 
 		// write quota_overcommit_reduction_percentage on az_resources (this is an AZ-level property, not per-project)
-		err = sqlext.WithPreparedStatement(tx, acpqUpdateQuotaOvercommitReductionPercentage, func(stmt *sql.Stmt) error {
+		err = sqlext.WithPreparedStatement(tx, acpqUpdateQuotaOvercommitReductionPercentageQuery, func(stmt *sql.Stmt) error {
 			for az, percentage := range quotaOvercommitReductionPercentage {
 				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
 				if !exists {
@@ -262,11 +262,12 @@ func (t acpqAZTarget) Requested() map[db.ProjectID]uint64 {
 // If an overcommit reduction is indicated, it will choose the according rounded value between
 // the overcommittedDesired and allocated + granted
 func (t acpqAZTarget) AddGranted(granted, overcommittedDesired map[db.ProjectID]uint64, quotaOvercommitReduction uint8) {
+	quotaOvercommitLeftoverFactor := float64(100-quotaOvercommitReduction) / 100
 	for projectID, pt := range t {
 		upper := overcommittedDesired[projectID]
 		lower := pt.Allocated + granted[projectID]
 		absoluteRange := upper - lower
-		increase := uint64(math.Round(float64(absoluteRange) * (float64(100-quotaOvercommitReduction) / 100)))
+		increase := uint64(math.Round(float64(absoluteRange) * quotaOvercommitLeftoverFactor))
 		pt.Allocated = lower + increase
 	}
 }
@@ -535,7 +536,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	// using capacity in that specific AZ.
 	// If a reduction of quota overcommit is in effect, we will reduce the granted quota by this.
 	for az, azTarget := range target {
-		if az == limes.AvailabilityZoneAny || overcommitedDesired[az] == nil {
+		if az == limes.AvailabilityZoneAny || quotaOvercommitReduction[az] == 0 {
 			continue
 		}
 		reduction := quotaOvercommitReduction[az]
@@ -557,6 +558,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
 	anyTarget.AddGranted(granted, overcommitedDesired[limes.AvailabilityZoneAny], reduction)
 
+	// ensure that desires that went unfulfilled cannot be granted by the next round unless it explicitly introduces new desires
 	target.resetDesiredToAllocated()
 }
 
