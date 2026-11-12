@@ -144,7 +144,7 @@ github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
 github.com/sapcc/go-api-declarations/opts
-# github.com/sapcc/go-bits v0.0.0-20261105181628-13886743d3a7
+# github.com/sapcc/go-bits v0.0.0-20261112110216-dce3761314c8
 ## explicit; go 1.27
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
@@ -187,12 +187,12 @@ go.xyrillian.de/gg/options
 go.xyrillian.de/gg/pathrouter
 go.xyrillian.de/gg/pgruntime
 go.xyrillian.de/gg/testcapture
-# go.xyrillian.de/schwift/v2 v2.2.1
+# go.xyrillian.de/schwift/v2 v2.2.2
 ## explicit; go 1.26
 go.xyrillian.de/schwift/v2
 go.xyrillian.de/schwift/v2/capabilities
 go.xyrillian.de/schwift/v2/gopherschwift
-# golang.org/x/sys v0.49.0
+# golang.org/x/sys v0.50.0
 ## explicit; go 1.26.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
