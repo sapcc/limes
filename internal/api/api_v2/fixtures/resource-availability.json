@@ -1,0 +1,40 @@
+{
+  "service_areas": {
+    "first": {
+      "services": {
+        "first": {
+          "categories": {
+            "foo_category": {
+              "resources": {
+                "capacity": {
+                  "availability_zones": {
+                    "az-one": 1880,
+                    "az-two": 1970
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "second": {
+      "services": {
+        "second": {
+          "categories": {
+            "foo_category": {
+              "resources": {
+                "capacity": {
+                  "availability_zones": {
+                    "az-one": 470,
+                    "az-two": 470
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
