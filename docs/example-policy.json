@@ -39,9 +39,11 @@
 
     "v2:meta:no_error_obfuscation": "rule:v2_cluster_admin",
 
+    "v2:cluster:report_availability": "rule:v2_cluster_viewer",
     "v2:cluster:report_single": "rule:v2_cluster_viewer",
     "v2:cluster:validation": "project_name:service and project_domain_name:Default and user_name:limes-validation and user_domain_name:Default",
 
+    "v2:domain:report_availability": "rule:v2_domain_viewer",
     "v2:domain:report_multiple": "rule:v2_cluster_viewer",
     "v2:domain:report_single": "rule:v2_domain_viewer",
 
@@ -53,6 +55,7 @@
     "v2:project:commitment_get_unscoped": "rule:v2_cluster_viewer",
     "v2:project:commitment_update": "rule:v2_project_admin",
     "v2:project:rate_update": "rule:v2_cluster_admin",
+    "v2:project:report_availability": "rule:v2_project_viewer",
     "v2:project:report_multiple": "rule:v2_domain_viewer",
     "v2:project:report_single": "rule:v2_project_viewer",
     "v2:project:resource_update": "rule:v2_project_admin",

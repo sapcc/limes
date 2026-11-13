@@ -25,6 +25,20 @@ func AZHasQuotaForTopology(topology liquid.Topology, az liquid.AvailabilityZone)
 	}
 }
 
+// AZHasCapacityForTopology returns true if the given availability zone can have a capacity for the given topology.
+// Basically, we only allow real AZs for az-separated and az-aware and any for flat.
+func AZHasCapacityForTopology(topology liquid.Topology, az liquid.AvailabilityZone) bool {
+	switch topology {
+	case liquid.FlatTopology:
+		return az == liquid.AvailabilityZoneAny
+	case liquid.AZAwareTopology, liquid.AZSeparatedTopology:
+		return az.IsReal()
+	default:
+		// require an explicit update to this function when new topologies are added
+		panic("do not know how to handle topology: " + string(topology))
+	}
+}
+
 // AZHasBackendQuotaForTopology returns true if the given availability zone can have a backend quota for the given topology.
 // This behaves almost similar to AZHasQuotaForTopology, but for non-az-separated topologies, only the "total" AZ value is valid.
 // Unknown never gets a valid value.
