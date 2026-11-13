@@ -6,7 +6,6 @@ package collector
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"fmt"
 	"slices"
 	"time"
@@ -116,9 +115,6 @@ func (c *Collector) discoverCapacityScrapeTask(ctx context.Context, _ prometheus
 	str, err := oblast.SelectOne[string](ctx, c.DB, findServiceForScrapeQuery, task.ScrapeTiming.StartedAt)
 	if err != nil {
 		return task, err
-	}
-	if str == "" {
-		return task, sql.ErrNoRows
 	}
 	task.ServiceType = db.ServiceType(str)
 

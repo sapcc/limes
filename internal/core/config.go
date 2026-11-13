@@ -220,9 +220,6 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			errs.Addf("invalid value for availability_zones[%d]: %q is not an acceptable name for a real AZ", idx, az)
 		}
 	}
-	if len(cluster.Liquids) == 0 {
-		missing("liquids[]")
-	}
 
 	usedAreas := make(map[string]bool)
 	// NOTE: Liquids[].FixedCapacityConfiguration and Liquids[].PrometheusCapacityConfiguration are optional

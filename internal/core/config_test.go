@@ -40,7 +40,7 @@ func TestConfigValidation(t *testing.T) {
 
 	// empty config
 	_, errs = core.NewClusterFromJSON([]byte("{}"), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: availability_zones[],missing configuration value: liquids[]")
+	assert.Equal(t, errs.Join(","), "missing configuration value: availability_zones[]")
 
 	// invalid AZs
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -269,6 +269,19 @@ func TestConfigValidation(t *testing.T) {
 				}
 			}
 		]
+	}`), time.Now, nil, true)
+	assert.Equal(t, errs.Join(","), "")
+
+	// Valid but empty liquids
+	_, errs = core.NewClusterFromJSON([]byte(`{
+		"availability_zones": [ "foo" ],
+		"discovery": {
+			"method": ""
+		},
+		"areas": {},
+		"liquids": {},
+		"resource_behavior": [],
+		"quota_distribution_configs": []
 	}`), time.Now, nil, true)
 	assert.Equal(t, errs.Join(","), "")
 }
