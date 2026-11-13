@@ -45,10 +45,10 @@ var (
 		SET quota = $1
 		WHERE project_id = $2 AND az_resource_id = $3 AND quota IS DISTINCT FROM $1
 	`)
-	acpqUpdateAllowsQuotaOvercommit = sqlext.SimplifyWhitespace(`
+	acpqUpdateQuotaOvercommitReductionPercentageQuery = sqlext.SimplifyWhitespace(`
 		UPDATE az_resources
-		SET allows_quota_overcommit = $1
-		WHERE id = $2 AND allows_quota_overcommit IS DISTINCT FROM $1
+		SET quota_overcommit_reduction_percentage = $1
+		WHERE id = $2 AND quota_overcommit_reduction_percentage IS DISTINCT FROM $1
 	`)
 	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -150,9 +150,9 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 			buf, _ := json.Marshal(constraints) //nolint:errcheck
 			logg.Debug("ACPQ for %s: constraints = %s", resource.Path, string(buf))
 		}
-		target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
+		target, quotaOvercommitReductionPercentage := acpqComputeQuotas(stats, cfg, constraints, resource.Topology)
 		if logg.ShowDebug {
-			logg.Debug("ACPQ for %s: allowsQuotaOvercommit = %#v", resource.Path, allowsQuotaOvercommit)
+			logg.Debug("ACPQ for %s: quotaOvercommitReductionPercentage = %#v", resource.Path, quotaOvercommitReductionPercentage)
 			buf, _ := json.Marshal(target) //nolint:errcheck
 			logg.Debug("ACPQ for %s: target = %s", resource.Path, string(buf))
 		}
@@ -186,22 +186,22 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 			return fmt.Errorf("while writing updated %s AZ quotas to DB: %w", resource.Path, err)
 		}
 
-		// write allows_quota_overcommit on az_resources (this is an AZ-level property, not per-project)
-		err = sqlext.WithPreparedStatement(tx, acpqUpdateAllowsQuotaOvercommit, func(stmt *sql.Stmt) error {
-			for az, allowsQuotaOvercommit := range allowsQuotaOvercommit {
+		// write quota_overcommit_reduction_percentage on az_resources (this is an AZ-level property, not per-project)
+		err = sqlext.WithPreparedStatement(tx, acpqUpdateQuotaOvercommitReductionPercentageQuery, func(stmt *sql.Stmt) error {
+			for az, percentage := range quotaOvercommitReductionPercentage {
 				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
 				if !exists {
 					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 				}
-				_, err := stmt.Exec(allowsQuotaOvercommit, azRes.ID)
+				_, err := stmt.Exec(percentage, azRes.ID)
 				if err != nil {
-					return fmt.Errorf("while updating allows_quota_overcommit for %s/%s: %w", resource.Path, az, err)
+					return fmt.Errorf("while updating quota_overcommit_reduction_percentage for %s/%s: %w", resource.Path, az, err)
 				}
 			}
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("while writing allows_quota_overcommit for %s: %w", resource.Path, err)
+			return fmt.Errorf("while writing quota_overcommit_reduction_percentage for %s: %w", resource.Path, err)
 		}
 
 		// mark project services with changed quota for SyncQuotaToBackendJob
@@ -259,9 +259,16 @@ func (t acpqAZTarget) Requested() map[db.ProjectID]uint64 {
 }
 
 // AddGranted extends the allocations in this map by the granted values.
-func (t acpqAZTarget) AddGranted(granted map[db.ProjectID]uint64) {
+// If an overcommit reduction is indicated, it will choose the according rounded value between
+// the overcommittedDesired and allocated + granted
+func (t acpqAZTarget) AddGranted(granted, overcommittedDesired map[db.ProjectID]uint64, quotaOvercommitReduction uint8) {
+	quotaOvercommitLeftoverFactor := float64(100-quotaOvercommitReduction) / 100
 	for projectID, pt := range t {
-		pt.Allocated += granted[projectID]
+		upper := overcommittedDesired[projectID]
+		lower := pt.Allocated + granted[projectID]
+		absoluteRange := upper - lower
+		increase := uint64(math.Round(float64(absoluteRange) * quotaOvercommitLeftoverFactor))
+		pt.Allocated = lower + increase
 	}
 }
 
@@ -273,7 +280,7 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, topology liquid.Topology) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectID]projectLocalQuotaConstraints, topology liquid.Topology) (target acpqGlobalTarget, quotaOvercommitReduction map[limes.AvailabilityZone]uint8) {
 	// in order to be able to handle usage in az=unknown via constraint (see below), we always initialize the map
 	if constraints == nil {
 		constraints = make(map[db.ProjectID]projectLocalQuotaConstraints)
@@ -319,24 +326,22 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	}
 
 	// enumerate which AZs allow quota overcommit
-	allowsQuotaOvercommit = make(map[limes.AvailabilityZone]bool)
+	quotaOvercommitReduction = make(map[limes.AvailabilityZone]uint8)
 	isAZAware := false
-	allowsQuotaOvercommitInAny := true
+	maxQuotaOvercommitReductionInAny := uint8(0)
 	for az := range isRelevantAZ {
-		allowsGrowthQuotaOvercommit, allowsBaseQuotaOvercommit := stats[az].allowsQuotaOvercommit(cfg)
-		allowsQuotaOvercommit[az] = allowsGrowthQuotaOvercommit
+		reduction, reductionInAny := stats[az].computeQuotaOvercommitReduction(cfg)
+		quotaOvercommitReduction[az] = reduction
 		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
 			isAZAware = true
-			if !allowsBaseQuotaOvercommit {
-				allowsQuotaOvercommitInAny = false
-			}
+			maxQuotaOvercommitReductionInAny = max(maxQuotaOvercommitReductionInAny, reductionInAny)
 		}
 	}
 
 	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
 	// in all the real AZs, so it can only allow quota overcommit if all AZs do
 	if isAZAware && topology != liquid.AZSeparatedTopology {
-		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allowsQuotaOvercommitInAny
+		quotaOvercommitReduction[limes.AvailabilityZoneAny] = maxQuotaOvercommitReductionInAny
 	}
 
 	// initialize data structure where new quota will be computed (this uses eager
@@ -358,7 +363,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
-	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
+	target.TryFulfillDesired(stats, quotaOvercommitReduction)
 
 	// phase 3: try granting desired_quota
 	for az := range isRelevantAZ {
@@ -376,29 +381,29 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 	target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
-	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
+	target.TryFulfillDesired(stats, quotaOvercommitReduction)
 
 	// phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
 	if cfg.ProjectBaseQuota > 0 {
 		for projectID := range isProjectID {
-			sumOfLocalizedQuotas := uint64(0)
+			sumOfLocalizedAllocations := uint64(0)
 			sumOfCapacities := uint64(0)
 			for az := range isRelevantAZ {
 				if az != limes.AvailabilityZoneAny {
-					sumOfLocalizedQuotas += target[az][projectID].Allocated
+					sumOfLocalizedAllocations += target[az][projectID].Allocated
 				}
 				sumOfCapacities += stats[az].Capacity
 			}
 			// we don't want to hand out the base quota in full, if the total capacity is lower than it
 			realisticBaseQuota := min(cfg.ProjectBaseQuota, sumOfCapacities)
-			if sumOfLocalizedQuotas < realisticBaseQuota {
+			if sumOfLocalizedAllocations < realisticBaseQuota {
 				// AZ separated topology receives the basequota to all available AZs
 				if topology == liquid.AZSeparatedTopology {
 					for az := range isRelevantAZ {
 						target[az][projectID].Desired = min(cfg.ProjectBaseQuota, stats[az].Capacity)
 					}
 				} else {
-					target[limes.AvailabilityZoneAny][projectID].Desired = realisticBaseQuota - sumOfLocalizedQuotas
+					target[limes.AvailabilityZoneAny][projectID].Desired = realisticBaseQuota - sumOfLocalizedAllocations
 				}
 			}
 		}
@@ -406,7 +411,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
 		target.EnforceConstraints(stats, constraints, allAZsInOrder, isProjectID, isAZAware)
-		target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
+		target.TryFulfillDesired(stats, quotaOvercommitReduction)
 	}
 
 	// lastly, we create one total entry for the result
@@ -424,7 +429,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 
-	return target, allowsQuotaOvercommit
+	return
 }
 
 // EnforceConstraints decreases Desired in order to fit into project-local quota constraints
@@ -511,37 +516,56 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 
 // TryFulfillDesired tries to increase Allocated towards Desired
 // using any remaining capacity in the cluster.
-func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
-	// in AZs where quota overcommit is allowed, we do not have to be careful
+func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, quotaOvercommitReduction map[limes.AvailabilityZone]uint8) {
+	overcommitedDesired := make(map[limes.AvailabilityZone]map[db.ProjectID]uint64)
+	// in AZs where quota overcommit is fully allowed, we do not have to be careful
 	for az, azTarget := range target {
-		if allowsQuotaOvercommit[az] {
+		if quotaOvercommitReduction[az] == 0 {
 			for _, projectTarget := range azTarget {
 				projectTarget.Allocated = max(projectTarget.Desired, projectTarget.Allocated)
+			}
+		} else {
+			overcommitedDesired[az] = make(map[db.ProjectID]uint64)
+			for projectID, projectTarget := range azTarget {
+				overcommitedDesired[az][projectID] = max(projectTarget.Desired, projectTarget.Allocated)
 			}
 		}
 	}
 
-	// real AZs (i.e. not "any") can only have their demand fulfilled locally,
-	// using capacity in that specific AZ
+	// Real AZs (i.e. not "any") can only have their demand fulfilled locally,
+	// using capacity in that specific AZ.
+	// If a reduction of quota overcommit is in effect, we will reduce the granted quota by this.
 	for az, azTarget := range target {
-		if az == limes.AvailabilityZoneAny {
+		if az == limes.AvailabilityZoneAny || quotaOvercommitReduction[az] == 0 {
 			continue
 		}
+		reduction := quotaOvercommitReduction[az]
 		availableCapacity := liquidapi.SaturatingSub(stats[az].Capacity, azTarget.SumAllocated())
-		if availableCapacity > 0 {
-			granted := liquidapi.DistributeFairly(availableCapacity, azTarget.Requested())
-			azTarget.AddGranted(granted)
-		}
+		granted := liquidapi.DistributeFairly(availableCapacity, azTarget.Requested())
+		azTarget.AddGranted(granted, overcommitedDesired[az], reduction)
 	}
 
 	// the pseudo-AZ "any" can fulfil demand by absorbing all unused capacity
+	if quotaOvercommitReduction[limes.AvailabilityZoneAny] == 0 {
+		return
+	}
 	var totalAvailable uint64
 	for az, azTarget := range target {
 		totalAvailable += liquidapi.SaturatingSub(stats[az].Capacity, azTarget.SumAllocated())
 	}
-	if totalAvailable > 0 {
-		anyTarget := target[limes.AvailabilityZoneAny]
-		granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
-		anyTarget.AddGranted(granted)
+	anyTarget := target[limes.AvailabilityZoneAny]
+	reduction := quotaOvercommitReduction[limes.AvailabilityZoneAny]
+	granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
+	anyTarget.AddGranted(granted, overcommitedDesired[limes.AvailabilityZoneAny], reduction)
+
+	// ensure that desires that went unfulfilled cannot be granted by the next round unless it explicitly introduces new desires
+	target.resetDesiredToAllocated()
+}
+
+func (target acpqGlobalTarget) resetDesiredToAllocated() {
+	for _, azTarget := range target {
+		for _, projectTarget := range azTarget {
+			projectTarget.Desired = projectTarget.Allocated
+		}
 	}
 }
