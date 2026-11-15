@@ -114,6 +114,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -130,7 +131,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	// check if project needs to be discovered
 	if dbProject == nil {
 		c := collector.NewCollector(p.Cluster, p.auditor)
-		newProjectUUIDs, err := c.ScanProjects(r.Context(), *dbDomain)
+		newProjectUUIDs, err := c.ScanProjects(ctx, *dbDomain)
 		if respondwith.ObfuscatedErrorText(w, err) {
 			return
 		}
@@ -149,7 +150,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// mark all project services as stale to force limes-collect to sync ASAP
-	_, err := p.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
+	_, err := gsql.Exec(ctx, p.DB, `UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}

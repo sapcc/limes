@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	"go.xyrillian.de/gg/gsql"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 	"go.xyrillian.de/gg/pgruntime"
 
@@ -390,9 +391,9 @@ func (s Setup) UpdateMockUserIdentity(updates map[string]string) {
 }
 
 // GetServiceID is a helper function for finding the ID of a db.Service record.
-func (s Setup) GetServiceID(srvType db.ServiceType) (result db.ServiceID) {
+func (s Setup) GetServiceID(srvType db.ServiceType) db.ServiceID {
 	s.t.Helper()
-	err := s.DB.QueryRow(`SELECT id FROM services WHERE type = $1`, srvType).Scan(&result)
+	result, err := oblast.SelectOne[db.ServiceID](s.Ctx, s.DB, `SELECT id FROM services WHERE type = $1`, srvType)
 	if err != nil {
 		s.t.Fatalf("could not find services.id for type = %q: %s", srvType, err.Error())
 	}
@@ -400,9 +401,9 @@ func (s Setup) GetServiceID(srvType db.ServiceType) (result db.ServiceID) {
 }
 
 // GetCategoryID is a helper function for finding the ID of a db.Category record.
-func (s Setup) GetCategoryID(srvType db.ServiceType, name liquid.CategoryName) (result db.CategoryID) {
+func (s Setup) GetCategoryID(srvType db.ServiceType, name liquid.CategoryName) db.CategoryID {
 	s.t.Helper()
-	err := s.DB.QueryRow(`SELECT id FROM categories WHERE service_id = $1 AND name = $2`, s.GetServiceID(srvType), name).Scan(&result)
+	result, err := oblast.SelectOne[db.CategoryID](s.Ctx, s.DB, `SELECT id FROM categories WHERE service_id = $1 AND name = $2`, s.GetServiceID(srvType), name)
 	if err != nil {
 		s.t.Fatalf("could not find categories.id for service_type = %q and name = %q: %s", srvType, name, err.Error())
 	}
@@ -410,10 +411,10 @@ func (s Setup) GetCategoryID(srvType db.ServiceType, name liquid.CategoryName) (
 }
 
 // GetResourceID is a helper function for finding the ID of a db.Resource record.
-func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName) (result db.ResourceID) {
+func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName) db.ResourceID {
 	s.t.Helper()
 	path := string(srvType) + "/" + string(resName)
-	err := s.DB.QueryRow(`SELECT id FROM resources WHERE path = $1`, path).Scan(&result)
+	result, err := oblast.SelectOne[db.ResourceID](s.Ctx, s.DB, `SELECT id FROM resources WHERE path = $1`, path)
 	if err != nil {
 		s.t.Fatalf("could not find resources.id for path = %q: %s", path, err.Error())
 	}
@@ -421,10 +422,10 @@ func (s Setup) GetResourceID(srvType db.ServiceType, resName liquid.ResourceName
 }
 
 // GetAZResourceID is a helper function for finding the ID of a db.AZResource record.
-func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceName, az limes.AvailabilityZone) (result db.AZResourceID) {
+func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceName, az limes.AvailabilityZone) db.AZResourceID {
 	s.t.Helper()
 	path := string(srvType) + "/" + string(resName) + "/" + string(az)
-	err := s.DB.QueryRow(`SELECT id FROM az_resources WHERE path = $1`, path).Scan(&result)
+	result, err := oblast.SelectOne[db.AZResourceID](s.Ctx, s.DB, `SELECT id FROM az_resources WHERE path = $1`, path)
 	if err != nil {
 		s.t.Fatalf("could not find az_resources.id for path = %q: %s", path, err.Error())
 	}
@@ -432,10 +433,10 @@ func (s Setup) GetAZResourceID(srvType db.ServiceType, resName liquid.ResourceNa
 }
 
 // GetRateID is a helper function for finding the ID of a db.Rate record.
-func (s Setup) GetRateID(srvType db.ServiceType, rateName liquid.RateName) (result db.RateID) {
+func (s Setup) GetRateID(srvType db.ServiceType, rateName liquid.RateName) db.RateID {
 	s.t.Helper()
 	path := string(srvType) + "/" + string(rateName)
-	err := s.DB.QueryRow(`SELECT id FROM rates WHERE path = $1`, path).Scan(&result)
+	result, err := oblast.SelectOne[db.RateID](s.Ctx, s.DB, `SELECT id FROM rates WHERE path = $1`, path)
 	if err != nil {
 		s.t.Fatalf("could not find rates.id for path = %q: %s", path, err.Error())
 	}
@@ -443,9 +444,9 @@ func (s Setup) GetRateID(srvType db.ServiceType, rateName liquid.RateName) (resu
 }
 
 // GetProjectID is a helper function for finding the ID of a db.Project record.
-func (s Setup) GetProjectID(name string) (result db.ProjectID) {
+func (s Setup) GetProjectID(name string) db.ProjectID {
 	s.t.Helper()
-	err := s.DB.QueryRow(`SELECT id FROM projects WHERE name = $1`, name).Scan(&result)
+	result, err := oblast.SelectOne[db.ProjectID](s.Ctx, s.DB, `SELECT id FROM projects WHERE name = $1`, name)
 	if err != nil {
 		s.t.Fatalf("could not find projects.id for name = %q: %s", name, err.Error())
 	}
@@ -453,9 +454,9 @@ func (s Setup) GetProjectID(name string) (result db.ProjectID) {
 }
 
 // GetProjectUUID is a helper function for finding the UUID of a db.Project record.
-func (s Setup) GetProjectUUID(name string) (result liquid.ProjectUUID) {
+func (s Setup) GetProjectUUID(name string) liquid.ProjectUUID {
 	s.t.Helper()
-	err := s.DB.QueryRow(`SELECT uuid FROM projects WHERE name = $1`, name).Scan(&result)
+	result, err := oblast.SelectOne[liquid.ProjectUUID](s.Ctx, s.DB, `SELECT uuid FROM projects WHERE name = $1`, name)
 	if err != nil {
 		s.t.Fatalf("could not find projects.uuid for name = %q: %s", name, err.Error())
 	}
@@ -465,7 +466,7 @@ func (s Setup) GetProjectUUID(name string) (result liquid.ProjectUUID) {
 // MustDBExec is a shorthand for s.DB.Exec() + t.Fatal() on error.
 func (s Setup) MustDBExec(query string, args ...any) {
 	s.t.Helper()
-	_ = must.ReturnT(s.DB.Exec(query, args...))(s.t)
+	_ = must.ReturnT(gsql.Exec(s.Ctx, s.DB, query, args...))(s.t)
 }
 
 // MustDBInsert is a shorthand for s.DB.Insert() + t.Fatal() on error.

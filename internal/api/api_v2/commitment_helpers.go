@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -108,7 +109,7 @@ func convertCommitmentToDisplayForm(c db.ProjectCommitment, path db.AZResourcePa
 // validateCommittability checks that the AZ resource identified by `path`:
 //   - exists in the given project scope, and
 //   - allows commitments of the specified duration.
-func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope reports_v2.ProjectScope, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot, scopeDescription string) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
+func (p *v2Provider) validateCommittability(ctx context.Context, path db.AZResourcePath, scope reports_v2.ProjectScope, duration limesresources.CommitmentDuration, sis core.ServiceInfoSnapshot, scopeDescription string) (_ db.AZResource, _ core.ScopedCommitmentBehavior, err error) {
 	_, ok := sis.GetServiceForType(path.ServiceType)
 	if !ok {
 		err = respondwith.CustomStatus(http.StatusNotFound, fmt.Errorf("%s%w", scopeDescription, errNoSuchService))
@@ -120,9 +121,9 @@ func (p *v2Provider) validateCommittability(path db.AZResourcePath, scope report
 		return
 	}
 
-	var forbidden bool
-	err = p.DB.QueryRow(`SELECT forbidden FROM project_resources WHERE project_id = $1 AND resource_id = $2`,
-		scope.Project.ID, resource.ID).Scan(&forbidden)
+	forbidden, err := oblast.SelectOne[bool](ctx, p.DB,
+		`SELECT forbidden FROM project_resources WHERE project_id = $1 AND resource_id = $2`,
+		scope.Project.ID, resource.ID)
 	if err != nil {
 		return
 	}
@@ -230,10 +231,8 @@ var pazrCommitmentStatsQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholde
 `))
 
 // getCommitmentStats collects statistics about existing commitments in a specific ProjectAZResource (pazr) scope.
-func getCommitmentStats(dbi db.Interface, projectID db.ProjectID, azResourceID db.AZResourceID) (stats pazrCommitmentStats, err error) {
-	err = dbi.QueryRow(pazrCommitmentStatsQuery, projectID, azResourceID).
-		Scan(&stats.TotalConfirmed, &stats.TotalGuaranteed)
-	return
+func getCommitmentStats(ctx context.Context, dbi db.Interface, projectID db.ProjectID, azResourceID db.AZResourceID) (stats pazrCommitmentStats, err error) {
+	return oblast.TupleSelectOne[pazrCommitmentStats](ctx, dbi, pazrCommitmentStatsQuery, projectID, azResourceID)
 }
 
 // analyzeCommitmentChangeResponse converts a CommitmentChangeResponse into an API error unless the response is positive.

@@ -15,6 +15,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 
@@ -201,13 +202,13 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			// try to sync other projects first, then retry in 30 seconds from now at the earliest
 			finishedAt := c.MeasureTimeAtEnd()
 			durationSecs := finishedAt.Sub(startedAt).Seconds()
-			_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt.Add(30*time.Second), durationSecs)
+			_, err2 := gsql.Exec(ctx, c.DB, quotaSyncRetryWithDelayQuery, srv.ID, finishedAt.Add(30*time.Second), durationSecs)
 			if err2 != nil {
 				return fmt.Errorf("%w (additional error when delaying retry: %s)", err, err2.Error())
 			}
 			return err
 		}
-		_, err = c.DB.Exec(quotaSyncMarkProjectAZResourcesAsAppliedQuery, pq.Array(projectAZResourceIDs))
+		_, err = gsql.Exec(ctx, c.DB, quotaSyncMarkProjectAZResourcesAsAppliedQuery, pq.Array(projectAZResourceIDs))
 		if err != nil {
 			return err
 		}
@@ -215,6 +216,6 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 
 	finishedAt := c.MeasureTimeAtEnd()
 	durationSecs := finishedAt.Sub(startedAt).Seconds()
-	_, err = c.DB.Exec(quotaSyncMarkServiceAsAppliedQuery, srv.ID, durationSecs)
+	_, err = gsql.Exec(ctx, c.DB, quotaSyncMarkServiceAsAppliedQuery, srv.ID, durationSecs)
 	return err
 }

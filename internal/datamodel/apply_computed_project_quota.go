@@ -5,7 +5,6 @@ package datamodel
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -159,14 +158,14 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 
 		// write new AZ quotas to database (this includes az=total)
 		projectsWithUpdatedQuota := make(map[db.ProjectID]struct{})
-		err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
+		err = gsql.WithPreparedStatement(ctx, tx, acpqUpdateAZQuotaQuery, func(stmt gsql.PreparedStatement) error {
 			for az, azTarget := range target {
 				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
 				if !exists {
 					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 				}
 				for projectID, projectTarget := range azTarget {
-					result, err := stmt.Exec(projectTarget.Allocated, projectID, azRes.ID)
+					result, err := stmt.Exec(ctx, projectTarget.Allocated, projectID, azRes.ID)
 					if err != nil {
 						return fmt.Errorf("in AZ %s in project %d: %w", az, projectID, err)
 					}
@@ -187,13 +186,13 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 		}
 
 		// write allows_quota_overcommit on az_resources (this is an AZ-level property, not per-project)
-		err = sqlext.WithPreparedStatement(tx, acpqUpdateAllowsQuotaOvercommit, func(stmt *sql.Stmt) error {
+		err = gsql.WithPreparedStatement(ctx, tx, acpqUpdateAllowsQuotaOvercommit, func(stmt gsql.PreparedStatement) error {
 			for az, allowsQuotaOvercommit := range allowsQuotaOvercommit {
 				azRes, exists := sis.GetAZResourceForPath(resource.Path.InAZ(az))
 				if !exists {
 					return fmt.Errorf("no az_resources entry for %s/%s", resource.Path, az)
 				}
-				_, err := stmt.Exec(allowsQuotaOvercommit, azRes.ID)
+				_, err := stmt.Exec(ctx, allowsQuotaOvercommit, azRes.ID)
 				if err != nil {
 					return fmt.Errorf("while updating allows_quota_overcommit for %s/%s: %w", resource.Path, az, err)
 				}
@@ -205,9 +204,9 @@ func ApplyComputedProjectQuota(ctx context.Context, sis core.ServiceInfoSnapshot
 		}
 
 		// mark project services with changed quota for SyncQuotaToBackendJob
-		err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectServicesQuery, func(stmt *sql.Stmt) error {
+		err = gsql.WithPreparedStatement(ctx, tx, acpqUpdateProjectServicesQuery, func(stmt gsql.PreparedStatement) error {
 			for projectID := range projectsWithUpdatedQuota {
-				_, err := stmt.Exec(now, projectID, service.ID)
+				_, err := stmt.Exec(ctx, now, projectID, service.ID)
 				if err != nil {
 					return fmt.Errorf("in project %d: %w", projectID, err)
 				}

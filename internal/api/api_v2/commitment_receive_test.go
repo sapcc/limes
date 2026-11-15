@@ -17,6 +17,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 	"go.xyrillian.de/gg/jsonmatch"
+	"go.xyrillian.de/gg/oblast"
 	. "go.xyrillian.de/gg/option"
 
 	"github.com/sapcc/limes/internal/audit"
@@ -220,11 +221,10 @@ func TestCommitmentReceiveHappyPaths(t *testing.T) {
 			receiveExpected["project_id"] = "uuid-for-dresden"
 			receiveCommitmentAndExpectSuccess(t, s, manager == "liquid", uuidReceived, map[string]any{"target_project_id": "uuid-for-dresden", "amount": 6}, receiveExpected, func() (cadf.Resource, cadf.Resource) {
 				// The leftover UUID is not in the response; read it from the DB.
-				var uuidLeftover liquid.CommitmentUUID
-				must.SucceedT(t, s.DB.QueryRow(
+				uuidLeftover := must.ReturnT(oblast.SelectOne[liquid.CommitmentUUID](s.Ctx, s.DB,
 					`SELECT uuid FROM project_commitments WHERE project_id = 1 AND status != 'superseded' AND uuid != $1`,
 					uuidReceived,
-				).Scan(&uuidLeftover))
+				))(t)
 				receiveCCR := liquid.CommitmentChangeRequest{
 					AZ:          "az-one",
 					InfoVersion: 1,
@@ -297,12 +297,11 @@ func TestCommitmentReceiveHappyPaths(t *testing.T) {
 			},
 			)
 			// Read the leftover UUID and its new transfer token from the DB for the DB-changes assertion
-			var uuidLeftover liquid.CommitmentUUID
-			var leftoverTransferToken string
-			must.SucceedT(t, s.DB.QueryRow(
+			uuidLeftover, leftoverTransferToken, err := oblast.SelectTwo[liquid.CommitmentUUID, string](s.Ctx, s.DB,
 				`SELECT uuid, transfer_token FROM project_commitments WHERE project_id = 1 AND status != 'superseded' AND uuid != $1`,
 				uuidReceived,
-			).Scan(&uuidLeftover, &leftoverTransferToken))
+			)
+			must.SucceedT(t, err)
 			tr.DBChanges().AssertEqualf(`
 				DELETE FROM project_commitments WHERE id = 2 AND uuid = '%[1]s' AND transfer_token = '%[2]s';
 				INSERT INTO project_commitments (id, uuid, project_id, az_resource_id, status, amount, duration, created_at, creator_uuid, creator_name, confirmed_at, expires_at, superseded_at, creation_context_json, supersede_context_json, updated_at) VALUES (2, '%[1]s', 1, 2, 'superseded', 10, '1 hour', %[8]d, 'uuid-for-alice', 'alice@Default', %[8]d, %[9]d, %[6]d, '{"reason": "receive", "related_ids": [1], "related_uuids": ["%[10]s"]}', '{"reason": "receive", "related_ids": [3, 4], "related_uuids": ["%[3]s", "%[4]s"]}', %[6]d);

@@ -244,7 +244,7 @@ func (c *Collector) initProject(ctx context.Context, domain db.Domain, project c
 
 		// add records to `project_services` table
 		allServiceTypes := slices.Collect(maps.Keys(c.Cluster.Config.Liquids))
-		_, err = tx.Exec(initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
+		_, err = gsql.Exec(ctx, tx, initProjectServicesQuery, dbProject.ID, c.MeasureTime(), pq.Array(allServiceTypes))
 		return err
 	})
 }
@@ -276,7 +276,7 @@ func (c *Collector) deleteProject(ctx context.Context, project db.Project) error
 		// it is fine to delete a project that only has superseded and expired commitments on it
 		// (if there are commitments in any other status, the `DELETE FROM projects` below will fail
 		// and rollback the full transaction)
-		_, err = tx.Exec(deleteProjectRemoveNonblockingCommitmentsQuery, project.ID)
+		_, err = gsql.Exec(ctx, tx, deleteProjectRemoveNonblockingCommitmentsQuery, project.ID)
 		if err != nil {
 			return err
 		}

@@ -754,19 +754,15 @@ func Test_ProjectOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, s.Handler)
-	var (
-		actualLimit   uint64
-		actualWindow  limesrates.Window
-		projectRateId db.ProjectRateID
-	)
-	err := s.DB.QueryRow(`
-		SELECT pra.rate_limit, pra.window_ns
+
+	_, err := oblast.SelectOne[int64](s.Ctx, s.DB, `
+		SELECT 1
 		FROM project_rates pra
 		JOIN rates ra ON ra.id = pra.rate_id
 		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`,
-		"berlin", "shared", "notexistent:bogus").Scan(&actualLimit, &actualWindow)
+		"berlin", "shared", "notexistent:bogus")
 	// There shouldn't be anything in the DB.
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected error %v but got %v", sql.ErrNoRows, err)
@@ -809,22 +805,12 @@ func Test_ProjectOperations(t *testing.T) {
 		JOIN services s ON s.id = ra.service_id
 		JOIN projects p ON p.id = pra.project_id
 		WHERE p.name = $1 AND s.type = $2 AND ra.name = $3`
-	must.SucceedT(t, s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow))
-	if actualLimit != expectedLimit {
-		t.Errorf(
-			"rate limit %s was not updated in database: expected limit %d, but got %d",
-			rateName, expectedLimit, actualLimit,
-		)
-	}
-	if actualWindow != expectedWindow {
-		t.Errorf(
-			"rate limit %s was not updated in database: expected window %d, but got %d",
-			rateName, expectedWindow, actualWindow,
-		)
-	}
+	actual := must.ReturnT(db.ProjectRateStore.SelectOne(s.Ctx, s.DB, getProjectRateQuery, "berlin", "shared", rateName))(t)
+	assert.Equal(t, actual.Limit, Some(expectedLimit))
+	assert.Equal(t, actual.Window, Some(expectedWindow))
 
 	// now we check that an update of the rate limit does not create a new row
-	oldProjectRateId := projectRateId
+	oldProjectRateId := actual.ID
 	expectedLimit = uint64(200)
 	oldassert.HTTPRequest{
 		Method:       "PUT",
@@ -832,19 +818,9 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         makeRequest(rateName, expectedLimit, expectedWindow),
 	}.Check(t, s.Handler)
-	must.SucceedT(t, s.DB.QueryRow(getProjectRateQuery, "berlin", "shared", rateName).Scan(&projectRateId, &actualLimit, &actualWindow))
-	if oldProjectRateId != projectRateId {
-		t.Errorf(
-			"for rate %s, a new ID was created instead of updating the existing one",
-			rateName,
-		)
-	}
-	if actualLimit != expectedLimit {
-		t.Errorf(
-			"rate limit %s was not updated in database: expected limit %d, but got %d",
-			rateName, expectedLimit, actualLimit,
-		)
-	}
+	actual = must.ReturnT(db.ProjectRateStore.SelectOne(s.Ctx, s.DB, getProjectRateQuery, "berlin", "shared", rateName))(t)
+	assert.Equal(t, actual.ID, oldProjectRateId)
+	assert.Equal(t, actual.Limit, Some(expectedLimit))
 
 	oldassert.HTTPRequest{
 		Method:       "GET",
@@ -964,15 +940,9 @@ func Test_LargeProjectList(t *testing.T) {
 		),
 	}
 	for _, query := range queries {
-		must.SucceedT(t, sqlext.WithPreparedStatement(s.DB, query, func(stmt *sql.Stmt) error {
-			for idx, uuid := range projectUUIDs {
-				_, err := stmt.Exec(idx, uuid)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		}))
+		for idx, uuid := range projectUUIDs {
+			s.MustDBExec(query, idx, uuid)
+		}
 	}
 
 	// build expectation for what the project list will look like

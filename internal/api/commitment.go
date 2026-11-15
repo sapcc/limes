@@ -379,13 +379,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		totalConfirmed            uint64
-	)
-	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &totalConfirmed)
+	azResourceID, resourceAllowsCommitments, totalConfirmed, err := oblast.SelectThree[db.AZResourceID, bool, uint64](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -394,7 +388,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	_ = azResourceID // returned by the above query, but not used in this function
+	_, _ = azResourceID, totalConfirmed // returned by the above query, but not used in this function
 
 	// this api should always check CanConfirm at now()
 	now := p.timeNow()
@@ -473,13 +467,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		totalConfirmed            uint64
-	)
-	err := p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &totalConfirmed)
+	azResourceID, resourceAllowsCommitments, totalConfirmed, err := oblast.SelectThree[db.AZResourceID, bool, uint64](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -640,7 +628,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt.IsSome() {
-		_, err := p.DB.Exec(`UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
+		_, err := gsql.Exec(ctx, p.DB, `UPDATE services SET next_scrape_at = $1 WHERE type = $2`, now, path.ServiceType)
 		if err != nil {
 			logg.Error("could not trigger a new capacity scrape after creating commitment %s: %s", dbCommitment.UUID, err.Error())
 		}
@@ -715,12 +703,7 @@ func (p *v1Provider) MergeProjectCommitments(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err := p.DB.QueryRow(findAZResourceLocationByIDQuery, azResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, azResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
@@ -925,12 +908,7 @@ func (p *v1Provider) RenewProjectCommitments(w http.ResponseWriter, r *http.Requ
 		ccr liquid.CommitmentChangeRequest
 	)
 	err = p.DB.WithinTransaction(ctx, nil, func(tx *gsql.Tx) error {
-		var (
-			path           db.AZResourcePath
-			totalConfirmed uint64
-		)
-		err = tx.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-			Scan(&path, &totalConfirmed)
+		path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, tx, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return respondwith.CustomStatus(http.StatusNotFound, errors.New("no route to this commitment"))
 		} else if err != nil {
@@ -1070,12 +1048,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1242,12 +1215,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1478,12 +1446,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID).
-		Scan(&path, &totalConfirmed)
+	path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "location data not found.", http.StatusNotFound)
@@ -1491,6 +1454,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
+	_ = totalConfirmed // returned by the above query, but not used in this function
 
 	resource, rExists := p.Cluster.SIC.GetSnapshot().GetResourceForPath(path.Resource())
 	if !rExists {
@@ -1538,13 +1502,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var (
-		path                 db.AZResourcePath
-		sourceTotalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID).
-		Scan(&path, &sourceTotalConfirmed)
-
+	path, sourceTotalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbCommitment.ProjectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1572,13 +1530,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// check that the target project allows commitments at all
-	var (
-		azResourceID              db.AZResourceID
-		resourceAllowsCommitments bool
-		targetTotalConfirmed      uint64
-	)
-	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, targetProject.ID, path).
-		Scan(&azResourceID, &resourceAllowsCommitments, &targetTotalConfirmed)
+	azResourceID, resourceAllowsCommitments, targetTotalConfirmed, err := oblast.SelectThree[db.AZResourceID, bool, uint64](ctx, p.DB, findAZResourceIDByLocationQuery, targetProject.ID, path)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -1805,12 +1757,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
-	var (
-		sourcePath           db.AZResourcePath
-		sourceTotalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&sourcePath, &sourceTotalConfirmed)
+	sourcePath, sourceTotalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -1898,13 +1845,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		targetAZResourceID        db.AZResourceID
-		resourceAllowsCommitments bool
-		targetTotalConfirmed      uint64
-	)
-	err = p.DB.QueryRow(findAZResourceIDByLocationQuery, dbProject.ID, targetPath).
-		Scan(&targetAZResourceID, &resourceAllowsCommitments, &targetTotalConfirmed)
+	targetAZResourceID, resourceAllowsCommitments, targetTotalConfirmed, err := oblast.SelectThree[db.AZResourceID, bool, uint64](ctx, p.DB, findAZResourceIDByLocationQuery, dbProject.ID, targetPath)
 	if respondwith.ObfuscatedErrorText(w, err) {
 		return
 	}
@@ -2121,12 +2062,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var (
-		path           db.AZResourcePath
-		totalConfirmed uint64
-	)
-	err = p.DB.QueryRow(findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID).
-		Scan(&path, &totalConfirmed)
+	path, totalConfirmed, err := oblast.SelectTwo[db.AZResourcePath, uint64](ctx, p.DB, findAZResourceLocationByIDQuery, dbCommitment.AZResourceID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)

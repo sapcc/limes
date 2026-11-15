@@ -12,6 +12,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
+	"go.xyrillian.de/gg/gsql"
 
 	"github.com/sapcc/limes/internal/db"
 )
@@ -54,11 +55,11 @@ var (
 	`))
 )
 
-func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels) error {
+func (c *Collector) cleanupOldCommitments(ctx context.Context, _ prometheus.Labels) error {
 	now := c.MeasureTime()
 
 	// step 1: move commitments to status "expired" if expires_at <= NOW()
-	_, err := c.DB.Exec(expiredCommitmentsUpdateStatusQuery, now)
+	_, err := gsql.Exec(ctx, c.DB, expiredCommitmentsUpdateStatusQuery, now)
 	if err != nil {
 		return fmt.Errorf("while moving commitments to status %q: %w", liquid.CommitmentStatusExpired, err)
 	}
@@ -71,13 +72,13 @@ func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels
 	// around in the DB for a little bit (in this case, one month) can
 	// potentially help in investigations when customers complain about
 	// commitments expiring unexpectedly.
-	_, err = c.DB.Exec(expiredCommitmentsCleanupQuery, now)
+	_, err = gsql.Exec(ctx, c.DB, expiredCommitmentsCleanupQuery, now)
 	if err != nil {
 		return fmt.Errorf("while deleting expired commitments without undeleted successors: %w", err)
 	}
 
 	// step 3: hard-delete soft-deleted commitments after a grace period
-	_, err = c.DB.Exec(hardDeleteCommitmentsQuery, now)
+	_, err = gsql.Exec(ctx, c.DB, hardDeleteCommitmentsQuery, now)
 	if err != nil {
 		return fmt.Errorf("while deleting soft-deleted commitments: %w", err)
 	}

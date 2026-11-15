@@ -252,7 +252,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	// for all resources thus updated, sync commitment status with reality
 	for _, res := range resources.All() {
 		now := c.MeasureTime()
-		_, err = c.DB.Exec(updateProjectCommitmentStatusForResourceQuery, res.Path, now)
+		_, err = gsql.Exec(ctx, c.DB, updateProjectCommitmentStatusForResourceQuery, res.Path, now)
 		if err != nil {
 			return fmt.Errorf("while updating project_commitments.status for %s/%s: %w", service.Type, res.Name, err)
 		}

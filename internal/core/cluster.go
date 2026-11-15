@@ -151,7 +151,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 
 	// delete all orphaned services
 	// respective resources, az_resources and rates are handled by delete-cascade
-	_, err = c.DB.Exec(`DELETE FROM services WHERE type != ALL($1)`, pq.Array(serviceTypes))
+	_, err = gsql.Exec(ctx, c.DB, `DELETE FROM services WHERE type != ALL($1)`, pq.Array(serviceTypes))
 	if err != nil {
 		errs.Addf("failed orphaned services cleanup: %w", err)
 	}
@@ -485,7 +485,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			if nonConvertibleEntries > 0 {
 				return fmt.Errorf("there are %d commitments with rounding issues when updating unit on resource_id %d from %q to %q", nonConvertibleEntries, resID, units.oldUnit, units.newUnit)
 			}
-			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
+			_, err = gsql.Exec(ctx, tx, sqlext.SimplifyWhitespace(`UPDATE project_commitments pc
 			SET amount = pc.amount * $1 / $2, updated_at = $4
 			FROM az_resources azr
 			WHERE pc.az_resource_id = azr.id AND azr.resource_id = $3`), oldFactor, newFactor, resID, timeNow)
@@ -493,7 +493,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 				return fmt.Errorf("error while updating project_commitments with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 			}
 
-			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE az_resources
+			_, err = gsql.Exec(ctx, tx, sqlext.SimplifyWhitespace(`UPDATE az_resources
 			SET raw_capacity = ROUND(raw_capacity * $1 / $2),
 			usage = ROUND(usage * $1 / $2),
 			last_nonzero_raw_capacity = ROUND(last_nonzero_raw_capacity * $1 / $2)
@@ -501,14 +501,14 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			if err != nil {
 				return fmt.Errorf("error while updating az_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 			}
-			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_resources
+			_, err = gsql.Exec(ctx, tx, sqlext.SimplifyWhitespace(`UPDATE project_resources
 			SET max_quota_from_outside_admin = ROUND(max_quota_from_outside_admin * $1 / $2),
 			override_quota_from_config = ROUND(override_quota_from_config * $1 / $2)
 			WHERE resource_id = $3`), oldFactor, newFactor, resID)
 			if err != nil {
 				return fmt.Errorf("error while updating project_resources with resource_id %d when changing unit from %q to %q: %w", resID, units.oldUnit, units.newUnit, err)
 			}
-			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
+			_, err = gsql.Exec(ctx, tx, sqlext.SimplifyWhitespace(`UPDATE project_az_resources pazr
 			SET quota = ROUND(pazr.quota * $1 / $2),
 			usage = ROUND(pazr.usage * $1 / $2),
 			physical_usage = ROUND(pazr.physical_usage * $1 / $2),
@@ -659,7 +659,7 @@ func SaveServiceInfoToDB(ctx context.Context, serviceType db.ServiceType, servic
 			}
 
 			// For all values which change with the next scrape or from config, we assume rounding is okay.
-			_, err = tx.Exec(sqlext.SimplifyWhitespace(`UPDATE project_rates
+			_, err = gsql.Exec(ctx, tx, sqlext.SimplifyWhitespace(`UPDATE project_rates
 				SET rate_limit = ROUND(rate_limit * $1 / $2),
 				usage_as_bigint = ROUND(usage_as_bigint::BIGINT * $1 / $2)::TEXT
 				WHERE rate_id = $3`), oldFactor, newFactor, rateID)

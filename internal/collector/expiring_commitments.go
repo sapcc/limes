@@ -87,7 +87,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		}
 
 		// mark short-term commitments as notified without queueing them
-		_, err := tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
+		_, err := gsql.Exec(ctx, tx, updateCommitmentAsNotifiedQuery, now, pq.Array(shortTermCommitmentIDs))
 		if err != nil {
 			return err
 		}
@@ -121,9 +121,12 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 		mailConfig := c.Cluster.Config.MailNotifications.UnwrapOrPanic("this task should not have been called if mail notifications are not configured")
 		template := mailConfig.Templates.ExpiringCommitments
 		for _, projectID := range slices.Sorted(maps.Keys(notifications)) {
-			var notification core.CommitmentGroupNotification
+			var (
+				notification core.CommitmentGroupNotification
+				err          error
+			)
 			commitments := notifications[projectID]
-			err := tx.QueryRow("SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID).Scan(&notification.DomainName, &notification.ProjectName)
+			notification.DomainName, notification.ProjectName, err = oblast.SelectTwo[string, string](ctx, tx, "SELECT d.name, p.name FROM domains d JOIN projects p ON d.id = p.domain_id where p.id = $1", projectID)
 			if err != nil {
 				return err
 			}
@@ -142,7 +145,7 @@ func (c *Collector) processExpiringCommitmentTask(ctx context.Context, commitmen
 			for idx, c := range commitments {
 				commitmentIDs[idx] = c.Commitment.ID
 			}
-			_, err = tx.Exec(updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
+			_, err = gsql.Exec(ctx, tx, updateCommitmentAsNotifiedQuery, now, pq.Array(commitmentIDs))
 			if err != nil {
 				return err
 			}
