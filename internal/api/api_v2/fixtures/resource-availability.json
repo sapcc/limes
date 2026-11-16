@@ -4,6 +4,15 @@
       "services": {
         "first": {
           "categories": {
+            "first": {
+              "resources": {
+                "things": {
+                  "availability_zones": {
+                    "any": 0
+                  }
+                }
+              }
+            },
             "foo_category": {
               "resources": {
                 "capacity": {
@@ -22,6 +31,15 @@
       "services": {
         "second": {
           "categories": {
+            "second": {
+              "resources": {
+                "things": {
+                  "availability_zones": {
+                    "any": 0
+                  }
+                }
+              }
+            },
             "foo_category": {
               "resources": {
                 "capacity": {

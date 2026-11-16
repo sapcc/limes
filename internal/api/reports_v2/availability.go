@@ -37,8 +37,9 @@ var availabilityReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholder
 		SELECT pc.az_resource_id, pc.project_id, COALESCE(SUM(pc.amount), 0) AS committed
 		FROM project_commitments pc
 		JOIN az_resources azr ON azr.id = pc.az_resource_id
-		JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
-		WHERE pc.status = {{liquid.CommitmentStatusConfirmed}}
+		LEFT JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
+		WHERE ($1 = TRUE OR ar.resource_id IS NOT NULL)
+		AND pc.status = {{liquid.CommitmentStatusConfirmed}}
 		GROUP BY pc.az_resource_id, pc.project_id
 	),
 	allocation_per_az_resource AS (
@@ -46,18 +47,19 @@ var availabilityReportQuery = sqlext.SimplifyWhitespace(db.ExpandEnumPlaceholder
 		SUM(GREATEST(COALESCE(pcs.committed, 0), pazr.usage)) AS allocation
 		FROM project_az_resources pazr
 		JOIN az_resources azr ON azr.id = pazr.az_resource_id
-		JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
+		LEFT JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
 		LEFT JOIN project_commitment_sums pcs
 		ON pcs.project_id = pazr.project_id AND pcs.az_resource_id = pazr.az_resource_id
+		WHERE ($1 = TRUE OR ar.resource_id IS NOT NULL)
 		GROUP BY pazr.az_resource_id
 	)
 	SELECT azr.id, azr.raw_capacity, COALESCE(alloc.allocation, 0) AS allocation
 	FROM az_resources azr
 	JOIN resources r ON r.id = azr.resource_id
-	JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
+	LEFT JOIN allowed_resources ar ON ar.resource_id = azr.resource_id
 	LEFT JOIN allocation_per_az_resource alloc ON alloc.az_resource_id = azr.id
-	WHERE azr.az != {{liquid.AvailabilityZoneTotal}}
-	AND r.has_capacity = true
+	WHERE ($1 = TRUE OR ar.resource_id IS NOT NULL)
+	AND azr.az != {{liquid.AvailabilityZoneTotal}}
 `))
 
 // GetResourcesAvailability returns a resourcesv2.AvailabilityReport showing
@@ -72,7 +74,7 @@ func GetResourcesAvailability(ctx context.Context, cluster *core.Cluster, scope 
 		RawCapacity  uint64          `db:"raw_capacity"`
 		Allocation   uint64          `db:"allocation"`
 	}
-	query, args := scope.ExpandScopeFilters(availabilityReportQuery)
+	query, args := scope.ExpandScopeFilters(availabilityReportQuery, scope.GetDomain().IsNone() && scope.GetProject().IsNone())
 	err := oblast.MustNewStore[record](oblast.PostgresDialect()).Select(ctx, cluster.DB, query, args...).Foreach(func(r record) error {
 		azResource, aExists := sis.GetAZResourceForID(r.AZResourceID)
 		if !aExists {
