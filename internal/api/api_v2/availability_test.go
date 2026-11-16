@@ -84,9 +84,15 @@ func TestV2ResourcesAvailability(t *testing.T) {
 		ExpectText(t, http.StatusForbidden, "Forbidden\n")
 	s.TokenValidator.Enforcer.AllowReportAvailability = true
 
-	// Cloud-admin: sees all resources with capacity (things has no capacity!)
+	// Cloud-admin: sees all resources with capacity
 	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/availability").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "cloud-admin"))
+
+	// Cloud-Admin: sees all resources even when all projects are forbidden
+	s.MustDBExec(`UPDATE project_resources SET forbidden = true`)
+	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/availability").ExpectJSON(t, http.StatusOK,
+		httptest.NewJQModifiableJSONFixture(fixturePath, "cloud-admin all forbidden"))
+	s.MustDBExec(`UPDATE project_resources SET forbidden = false`)
 
 	// Domain-scoped token for germany: sees only resources not forbidden in at least one project of that domain
 	s.TokenValidator.Enforcer.AllowCluster = false
@@ -102,7 +108,7 @@ func TestV2ResourcesAvailability(t *testing.T) {
 	s.MustDBExec(`UPDATE project_resources SET forbidden = true WHERE resource_id = $1 AND project_id IN (SELECT id FROM projects WHERE domain_id = (SELECT id FROM domains WHERE name = 'germany'))`, firstCapacityResourceID)
 	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/availability").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "domain-germany-forbidden").
-			Modify("del(.service_areas.first)"))
+			Modify("del(.service_areas.first.services.first.categories.foo_category)"))
 
 	// allow it for one project - it appears again in the report
 	s.MustDBExec(`UPDATE project_resources SET forbidden = false WHERE resource_id = $1 AND project_id = $2`, firstCapacityResourceID, berlin)
@@ -125,5 +131,5 @@ func TestV2ResourcesAvailability(t *testing.T) {
 	s.MustDBExec(`UPDATE project_resources SET forbidden = true WHERE resource_id = $1 AND project_id = $2`, firstCapacityResourceID, berlin)
 	s.Handler.RespondTo(s.Ctx, "GET /v2/resources/availability").ExpectJSON(t, http.StatusOK,
 		httptest.NewJQModifiableJSONFixture(fixturePath, "project-berlin-forbidden").
-			Modify("del(.service_areas.first)"))
+			Modify("del(.service_areas.first.services.first.categories.foo_category)"))
 }

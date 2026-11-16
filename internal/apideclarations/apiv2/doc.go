@@ -79,7 +79,6 @@
 // # Endpoint: GET /v2/resources/availability
 //
 // Returns information about the cluster-wide capacities available to be consumed by resource and availability zone.
-// Resources which don't report capacity at all will not be included in the report.
 // Available capacity is defined as capacity minus allocation, where allocation is the sum of all usages plus unused committed capacity.
 // The report will clamp the available capacity at 0, even when there is a reporting mismatch and allocation exceeds capacity.
 // For resources with a flat topology, the report will contain a single entry with the pseudo-AZ "any".
