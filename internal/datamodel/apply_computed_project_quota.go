@@ -518,6 +518,9 @@ func (target acpqGlobalTarget) EnforceConstraints(stats map[limes.AvailabilityZo
 // using any remaining capacity in the cluster.
 func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, quotaOvercommitReduction map[limes.AvailabilityZone]uint8) {
 	overcommitedDesired := make(map[limes.AvailabilityZone]map[db.ProjectID]uint64)
+	// ensure that desires that went unfulfilled cannot be granted by the next round unless it explicitly introduces new desires
+	defer target.resetDesiredToAllocated()
+
 	// in AZs where quota overcommit is fully allowed, we do not have to be careful
 	for az, azTarget := range target {
 		if quotaOvercommitReduction[az] == 0 {
@@ -557,9 +560,6 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	reduction := quotaOvercommitReduction[limes.AvailabilityZoneAny]
 	granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
 	anyTarget.AddGranted(granted, overcommitedDesired[limes.AvailabilityZoneAny], reduction)
-
-	// ensure that desires that went unfulfilled cannot be granted by the next round unless it explicitly introduces new desires
-	target.resetDesiredToAllocated()
 }
 
 func (target acpqGlobalTarget) resetDesiredToAllocated() {

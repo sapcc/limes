@@ -356,7 +356,7 @@ func (d *DataMetricsV1Reporter) Handler() http.Handler {
 			"limes_available_commitment_duration":                          gauge(`Reports which commitment durations are available for new commitments on a Limes resource.`),
 			"limes_cluster_capacity":                                       gauge(`Reported capacity of a Limes resource for an OpenStack cluster.`),
 			"limes_cluster_capacity_per_az":                                gauge("Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone."),
-			"limes_cluster_resource_quota_overcommit_reduction_percentage": gauge(`How much of the quota overcommit was reduced by the ACPQ algorithm. Values between 0 and 100. For resources without reduce_quota_overcommit_from_allocated_percent window, this jumps between 0 and 100.`),
+			"limes_cluster_resource_quota_overcommit_reduction_percentage": gauge(`How much of the quota overcommit was reduced by the ApplyComputedProjectQuota algorithm. Values between 0 and 100. For resources without reduce_quota_overcommit_from_allocated_percent window, this jumps between 0 and 100.`),
 			"limes_cluster_usage_per_az":                                   gauge("Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone."),
 			"limes_domain_quota":                                           gauge(`Assigned quota of a Limes resource for an OpenStack domain.`),
 			"limes_project_backendquota":                                   gauge(`Actual quota of a Limes resource for an OpenStack project.`),

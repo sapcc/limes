@@ -2,10 +2,10 @@
 # TYPE limitas_az_resource_quota_overcommit_reduction_percentage gauge
 limitas_az_resource_quota_overcommit_reduction_percentage{az="any",resource="capacity",service="unittest"} 0
 limitas_az_resource_quota_overcommit_reduction_percentage{az="any",resource="things",service="unittest"} 0
-limitas_az_resource_quota_overcommit_reduction_percentage{az="az-one",resource="capacity",service="unittest"} 0
-limitas_az_resource_quota_overcommit_reduction_percentage{az="az-one",resource="things",service="unittest"} 0
-limitas_az_resource_quota_overcommit_reduction_percentage{az="az-two",resource="capacity",service="unittest"} 0
-limitas_az_resource_quota_overcommit_reduction_percentage{az="az-two",resource="things",service="unittest"} 0
+limitas_az_resource_quota_overcommit_reduction_percentage{az="az-one",resource="capacity",service="unittest"} 100
+limitas_az_resource_quota_overcommit_reduction_percentage{az="az-one",resource="things",service="unittest"} 100
+limitas_az_resource_quota_overcommit_reduction_percentage{az="az-two",resource="capacity",service="unittest"} 100
+limitas_az_resource_quota_overcommit_reduction_percentage{az="az-two",resource="things",service="unittest"} 100
 # HELP limitas_cluster_rate_global_limit The value of the global limit for this rate. All users together may not exceed more than this amount of operations or units over the course of the respective time window (see limitas_cluster_rate_global_window_seconds). Only shown for rates that have limits (not for those that just track usage).
 # TYPE limitas_cluster_rate_global_limit gauge
 limitas_cluster_rate_global_limit{rate="rateWithClusterLimit",service="unittest"} 5000
