@@ -194,4 +194,12 @@ var sqlMigrations = map[int64]string{
 		ALTER TABLE resources ADD COLUMN acpq_duration_secs REAL NOT NULL DEFAULT 0;
 		ALTER TABLE services DROP COLUMN acpq_duration_secs;
 	`,
+	93: `
+		ALTER TABLE az_resources ADD COLUMN quota_overcommit_reduction_percentage BIGINT NOT NULL DEFAULT 0;
+		UPDATE az_resources SET quota_overcommit_reduction_percentage = 100 WHERE allows_quota_overcommit = FALSE;
+	`,
+	// needs to be a separate migration because it depends on the previous one being committed due to pending trigger events
+	94: `
+		ALTER TABLE az_resources DROP COLUMN allows_quota_overcommit;
+	`,
 }

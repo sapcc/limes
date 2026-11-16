@@ -60,6 +60,7 @@ In the v1-API `:set_rate_limit` policies, the object attribute `%(service_type)s
 The v2 API uses the policy rules listed below.
 
 <!-- This table is sorted by the third section of the rule name first, then by the second section. This groups similar rules of different levels together. -->
+
 | Rule | Object attributes | Authorized access |
 | --- | --- | --- |
 | `v2:cluster:report_single` | none | `GET /v2/{rates,resources}/cluster` |
@@ -143,8 +144,8 @@ A configuration file in JSON format must be provided that describes things like 
 ```json
 {
   "availability_zones": [
-    "east-1", 
-    "west-1", 
+    "east-1",
+    "west-1",
     "west-2"
   ],
   "liquids": {
@@ -203,7 +204,6 @@ The payload for this POST request will look like this:
 
 The recipient of this request is expected to implement some method for finding appropriate recipient mail addresses from the provided project ID, and then deliver the mail to those recipients.
 The value for `mime_type` is guaranteed to be either `text/plain` or `text/html`.
-
 
 ### Liquid configuration/ Service Types
 
@@ -284,7 +284,6 @@ The basic principle for capacity collection is that Limes always queries a liqui
 does not report capacity, it will report `hasCapacity=false`. Additional means of providing capacity beside the liquid itself values are fixed
 (`fixed_capacity_values`) and prometheus (`capacity_values_from_prometheus`). In case one or both are enabled, Limes will fail capacity collection
 if any of the 3 options (liquid, manual, prometheus) fails.
-
 
 #### Capacity from fixed values
 
@@ -398,6 +397,7 @@ If you want to have a fallback value that matches if nothing else does, put a ru
 #### `complex unit`
 
 In Limes, a unit cannot only be `piece`, or multiples of `B` but also consist of a value with unit, e.g.:
+
 * `1 piece`
 * `480 GiB`
 
@@ -584,7 +584,8 @@ Autogrow requires an object with configuration options at `quota_distribution_co
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `allow_quota_overcommit_until_allocated_percent` | *(disabled)* | "Quota overcommit" means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. By default, quota overcommit is always allowed. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once usage reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. |
+| `allow_quota_overcommit_until_allocated_percent` | *(disabled)* | "Quota overcommit" means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. By default, quota overcommit is always allowed. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once the sum of all allocations (usage + unused commitments) reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. |
+| `reduce_quota_overcommit_from_allocated_percent` | *(disabled)* | If `allow_quota_overcommit_until_allocated_percent` is set, this value **can** be set to a percentage of the resource's capacity lower than it, effectively creating a window. Once the sum of all allocations (usage + unused commitments) reaches this lower boundary, the application will start to restrict the quota overcommit in a step-function with 5 levels towards the upper boundary, based on the current overall allocation. We will reduce the overcommit by 20% when allocation is 0%-25% of this window, by 40% for 25%-50%, and so on until the reduction increases to 100% at the end of this window. This means, the behavior after the upper bound is always the same. |
 | `project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
 | `growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
 | `growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
@@ -672,7 +673,7 @@ Example configuration:
         ],
         "project_default": [
           {
-            "name": "services/swift/account/container/object:create", 
+            "name": "services/swift/account/container/object:create",
             "limit": 1000,
             "window": "1s"
           }

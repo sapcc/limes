@@ -95,8 +95,9 @@ type AZResource struct {
 	// from existing AZs with faulty capacity recording that should block base quota overcommit.
 	// None for az=total
 	LastNonzeroRawCapacity Option[uint64] `db:"last_nonzero_raw_capacity"`
-	// This indicates whether this resource allowed quota overcommit when the quotas were last adjusted.
-	AllowsQuotaOvercommit bool `db:"allows_quota_overcommit"`
+	// This indicates how much of the quota overcommit was cut.
+	// For a service where only AllowQuotaOvercommitUntilAllocatedPercent exists, this will behave like a bool only with values 0 and 100.
+	QuotaOvercommitReductionPercentage uint8 `db:"quota_overcommit_reduction_percentage"`
 }
 
 // AZResourceStore is the [oblast.Store] for the `az_resources` table.

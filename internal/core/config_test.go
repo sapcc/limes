@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/httptest"
+	"github.com/sapcc/go-bits/must"
 	"go.xyrillian.de/gg/assert"
 
 	"github.com/sapcc/limes/internal/core"
@@ -36,11 +38,15 @@ func TestConfigValidation(t *testing.T) {
 
 	// invalid JSON
 	_, errs = core.NewClusterFromJSON([]byte("{invalid}"), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "parse configuration: invalid character 'i' looking for beginning of object key string")
+	assert.ErrsEqual(t, errs, []string{
+		"parse configuration: invalid character 'i' looking for beginning of object key string",
+	})
 
 	// empty config
 	_, errs = core.NewClusterFromJSON([]byte("{}"), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: availability_zones[]")
+	assert.ErrsEqual(t, errs, []string{
+		"missing configuration value: availability_zones[]",
+	})
 
 	// invalid AZs
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -52,7 +58,10 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "invalid value for availability_zones[0]: \"\" is not an acceptable name for a real AZ,invalid value for availability_zones[1]: \"any\" is not an acceptable name for a real AZ")
+	assert.ErrsEqual(t, errs, []string{
+		`invalid value for availability_zones[0]: "" is not an acceptable name for a real AZ`,
+		`invalid value for availability_zones[1]: "any" is not an acceptable name for a real AZ`,
+	})
 
 	// missing area attribute in liquid config
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -61,7 +70,9 @@ func TestConfigValidation(t *testing.T) {
 			"shared": {}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: liquids.shared.area")
+	assert.ErrsEqual(t, errs, []string{
+		"missing configuration value: liquids.shared.area",
+	})
 
 	// area not in areas
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -72,7 +83,9 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "liquids.shared has area testing which is not defined in areas")
+	assert.ErrsEqual(t, errs, []string{
+		"liquids.shared has area testing which is not defined in areas",
+	})
 
 	// area defined but empty display name and unused area
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -84,7 +97,10 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), `areas[foo]: not referenced by any liquids[].area,invalid value for areas[testing].display_name: must not be ""`)
+	assert.ErrsEqual(t, errs, []string{
+		`areas[foo]: not referenced by any liquids[].area`,
+		`invalid value for areas[testing].display_name: must not be ""`,
+	})
 
 	// empty resource/rate behaviors
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -102,7 +118,10 @@ func TestConfigValidation(t *testing.T) {
 			{ "rate": "" }
 		]
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: resource_behavior[0].resource,missing configuration value: rate_behavior[0].rate")
+	assert.ErrsEqual(t, errs, []string{
+		"missing configuration value: resource_behavior[0].resource",
+		"missing configuration value: rate_behavior[0].rate",
+	})
 
 	// quota distribution config: empty resource name and invalid model
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -124,7 +143,11 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: distribution_model_configs[0].resource,invalid value for distribution_model_configs[0].model: \"invalid\",invalid value for distribution_model_configs[0].autogrow: cannot be set for model \"invalid\"")
+	assert.ErrsEqual(t, errs, []string{
+		"missing configuration value: distribution_model_configs[0].resource",
+		`invalid value for distribution_model_configs[0].model: "invalid"`,
+		`invalid value for distribution_model_configs[0].autogrow: cannot be set for model "invalid"`,
+	})
 
 	// quota distribution config: missing autogrow configuration
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -142,10 +165,12 @@ func TestConfigValidation(t *testing.T) {
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "missing configuration value: distribution_model_configs[0].autogrow")
+	assert.ErrsEqual(t, errs, []string{
+		"missing configuration value: distribution_model_configs[0].autogrow",
+	})
 
 	// quota distribution config: invalid growth multiplier and invalid retention period
-	_, errs = core.NewClusterFromJSON([]byte(`{
+	testConfigQuotaDistro := `{
 		"availability_zones": [ "foo" ],
 		"areas": { "testing": { "display_name": "Testing" }},
 		"liquids": {
@@ -163,8 +188,39 @@ func TestConfigValidation(t *testing.T) {
 				}
 			}
 		]
-	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "invalid value for distribution_model_configs[0].growth_multiplier: -5 (must be >= 0),invalid value for distribution_model_configs[0].usage_data_retention_period: must not be 0")
+	}`
+	_, errs = core.NewClusterFromJSON([]byte(testConfigQuotaDistro), time.Now, nil, true)
+	assert.ErrsEqual(t, errs, []string{
+		"invalid value for distribution_model_configs[0].growth_multiplier: -5 (must be >= 0)",
+		"invalid value for distribution_model_configs[0].usage_data_retention_period: must not be 0",
+	})
+
+	// invalid values for quota_overcommit
+	_, errs = core.NewClusterFromJSON(must.ReturnT(httptest.NewJQModifiableJSONString(testConfigQuotaDistro, "quota_overcommit checks").
+		Modify(`.quota_distribution_configs[0].autogrow = {
+			"growth_multiplier": 1.2,
+			"usage_data_retention_period": "1h",
+			"reduce_quota_overcommit_from_allocated_percent": 200
+		}`).
+		MarshalJSON())(t), time.Now, nil, true)
+	assert.ErrsEqual(t, errs, []string{
+		"invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: must be >= 0 and <= 100",
+		"invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: cannot be set without allow_quota_overcommit_until_allocated_percent",
+	})
+
+	// more (other) invalid values for quota_overcommit
+	_, errs = core.NewClusterFromJSON(must.ReturnT(httptest.NewJQModifiableJSONString(testConfigQuotaDistro, "quota_overcommit checks").
+		Modify(`.quota_distribution_configs[0].autogrow = {
+			"growth_multiplier": 1.2,
+			"usage_data_retention_period": "1h",
+			"reduce_quota_overcommit_from_allocated_percent": 95,
+			"allow_quota_overcommit_until_allocated_percent": -100
+		}`).
+		MarshalJSON())(t), time.Now, nil, true)
+	assert.ErrsEqual(t, errs, []string{
+		"invalid value for distribution_model_configs[0].allow_quota_overcommit_until_allocated_percent: must be >= 0 and <= 100",
+		"invalid value for distribution_model_configs[0].reduce_quota_overcommit_from_allocated_percent: must be < allow_quota_overcommit_until_allocated_percent",
+	})
 
 	// commitment conversion: overlapping flavors
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -231,7 +287,9 @@ func TestConfigValidation(t *testing.T) {
 			}
 		}
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), `invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rules["flavor2"] identifier must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`)
+	assert.ErrsEqual(t, errs, []string{
+		`invalid value: liquids.second.commitment_behavior_per_resource[0].conversion_rules["flavor2"] identifier must be restricted to a single serviceType, but "flavor2" is already used by another serviceType`,
+	})
 
 	// Valid config. Empty discovery method should be allowed
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -263,14 +321,16 @@ func TestConfigValidation(t *testing.T) {
 				"resource": ".*/capacity",
 				"model": "autogrow",
 				"autogrow": {
-					"growth_multiplier": 1.0,
+					"growth_multiplier": 1.2,
 					"project_base_quota": 10,
-					"usage_data_retention_period": "1m"
+					"usage_data_retention_period": "1m",
+					"allow_quota_overcommit_until_allocated_percent": 95,
+					"reduce_quota_overcommit_from_allocated_percent": 85
 				}
 			}
 		]
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "")
+	assert.ErrsEqual(t, errs, []string{})
 
 	// Valid but empty liquids
 	_, errs = core.NewClusterFromJSON([]byte(`{
@@ -283,5 +343,5 @@ func TestConfigValidation(t *testing.T) {
 		"resource_behavior": [],
 		"quota_distribution_configs": []
 	}`), time.Now, nil, true)
-	assert.Equal(t, errs.Join(","), "")
+	assert.ErrsEqual(t, errs, []string{})
 }
