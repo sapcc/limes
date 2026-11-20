@@ -13,7 +13,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.25.1
 	github.com/sapcc/go-bits v0.0.0-20261119170052-2c0267f1a934
-	github.com/sergi/go-diff v1.4.0
+	github.com/sergi/go-diff v1.4.5
 	go.xyrillian.de/gg v1.21.0
 	go.xyrillian.de/schwift/v2 v2.2.2
 )
