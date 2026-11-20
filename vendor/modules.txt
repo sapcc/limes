@@ -168,7 +168,7 @@ github.com/sapcc/go-bits/regexpext
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/sqlext
 github.com/sapcc/go-bits/syncext
-# github.com/sergi/go-diff v1.4.0
+# github.com/sergi/go-diff v1.4.5
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
 # go.xyrillian.de/gg v1.21.0
