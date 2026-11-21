@@ -23,6 +23,7 @@ type PolicyEnforcer struct {
 	// flags by v2 action
 	AllowReportSingle          bool
 	AllowReportMultiple        bool
+	AllowReportAvailability    bool
 	AllowCommitmentCreate      bool
 	AllowCommitmentDelete      bool
 	AllowCommitmentDeleteAdmin bool
@@ -87,6 +88,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowReportSingle
 	case "report_multiple":
 		return e.AllowReportMultiple
+	case "report_availability":
+		return e.AllowReportAvailability
 	case "commitment_create":
 		return e.AllowCommitmentCreate
 	case "commitment_delete":

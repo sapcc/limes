@@ -277,6 +277,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		// v2 actions
 		AllowReportSingle:          true,
 		AllowReportMultiple:        true,
+		AllowReportAvailability:    true,
 		AllowCommitmentCreate:      true,
 		AllowCommitmentDelete:      true,
 		AllowCommitmentDeleteAdmin: true,
