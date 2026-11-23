@@ -23,11 +23,13 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// findAllowedResourcesQuery is the raw SQL fragment for finding non-forbidden resources
+// visible in the authenticated scope. It is used both as a standalone query
+// and embedded as a CTE in [availabilityReportQuery].
 var findAllowedResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT DISTINCT s.type, r.name
+	SELECT DISTINCT r.id as resource_id
 	FROM project_resources pr
 	JOIN resources r ON pr.resource_id = r.id
-	JOIN services s ON r.service_id = s.id
 	JOIN projects p ON pr.project_id = p.id
 	JOIN domains d ON p.domain_id = d.id
 	WHERE {{p.id = ANY($project_id)}} AND {{d.id = ANY($domain_id)}}
@@ -57,15 +59,18 @@ func GetResourcesInfo(ctx context.Context, cluster *core.Cluster, scope Scope, t
 	// collect allowed items for this user
 	allowedResourcesByService := make(map[db.ServiceType]map[liquid.ResourceName]struct{})
 	type allowedResourceRecord struct {
-		ServiceType  db.ServiceType      `db:"type"`
-		ResourceName liquid.ResourceName `db:"name"`
+		ResourceID db.ResourceID `db:"resource_id"`
 	}
 	query, args := scope.ExpandScopeFilters(findAllowedResourcesQuery)
 	err := oblast.MustNewStore[allowedResourceRecord](oblast.PostgresDialect()).Select(ctx, dbm, query, args...).Foreach(func(r allowedResourceRecord) error {
-		if allowedResourcesByService[r.ServiceType] == nil {
-			allowedResourcesByService[r.ServiceType] = make(map[liquid.ResourceName]struct{})
+		res, rExists := sis.GetResourceForID(r.ResourceID)
+		if !rExists {
+			return nil // defense in depth: skip resources that are not known to serviceInfo
 		}
-		allowedResourcesByService[r.ServiceType][r.ResourceName] = struct{}{}
+		if allowedResourcesByService[res.Path.ServiceType] == nil {
+			allowedResourcesByService[res.Path.ServiceType] = make(map[liquid.ResourceName]struct{})
+		}
+		allowedResourcesByService[res.Path.ServiceType][res.Path.ResourceName] = struct{}{}
 		return nil
 	})
 	if err != nil {
