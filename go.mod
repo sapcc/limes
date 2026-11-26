@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/common v0.74.0
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.25.1
-	github.com/sapcc/go-bits v0.0.0-20261119170052-2c0267f1a934
+	github.com/sapcc/go-bits v0.0.0-20261126170205-c4438fd89447
 	github.com/sergi/go-diff v1.4.0
 	go.xyrillian.de/gg v1.21.0
 	go.xyrillian.de/schwift/v2 v2.2.2
@@ -34,7 +34,7 @@ require (
 	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.16.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.17.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
