@@ -110,8 +110,8 @@ github.com/sapcc/go-api-declarations v1.25.1 h1:Lrbf8TZY/ARg0J9IrlrObqnXjrzSzmYK
 github.com/sapcc/go-api-declarations v1.25.1/go.mod h1:bJkK8wphzlmUmN5lxBv8BbfxUXMOkW+UiC10xBHXsFs=
 github.com/sapcc/go-bits v0.0.0-20261126170205-c4438fd89447 h1:Cw6cxTQaNnUeuHP4K1VlXLCwHjwwJb4PcVjY/nrlzeY=
 github.com/sapcc/go-bits v0.0.0-20261126170205-c4438fd89447/go.mod h1:iYFB1a1nZVLaEXp2L158ZOyf3x7shJnEmtlaDUoFRZQ=
-github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
-github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
+github.com/sergi/go-diff v1.4.5 h1:3LvhZn2aCAWagLwIhga3BZiEZ82j5+oQ0vKDwkhjHCI=
+github.com/sergi/go-diff v1.4.5/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
